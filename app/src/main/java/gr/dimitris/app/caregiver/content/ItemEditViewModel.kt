@@ -10,6 +10,7 @@ import gr.dimitris.app.core.data.Item
 import gr.dimitris.app.core.data.ItemKind
 import gr.dimitris.app.core.data.Who
 import gr.dimitris.app.core.greek.Syllabifier
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -71,7 +72,10 @@ class ItemEditViewModel(private val graph: AppGraph, private val itemId: String?
     fun photoTaken(file: File, success: Boolean) {
         viewModelScope.launch(Dispatchers.IO) {
             if (!success) { file.delete(); return@launch }
-            runCatching { graph.images.shrinkInPlace(file) }.onFailure { graph.errors.record("photo shrink", it) }
+            runCatching { graph.images.shrinkInPlace(file) }.onFailure { e ->
+                graph.errors.record("photo shrink", e)
+                _state.update { it.copy(error = "Η φωτογραφία δεν επεξεργάστηκε, αλλά κρατήθηκε.") }
+            }
             _state.update { it.copy(imagePath = file.absolutePath) }
         }
     }
@@ -100,7 +104,7 @@ class ItemEditViewModel(private val graph: AppGraph, private val itemId: String?
     fun speakWithTts() {
         val text = _state.value.text.trim()
         if (text.isEmpty()) return
-        viewModelScope.launch { graph.tts.speak(text, 0.8f) }
+        viewModelScope.launch { graph.tts.speak(text, 0.8f).onFailure { graph.errors.record("tts", it) } }
     }
 
     fun save(onSaved: () -> Unit) {
@@ -109,14 +113,21 @@ class ItemEditViewModel(private val graph: AppGraph, private val itemId: String?
         if (s.isRecording) stopRecording()
         _state.update { it.copy(saving = true) }
         viewModelScope.launch {
-            val existing = s.id?.let { graph.items.get(it) }
-            val draft = (existing ?: Item(text = s.text)).copy(
-                text = s.text, kind = s.kind, category = s.category, imagePath = s.imagePath, firstSyllableOverride = s.firstSyllableOverride,
-            )
-            val saved = graph.items.save(draft)
-            _state.value.newRecording?.let { graph.items.addRecording(saved.id, it.file, it.durationMs, Who.CAREGIVER) }
-            _state.update { it.copy(id = saved.id, newRecording = null, savedRecordingPath = it.recordingPath, saving = false) }
-            onSaved()
+            try {
+                val existing = s.id?.let { graph.items.get(it) }
+                val draft = (existing ?: Item(text = s.text)).copy(
+                    text = s.text, kind = s.kind, category = s.category, imagePath = s.imagePath, firstSyllableOverride = s.firstSyllableOverride,
+                )
+                val saved = graph.items.save(draft)
+                _state.value.newRecording?.let { graph.items.addRecording(saved.id, it.file, it.durationMs, Who.CAREGIVER) }
+                _state.update { it.copy(id = saved.id, newRecording = null, savedRecordingPath = it.recordingPath, saving = false) }
+                onSaved()
+            } catch (ce: CancellationException) {
+                throw ce
+            } catch (e: Exception) {
+                graph.errors.record("item save", e)
+                _state.update { it.copy(saving = false, error = "Δεν αποθηκεύτηκε. Δοκίμασε ξανά.") }
+            }
         }
     }
 

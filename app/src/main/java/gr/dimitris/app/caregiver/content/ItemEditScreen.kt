@@ -172,5 +172,5 @@ fun ItemEditScreen(itemId: String?, onClose: () -> Unit) {
 @Composable
 private fun KindChip(label: String, selected: Boolean, onClick: () -> Unit) {
     FilterChip(selected = selected, onClick = onClick, label = { Text(label, style = MaterialTheme.typography.bodyLarge) },
-        modifier = Modifier.heightIn(min = 56.dp))
+        modifier = Modifier.heightIn(min = Sizes.touchMin))
 }

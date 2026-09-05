@@ -42,9 +42,10 @@ import java.io.File
 @Composable
 fun ItemListScreen(onBack: () -> Unit, onEdit: (String?) -> Unit) {
     val graph = LocalAppGraph.current
-    val all by graph.items.observeAll().collectAsStateWithLifecycle(initialValue = emptyList())
+    val flow = remember(graph) { graph.items.observeAll() }
+    val all by flow.collectAsStateWithLifecycle(initialValue = emptyList())
     var query by remember { mutableStateOf("") }
-    val shown = ItemSearch.filter(all, query)
+    val shown = remember(all, query) { ItemSearch.filter(all, query) }
     val grouped = shown.groupBy { it.category }.toSortedMap(compareBy { it.ordinal })   // declaration order: Γρήγορα, Φαγητό, ...
 
     DimitrisScreen(
@@ -60,6 +61,8 @@ fun ItemListScreen(onBack: () -> Unit, onEdit: (String?) -> Unit) {
         Spacer(Modifier.padding(Sizes.gapSmall))
         if (all.isEmpty()) {
             Text("Δεν υπάρχουν λέξεις ακόμα. Πάτα «Νέα λέξη».", style = MaterialTheme.typography.bodyLarge)
+        } else if (shown.isEmpty()) {
+            Text("Δεν βρέθηκε τίποτα.", style = MaterialTheme.typography.bodyLarge)
         }
         LazyColumn {
             grouped.forEach { (category, items) ->
