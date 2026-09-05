@@ -22,6 +22,11 @@ object NumbersModule : Module {
         graph.db.items().activeOfKinds(listOf(ItemKind.NUMBER)).take(EXERCISES_PER_SESSION)
             .ifEmpty { List(EXERCISES_PER_SESSION) { Item(text = "Αριθμοί", kind = ItemKind.NUMBER, category = Category.NUMBERS) } }
 
+    /**
+     * [items] are placeholders, but their number is the session's budget for this module: it runs one
+     * exercise per item it was given, which is the contract every module owes the session runner.
+     */
     @Composable
-    override fun Screen(items: List<Item>, sessionId: String?, onDone: () -> Unit, onLeave: () -> Unit) = NumbersScreen(sessionId, onDone, onLeave)
+    override fun Screen(items: List<Item>, sessionId: String?, onDone: () -> Unit, onLeave: () -> Unit) =
+        NumbersScreen(exercisesFor(items.size), sessionId, onDone, onLeave)
 }

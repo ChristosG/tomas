@@ -5,6 +5,16 @@ import gr.dimitris.app.core.greek.GreekNumbers
 
 data class Price(val name: String, val cents: Int)
 
+/**
+ * How many exercises a plan of [plannedItems] items buys.
+ *
+ * The module owes the session one Attempt per item it was handed, and the session shares one sitting
+ * out between the modules ([gr.dimitris.app.today.SessionBudget]), so a short plan means a short run.
+ * Never zero — a module worth entering is worth one question — and never more than the full ten free
+ * practice asks for.
+ */
+fun exercisesFor(plannedItems: Int): Int = plannedItems.coerceIn(1, NumbersModule.EXERCISES_PER_SESSION)
+
 /** One question. [options] are what he can tap; [answer] is the correct option value. */
 sealed class NumberExercise {
     abstract val level: Int
@@ -12,6 +22,12 @@ sealed class NumberExercise {
     abstract val options: List<Int>
     abstract val answer: Int
     abstract val type: String
+
+    /**
+     * What the phone says. The written [prompt] stays as it is — he has to match it to the buttons —
+     * but Greek TTS reads "10,00 €" as punctuation, so the euro questions spell the amount out.
+     */
+    open val spokenPrompt: String get() = prompt
 
     /** Which is more? Two quantities, with dots at low levels. */
     data class Compare(override val level: Int, val a: Int, val b: Int, val showDots: Boolean) : NumberExercise() {
@@ -47,6 +63,7 @@ sealed class NumberExercise {
     data class CoinPick(override val level: Int, val targetCents: Int, override val options: List<Int>) : NumberExercise() {
         override val type = "coin"
         override val prompt = "Ποιο είναι το ${Euro.format(targetCents)};"
+        override val spokenPrompt: String get() = "Ποιο είναι το ${Euro.spoken(targetCents)};"
         override val answer = targetCents
     }
 
@@ -62,6 +79,7 @@ sealed class NumberExercise {
     data class Pay(override val level: Int, val priceCents: Int, override val options: List<Int>) : NumberExercise() {
         override val type = "pay"
         override val prompt = "Κοστίζει ${Euro.format(priceCents)}. Με τι πληρώνεις;"
+        override val spokenPrompt: String get() = "Κοστίζει ${Euro.spoken(priceCents)}. Με τι πληρώνεις;"
         override val answer = options.filter { it >= priceCents }.min()
     }
 }

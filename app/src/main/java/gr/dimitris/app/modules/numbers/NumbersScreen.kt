@@ -23,10 +23,12 @@ import gr.dimitris.app.ui.components.QuietButton
 import gr.dimitris.app.ui.components.SuccessMark
 import gr.dimitris.app.ui.theme.Sizes
 
+/** [count] exercises, one per item the session budgeted for this module. */
 @Composable
-fun NumbersScreen(sessionId: String?, onDone: () -> Unit, onLeave: () -> Unit) {
+fun NumbersScreen(count: Int, sessionId: String?, onDone: () -> Unit, onLeave: () -> Unit) {
     val graph = LocalAppGraph.current
-    val vm: NumbersViewModel = viewModel(key = "numbers-${sessionId ?: "practice"}") { NumbersViewModel(graph, sessionId) }
+    // The count is part of the key: a resumed ViewModel would otherwise keep the old session's length.
+    val vm: NumbersViewModel = viewModel(key = "numbers-${sessionId ?: "practice"}-$count") { NumbersViewModel(graph, sessionId, count) }
     val s by vm.state.collectAsStateWithLifecycle()
 
     if (s.done) {
@@ -37,6 +39,11 @@ fun NumbersScreen(sessionId: String?, onDone: () -> Unit, onLeave: () -> Unit) {
             if (s.levelChanged != null) {
                 Spacer(Modifier.height(Sizes.gapSmall))
                 Text(if (s.levelChanged!! > s.level) "Ανεβαίνεις στο επίπεδο ${s.levelChanged}. Μπράβο!" else "Πάμε λίγο πιο εύκολα: επίπεδο ${s.levelChanged}.", style = MaterialTheme.typography.bodyLarge)
+            }
+            // The end screen speaks too, so a silent phone has to be said here as well.
+            if (s.error != null) {
+                Spacer(Modifier.height(Sizes.gapSmall))
+                Text(s.error!!, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyLarge)
             }
         }
         return

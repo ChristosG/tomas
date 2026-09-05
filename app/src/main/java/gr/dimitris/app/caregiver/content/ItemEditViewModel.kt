@@ -66,7 +66,7 @@ class ItemEditViewModel(private val graph: AppGraph, private val itemId: String?
     fun setKind(kind: ItemKind) = _state.update { it.copy(kind = kind) }
     fun setCategory(category: Category) = _state.update { it.copy(category = category) }
     fun setPinned(on: Boolean) = _state.update { it.copy(pinned = on) }
-    fun setPriceText(t: String) = _state.update { it.copy(priceText = t) }
+    fun setPriceText(t: String) = _state.update { it.copy(priceText = t, error = null) }
     fun setOverride(value: String) = _state.update { it.copy(firstSyllableOverride = value) }
     fun clearError() = _state.update { it.copy(error = null) }
 

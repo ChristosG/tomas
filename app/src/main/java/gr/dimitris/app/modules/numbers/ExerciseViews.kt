@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -32,7 +33,6 @@ import gr.dimitris.app.ui.theme.Sizes
 /** A big answer button. Green when it is the right answer after answering, muted when it was a wrong tap. */
 @Composable
 fun OptionButton(label: String, value: Int, chosen: Int?, correct: Boolean?, answer: Int, onClick: (Int) -> Unit, modifier: Modifier = Modifier, big: Boolean = true) {
-    val feedback = LocalFeedback.current
     val revealed = correct == true
     val container = when {
         revealed && value == answer -> MaterialTheme.colorScheme.tertiary
@@ -41,12 +41,20 @@ fun OptionButton(label: String, value: Int, chosen: Int?, correct: Boolean?, ans
     }
     val content = if (chosen == value && correct == false) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onPrimary
     Button(
-        onClick = { feedback.tap(); onClick(value) },
+        // No tap haptic here: choose() answers with success or nudge, and a tap after the answer
+        // does nothing at all — a buzz would promise otherwise.
+        onClick = { onClick(value) },
         colors = ButtonDefaults.buttonColors(containerColor = container, contentColor = content),
         shape = RoundedCornerShape(Sizes.corner),
+        // Material's 24dp default eats a narrow button: a "1000" tick would stack its digits, and
+        // reading the number is the exercise.
+        contentPadding = PaddingValues(horizontal = 4.dp, vertical = 4.dp),
         modifier = modifier.heightIn(min = if (big) 96.dp else Sizes.touchMin),
     ) {
-        Text(label, style = if (big) MaterialTheme.typography.displayLarge else MaterialTheme.typography.titleLarge, textAlign = TextAlign.Center)
+        Text(
+            label, style = if (big) MaterialTheme.typography.displayLarge else MaterialTheme.typography.titleLarge,
+            textAlign = TextAlign.Center, maxLines = 1, softWrap = false,
+        )
     }
 }
 
@@ -91,8 +99,10 @@ fun CountView(e: NumberExercise.Count, s: NumbersState, onTapObject: () -> Unit,
                 onClick = { if (i == s.tapped) onTapObject() else feedback.nudge() },
                 shape = CircleShape,
                 colors = ButtonDefaults.buttonColors(containerColor = if (counted) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.secondary),
+                // 72dp minus Material's default padding leaves no room for "10".
+                contentPadding = PaddingValues(0.dp),
                 modifier = Modifier.size(Sizes.touchMin),
-            ) { Text(if (counted) (i + 1).toString() else "", style = MaterialTheme.typography.titleLarge) }
+            ) { Text(if (counted) (i + 1).toString() else "", style = MaterialTheme.typography.titleLarge, maxLines = 1, softWrap = false) }
         }
     }
     Spacer(Modifier.height(Sizes.gap))

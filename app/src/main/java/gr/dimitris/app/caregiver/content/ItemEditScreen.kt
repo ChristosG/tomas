@@ -101,6 +101,12 @@ fun ItemEditScreen(itemId: String?, onClose: () -> Unit) {
         title = if (s.isNew) "Νέα λέξη" else "Επεξεργασία",
         onBack = onClose,
         bottom = {
+            // Beside the button that was refused, not at the far end of a long scrolling form: a save
+            // that does nothing and says why several hundred dp below is a save that says nothing.
+            if (s.error != null) {
+                Text(s.error!!, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyLarge)
+                Spacer(Modifier.height(Sizes.gapSmall))
+            }
             BigButton("Αποθήκευση", onClick = { vm.save(onClose) }, tone = ButtonTone.Success, enabled = !s.saving)
         },
     ) {
@@ -187,9 +193,6 @@ fun ItemEditScreen(itemId: String?, onClose: () -> Unit) {
             if (!s.isNew) {
                 QuietButton("Διαγραφή", onClick = { confirmDelete = true }, icon = Icons.Rounded.Delete)
                 Spacer(Modifier.height(Sizes.gap))
-            }
-            if (s.error != null) {
-                Text(s.error!!, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyLarge)
             }
         }
     }

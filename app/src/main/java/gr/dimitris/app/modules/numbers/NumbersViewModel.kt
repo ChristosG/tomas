@@ -36,8 +36,14 @@ data class NumbersState(
     val error: String? = null,
 )
 
-class NumbersViewModel(private val graph: AppGraph, private val sessionId: String?) : ViewModel() {
-    private val _state = MutableStateFlow(NumbersState())
+class NumbersViewModel(
+    private val graph: AppGraph,
+    private val sessionId: String?,
+    /** One exercise per item the session handed the module; free practice asks for the full ten. */
+    private val count: Int = NumbersModule.EXERCISES_PER_SESSION,
+) : ViewModel() {
+    // Seeded with the count, so the title says "1/7" while it loads instead of flashing "1/10".
+    private val _state = MutableStateFlow(NumbersState(total = count))
     val state: StateFlow<NumbersState> = _state.asStateFlow()
     private var exercises: List<NumberExercise> = emptyList()
     private var startedAt = now()
@@ -54,28 +60,40 @@ class NumbersViewModel(private val graph: AppGraph, private val sessionId: Strin
     /** Set the moment the session starts winding down, so two taps cannot end it twice. */
     private var ending = false
 
+    /**
+     * True from the moment an exercise is answered or skipped until the next one starts. It carries
+     * both guards: one attempt per exercise, and one advance per finished exercise.
+     */
+    private var finishing = false
+
     init {
         viewModelScope.launch {
-            val level = graph.settings.numbersLevel.first()
+            val level = runCatching { graph.settings.numbersLevel.first() }
+                .getOrElse { graph.errors.record("numbers level read", it); NumberProgression.MIN_LEVEL }
             val prices = runCatching { graph.db.items().withPrices().map { Price(it.text, it.priceCents!!) } }
                 .getOrElse { graph.errors.record("numbers prices", it); emptyList() }
-            exercises = ExerciseGenerator().session(level, prices, NumbersModule.EXERCISES_PER_SESSION)
+            // Through the same rule the module used, so the list is never empty whatever it was handed.
+            exercises = ExerciseGenerator().session(level, prices, exercisesFor(count))
             results += recentResults(level)
             _state.value = NumbersState(level = level, exercise = exercises.first(), total = exercises.size)
             speakPrompt()
         }
     }
 
+    /**
+     * The first-try results already stored at this level. Skips are left out, exactly as they are
+     * while he plays ([record]): a question he passed on is not evidence either way.
+     */
     private suspend fun recentResults(level: Int): List<Boolean> =
         runCatching {
             graph.db.attempts().since(startOfDay(now()) - 30L * 24 * 60 * 60 * 1000)
-                .filter { it.module == ModuleId.NUMBERS && it.itemId == "numbers:level:$level" }
+                .filter { it.module == ModuleId.NUMBERS && it.itemId == "numbers:level:$level" && it.outcome != Outcome.SKIPPED }
                 .map { it.outcome == Outcome.CORRECT }
         }.getOrDefault(emptyList())
 
     fun speakPrompt() {
         val e = _state.value.exercise ?: return
-        viewModelScope.launch { report(graph.speaker.speakText(e.prompt)) }
+        viewModelScope.launch { report(graph.speaker.speakText(e.spokenPrompt)) }
     }
 
     /**
@@ -105,6 +123,7 @@ class NumbersViewModel(private val graph: AppGraph, private val sessionId: Strin
         if (s.correct == true) return
         if (value == e.answer) {
             graph.feedback.success()
+            finishing = true
             _state.update { it.copy(chosen = value, correct = true) }
             viewModelScope.launch { report(graph.speaker.speakText(sayAnswer(e) + ". Σωστά!")) }
             record(e, firstTry = s.wrongTries == 0, given = value)
@@ -117,15 +136,28 @@ class NumbersViewModel(private val graph: AppGraph, private val sessionId: Strin
 
     fun skip() {
         val e = _state.value.exercise ?: return
+        // One skip per exercise: the button is still there for a frame, and a second tap would pass
+        // on the exercise that has not been shown yet.
+        if (finishing) return
+        finishing = true
         graph.feedback.nudge()
         record(e, firstTry = false, given = null, skipped = true)
-        next()
+        advance()
     }
 
     fun next() {
+        // Only a finished exercise moves on. A second tap on «Επόμενο» — the button is still there
+        // for a frame after the first — would otherwise skip the exercise that just arrived, and it
+        // would leave the session counting an exercise he was never shown.
+        if (!finishing) return
+        advance()
+    }
+
+    private fun advance() {
         val s = _state.value
         // Nothing to advance past: the exercises are still loading, or the session is already over.
         if (s.exercise == null) return
+        finishing = false
         val i = s.index + 1
         if (i >= exercises.size) { finishSession(); return }
         startedAt = now()
@@ -143,8 +175,10 @@ class NumbersViewModel(private val graph: AppGraph, private val sessionId: Strin
             write?.join()
             val level = _state.value.level
             val newLevel = NumberProgression.next(level, results)
-            if (newLevel != level) graph.settings.setNumbersLevel(newLevel)
-            _state.update { it.copy(done = true, levelChanged = newLevel.takeIf { n -> n != level }) }
+            // A settings write that fails must not strand him on a screen that never says "done".
+            val moved = newLevel != level && runCatching { graph.settings.setNumbersLevel(newLevel) }
+                .onFailure { graph.errors.record("numbers level write", it) }.isSuccess
+            _state.update { it.copy(done = true, levelChanged = newLevel.takeIf { moved }) }
         }
     }
 
@@ -165,8 +199,12 @@ class NumbersViewModel(private val graph: AppGraph, private val sessionId: Strin
         val detail = gson.toJson(mapOf("type" to e.type, "exercise" to e, "given" to given, "answer" to e.answer))
         // Read eagerly: the clock is restarted the moment the next exercise arrives.
         val began = startedAt
+        // Chained, because the app scope runs on a pool with no ordering: whoever joins the last
+        // write must be joining every write, or a row can land after the session has counted.
+        val prev = lastWrite
         // The app scope, not this screen's: pressing back must not lose the answer he just gave.
         lastWrite = graph.scope.launch {
+            prev?.join()
             runCatching {
                 graph.db.attempts().insert(
                     Attempt(itemId = "numbers:level:${e.level}", module = ModuleId.NUMBERS, sessionId = sessionId, startedAt = began,
@@ -178,7 +216,8 @@ class NumbersViewModel(private val graph: AppGraph, private val sessionId: Strin
 
     private fun sayAnswer(e: NumberExercise): String = when (e) {
         is NumberExercise.Compare, is NumberExercise.NumberLine, is NumberExercise.Count, is NumberExercise.WordMatch -> GreekNumbers.words(e.answer)
-        is NumberExercise.CoinPick, is NumberExercise.Pay -> Euro.format(e.answer)
+        // Spoken, not written: Greek TTS reads "10,00 €" as punctuation.
+        is NumberExercise.CoinPick, is NumberExercise.Pay -> Euro.spoken(e.answer)
         is NumberExercise.PriceCompare -> if (e.a.cents >= e.b.cents) e.a.name else e.b.name
     }
 

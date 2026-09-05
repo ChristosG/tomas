@@ -74,9 +74,29 @@ class ExerciseGeneratorTest {
         assertTrue(all.any { it is NumberExercise.Pay })
     }
 
+    @Test fun `a four-item plan yields four exercises`() {
+        assertEquals(4, exercisesFor(4))
+        assertEquals(4, gen.session(1, prices, exercisesFor(4)).size)
+        // Free practice hands over the full ten, and a session may never ask for none.
+        assertEquals(10, exercisesFor(10))
+        assertEquals(1, exercisesFor(0))
+        assertEquals(10, exercisesFor(25))
+    }
+
     @Test fun `session has the requested size and only that level`() {
         val s = gen.session(3, prices, 10)
         assertEquals(10, s.size); assertTrue(s.all { it.level == 3 })
+    }
+
+    @Test fun `euro questions are spoken in words, not punctuation`() {
+        val coin = NumberExercise.CoinPick(7, 1000, listOf(1000, 200, 500))
+        assertEquals("Ποιο είναι το 10,00 €;", coin.prompt)
+        assertEquals("Ποιο είναι το δέκα ευρώ;", coin.spokenPrompt)
+        val pay = NumberExercise.Pay(7, 250, listOf(100, 500, 200))
+        assertTrue(pay.spokenPrompt.contains("δύο ευρώ και πενήντα λεπτά"))
+        // Everything else says exactly what it shows.
+        val compare = NumberExercise.Compare(1, 2, 5, showDots = true)
+        assertEquals(compare.prompt, compare.spokenPrompt)
     }
 
     @Test fun `every exercise has a Greek prompt`() {
