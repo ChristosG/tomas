@@ -75,10 +75,15 @@ class Voice(
     }
 
     /**
-     * Throws (in Greek) if a recording is already running. Focus is taken before the recorder starts,
-     * so the first millisecond is not another app's music, and handed straight back if it never does.
+     * Throws (in Greek) if a recording is already running. The refusal is checked here, before any
+     * focus is touched, because the abandon below would otherwise drop the focus the running take
+     * holds — a second start must leave the first recording exactly as it was.
+     *
+     * Otherwise focus is taken before the recorder starts, so the first millisecond is not another
+     * app's music, and handed straight back if the recorder never starts.
      */
     fun startRecording(): File {
+        if (isRecording) throw IllegalStateException(ALREADY_RECORDING)
         quiet()
         audio.requestAudioFocus(recordFocus)
         return try {
@@ -121,5 +126,8 @@ class Voice(
     companion object {
         /** Said when output is asked for mid-recording: the microphone is open and must stay clean. */
         const val RECORDING_NOW = "Ηχογραφεί τώρα"
+
+        /** The same words [Recorder] uses, so a refusal reads the same wherever it is raised. */
+        const val ALREADY_RECORDING = "Ήδη ηχογραφεί"
     }
 }

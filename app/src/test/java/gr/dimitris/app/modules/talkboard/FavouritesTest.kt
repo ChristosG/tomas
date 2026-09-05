@@ -25,12 +25,26 @@ class FavouritesTest {
     }
 
     /** Day one: nothing pinned, nothing tapped. The tab must not open empty. */
-    @Test fun `with no pins and no usage it falls back to the start of the vocabulary`() {
+    @Test fun `with no pins and no usage it falls back to the vocabulary by category then word`() {
+        val water = Item(text = "νερό", category = Category.FOOD)
+        val bread = Item(text = "ψωμί", category = Category.FOOD)
+        val home = Item(text = "σπίτι", category = Category.PLACES)
+        val ranked = Favourites.rank(listOf(home, bread, water), pinnedIds = emptySet(), usage = emptyList())
+        assertEquals(listOf(water, bread, home), ranked)
+    }
+
+    /** The quick row above the tabs already shows every quick phrase; the fallback must not repeat them. */
+    @Test fun `the fallback leaves out the quick phrases`() {
         val quick = Item(text = "Ναι", category = Category.QUICK)
-        val food = Item(text = "νερό", category = Category.FOOD)
         val alsoQuick = Item(text = "Βοήθεια", category = Category.QUICK)
-        val ranked = Favourites.rank(listOf(food, quick, alsoQuick), pinnedIds = emptySet(), usage = emptyList(), limit = 2)
-        assertEquals(listOf(alsoQuick, quick), ranked)
+        val water = Item(text = "νερό", category = Category.FOOD)
+        assertEquals(listOf(water), Favourites.rank(listOf(quick, water, alsoQuick), emptySet(), emptyList()))
+    }
+
+    /** Nothing but quick phrases means there is genuinely nothing to fall back to. */
+    @Test fun `a quick-only vocabulary falls back to nothing`() {
+        val quick = Item(text = "Ναι", category = Category.QUICK)
+        assertEquals(emptyList<Item>(), Favourites.rank(listOf(quick), emptySet(), emptyList()))
     }
 
     @Test fun `usage that names only unknown ids still falls back`() {
