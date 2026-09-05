@@ -9,8 +9,11 @@ import gr.dimitris.app.core.data.ModuleId
 import gr.dimitris.app.core.data.Who
 import gr.dimitris.app.core.data.now
 import gr.dimitris.app.core.speech.SpeechMatch
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -43,11 +46,13 @@ class WordCoachViewModel(private val graph: AppGraph, private val items: List<It
     private var ladder = CueLadder(items.first())
     private var startedAt = now()
 
-    /** Written and read from the app scope, off the main thread; the attempt reads it after joining the save. */
-    @Volatile private var selfRecordingId: String? = null
-
-    /** The write of the last take. The attempt waits for it, so it can point at the recording. */
-    private var recordingSave: Job? = null
+    /**
+     * The write of the last take, as a value: the attempt awaits the id instead of reading a field
+     * that the next word has already cleared. A finish landing in the same breath as the save used
+     * to read the field either before it was written or after [next] had nulled it, and the take
+     * quietly stopped belonging to the word it was made for.
+     */
+    private var recordingSave: Deferred<String?>? = null
 
     /**
      * The attempt + schedule write of the word just finished. It runs on the app scope, so [next]
@@ -110,11 +115,19 @@ class WordCoachViewModel(private val graph: AppGraph, private val items: List<It
         if (_state.value.isRecording) {
             runCatching { graph.voice.stopRecording() }
                 .onSuccess { rec ->
+                    val itemId = _state.value.item.id
                     _state.update { it.copy(isRecording = false, selfRecordingPath = graph.files.relativize(rec.file)) }
                     // The app scope, not this screen's: the take is on disk, its row must land too.
-                    recordingSave = graph.scope.launch {
-                        runCatching { graph.items.addRecording(_state.value.item.id, rec.file, rec.durationMs, Who.DIMITRIS).id }
-                            .fold({ selfRecordingId = it }, { graph.errors.record("wordcoach save recording", it) })
+                    recordingSave = graph.scope.async {
+                        try {
+                            graph.items.addRecording(itemId, rec.file, rec.durationMs, Who.DIMITRIS).id
+                        } catch (ce: CancellationException) {
+                            // A cancelled write is not a failed one, and must not be logged as one.
+                            throw ce
+                        } catch (e: Exception) {
+                            graph.errors.record("wordcoach save recording", e)
+                            null
+                        }
                     }
                 }
                 .onFailure { e -> graph.errors.record("wordcoach record stop", e); _state.update { it.copy(isRecording = false, error = "Πολύ σύντομη ηχογράφηση") } }
@@ -180,10 +193,11 @@ class WordCoachViewModel(private val graph: AppGraph, private val items: List<It
         val detail = s.heard?.let { """{"heard":${jsonString(it)},"matched":${s.heardMatched}}""" } ?: "{}"
         // The app scope, not this screen's: pressing back must not lose the word he just said.
         lastWrite = graph.scope.launch {
-            // The recording row carries the id the attempt points at, so let its write land first.
-            save?.join()
-            val recordingId = selfRecordingId
             runCatching {
+                // The recording row carries the id the attempt points at, so let its write land
+                // first — and inside the guard, because the app scope has no exception handler and
+                // a throw from the await would be an uncaught crash rather than a logged failure.
+                val recordingId = save?.await()
                 graph.db.attempts().insert(
                     Attempt(itemId = s.item.id, module = ModuleId.WORDCOACH, sessionId = sessionId, startedAt = startedAt,
                         durationMs = now() - startedAt, outcome = outcome, cueLevel = level, selfRecordingId = recordingId, detail = detail)
@@ -217,7 +231,6 @@ class WordCoachViewModel(private val graph: AppGraph, private val items: List<It
         }
         ladder = CueLadder(items[i])
         startedAt = now()
-        selfRecordingId = null
         recordingSave = null
         _state.value = WordCoachState(index = i, total = items.size, item = items[i], sttOn = _state.value.sttOn)
     }
