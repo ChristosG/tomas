@@ -43,6 +43,34 @@ class CueLadderTest {
         assertEquals(Outcome.SKIPPED, l.outcomeFor(false))
     }
 
+    /**
+     * A cue is a sound to start from, never a sentence. Dialogue turns carry punctuation the words
+     * on the talk board do not: level 2 of «Ναι, θα έρθω.» used to be «Ναι,» — the comma shown at
+     * displayLarge and handed to the speech engine — and «Τα λέμε. Γεια.» gave the cue «Τα » with
+     * its trailing space. Every module shares this ladder, so every module got it.
+     */
+    @Test fun `punctuation never reaches the cue, at any level`() {
+        val line = Item(text = "«Ναι, θα έρθω.»", firstSound = "ν", firstSyllable = "Ναι,")
+        val l = CueLadder(line)
+        assertEquals("ν", l.hint().let { l.cueText() })
+        assertEquals("Ναι", l.hint().let { l.cueText() })
+        assertEquals("Ναι θα έρθω", l.hint().let { l.cueText() })
+        assertEquals("Ναι θα έρθω", l.hint().let { l.cueText() })
+    }
+
+    @Test fun `a trailing space is not part of the syllable`() {
+        val l = CueLadder(Item(text = "Τα λέμε. Γεια.", firstSound = "τ", firstSyllable = "Τα "))
+        l.hint(); l.hint()
+        assertEquals("Τα", l.cueText())
+    }
+
+    /** Nothing but marks is nothing to say, and the screen shows nothing rather than a stray dash. */
+    @Test fun `a cue that was only punctuation is no cue at all`() {
+        val l = CueLadder(Item(text = "!;", firstSound = "!", firstSyllable = ";"))
+        assertNull(l.hint().let { l.cueText() })
+        assertNull(l.hint().let { l.cueText() })
+    }
+
     @Test fun `reset returns to picture only`() {
         val l = CueLadder(full).apply { hint(); hint() }
         l.reset()
