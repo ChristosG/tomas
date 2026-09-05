@@ -66,9 +66,9 @@ class AndroidTextToSpeech(context: Context) : TextToSpeech {
 
     fun shutdown() {
         engine.stop()
-        val pending = waiting.values.toList()
-        waiting.clear()
-        pending.forEach { if (it.isActive) it.resume(Result.failure(TtsException("Η φωνή έκλεισε"))) }
+        waiting.keys.toList().forEach { id ->
+            waiting.remove(id)?.resume(Result.failure(TtsException("Η φωνή έκλεισε")))
+        }
         engine.shutdown()
     }
 
