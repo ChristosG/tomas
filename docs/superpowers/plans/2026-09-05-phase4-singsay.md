@@ -734,4 +734,43 @@ Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
 ### Task 5: Phase 4 verification
 
 - [ ] Full suites green; install on `R5CWC2C1KSJ`; sing through one phrase across all five stages with the phone's speaker on; record Chris's sung model for two phrases; Σφάλματα stays empty.
-- [ ] Append "Phase 4 verified on <date>, <device>" here; commit `docs(phase4): verification notes`.
+- [x] Append "Phase 4 verified on <date>, <device>" here; commit `docs(phase4): verification notes`. See **Verification notes** at the end of this file — the first box stays open because the phone and the ear are still missing.
+
+---
+
+## Verification notes
+
+**Phase 4 verified on 2026-09-05, `emulator-5554` (Medium_Phone_API_36, API 36).** Not yet on
+`R5CWC2C1KSJ`, and **nothing in phase 4 has been heard by a person** — see the last row below.
+
+Suites, after the final fix wave (`8c15fc7..28ffde7`):
+
+- `./gradlew -q testDebugUnitTest` — **173 tests, 0 failures** (157 before the wave).
+- `adb shell pm clear gr.dimitris.app`, then `./gradlew connectedDebugAndroidTest` on
+  `emulator-5554` — **39 tests, 0 failures** (36 before), `ToneSynthTest` 5/5, `VoiceTest` 8/8
+  (two new: `quiet()` stops a running melody, the melody is refused while recording),
+  `SingSayFlowTest` 3/3, `MigrationTest` 3/3.
+- `./gradlew -q installDebug`, then by hand on a cleared install:
+
+| Check | Result |
+|---|---|
+| Free practice through all five stages, each announced out loud | «Άκου.» → «Τραγούδα μαζί μου.» (backing plays once) → «Τραγούδα το μόνος σου.» ×3 → «Πες το τραγουδιστά.» → «Πες το κανονικά.» |
+| Finishing at stage 5 | `CORRECT`, `cueLevel 0`, `detail {"stage":5}`, Leitner box 2 |
+| «Το έκανα» at stage 3 | `ASSISTED`, `cueLevel 2`, `detail {"stage":3}`, box 1 — the demotion the old code gave it is gone |
+| Session across three modules | sing-say capped at 3 phrases; ended «Έκανες 8 ασκήσεις σήμερα: Λέξεις, Τραγούδα και πες το» — the five skipped number exercises excluded, their module unnamed |
+| HOME during the melody, then reopening | same phrase, nothing playing |
+| «Μίλα» during the melody | output freed 0.78 s after the tap against 2.68 s if the melody is left to end itself: `voice.quiet()` really stops it |
+| «Μίλα» with the microphone open | take cancelled, talk board spoke normally, no error row, and the module's own button read «Ηχογράφηση» again on the way back |
+| Caregiver sung model | «Τραγούδησέ το» records; switching the kind chip stops it without stranding the take; save wrote one `recordings` row `style=SUNG` |
+| The module plays it | «θέλω καφέ» in free practice: no "Δεν υπάρχει τραγουδισμένη φωνή" line, the caregiver's take is the model |
+| Seed | 195 items (32 phrases), 194 with pictograms; the 20 MIT phrases visible in the talk board and the caregiver list |
+| Σφάλματα | **empty** after the whole run |
+
+Screenshots: `.superpowers/sdd/2026-09-05-phase4-singsay/shots/20-*` … `43-*`.
+Full account of the wave: `.superpowers/sdd/2026-09-05-phase4-singsay/fix-wave-report.md`.
+
+**Still open for Chris:** the phase has never been *heard*. Every device run so far was an emulator
+with nobody listening, so the two pitches, the 550/80 ms tempo, the note envelope, the 0.6 → 0.3 → 0
+fade and the new silent tail on the last note are unverified by ear, and no sung model has been
+recorded by a person. That, and a run on `R5CWC2C1KSJ` with the speaker on, is what Task 5 still
+wants.
