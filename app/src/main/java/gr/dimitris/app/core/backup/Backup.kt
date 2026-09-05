@@ -10,6 +10,8 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
+class BackupException(message: String) : Exception(message)
+
 /** One zip: the database plus photos and recordings. The phase-0 way to move Dimitris' data and back it up. */
 class Backup(private val graph: AppGraph) {
 
@@ -29,22 +31,40 @@ class Backup(private val graph: AppGraph) {
 
     suspend fun import(uri: Uri) = withContext(Dispatchers.IO) {
         val tmp = File(graph.app.cacheDir, "import").apply { deleteRecursively(); mkdirs() }
-        graph.app.contentResolver.openInputStream(uri)?.use { Zips.unzip(it, tmp) } ?: error("Δεν άνοιξε το αρχείο")
+        graph.app.contentResolver.openInputStream(uri)?.use { Zips.unzip(it, tmp) } ?: throw BackupException("Δεν άνοιξε το αρχείο")
         val newDb = File(tmp, AppDatabase.NAME)
-        require(newDb.isFile) { "Το αρχείο δεν είναι αντίγραφο της εφαρμογής" }
+        if (!newDb.isFile) throw BackupException("Το αρχείο δεν είναι αντίγραφο της εφαρμογής")
 
-        graph.db.close()
         val dbFile = graph.app.getDatabasePath(AppDatabase.NAME)
-        listOf(dbFile, File(dbFile.path + "-wal"), File(dbFile.path + "-shm")).forEach { it.delete() }
-        newDb.copyTo(dbFile, overwrite = true)
-        replaceDir(File(tmp, "photos"), graph.files.photosDir)
-        replaceDir(File(tmp, "recordings"), graph.files.recordingsDir)
-        tmp.deleteRecursively()
-        graph.reopenDatabase()
+        val staged = File(dbFile.path + ".new")
+        newDb.copyTo(staged, overwrite = true)              // still safe: live db untouched
+
+        val backup = File(dbFile.path + ".bak")
+        graph.db.close()
+        try {
+            listOf(File(dbFile.path + "-wal"), File(dbFile.path + "-shm")).forEach { it.delete() }
+            if (dbFile.exists() && !dbFile.renameTo(backup)) throw BackupException("Δεν μπόρεσα να φυλάξω την παλιά βάση")
+            if (!staged.renameTo(dbFile)) { backup.renameTo(dbFile); throw BackupException("Δεν μπόρεσα να τοποθετήσω τη νέα βάση") }
+            replaceDir(File(tmp, "photos"), graph.files.photosDir)
+            replaceDir(File(tmp, "recordings"), graph.files.recordingsDir)
+            backup.delete()
+        } finally {
+            graph.reopenDatabase()   // whatever happened, the app has a database again
+            tmp.deleteRecursively()
+        }
     }
 
+    /** Old content is kept until the new content is fully in place. */
     private fun replaceDir(from: File, to: File) {
-        to.deleteRecursively(); to.mkdirs()
-        if (from.isDirectory) from.copyRecursively(to, overwrite = true)
+        val old = File(to.path + ".old").apply { deleteRecursively() }
+        if (to.exists() && !to.renameTo(old)) throw BackupException("Δεν μπόρεσα να αντικαταστήσω τα αρχεία")
+        to.mkdirs()
+        if (from.isDirectory) {
+            runCatching { from.copyRecursively(to, overwrite = true) }.onFailure {
+                to.deleteRecursively(); old.renameTo(to)
+                throw BackupException("Δεν μπόρεσα να αντιγράψω τα αρχεία")
+            }
+        }
+        old.deleteRecursively()
     }
 }

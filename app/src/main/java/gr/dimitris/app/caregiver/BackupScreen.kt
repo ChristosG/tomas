@@ -25,6 +25,7 @@ import androidx.core.content.FileProvider
 import gr.dimitris.app.LocalAppGraph
 import gr.dimitris.app.caregiver.content.FILE_AUTHORITY
 import gr.dimitris.app.core.backup.Backup
+import gr.dimitris.app.core.backup.BackupException
 import gr.dimitris.app.ui.components.BigButton
 import gr.dimitris.app.ui.components.DimitrisScreen
 import gr.dimitris.app.ui.components.QuietButton
@@ -42,23 +43,27 @@ fun BackupScreen(onBack: () -> Unit, onImported: () -> Unit) {
 
     val pickZip = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> pending = uri }
 
-    DimitrisScreen(title = "Αντίγραφο ασφαλείας", onBack = onBack) {
+    DimitrisScreen(
+        title = "Αντίγραφο ασφαλείας",
+        onBack = onBack,
+        bottom = {
+            BigButton("Εξαγωγή και αποστολή", icon = Icons.Rounded.Share, onClick = {
+                scope.launch {
+                    runCatching { backup.export() }
+                        .onSuccess { file ->
+                            val uri = FileProvider.getUriForFile(context, FILE_AUTHORITY, file)
+                            val send = Intent(Intent.ACTION_SEND).setType("application/zip").putExtra(Intent.EXTRA_STREAM, uri)
+                                .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                            context.startActivity(Intent.createChooser(send, "Αποστολή αντιγράφου"))
+                        }
+                        .onFailure { graph.errors.record("backup export", it); status = "Η εξαγωγή απέτυχε" }
+                }
+            })
+            Spacer(Modifier.height(Sizes.gapSmall))
+            QuietButton("Εισαγωγή από αρχείο", icon = Icons.Rounded.FileDownload, onClick = { pickZip.launch(arrayOf("application/zip", "application/octet-stream")) })
+        },
+    ) {
         Text("Το αντίγραφο έχει τις λέξεις, τις φωτογραφίες, τις φωνές και όλο το ιστορικό.", style = MaterialTheme.typography.bodyLarge)
-        Spacer(Modifier.height(Sizes.gap))
-        BigButton("Εξαγωγή και αποστολή", icon = Icons.Rounded.Share, onClick = {
-            scope.launch {
-                runCatching { backup.export() }
-                    .onSuccess { file ->
-                        val uri = FileProvider.getUriForFile(context, FILE_AUTHORITY, file)
-                        val send = Intent(Intent.ACTION_SEND).setType("application/zip").putExtra(Intent.EXTRA_STREAM, uri)
-                            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                        context.startActivity(Intent.createChooser(send, "Αποστολή αντιγράφου"))
-                    }
-                    .onFailure { graph.errors.record("backup export", it); status = "Η εξαγωγή απέτυχε" }
-            }
-        })
-        Spacer(Modifier.height(Sizes.gapSmall))
-        QuietButton("Εισαγωγή από αρχείο", icon = Icons.Rounded.FileDownload, onClick = { pickZip.launch(arrayOf("application/zip", "application/octet-stream")) })
         if (status != null) {
             Spacer(Modifier.height(Sizes.gap))
             Text(status!!, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.error)
@@ -76,7 +81,7 @@ fun BackupScreen(onBack: () -> Unit, onImported: () -> Unit) {
                     scope.launch {
                         runCatching { backup.import(uri) }
                             .onSuccess { onImported() }
-                            .onFailure { graph.errors.record("backup import", it); status = it.message ?: "Η εισαγωγή απέτυχε" }
+                            .onFailure { graph.errors.record("backup import", it); status = (it as? BackupException)?.message ?: "Η εισαγωγή απέτυχε" }
                     }
                 }) { Text("Ναι, αντικατάσταση", style = MaterialTheme.typography.labelLarge) }
             },

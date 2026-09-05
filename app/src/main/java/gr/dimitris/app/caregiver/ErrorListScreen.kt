@@ -33,7 +33,8 @@ import java.util.Locale
 fun ErrorListScreen(onBack: () -> Unit) {
     val graph = LocalAppGraph.current
     val scope = rememberCoroutineScope()
-    val logs by graph.db.errorLogs().observeRecent(200).collectAsStateWithLifecycle(initialValue = emptyList())
+    val flow = remember(graph) { graph.db.errorLogs().observeRecent(200) }
+    val logs by flow.collectAsStateWithLifecycle(initialValue = emptyList())
     var expanded by remember { mutableStateOf<String?>(null) }
     val format = remember { DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT, Locale("el")) }
 
