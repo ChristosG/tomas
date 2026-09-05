@@ -32,10 +32,7 @@ class SessionBuilder(
         val boxOf = rows.associate { it.itemId to it.box }
 
         val due = rows.filter { it.nextDueAt <= t }.sortedBy { it.nextDueAt }.mapNotNull { byId[it.itemId] }
-        // Only rows still at the starting box are genuinely "new" introductions; a row's createdAt
-        // defaults to wall-clock time, so counting every row here would also catch older items that
-        // have already advanced past box 1 whenever the test/fake clock sits in the past.
-        val introducedToday = rows.count { it.box == LeitnerPolicy.MIN_BOX && it.createdAt >= startOfDay(t) }
+        val introducedToday = rows.count { it.createdAt >= startOfDay(t) }
         val scheduledIds = rows.map { it.itemId }.toSet()
         val fresh = pool.filter { it.id !in scheduledIds }
             .sortedWith(compareBy<Item> { it.source != Source.CAREGIVER }.thenBy { it.createdAt })

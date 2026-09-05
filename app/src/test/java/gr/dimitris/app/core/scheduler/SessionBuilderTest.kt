@@ -24,8 +24,8 @@ class SessionBuilderTest {
     @Test fun `due items come first, then new ones up to the daily cap`() = runTest {
         val due = word("due"); val later = word("later")
         val n1 = word("n1", createdAt = 1); val n2 = word("n2", createdAt = 2); val n3 = word("n3", createdAt = 3); val n4 = word("n4", createdAt = 4)
-        schedules.upsert(Schedule(due.id, m, box = 2, nextDueAt = noon - 1))
-        schedules.upsert(Schedule(later.id, m, box = 3, nextDueAt = noon + 1))
+        schedules.upsert(Schedule(due.id, m, box = 2, nextDueAt = noon - 1, createdAt = noon - 10 * LeitnerPolicy.DAY_MS))
+        schedules.upsert(Schedule(later.id, m, box = 3, nextDueAt = noon + 1, createdAt = noon - 10 * LeitnerPolicy.DAY_MS))
         val plan = builder.plan(m, listOf(ItemKind.WORD))
         assertEquals(setOf(due.id, n1.id, n2.id, n3.id), plan.map { it.id }.toSet())
         assert(n4.id !in plan.map { it.id })
