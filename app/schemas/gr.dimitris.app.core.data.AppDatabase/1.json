@@ -2,7 +2,7 @@
   "formatVersion": 1,
   "database": {
     "version": 1,
-    "identityHash": "417af2b9ab900433e9d49d08f7ac9b60",
+    "identityHash": "13cebf1d1c4ce3fd450c3ccf834314da",
     "entities": [
       {
         "tableName": "items",
@@ -107,6 +107,24 @@
             ],
             "orders": [],
             "createSql": "CREATE INDEX IF NOT EXISTS `index_items_deleted` ON `${TABLE_NAME}` (`deleted`)"
+          },
+          {
+            "name": "index_items_source",
+            "unique": false,
+            "columnNames": [
+              "source"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_items_source` ON `${TABLE_NAME}` (`source`)"
+          },
+          {
+            "name": "index_items_updatedAt",
+            "unique": false,
+            "columnNames": [
+              "updatedAt"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_items_updatedAt` ON `${TABLE_NAME}` (`updatedAt`)"
           }
         ]
       },
@@ -184,6 +202,15 @@
             ],
             "orders": [],
             "createSql": "CREATE INDEX IF NOT EXISTS `index_recordings_itemId` ON `${TABLE_NAME}` (`itemId`)"
+          },
+          {
+            "name": "index_recordings_updatedAt",
+            "unique": false,
+            "columnNames": [
+              "updatedAt"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_recordings_updatedAt` ON `${TABLE_NAME}` (`updatedAt`)"
           }
         ]
       },
@@ -300,6 +327,15 @@
             ],
             "orders": [],
             "createSql": "CREATE INDEX IF NOT EXISTS `index_attempts_startedAt` ON `${TABLE_NAME}` (`startedAt`)"
+          },
+          {
+            "name": "index_attempts_updatedAt",
+            "unique": false,
+            "columnNames": [
+              "updatedAt"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_attempts_updatedAt` ON `${TABLE_NAME}` (`updatedAt`)"
           }
         ]
       },
@@ -367,7 +403,18 @@
             "itemId",
             "module"
           ]
-        }
+        },
+        "indices": [
+          {
+            "name": "index_schedules_updatedAt",
+            "unique": false,
+            "columnNames": [
+              "updatedAt"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_schedules_updatedAt` ON `${TABLE_NAME}` (`updatedAt`)"
+          }
+        ]
       },
       {
         "tableName": "sessions",
@@ -432,7 +479,18 @@
           "columnNames": [
             "id"
           ]
-        }
+        },
+        "indices": [
+          {
+            "name": "index_sessions_updatedAt",
+            "unique": false,
+            "columnNames": [
+              "updatedAt"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_sessions_updatedAt` ON `${TABLE_NAME}` (`updatedAt`)"
+          }
+        ]
       },
       {
         "tableName": "error_logs",
@@ -492,12 +550,23 @@
           "columnNames": [
             "id"
           ]
-        }
+        },
+        "indices": [
+          {
+            "name": "index_error_logs_updatedAt",
+            "unique": false,
+            "columnNames": [
+              "updatedAt"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_error_logs_updatedAt` ON `${TABLE_NAME}` (`updatedAt`)"
+          }
+        ]
       }
     ],
     "setupQueries": [
       "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
-      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '417af2b9ab900433e9d49d08f7ac9b60')"
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '13cebf1d1c4ce3fd450c3ccf834314da')"
     ]
   }
 }

@@ -29,8 +29,13 @@ enum class Who { DIMITRIS, CAREGIVER }
 enum class ModuleId { TALKBOARD, WORDCOACH, NUMBERS, SINGSAY, SCRIPTS, SENTENCES, TRACE, ARCADE }
 enum class Outcome { CORRECT, ASSISTED, SKIPPED }
 
-/** The unit of everything: a word, phrase, number or script line, with its picture and model voice. */
-@Entity(tableName = "items", indices = [Index("category"), Index("deleted")])
+/**
+ * The unit of everything: a word, phrase, number or script line, with its picture and model voice.
+ *
+ * Every table carries an index on updatedAt: phase 10 syncs by "rows changed since X", and the
+ * caregiver screens already sort and filter by it.
+ */
+@Entity(tableName = "items", indices = [Index("category"), Index("deleted"), Index("source"), Index("updatedAt")])
 data class Item(
     @PrimaryKey val id: String = newId(),
     val text: String,
@@ -49,7 +54,7 @@ data class Item(
     val deleted: Boolean = false,
 )
 
-@Entity(tableName = "recordings", indices = [Index("itemId")])
+@Entity(tableName = "recordings", indices = [Index("itemId"), Index("updatedAt")])
 data class Recording(
     @PrimaryKey val id: String = newId(),
     val itemId: String,
@@ -63,7 +68,7 @@ data class Recording(
 )
 
 /** Append-only. One row per try in any module. */
-@Entity(tableName = "attempts", indices = [Index("itemId"), Index("module"), Index("startedAt")])
+@Entity(tableName = "attempts", indices = [Index("itemId"), Index("module"), Index("startedAt"), Index("updatedAt")])
 data class Attempt(
     @PrimaryKey val id: String = newId(),
     val itemId: String,
@@ -83,7 +88,7 @@ data class Attempt(
 )
 
 /** Leitner spaced repetition state per (item, module). Filled in by phase 2. */
-@Entity(tableName = "schedules", primaryKeys = ["itemId", "module"])
+@Entity(tableName = "schedules", primaryKeys = ["itemId", "module"], indices = [Index("updatedAt")])
 data class Schedule(
     val itemId: String,
     val module: ModuleId,
@@ -96,7 +101,7 @@ data class Schedule(
     val deleted: Boolean = false,
 )
 
-@Entity(tableName = "sessions")
+@Entity(tableName = "sessions", indices = [Index("updatedAt")])
 data class Session(
     @PrimaryKey val id: String = newId(),
     val startedAt: Long,
@@ -111,7 +116,7 @@ data class Session(
 )
 
 /** Append-only. Dimitris cannot report bugs, so the app keeps its own list for caregivers. */
-@Entity(tableName = "error_logs")
+@Entity(tableName = "error_logs", indices = [Index("updatedAt")])
 data class ErrorLog(
     @PrimaryKey val id: String = newId(),
     val at: Long = now(),
