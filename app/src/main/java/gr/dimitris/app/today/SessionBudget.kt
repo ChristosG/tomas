@@ -19,4 +19,13 @@ object SessionBudget {
     /** Exercises each of [moduleCount] modules may contribute today. */
     fun allowance(moduleCount: Int): Int =
         if (moduleCount <= 0) 0 else maxOf(MIN_PER_MODULE, MAX_SESSION_ITEMS / moduleCount)
+
+    /**
+     * What one module really contributes. A module that runs as one unit — a dialogue — keeps its
+     * whole list: cutting it changed nothing about what ran and only made the session row's
+     * `plannedItemCount` a number the module was going to overshoot. The dialogue is held to a
+     * sitting's length by the editor's own cap on how many turns a dialogue may have, not here.
+     */
+    fun <T> share(items: List<T>, allowance: Int, atomic: Boolean): List<T> =
+        if (atomic) items else items.take(allowance)
 }

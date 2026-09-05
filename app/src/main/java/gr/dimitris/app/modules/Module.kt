@@ -29,6 +29,14 @@ interface Module {
     val titleGreek: String
     val icon: ImageVector
 
+    /**
+     * True when the module runs its whole list or nothing: a conversation cannot be cut in half.
+     * The session budget then leaves this module's plan alone — which is what keeps
+     * `plannedItemCount` honest, because a truncated list the module ignores would have the session
+     * row promising fewer exercises than the module goes on to run.
+     */
+    val atomic: Boolean get() = false
+
     /** Items this module wants in today's mixed session. Empty means "nothing today". */
     suspend fun planFor(graph: AppGraph): List<Item>
 
