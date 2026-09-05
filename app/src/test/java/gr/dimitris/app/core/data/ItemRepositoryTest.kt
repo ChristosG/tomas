@@ -48,4 +48,27 @@ class ItemRepositoryTest {
         assertNull(recordings.get("nope"))
         assertEquals(Who.DIMITRIS, self.who)
     }
+
+    @Test fun `blank override is stored as null and a real one trimmed`() = runTest {
+        assertEquals(null, repo.save(Item(text = "καφές", firstSyllableOverride = "  ")).firstSyllableOverride)
+        assertEquals("κα", repo.save(Item(text = "καφές", firstSyllableOverride = " κα ")).firstSyllableOverride)
+    }
+
+    @Test fun `modelRecording falls back to the latest caregiver recording`() = runTest {
+        val item = repo.save(Item(text = "ψωμί"))
+        val older = Recording(itemId = item.id, path = "/tmp/a.m4a", who = Who.CAREGIVER, durationMs = 500, recordedAt = 10)
+        val newer = Recording(itemId = item.id, path = "/tmp/b.m4a", who = Who.CAREGIVER, durationMs = 500, recordedAt = 20)
+        recordings.upsert(older); recordings.upsert(newer)
+        assertEquals(newer, repo.modelRecording(item))   // item.modelRecordingId is null
+    }
+
+    @Test fun `saving an existing item keeps id createdAt and model recording`() = runTest {
+        val item = repo.save(Item(text = "γάλα", createdAt = 42))
+        val rec = repo.addRecording(item.id, File("/tmp/x.m4a"), 700, Who.CAREGIVER)
+        val again = repo.save(repo.get(item.id)!!.copy(text = "γάλα φρέσκο"))
+        assertEquals(item.id, again.id)
+        assertEquals(42L, again.createdAt)
+        assertEquals(rec.id, again.modelRecordingId)
+        assertEquals("γ", again.firstSound)
+    }
 }
