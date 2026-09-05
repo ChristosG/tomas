@@ -1115,7 +1115,7 @@ class SessionViewModel(private val graph: AppGraph) : ViewModel() {
                 .onFailure { graph.errors.record("session end", it) }
             _state.value = SessionStep.Summary(completed, planned)
             graph.feedback.success()
-            graph.tts.speak("Μπράβο Δημήτρη! Έκανες $completed λέξεις σήμερα.", graph.settings.speechRate.first())
+            graph.tts.speak("Μπράβο Δημήτρη! Έκανες $completed ασκήσεις σήμερα.", graph.settings.speechRate.first())
         }
     }
 }
@@ -1160,7 +1160,7 @@ fun SessionScreen(onDone: () -> Unit) {
             Spacer(Modifier.height(Sizes.gap))
             Text("Μπράβο Δημήτρη!", style = MaterialTheme.typography.displayLarge)
             Spacer(Modifier.height(Sizes.gapSmall))
-            Text("Έκανες ${s.completed} από ${s.planned} λέξεις σήμερα.", style = MaterialTheme.typography.bodyLarge)
+            Text("Έκανες ${s.completed} από ${s.planned} ασκήσεις σήμερα.", style = MaterialTheme.typography.bodyLarge)
         }
     }
 }
