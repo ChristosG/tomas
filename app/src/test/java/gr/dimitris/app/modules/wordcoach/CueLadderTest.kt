@@ -33,6 +33,25 @@ class CueLadderTest {
         assertEquals(3, l.level)
     }
 
+    /**
+     * A rung that repeats the one below it is no rung. «όχι» is cued «ο» at level 1 and «ό» at
+     * level 2 — the same letter with an accent on it — so he pressed «Βοήθεια» for more help and
+     * got back exactly what he was already looking at. Every vowel-initial word whose first
+     * syllable is that single vowel did it, and the ladder now steps straight on to the word.
+     */
+    @Test fun `skips a first syllable that only repeats the first sound`() {
+        val l = CueLadder(Item(text = "όχι", firstSound = "ο", firstSyllable = "ό"))
+        assertEquals(listOf(0, 1, 3, 4), l.levels)
+        assertEquals("ο", l.hint().let { l.cueText() })
+        assertEquals("όχι", l.hint().let { l.cueText() })
+    }
+
+    /** A syllable that adds a sound is still a step, whatever accents or capitals it carries. */
+    @Test fun `a syllable that adds a sound keeps its rung`() {
+        assertEquals(listOf(0, 1, 2, 3, 4), CueLadder(Item(text = "εκκλησία", firstSound = "ε", firstSyllable = "εκ")).levels)
+        assertEquals(listOf(0, 1, 2, 3, 4), CueLadder(Item(text = "Καφές", firstSound = "κ", firstSyllable = "Κα")).levels)
+    }
+
     @Test fun `outcome depends on the level reached`() {
         val l = CueLadder(full)
         assertEquals(Outcome.CORRECT, l.outcomeFor(confirmed = true))
