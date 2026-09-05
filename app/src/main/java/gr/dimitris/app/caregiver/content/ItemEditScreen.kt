@@ -24,6 +24,7 @@ import androidx.compose.material.icons.rounded.CameraAlt
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Image
 import androidx.compose.material.icons.rounded.Mic
+import androidx.compose.material.icons.rounded.MusicNote
 import androidx.compose.material.icons.rounded.PhotoLibrary
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Stop
@@ -83,6 +84,9 @@ fun ItemEditScreen(itemId: String?, onClose: () -> Unit) {
     }
     val askMic = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) vm.toggleRecording() else vm.micDenied()
+    }
+    val askSungMic = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) vm.toggleSungRecording() else vm.micDenied()
     }
     val askCamera = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) {
@@ -177,6 +181,25 @@ fun ItemEditScreen(itemId: String?, onClose: () -> Unit) {
                 if (s.recordingPath != null && !s.isRecording) {
                     Spacer(Modifier.width(8.dp))
                     QuietButton("Άκου", onClick = vm::playRecording, icon = Icons.Rounded.PlayArrow, modifier = Modifier.weight(1f))
+                }
+            }
+            // Only phrases are sung: the module works on whole phrases, and a sung single word
+            // would be a button that records something nothing ever plays.
+            if (s.kind == ItemKind.PHRASE) {
+                Spacer(Modifier.height(Sizes.gapSmall))
+                Text("Τραγουδισμένο (για το «Τραγούδα και πες το»)", style = MaterialTheme.typography.bodyLarge)
+                Row {
+                    BigButton(
+                        if (s.isRecordingSung) "Στοπ" else "Τραγούδησέ το",
+                        onClick = { askSungMic.launch(Manifest.permission.RECORD_AUDIO) },
+                        icon = if (s.isRecordingSung) Icons.Rounded.Stop else Icons.Rounded.MusicNote,
+                        tone = if (s.isRecordingSung) ButtonTone.Secondary else ButtonTone.Primary,
+                        modifier = Modifier.weight(1f),
+                    )
+                    if (s.sungPath != null && !s.isRecordingSung) {
+                        Spacer(Modifier.width(8.dp))
+                        QuietButton("Άκου", onClick = vm::playSung, icon = Icons.Rounded.PlayArrow, modifier = Modifier.weight(1f))
+                    }
                 }
             }
             Spacer(Modifier.height(Sizes.gap))

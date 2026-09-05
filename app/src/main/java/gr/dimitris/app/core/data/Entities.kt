@@ -27,6 +27,12 @@ enum class Category(val greek: String) {
 
 enum class Source { SEED, CAREGIVER }
 enum class Who { DIMITRIS, CAREGIVER }
+
+/**
+ * How a recording was made. A sung take is the caregiver singing the phrase on its melody, for
+ * "Τραγούδα και πες το"; it is never the model voice the talk board or the word coach plays.
+ */
+enum class RecordingStyle { SPOKEN, SUNG }
 enum class ModuleId { TALKBOARD, WORDCOACH, NUMBERS, SINGSAY, SCRIPTS, SENTENCES, TRACE, ARCADE }
 enum class Outcome { CORRECT, ASSISTED, SKIPPED }
 
@@ -65,6 +71,8 @@ data class Recording(
     val itemId: String,
     val path: String,
     val who: Who,
+    /** Defaulted in SQL as well as in Kotlin, so the rows written before phase 4 stay spoken ones. */
+    @ColumnInfo(defaultValue = "SPOKEN") val style: RecordingStyle = RecordingStyle.SPOKEN,
     val durationMs: Long,
     val recordedAt: Long = now(),
     val createdAt: Long = now(),

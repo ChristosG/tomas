@@ -8,6 +8,7 @@ import gr.dimitris.app.core.audio.Recorded
 import gr.dimitris.app.core.data.Category
 import gr.dimitris.app.core.data.Item
 import gr.dimitris.app.core.data.ItemKind
+import gr.dimitris.app.core.data.RecordingStyle
 import gr.dimitris.app.core.data.Who
 import gr.dimitris.app.core.greek.Euro
 import gr.dimitris.app.core.greek.Syllabifier
@@ -38,10 +39,16 @@ data class ItemEditState(
     /** Fresh recording made in this editor, written to the db on save. */
     val newRecording: Recorded? = null,
     val isRecording: Boolean = false,
+    /** Existing sung take, if any: the caregiver singing the phrase for "Τραγούδα και πες το". */
+    val savedSungPath: String? = null,
+    /** Fresh sung take made in this editor, written to the db on save. */
+    val newSungRecording: Recorded? = null,
+    val isRecordingSung: Boolean = false,
     val saving: Boolean = false,
     val error: String? = null,
 ) {
     val recordingPath: String? get() = newRecording?.file?.absolutePath ?: savedRecordingPath
+    val sungPath: String? get() = newSungRecording?.file?.absolutePath ?: savedSungPath
     val isNew: Boolean get() = id == null
 }
 
@@ -53,11 +60,12 @@ class ItemEditViewModel(private val graph: AppGraph, private val itemId: String?
         if (itemId != null) viewModelScope.launch {
             val item = graph.items.get(itemId) ?: return@launch
             val model = graph.items.modelRecording(item)
+            val sung = graph.items.sungRecording(item)
             _state.value = ItemEditState(
                 id = item.id, text = item.text, kind = item.kind, category = item.category, pinned = item.pinned,
                 priceText = item.priceCents?.let { Euro.format(it).removeSuffix(" €") } ?: "", imagePath = item.imagePath,
                 firstSyllableOverride = item.firstSyllableOverride ?: "", autoSyllable = Syllabifier.firstSyllable(item.text),
-                savedRecordingPath = model?.path,
+                savedRecordingPath = model?.path, savedSungPath = sung?.path,
             )
         }
     }
@@ -89,24 +97,44 @@ class ItemEditViewModel(private val graph: AppGraph, private val itemId: String?
         }
     }
 
-    fun toggleRecording() {
-        if (_state.value.isRecording) stopRecording() else startRecording()
+    fun toggleRecording() = toggle(
+        recording = _state.value.isRecording,
+        setRecording = { on -> _state.update { it.copy(isRecording = on) } },
+        keep = { rec -> _state.value.newRecording?.file?.delete(); _state.update { it.copy(newRecording = rec) } },
+    )
+
+    /** The sung take: the same microphone, kept in its own field so neither recording overwrites the other. */
+    fun toggleSungRecording() = toggle(
+        recording = _state.value.isRecordingSung,
+        setRecording = { on -> _state.update { it.copy(isRecordingSung = on) } },
+        keep = { rec -> _state.value.newSungRecording?.file?.delete(); _state.update { it.copy(newSungRecording = rec) } },
+    )
+
+    /**
+     * One start/stop dance for both takes. Only where the finished recording is kept differs, so the
+     * refusal wording, the error log and the "not recording any more" state live here once.
+     */
+    private fun toggle(recording: Boolean, setRecording: (Boolean) -> Unit, keep: (Recorded) -> Unit) {
+        if (recording) {
+            runCatching { graph.voice.stopRecording() }
+                .onSuccess { rec -> keep(rec); setRecording(false) }
+                .onFailure { e ->
+                    graph.errors.record("recorder stop", e)
+                    setRecording(false)
+                    _state.update { it.copy(error = "Πολύ σύντομη ηχογράφηση, δοκίμασε ξανά") }
+                }
+        } else {
+            runCatching { graph.voice.startRecording() }
+                .onSuccess { setRecording(true); _state.update { it.copy(error = null) } }
+                .onFailure { e -> graph.errors.record("recorder start", e); _state.update { it.copy(error = "Δεν ξεκίνησε η ηχογράφηση") } }
+        }
     }
 
-    private fun startRecording() {
-        runCatching { graph.voice.startRecording() }
-            .onSuccess { _state.update { it.copy(isRecording = true, error = null) } }
-            .onFailure { e -> graph.errors.record("recorder start", e); _state.update { it.copy(error = "Δεν ξεκίνησε η ηχογράφηση") } }
-    }
+    fun playRecording() = play(_state.value.recordingPath)
+    fun playSung() = play(_state.value.sungPath)
 
-    private fun stopRecording() {
-        runCatching { graph.voice.stopRecording() }
-            .onSuccess { rec -> _state.value.newRecording?.file?.delete(); _state.update { it.copy(isRecording = false, newRecording = rec) } }
-            .onFailure { e -> graph.errors.record("recorder stop", e); _state.update { it.copy(isRecording = false, error = "Πολύ σύντομη ηχογράφηση, δοκίμασε ξανά") } }
-    }
-
-    fun playRecording() {
-        val path = _state.value.recordingPath ?: return
+    private fun play(path: String?) {
+        if (path == null) return
         viewModelScope.launch { graph.voice.play(graph.files.resolve(path)).onFailure { graph.errors.record("play recording", it) } }
     }
 
@@ -129,7 +157,8 @@ class ItemEditViewModel(private val graph: AppGraph, private val itemId: String?
             _state.update { it.copy(error = "Η τιμή θέλει μορφή 3,50") }
             return
         }
-        if (s.isRecording) stopRecording()
+        if (s.isRecording) toggleRecording()
+        if (s.isRecordingSung) toggleSungRecording()
         _state.update { it.copy(saving = true) }
         viewModelScope.launch {
             try {
@@ -140,7 +169,13 @@ class ItemEditViewModel(private val graph: AppGraph, private val itemId: String?
                 )
                 val saved = graph.items.save(draft)
                 _state.value.newRecording?.let { graph.items.addRecording(saved.id, it.file, it.durationMs, Who.CAREGIVER) }
-                _state.update { it.copy(id = saved.id, newRecording = null, savedRecordingPath = it.recordingPath, saving = false) }
+                _state.value.newSungRecording?.let { graph.items.addRecording(saved.id, it.file, it.durationMs, Who.CAREGIVER, RecordingStyle.SUNG) }
+                _state.update {
+                    it.copy(
+                        id = saved.id, newRecording = null, savedRecordingPath = it.recordingPath,
+                        newSungRecording = null, savedSungPath = it.sungPath, saving = false,
+                    )
+                }
                 graph.feedback.success()
                 onSaved()
             } catch (ce: CancellationException) {
@@ -160,5 +195,6 @@ class ItemEditViewModel(private val graph: AppGraph, private val itemId: String?
     override fun onCleared() {
         if (graph.voice.isRecording) graph.voice.cancelRecording()
         _state.value.newRecording?.file?.delete()
+        _state.value.newSungRecording?.file?.delete()
     }
 }

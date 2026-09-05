@@ -49,6 +49,16 @@ class ItemRepositoryTest {
         assertEquals(Who.DIMITRIS, self.who)
     }
 
+    /** The sung take is a second model voice, not a replacement: the talk board must keep speaking. */
+    @Test fun `sung recordings are kept apart from spoken ones`() = runTest {
+        val item = repo.save(Item(text = "θέλω καφέ"))
+        val spoken = repo.addRecording(item.id, File("/tmp/s.m4a"), 900, Who.CAREGIVER)
+        val sung = repo.addRecording(item.id, File("/tmp/g.m4a"), 1800, Who.CAREGIVER, RecordingStyle.SUNG)
+        assertEquals(spoken.id, repo.get(item.id)?.modelRecordingId)
+        assertEquals(sung, repo.sungRecording(repo.get(item.id)!!))
+        assertEquals(spoken, repo.modelRecording(repo.get(item.id)!!))
+    }
+
     @Test fun `blank override is stored as null and a real one trimmed`() = runTest {
         assertEquals(null, repo.save(Item(text = "καφές", firstSyllableOverride = "  ")).firstSyllableOverride)
         assertEquals("κα", repo.save(Item(text = "καφές", firstSyllableOverride = " κα ")).firstSyllableOverride)

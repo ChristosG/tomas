@@ -40,4 +40,21 @@ class MigrationTest {
             }
         }
     }
+
+    @Test fun migrate3To4AddsRecordingStyleDefaultSpoken() {
+        val name = "migration-test-4.db"
+        helper.createDatabase(name, 3).use { db ->
+            db.execSQL(
+                "INSERT INTO recordings (id, itemId, path, who, durationMs, recordedAt, createdAt, updatedAt, deleted) " +
+                    "VALUES ('r', 'a', '/x.m4a', 'CAREGIVER', 500, 1, 1, 1, 0)"
+            )
+        }
+        helper.runMigrationsAndValidate(name, 4, true).use { db ->
+            db.query("SELECT style FROM recordings WHERE id = 'r'").use { c ->
+                c.moveToFirst()
+                // Every recording made before phase 4 was a spoken one, and it has to stay the model voice.
+                assertEquals("style should default to SPOKEN", "SPOKEN", c.getString(0))
+            }
+        }
+    }
 }

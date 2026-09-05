@@ -29,8 +29,8 @@ interface ItemDao {
 interface RecordingDao {
     @Upsert suspend fun upsert(recording: Recording)
     @Query("SELECT * FROM recordings WHERE id = :id AND deleted = 0") suspend fun get(id: String): Recording?
-    @Query("SELECT * FROM recordings WHERE itemId = :itemId AND who = :who AND deleted = 0 ORDER BY recordedAt DESC LIMIT 1")
-    suspend fun latestFor(itemId: String, who: Who): Recording?
+    @Query("SELECT * FROM recordings WHERE itemId = :itemId AND who = :who AND style = :style AND deleted = 0 ORDER BY recordedAt DESC LIMIT 1")
+    suspend fun latestFor(itemId: String, who: Who, style: RecordingStyle): Recording?
     @Query("UPDATE recordings SET deleted = 1, updatedAt = :now WHERE id = :id") suspend fun softDelete(id: String, now: Long)
 }
 

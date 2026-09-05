@@ -33,15 +33,22 @@ class ItemRepository(
 
     suspend fun delete(id: String) = items.softDelete(id, clock())
 
-    suspend fun addRecording(itemId: String, file: File, durationMs: Long, who: Who): Recording {
-        val recording = Recording(itemId = itemId, path = relativize(file), who = who, durationMs = durationMs, recordedAt = clock())
+    /**
+     * A sung take is a second voice for the same item, never the model one: only a spoken caregiver
+     * recording becomes what the talk board and the word coach play back.
+     */
+    suspend fun addRecording(itemId: String, file: File, durationMs: Long, who: Who, style: RecordingStyle = RecordingStyle.SPOKEN): Recording {
+        val recording = Recording(itemId = itemId, path = relativize(file), who = who, style = style, durationMs = durationMs, recordedAt = clock())
         recordings.upsert(recording)
-        if (who == Who.CAREGIVER) {
+        if (who == Who.CAREGIVER && style == RecordingStyle.SPOKEN) {
             items.get(itemId)?.let { items.upsert(it.copy(modelRecordingId = recording.id, updatedAt = clock())) }
         }
         return recording
     }
 
     suspend fun modelRecording(item: Item): Recording? =
-        item.modelRecordingId?.let { recordings.get(it) } ?: recordings.latestFor(item.id, Who.CAREGIVER)
+        item.modelRecordingId?.let { recordings.get(it) } ?: recordings.latestFor(item.id, Who.CAREGIVER, RecordingStyle.SPOKEN)
+
+    /** The caregiver singing this item, for "Τραγούδα και πες το". Null when nobody has sung it yet. */
+    suspend fun sungRecording(item: Item): Recording? = recordings.latestFor(item.id, Who.CAREGIVER, RecordingStyle.SUNG)
 }
