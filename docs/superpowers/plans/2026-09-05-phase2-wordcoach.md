@@ -693,3 +693,691 @@ Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
 ```
 
 ---
+
+### Task 5: Word coach module (ViewModel + screen) and module registration
+
+**Files:**
+- Modify: `modules/Module.kt` (add `practiceFor` default), `AppGraph.kt` (`modules = listOf(WordCoachModule)`)
+- Create: `modules/wordcoach/WordCoachModule.kt`, `WordCoachViewModel.kt`, `WordCoachScreen.kt`
+
+**Interfaces:**
+- Consumes: `CueLadder`, `Scheduler`, `SessionBuilder`, `ItemSpeaker` (`graph.speaker`), `SpeechToText` (`graph.stt`), `SpeechMatch`, `Recorder`, `Player`, `ItemRepository.addRecording`, `AttemptDao.insert`, `Settings.sttEnabled`, `Feedback`, `PictureCard`, `BigButton`, `QuietButton`, `SuccessMark`, `DimitrisScreen`.
+- Produces: `Module.practiceFor(graph)` (default = `planFor`), `WordCoachModule` object, `WordCoachScreen(items, sessionId, onDone)`, `WordCoachViewModel(graph, items, sessionId)` with `state: StateFlow<WordCoachState>`.
+
+- [ ] **Step 1: Module interface default**
+
+In `modules/Module.kt` add after `planFor`:
+```kotlin
+    /** Items for free practice from the Today grid. Defaults to the session plan; modules may fall back to random items. */
+    suspend fun practiceFor(graph: AppGraph): List<Item> = planFor(graph)
+```
+
+- [ ] **Step 2: Module object**
+
+`modules/wordcoach/WordCoachModule.kt`:
+```kotlin
+package gr.dimitris.app.modules.wordcoach
+
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.RecordVoiceOver
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.graphics.vector.ImageVector
+import gr.dimitris.app.AppGraph
+import gr.dimitris.app.core.data.Item
+import gr.dimitris.app.core.data.ItemKind
+import gr.dimitris.app.core.data.ModuleId
+import gr.dimitris.app.core.scheduler.SessionBuilder
+import gr.dimitris.app.modules.Module
+
+object WordCoachModule : Module {
+    override val id = ModuleId.WORDCOACH
+    override val titleGreek = "Λέξεις"
+    override val icon: ImageVector = Icons.Rounded.RecordVoiceOver
+    private val kinds = listOf(ItemKind.WORD, ItemKind.PHRASE)
+
+    override suspend fun planFor(graph: AppGraph): List<Item> =
+        SessionBuilder(graph.db.items(), graph.db.schedules()).plan(id, kinds)
+
+    override suspend fun practiceFor(graph: AppGraph): List<Item> =
+        planFor(graph).ifEmpty { graph.db.items().activeOfKinds(kinds).shuffled().take(8) }
+
+    @Composable
+    override fun Screen(items: List<Item>, sessionId: String?, onDone: () -> Unit) = WordCoachScreen(items, sessionId, onDone)
+}
+```
+
+In `AppGraph.kt` change `val modules: List<Module> = emptyList()` to `val modules: List<Module> = listOf(WordCoachModule)` (import `gr.dimitris.app.modules.wordcoach.WordCoachModule`).
+
+- [ ] **Step 3: ViewModel**
+
+`modules/wordcoach/WordCoachViewModel.kt`:
+```kotlin
+package gr.dimitris.app.modules.wordcoach
+
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import gr.dimitris.app.AppGraph
+import gr.dimitris.app.core.data.Attempt
+import gr.dimitris.app.core.data.Item
+import gr.dimitris.app.core.data.ModuleId
+import gr.dimitris.app.core.data.Who
+import gr.dimitris.app.core.data.now
+import gr.dimitris.app.core.speech.SpeechMatch
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
+import java.io.File
+
+data class WordCoachState(
+    val index: Int = 0,
+    val total: Int,
+    val item: Item,
+    val level: Int = 0,
+    val cueText: String? = null,
+    val showsWord: Boolean = false,
+    val canHint: Boolean = true,
+    val isRecording: Boolean = false,
+    val selfRecordingPath: String? = null,
+    val sttOn: Boolean = false,
+    val listening: Boolean = false,
+    val heard: String? = null,
+    val heardMatched: Boolean = false,
+    /** True after "Το είπα!": success mark shown, only "Επόμενο" remains. */
+    val confirmed: Boolean = false,
+    val done: Boolean = false,
+    val error: String? = null,
+)
+
+class WordCoachViewModel(private val graph: AppGraph, private val items: List<Item>, private val sessionId: String?) : ViewModel() {
+    private var ladder = CueLadder(items.first())
+    private var startedAt = now()
+    private var selfRecordingId: String? = null
+
+    private val _state = MutableStateFlow(WordCoachState(total = items.size, item = items.first()))
+    val state: StateFlow<WordCoachState> = _state.asStateFlow()
+
+    init {
+        viewModelScope.launch { _state.update { it.copy(sttOn = graph.settings.sttEnabled.first() && graph.stt.isAvailable) } }
+    }
+
+    private fun publishLadder() = _state.update {
+        it.copy(level = ladder.level, cueText = ladder.cueText(), showsWord = ladder.showsWord, canHint = ladder.canHint)
+    }
+
+    /** One more hint. Levels 1–2 are spoken by TTS; 3–4 use the model voice. */
+    fun hint() {
+        if (!ladder.canHint) return
+        ladder.hint()
+        publishLadder()
+        speakCue()
+    }
+
+    fun repeatCue() = speakCue()
+
+    private fun speakCue() {
+        val s = _state.value
+        viewModelScope.launch {
+            when (s.level) {
+                1, 2 -> ladder.cueText()?.let { graph.speaker.speakText(it) }
+                3, 4 -> graph.speaker.speak(s.item)
+                else -> Unit
+            }
+        }
+    }
+
+    fun toggleRecording() {
+        if (_state.value.isRecording) {
+            runCatching { graph.recorder.stop() }
+                .onSuccess { rec ->
+                    _state.update { it.copy(isRecording = false, selfRecordingPath = rec.file.absolutePath) }
+                    viewModelScope.launch {
+                        selfRecordingId = graph.items.addRecording(_state.value.item.id, rec.file, rec.durationMs, Who.DIMITRIS).id
+                    }
+                }
+                .onFailure { e -> graph.errors.record("wordcoach record stop", e); _state.update { it.copy(isRecording = false, error = "Πολύ σύντομη ηχογράφηση") } }
+        } else {
+            runCatching { graph.recorder.start() }
+                .onSuccess { _state.update { it.copy(isRecording = true, error = null) } }
+                .onFailure { e -> graph.errors.record("wordcoach record start", e); _state.update { it.copy(error = "Δεν ξεκίνησε η ηχογράφηση") } }
+        }
+    }
+
+    /** Model voice, then his own recording. */
+    fun playComparison() {
+        val path = _state.value.selfRecordingPath ?: return
+        viewModelScope.launch {
+            graph.speaker.speak(_state.value.item)
+            graph.player.play(File(path)).onFailure { graph.errors.record("wordcoach compare", it) }
+        }
+    }
+
+    /** Optional soft recognition: encouragement only, never a gate. */
+    fun listen() {
+        if (!_state.value.sttOn || _state.value.listening) return
+        _state.update { it.copy(listening = true, heard = null, heardMatched = false) }
+        viewModelScope.launch {
+            val result = graph.stt.listen(5)
+            val text = result.getOrNull()?.text
+            val matched = text != null && SpeechMatch.matches(text, _state.value.item.text)
+            if (matched) graph.feedback.success()
+            _state.update { it.copy(listening = false, heard = text, heardMatched = matched) }
+        }
+    }
+
+    fun confirm() = finish(confirmed = true)
+    fun skip() = finish(confirmed = false)
+
+    private fun finish(confirmed: Boolean) {
+        if (_state.value.isRecording) toggleRecording()
+        val s = _state.value
+        val outcome = ladder.outcomeFor(confirmed)
+        val detail = s.heard?.let { """{"heard":${jsonString(it)},"matched":${s.heardMatched}}""" } ?: "{}"
+        viewModelScope.launch {
+            runCatching {
+                graph.db.attempts().insert(
+                    Attempt(itemId = s.item.id, module = ModuleId.WORDCOACH, sessionId = sessionId, startedAt = startedAt,
+                        durationMs = now() - startedAt, outcome = outcome, cueLevel = ladder.level, selfRecordingId = selfRecordingId, detail = detail)
+                )
+                graph.scheduler.record(s.item.id, ModuleId.WORDCOACH, outcome, ladder.level)
+            }.onFailure { graph.errors.record("wordcoach finish", it) }
+        }
+        if (confirmed) {
+            graph.feedback.success()
+            _state.update { it.copy(confirmed = true) }
+        } else {
+            graph.feedback.nudge()
+            next()
+        }
+    }
+
+    fun next() {
+        val i = _state.value.index + 1
+        if (i >= items.size) { _state.update { it.copy(done = true) }; return }
+        ladder = CueLadder(items[i])
+        startedAt = now()
+        selfRecordingId = null
+        _state.value = WordCoachState(index = i, total = items.size, item = items[i], sttOn = _state.value.sttOn)
+    }
+
+    override fun onCleared() {
+        if (graph.recorder.isRecording) graph.recorder.cancel()
+    }
+
+    private fun jsonString(s: String) = "\"" + s.replace("\\", "\\\\").replace("\"", "\\\"") + "\""
+}
+```
+
+- [ ] **Step 4: Screen**
+
+`modules/wordcoach/WordCoachScreen.kt`:
+```kotlin
+package gr.dimitris.app.modules.wordcoach
+
+import android.Manifest
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.width
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Compare
+import androidx.compose.material.icons.rounded.Hearing
+import androidx.compose.material.icons.rounded.Mic
+import androidx.compose.material.icons.rounded.Stop
+import androidx.compose.material.icons.rounded.VolumeUp
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.style.TextAlign
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
+import gr.dimitris.app.LocalAppGraph
+import gr.dimitris.app.core.data.Item
+import gr.dimitris.app.ui.components.BigButton
+import gr.dimitris.app.ui.components.ButtonTone
+import gr.dimitris.app.ui.components.DimitrisScreen
+import gr.dimitris.app.ui.components.PictureCard
+import gr.dimitris.app.ui.components.QuietButton
+import gr.dimitris.app.ui.components.SuccessMark
+import gr.dimitris.app.ui.theme.Sizes
+
+@Composable
+fun WordCoachScreen(items: List<Item>, sessionId: String?, onDone: () -> Unit) {
+    val graph = LocalAppGraph.current
+    val vm: WordCoachViewModel = viewModel(key = "wordcoach-${sessionId ?: "practice"}-${items.size}") { WordCoachViewModel(graph, items, sessionId) }
+    val s by vm.state.collectAsStateWithLifecycle()
+    val askMic = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted -> if (granted) vm.toggleRecording() }
+
+    LaunchedEffect(s.done) { if (s.done) onDone() }
+
+    DimitrisScreen(
+        title = "Λέξεις ${s.index + 1}/${s.total}",
+        onBack = onDone,
+        bottom = {
+            if (s.confirmed) {
+                BigButton("Επόμενο", onClick = vm::next, tone = ButtonTone.Success)
+            } else {
+                Row {
+                    BigButton("Βοήθεια", onClick = vm::hint, tone = ButtonTone.Secondary, enabled = s.canHint, modifier = Modifier.weight(1f))
+                    Spacer(Modifier.width(Sizes.gapSmall))
+                    BigButton("Το είπα!", onClick = vm::confirm, tone = ButtonTone.Success, modifier = Modifier.weight(1f))
+                }
+                Spacer(Modifier.height(Sizes.gapSmall))
+                QuietButton("Παράλειψη", onClick = vm::skip)
+            }
+        },
+    ) {
+        Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+            PictureCard(imagePath = s.item.imagePath, label = if (s.showsWord) s.item.text else null, onClick = vm::repeatCue,
+                modifier = Modifier.fillMaxWidth(0.7f))
+            SuccessMark(visible = s.confirmed)
+        }
+        Spacer(Modifier.height(Sizes.gapSmall))
+        if (s.level in 1..2) {
+            Text(s.cueText ?: "", style = MaterialTheme.typography.displayLarge, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
+        }
+        Spacer(Modifier.height(Sizes.gapSmall))
+        Row {
+            QuietButton("Άκου", onClick = vm::repeatCue, icon = Icons.Rounded.VolumeUp, modifier = Modifier.weight(1f))
+            Spacer(Modifier.width(Sizes.gapSmall))
+            QuietButton(
+                if (s.isRecording) "Στοπ" else "Πες το",
+                onClick = { askMic.launch(Manifest.permission.RECORD_AUDIO) },
+                icon = if (s.isRecording) Icons.Rounded.Stop else Icons.Rounded.Mic,
+                modifier = Modifier.weight(1f),
+            )
+        }
+        if (s.selfRecordingPath != null && !s.isRecording) {
+            Spacer(Modifier.height(Sizes.gapSmall))
+            QuietButton("Σύγκριση", onClick = vm::playComparison, icon = Icons.Rounded.Compare)
+        }
+        if (s.sttOn) {
+            Spacer(Modifier.height(Sizes.gapSmall))
+            QuietButton(if (s.listening) "Ακούω..." else "Άκουσέ με", onClick = vm::listen, icon = Icons.Rounded.Hearing)
+            if (s.heard != null) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
+                    Text(
+                        if (s.heardMatched) "Άκουσα «${s.heard}». Μπράβο!" else "Άκουσα «${s.heard}». Δοκίμασε ξανά αν θέλεις.",
+                        style = MaterialTheme.typography.bodyLarge, textAlign = TextAlign.Center,
+                    )
+                }
+            }
+        }
+        if (s.error != null) {
+            Spacer(Modifier.height(Sizes.gapSmall))
+            Text(s.error!!, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyLarge)
+        }
+    }
+}
+```
+
+- [ ] **Step 5: Build**
+
+Run: `./gradlew -q assembleDebug testDebugUnitTest` — Expected: passes (nothing reaches the screen until Task 6).
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add app/src/main
+git commit -m "feat(phase2): word coach module with cue ladder, recording and soft recognition
+
+Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
+```
+
+---
+
+### Task 6: Session runner, free practice, Today module grid
+
+**Files:**
+- Create: `today/SessionViewModel.kt`, `today/PracticeScreen.kt`, `today/ModuleGrid.kt`
+- Modify: `today/SessionScreen.kt` (rewrite), `today/TodayScreen.kt` (grid), `Nav.kt` (PRACTICE route)
+- Test: `app/src/androidTest/java/gr/dimitris/app/today/SessionFlowTest.kt`
+
+**Interfaces:**
+- Consumes: `AppGraph.modules`, `Module.planFor/practiceFor/Screen`, `Settings.enabledModules`, `SessionDao.upsert/get`, `TextToSpeech`, `Feedback`.
+- Produces: `Routes.PRACTICE = "practice/{moduleId}"`, `Routes.practice(id)`, `SessionViewModel(graph)` with `state: StateFlow<SessionStep>`, `SessionStep` (`Loading`, `Run`, `Summary`, `Empty`), `PracticeScreen(moduleId, onDone)`, `ModuleGrid(modules, onOpen)`.
+
+- [ ] **Step 1: ViewModel**
+
+`today/SessionViewModel.kt`:
+```kotlin
+package gr.dimitris.app.today
+
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import gr.dimitris.app.AppGraph
+import gr.dimitris.app.core.data.Item
+import gr.dimitris.app.core.data.Session
+import gr.dimitris.app.core.data.now
+import gr.dimitris.app.modules.Module
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
+
+sealed class SessionStep {
+    object Loading : SessionStep()
+    object Empty : SessionStep()
+    data class Run(val index: Int, val module: Module, val items: List<Item>, val sessionId: String) : SessionStep()
+    data class Summary(val completed: Int, val planned: Int) : SessionStep()
+}
+
+/** Builds today's mixed session from the enabled modules and walks through them one by one. */
+class SessionViewModel(private val graph: AppGraph) : ViewModel() {
+    private val _state = MutableStateFlow<SessionStep>(SessionStep.Loading)
+    val state: StateFlow<SessionStep> = _state.asStateFlow()
+
+    private var plans: List<Pair<Module, List<Item>>> = emptyList()
+    private var session: Session? = null
+    private var completed = 0
+
+    init {
+        viewModelScope.launch {
+            val enabled = graph.settings.enabledModules.first()
+            plans = graph.modules.filter { it.id in enabled }
+                .mapNotNull { m -> runCatching { m.planFor(graph) }.getOrElse { graph.errors.record("plan ${m.id}", it); emptyList() }.takeIf { it.isNotEmpty() }?.let { m to it } }
+            if (plans.isEmpty()) {
+                _state.value = SessionStep.Empty
+                graph.tts.speak("Τίποτα για σήμερα. Τα λέμε αύριο!", graph.settings.speechRate.first())
+                return@launch
+            }
+            val s = Session(startedAt = now(), plannedModules = plans.joinToString(",") { it.first.id.name }, plannedItemCount = plans.sumOf { it.second.size })
+            runCatching { graph.db.sessions().upsert(s) }.onFailure { graph.errors.record("session start", it) }
+            session = s
+            _state.value = SessionStep.Run(0, plans[0].first, plans[0].second, s.id)
+        }
+    }
+
+    fun moduleDone() {
+        val step = _state.value as? SessionStep.Run ?: return
+        completed += step.items.size
+        val next = step.index + 1
+        if (next < plans.size) {
+            _state.value = SessionStep.Run(next, plans[next].first, plans[next].second, step.sessionId)
+            return
+        }
+        val s = session
+        val planned = plans.sumOf { it.second.size }
+        viewModelScope.launch {
+            if (s != null) runCatching { graph.db.sessions().upsert(s.copy(endedAt = now(), completedItemCount = completed, updatedAt = now())) }
+                .onFailure { graph.errors.record("session end", it) }
+            _state.value = SessionStep.Summary(completed, planned)
+            graph.feedback.success()
+            graph.tts.speak("Μπράβο Δημήτρη! Έκανες $completed λέξεις σήμερα.", graph.settings.speechRate.first())
+        }
+    }
+}
+```
+
+- [ ] **Step 2: Session, practice and grid screens**
+
+`today/SessionScreen.kt` (replace the whole file):
+```kotlin
+package gr.dimitris.app.today
+
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
+import androidx.compose.ui.Modifier
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
+import gr.dimitris.app.LocalAppGraph
+import gr.dimitris.app.ui.components.BigButton
+import gr.dimitris.app.ui.components.DimitrisScreen
+import gr.dimitris.app.ui.components.SuccessMark
+import gr.dimitris.app.ui.theme.Sizes
+
+@Composable
+fun SessionScreen(onDone: () -> Unit) {
+    val graph = LocalAppGraph.current
+    val vm: SessionViewModel = viewModel { SessionViewModel(graph) }
+    val step by vm.state.collectAsStateWithLifecycle()
+
+    when (val s = step) {
+        SessionStep.Loading -> DimitrisScreen { Text("Ετοιμάζω τη σημερινή άσκηση...", style = MaterialTheme.typography.headlineMedium) }
+        SessionStep.Empty -> DimitrisScreen(bottom = { BigButton("Εντάξει", onClick = onDone) }) {
+            Text("Τίποτα για σήμερα. Τα λέμε αύριο!", style = MaterialTheme.typography.headlineMedium)
+        }
+        is SessionStep.Run -> key(s.index) { s.module.Screen(items = s.items, sessionId = s.sessionId, onDone = vm::moduleDone) }
+        is SessionStep.Summary -> DimitrisScreen(bottom = { BigButton("Εντάξει", onClick = onDone) }) {
+            SuccessMark(visible = true)
+            Spacer(Modifier.height(Sizes.gap))
+            Text("Μπράβο Δημήτρη!", style = MaterialTheme.typography.displayLarge)
+            Spacer(Modifier.height(Sizes.gapSmall))
+            Text("Έκανες ${s.completed} από ${s.planned} λέξεις σήμερα.", style = MaterialTheme.typography.bodyLarge)
+        }
+    }
+}
+```
+
+`today/PracticeScreen.kt`:
+```kotlin
+package gr.dimitris.app.today
+
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import gr.dimitris.app.LocalAppGraph
+import gr.dimitris.app.core.data.Item
+import gr.dimitris.app.core.data.ModuleId
+import gr.dimitris.app.ui.components.BigButton
+import gr.dimitris.app.ui.components.DimitrisScreen
+
+/** Free practice of one module from the Today grid: same screen, no session row. */
+@Composable
+fun PracticeScreen(moduleId: ModuleId, onDone: () -> Unit) {
+    val graph = LocalAppGraph.current
+    val module = remember(moduleId) { graph.modules.first { it.id == moduleId } }
+    var items by remember { mutableStateOf<List<Item>?>(null) }
+
+    LaunchedEffect(moduleId) {
+        items = runCatching { module.practiceFor(graph) }.getOrElse { graph.errors.record("practice ${module.id}", it); emptyList() }
+    }
+
+    when (val list = items) {
+        null -> DimitrisScreen { Text("Ετοιμάζω...", style = MaterialTheme.typography.headlineMedium) }
+        else -> if (list.isEmpty()) DimitrisScreen(bottom = { BigButton("Εντάξει", onClick = onDone) }) {
+            Text("Δεν υπάρχουν λέξεις ακόμα. Ζήτα από κάποιον να προσθέσει.", style = MaterialTheme.typography.headlineMedium)
+        } else module.Screen(items = list, sessionId = null, onDone = onDone)
+    }
+}
+```
+
+`today/ModuleGrid.kt`:
+```kotlin
+package gr.dimitris.app.today
+
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
+import gr.dimitris.app.modules.Module
+import gr.dimitris.app.ui.theme.LocalFeedback
+import gr.dimitris.app.ui.theme.Sizes
+
+@Composable
+fun ModuleGrid(modules: List<Module>, onOpen: (Module) -> Unit, modifier: Modifier = Modifier) {
+    val feedback = LocalFeedback.current
+    LazyVerticalGrid(
+        columns = GridCells.Fixed(2),
+        horizontalArrangement = Arrangement.spacedBy(Sizes.gapSmall),
+        verticalArrangement = Arrangement.spacedBy(Sizes.gapSmall),
+        modifier = modifier.fillMaxWidth(),
+    ) {
+        items(modules, key = { it.id.name }) { m ->
+            Card(
+                onClick = { feedback.tap(); onOpen(m) },
+                shape = RoundedCornerShape(Sizes.corner),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                modifier = Modifier.heightIn(min = 120.dp),
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth().padding(16.dp)) {
+                    Icon(m.icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(48.dp))
+                    Text(m.titleGreek, style = MaterialTheme.typography.titleLarge)
+                }
+            }
+        }
+    }
+}
+```
+
+- [ ] **Step 3: Today grid and route**
+
+In `TodayScreen.kt`: collect `val enabled by graph.settings.enabledModules.collectAsStateWithLifecycle(initialValue = emptySet())`, add a parameter `onPractice: (ModuleId) -> Unit`, and after the TTS card block add:
+```kotlin
+        val modules = graph.modules.filter { it.id in enabled }
+        if (modules.isNotEmpty()) {
+            Spacer(Modifier.height(Sizes.gap))
+            Text("Εξάσκηση", style = MaterialTheme.typography.titleLarge)
+            Spacer(Modifier.height(Sizes.gapSmall))
+            ModuleGrid(modules, onOpen = { onPractice(it.id) })
+        }
+```
+In `Nav.kt`: add `const val PRACTICE = "practice/{moduleId}"` and `fun practice(id: ModuleId) = "practice/${id.name}"` to `Routes`; pass `onPractice = { nav.navigate(Routes.practice(it)) }` to `TodayScreen`; register:
+```kotlin
+        composable(Routes.PRACTICE) { entry ->
+            val id = ModuleId.valueOf(entry.arguments?.getString("moduleId") ?: ModuleId.WORDCOACH.name)
+            PracticeScreen(moduleId = id, onDone = { nav.popBackStack(Routes.TODAY, inclusive = false) })
+        }
+```
+
+- [ ] **Step 4: Instrumented flow test**
+
+`app/src/androidTest/java/gr/dimitris/app/today/SessionFlowTest.kt`:
+```kotlin
+package gr.dimitris.app.today
+
+import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onAllNodes
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
+import androidx.test.core.app.ApplicationProvider
+import gr.dimitris.app.DimitrisApp
+import gr.dimitris.app.MainActivity
+import gr.dimitris.app.core.data.Category
+import gr.dimitris.app.core.data.Item
+import kotlinx.coroutines.runBlocking
+import org.junit.Before
+import org.junit.Rule
+import org.junit.Test
+
+class SessionFlowTest {
+    @get:Rule val compose = createAndroidComposeRule<MainActivity>()
+
+    @Before fun seedOneWord() = runBlocking {
+        val graph = ApplicationProvider.getApplicationContext<DimitrisApp>().graph
+        graph.items.save(Item(text = "νερό", category = Category.FOOD))
+    }
+
+    @Test fun startRunsWordCoachAndConfirmAdvances() {
+        compose.onNodeWithText("Ξεκίνα").performClick()
+        compose.waitUntil(15_000) { compose.onAllNodes(hasText("Το είπα!")).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithText("Βοήθεια").assertIsDisplayed()
+        compose.onNodeWithText("Το είπα!").performClick()
+        compose.onNodeWithText("Επόμενο").assertIsDisplayed()
+    }
+}
+```
+
+- [ ] **Step 5: Build, run everything, use it**
+
+Run: `./gradlew -q testDebugUnitTest && ANDROID_SERIAL=emulator-5554 ./gradlew -q installDebug connectedDebugAndroidTest`
+Expected: all green. On the emulator: "Ξεκίνα" runs through up to 12 words; "Βοήθεια" climbs the ladder (letter, syllable if known, spoken word, written word); "Το είπα!" shows the check and "Επόμενο"; the end screen says Μπράβο and speaks. Today shows an "Εξάσκηση" grid with "Λέξεις".
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add app/src/main app/src/androidTest
+git commit -m "feat(phase2): daily session runner, free practice and Today module grid
+
+Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
+```
+
+---
+
+### Task 7: Caregiver toggles for modules and speech recognition
+
+**Files:**
+- Modify: `caregiver/SettingsScreen.kt`
+
+- [ ] **Step 1: Add two sections**
+
+After the "Κλείδωμα φροντιστή" block and before "Σχετικά", add:
+```kotlin
+            Text("Ασκήσεις", style = MaterialTheme.typography.titleLarge)
+            val enabled by graph.settings.enabledModules.collectAsStateWithLifecycle(initialValue = emptySet())
+            graph.modules.forEach { m ->
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                    Text(m.titleGreek, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+                    Switch(checked = m.id in enabled, onCheckedChange = { on -> scope.launch { graph.settings.setModuleEnabled(m.id, on) } })
+                }
+            }
+            Spacer(Modifier.height(Sizes.gap))
+
+            Text("Αναγνώριση ομιλίας (δοκιμαστικό)", style = MaterialTheme.typography.titleLarge)
+            val stt by graph.settings.sttEnabled.collectAsStateWithLifecycle(initialValue = false)
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                Text(
+                    if (graph.stt.isAvailable) "Δείχνει τι άκουσε το τηλέφωνο. Ποτέ δεν τον κόβει." else "Η συσκευή δεν έχει αναγνώριση ομιλίας.",
+                    style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f),
+                )
+                Switch(checked = stt && graph.stt.isAvailable, enabled = graph.stt.isAvailable, onCheckedChange = { on -> scope.launch { graph.settings.setSttEnabled(on) } })
+            }
+            Spacer(Modifier.height(Sizes.gap))
+```
+
+- [ ] **Step 2: Build, install, check, commit**
+
+Run: `ANDROID_SERIAL=emulator-5554 ./gradlew -q installDebug` — switching "Λέξεις" off removes it from the Today grid and from sessions; switching recognition on shows "Άκουσέ με" in the word coach.
+```bash
+git add app/src/main
+git commit -m "feat(phase2): caregiver toggles for modules and speech recognition
+
+Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
+```
+
+---
+
+### Task 8: Phase 2 verification
+
+- [ ] `./gradlew -q testDebugUnitTest && ANDROID_SERIAL=emulator-5554 ./gradlew -q connectedDebugAndroidTest` — all green.
+- [ ] `ANDROID_SERIAL=R5CWC2C1KSJ ./gradlew -q installDebug`; on the phone: run a full session, use every button once (Βοήθεια ×4, Άκου, Πες το/Στοπ, Σύγκριση, Το είπα!, Παράλειψη, Επόμενο), enable recognition and say a word, finish and hear the summary. Caregiver → Σφάλματα must stay empty.
+- [ ] Append "Phase 2 verified on <date>, <device>" with problems under this task; commit `docs(phase2): verification notes`.
