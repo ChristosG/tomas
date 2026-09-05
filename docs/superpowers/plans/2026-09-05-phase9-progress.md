@@ -1,0 +1,122 @@
+# Dimitris' App — Phase 9 (Progress, Insights, Claude) Implementation Plan
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** Caregivers see how Dimitris is doing (minutes, streak, accuracy per module, cue-level trend, mastered words, talk board usage, current levels), read plain-Greek insights the app derives itself, adjust levels by hand, and optionally ask Claude for advice plus a two-sentence encouragement that the phone reads to Dimitris.
+
+**Architecture:** Pure `ProgressStats` (from attempts/sessions/schedules) and `InsightRules` (Chris-marked) with tests; a `ProgressScreen` with small Canvas bar charts and level controls; `SecretStore` (EncryptedSharedPreferences) for the API key; `AdviceSummary` (pure, text-only, never audio or photos); `ClaudeAdvisor` on the official Anthropic Java SDK from Kotlin; an `AdviceScreen`. Nothing leaves the device unless a key is set and the caregiver taps the button.
+
+**Tech Stack:** as before + `com.anthropic:anthropic-java:2.34.0` (official SDK; Kotlin uses the Java SDK), `androidx.security:security-crypto` (already declared), `INTERNET` permission.
+
+**Spec:** `docs/superpowers/specs/2026-09-05-dimitris-app-design.md` (§7 phase 9)
+
+## Global Constraints
+
+- Greek-only UI; 72dp; bottom actions.
+- Claude: model `claude-opus-5` (configurable string in settings, default that), adaptive thinking (`ThinkingConfigAdaptive`), `maxTokens = 4000`, a fixed Greek system prompt describing Dimitris' profile and the two required sections; the user message is the `AdviceSummary` text. Response parsed into `caregivers` and `dimitris` parts by the markers `## Για τους φροντιστές` and `## Για τον Δημήτρη`. `stop_reason == refusal` or any exception → Greek error text, recorded via `graph.errors`. No key → the button is disabled with "Βάλε κλειδί στις ρυθμίσεις".
+- The summary contains: date range, minutes, streak, per-module attempt counts and accuracy, mean cue level per week, mastered count, ten most-skipped items (text only), ten most-used talk board items (text only), current levels, the rule-engine insights. Never audio, photos, or file paths.
+- `InsightRules` implemented by Claude with `// CHRIS: rewrite me` and full tests (controller ruling).
+- Commits `feat(phase9): ...` with the Co-Authored-By trailer; conventions as previous phases.
+
+---
+
+### Task 1: ProgressStats and InsightRules (pure)
+
+**Files:** create `caregiver/progress/ProgressStats.kt`, `caregiver/insights/InsightRules.kt`; tests `ProgressStatsTest.kt`, `InsightRulesTest.kt`.
+
+**Interfaces:**
+- `data class DayStat(val day: Long /* startOfDay */, val minutes: Int, val attempts: Int)`; `data class ModuleStat(val module: ModuleId, val attempts: Int, val correct: Int, val assisted: Int, val skipped: Int) { val accuracy: Float }`; `data class WeekCue(val weekStart: Long, val meanCue: Float)`; `data class Progress(val from: Long, val to: Long, val days: List<DayStat>, val streakDays: Int, val modules: List<ModuleStat>, val cueTrend: List<WeekCue>, val mastered: Int, val mostSkipped: List<Pair<String, Int>>, val mostUsedTalk: List<Pair<String, Int>>)`.
+- `object ProgressStats { fun compute(attempts: List<Attempt>, sessions: List<Session>, schedules: List<Schedule>, items: Map<String, Item>, from: Long, to: Long, zone: ZoneId = ZoneId.systemDefault()): Progress }` — minutes per day from session durations (`endedAt - startedAt`, capped at 60 min each); streak = consecutive days ending today (or yesterday) with ≥ 1 attempt; cue trend over WORDCOACH/SCRIPTS/SINGSAY attempts with non-null cueLevel, grouped by ISO week; mastered = schedules with box 5; mostSkipped = item texts by SKIPPED count (real items only, synthetic ids excluded); mostUsedTalk = TALKBOARD attempts by item text.
+- `object InsightRules { fun generate(p: Progress, attempts: List<Attempt>, items: Map<String, Item>): List<String> }` — Greek one-liners, at most 6, in priority order: streak ≥ 3 ("Σερί N ημερών. Συνέχισε έτσι!"); a module with ≥ 20 attempts this period and accuracy ≥ 0.8 ("Οι Λέξεις πάνε πολύ καλά: N% σωστά."); cue trend improved by ≥ 0.5 between first and last week ("Χρειάζεται λιγότερη βοήθεια από την προηγούμενη εβδομάδα."); a first-sound group (by `Item.firstSound`) with ≥ 6 attempts whose accuracy rose ≥ 0.2 versus the previous period ("Οι λέξεις που αρχίζουν από «π» βελτιώθηκαν."); ≥ 3 items skipped ≥ 3 times ("Δύσκολες λέξεις: καφές, ψωμί, νερό. Δοκίμασε φωτογραφία ή φωνή."); no session for ≥ 3 days ("Καμία άσκηση εδώ και N μέρες.").
+
+- [ ] Failing tests with hand-built attempt lists (fixed epoch times), then implement, `./gradlew -q testDebugUnitTest`, commit `feat(phase9): progress statistics and insight rules`.
+
+---
+
+### Task 2: Progress screen with level controls
+
+**Files:** create `caregiver/progress/ProgressViewModel.kt`, `ProgressScreen.kt`, `Charts.kt` (`BarChart(values: List<Float>, labels: List<String>)` on `Canvas`, navy bars on mist background, no library); modify `Nav.kt` (`caregiver/progress`), `CaregiverHomeScreen.kt` (entry "Πρόοδος" first in the list), `core/data/Daos.kt` (+ `AttemptDao.between(from, to)`, `SessionDao.between(from, to)`, `ScheduleDao.allActive()`).
+
+- [ ] ViewModel loads the last 28 days (`startOfDay(now) - 27 days .. now`), computes `Progress` and insights on `Dispatchers.Default`, exposes level values (`numbersLevel`, `sentencesLevel`, `traceLevel`) with setters.
+- [ ] Screen sections: "Αυτή την εβδομάδα" (minutes bar chart per day, streak line), "Ανά άσκηση" (one row per module: name, attempts, accuracy %), "Πόση βοήθεια" (cue trend bar chart, lower is better, caption "Λιγότερο = καλύτερα"), "Μαθημένες λέξεις: N", "Δύσκολες λέξεις" list, "Στον πίνακα λέει πιο συχνά" list, "Τι βλέπω" insight lines, "Επίπεδα" with three stepper rows (− value +, 72dp buttons) for numbers (1–7), sentences (1–4), trace (1–5), and at the bottom `BigButton("Ρώτα τον Claude")` (enabled only with a key; Task 3 wires the action) plus `QuietButton("Εξαγωγή αναφοράς")` that shares the `AdviceSummary` text as plain text (share sheet).
+- [ ] Build, install, look; commit `feat(phase9): progress dashboard with level controls`.
+
+---
+
+### Task 3: Claude advisor
+
+**Files:** modify `gradle/libs.versions.toml` + `app/build.gradle.kts` (`anthropic = "2.34.0"`, `implementation("com.anthropic:anthropic-java:2.34.0")`; add `packaging { resources.excludes += setOf("META-INF/INDEX.LIST", "META-INF/io.netty.versions.properties", "META-INF/DEPENDENCIES") }` only if the build complains about duplicate META-INF entries), `AndroidManifest.xml` (`<uses-permission android:name="android.permission.INTERNET" />`); create `core/secrets/SecretStore.kt`, `caregiver/insights/AdviceSummary.kt`, `ClaudeAdvisor.kt`, `AdviceScreen.kt`; modify `caregiver/SettingsScreen.kt` (section "Claude": masked key field with "Αποθήκευση κλειδιού" and "Διαγραφή", model field default `claude-opus-5`), `Nav.kt` (`caregiver/advice`), `ProgressScreen.kt` (button navigates), `core/settings/Settings.kt` (+ `claudeModel`).
+Tests: `AdviceSummaryTest` (contains counts, never contains "/photos/" or ".m4a"; Greek headings), `ClaudeAdvisorParseTest` (splits the two sections; missing markers → whole text as caregivers, Dimitris part empty).
+
+- [ ] `SecretStore(context)`: `EncryptedSharedPreferences` (`MasterKey` AES256_GCM) with `getClaudeKey(): String?`, `setClaudeKey(key: String?)`.
+- [ ] `AdviceSummary.build(p: Progress, insights: List<String>, levels: Map<String, Int>): String` — Greek headed sections, plain text, ≤ 6 000 characters.
+- [ ] `ClaudeAdvisor(secrets, model: () -> String)`:
+```kotlin
+package gr.dimitris.app.caregiver.insights
+
+import com.anthropic.client.okhttp.AnthropicOkHttpClient
+import com.anthropic.errors.AnthropicServiceException
+import com.anthropic.models.messages.MessageCreateParams
+import com.anthropic.models.messages.ThinkingConfigAdaptive
+import gr.dimitris.app.core.secrets.SecretStore
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+
+data class Advice(val caregivers: String, val dimitris: String)
+
+class ClaudeAdvisor(private val secrets: SecretStore, private val model: suspend () -> String) {
+    val hasKey: Boolean get() = !secrets.getClaudeKey().isNullOrBlank()
+
+    suspend fun ask(summary: String): Result<Advice> = withContext(Dispatchers.IO) {
+        val key = secrets.getClaudeKey()?.takeIf { it.isNotBlank() }
+            ?: return@withContext Result.failure(IllegalStateException("Δεν υπάρχει κλειδί"))
+        runCatching {
+            val client = AnthropicOkHttpClient.builder().apiKey(key).build()
+            val params = MessageCreateParams.builder()
+                .model(model())
+                .maxTokens(4000L)
+                .thinking(ThinkingConfigAdaptive.builder().build())
+                .system(SYSTEM_PROMPT)
+                .addUserMessage(summary)
+                .build()
+            val response = client.messages().create(params)
+            if (response.stopReason().toString().equals("refusal", ignoreCase = true)) error("Ο Claude δεν απάντησε σε αυτό το αίτημα.")
+            val text = response.content().stream().flatMap { it.text().stream() }.map { it.text() }.toList().joinToString("\n")
+            parse(text)
+        }.recoverCatching { e ->
+            if (e is AnthropicServiceException) throw IllegalStateException("Σφάλμα από τον Claude: ${e.statusCode()}", e) else throw e
+        }
+    }
+
+    companion object {
+        const val CAREGIVERS = "## Για τους φροντιστές"
+        const val DIMITRIS = "## Για τον Δημήτρη"
+        val SYSTEM_PROMPT = """
+            Είσαι σύμβουλος για την αποκατάσταση του Δημήτρη, ενός ενήλικα με αφασία Broca και δεξιά ημιπάρεση μετά από εγκεφαλικό
+            στο αριστερό ημισφαίριο πριν από 2,5 χρόνια. Καταλαβαίνει καλά, δυσκολεύεται να εκφραστεί, έχει ακαλκουλία, θυμάται
+            και τραγουδά. Θα λάβεις μια περίληψη της εξάσκησής του από την εφαρμογή του. Απάντησε στα ελληνικά, με απλά λόγια,
+            χωρίς ιατρικές διαγνώσεις, ακριβώς με αυτές τις δύο ενότητες και τίτλους:
+            $CAREGIVERS
+            (3 έως 6 σύντομες, συγκεκριμένες προτάσεις για το τι να κάνουν οι φροντιστές την επόμενη εβδομάδα)
+            $DIMITRIS
+            (ακριβώς 2 σύντομες, ζεστές προτάσεις προς τον Δημήτρη, σε δεύτερο πρόσωπο, χωρίς αριθμούς)
+        """.trimIndent()
+
+        fun parse(text: String): Advice {
+            val c = text.indexOf(CAREGIVERS); val d = text.indexOf(DIMITRIS)
+            if (c == -1 || d == -1 || d < c) return Advice(text.trim(), "")
+            return Advice(text.substring(c + CAREGIVERS.length, d).trim(), text.substring(d + DIMITRIS.length).trim())
+        }
+    }
+}
+```
+  (If the Java SDK cannot be used on Android — e.g. an unresolvable dependency conflict — the implementer reports BLOCKED with the exact error; the controller decides on a raw-HTTP fallback. Do not silently switch.)
+- [ ] `AdviceScreen(onBack)`: shows a "Ρωτάω τον Claude..." state, then the two sections; `BigButton("Άκου για τον Δημήτρη")` speaks the Dimitris part with TTS; errors in Greek; the summary sent is viewable under "Τι στάλθηκε".
+- [ ] Settings section "Claude" with the masked key field, save/delete, model field; `AppGraph` gets `secrets` and `advisor`.
+- [ ] Build; unit tests; install; with no key the button is disabled; with an invalid key the Greek error appears (test with `sk-ant-invalid`). Commit `feat(phase9): Claude advisor with encrypted key`.
+
+---
+
+### Task 4: Phase 9 verification
+
+- [ ] Full suites green; install on the phone; Chris enters his key later — verify the no-key and bad-key paths; Σφάλματα shows the bad-key error once. Append notes; commit `docs(phase9): verification notes`.
