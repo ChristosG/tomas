@@ -19,7 +19,7 @@
 - Hand: `Settings.traceHand` (LEFT default, RIGHT) shown as a hint "Με το δεξί χέρι" / "Με το αριστερό χέρι".
 - Commits `feat(phase7): ...` with the Co-Authored-By trailer; conventions as previous phases.
 
-- **Module contract (after the phase-2 fix wave):** `Module.Screen(items, sessionId, onDone, onLeave)` — `onDone` = all exercises finished, `onLeave` = the user pressed back (the screen's `onBack` calls the module's own cleanup then `onLeave`). Attempt/schedule writes go on `graph.scope` (they must survive the screen); the last write is joined before `done` is published. Every module screen has `DisposableEffect(Unit) { onDispose { graph.voice.quiet() } }` semantics through the session/practice hosts. Sessions cap at 15 items across modules (`SessionBudget.allowance(n)`), so `planFor` lists may be truncated.
+- **Module contract (after the phase-2 fix wave):** `Module.Screen(items, sessionId, onDone, onLeave)` — `onDone` = all exercises finished, `onLeave` = the user pressed back (the screen's `onBack` calls `vm.leave(onLeave)`: the ViewModel cancels a running take, quiets the voice, joins its last app-scope write, then invokes `onLeave` — both callbacks are invoked only after the module's Attempt rows have landed). Attempt/schedule writes go on `graph.scope` (they must survive the screen); the last write is joined before `done` is published. Every module screen has `DisposableEffect(Unit) { onDispose { graph.voice.quiet() } }` semantics through the session/practice hosts. Sessions cap at 15 items across modules (`SessionBudget.allowance(n)`), so `planFor` lists may be truncated.
 
 ---
 

@@ -18,7 +18,7 @@
 - The model is the caregiver's SUNG recording when it exists, else TTS of the phrase followed by the synthesized melody with syllables lighting up.
 - DB change by auto-migration only, schema committed. Build from `/mnt/nvme2TB/tomas/.claude/worktrees/phase0`; instrumented with `ANDROID_SERIAL=emulator-5554`. Commits `feat(phase4): ...` ending with `Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>`.
 
-- **Module contract (after the phase-2 fix wave):** `Module.Screen(items, sessionId, onDone, onLeave)` — `onDone` = all exercises finished, `onLeave` = the user pressed back (the screen's `onBack` calls the module's own cleanup then `onLeave`). Attempt/schedule writes go on `graph.scope` (they must survive the screen); the last write is joined before `done` is published. Every module screen has `DisposableEffect(Unit) { onDispose { graph.voice.quiet() } }` semantics through the session/practice hosts. Sessions cap at 15 items across modules (`SessionBudget.allowance(n)`), so `planFor` lists may be truncated.
+- **Module contract (after the phase-2 fix wave):** `Module.Screen(items, sessionId, onDone, onLeave)` — `onDone` = all exercises finished, `onLeave` = the user pressed back (the screen's `onBack` calls `vm.leave(onLeave)`: the ViewModel cancels a running take, quiets the voice, joins its last app-scope write, then invokes `onLeave` — both callbacks are invoked only after the module's Attempt rows have landed). Attempt/schedule writes go on `graph.scope` (they must survive the screen); the last write is joined before `done` is published. Every module screen has `DisposableEffect(Unit) { onDispose { graph.voice.quiet() } }` semantics through the session/practice hosts. Sessions cap at 15 items across modules (`SessionBudget.allowance(n)`), so `planFor` lists may be truncated.
 
 ---
 
@@ -665,7 +665,7 @@ fun SingSayScreen(items: List<Item>, sessionId: String?, onDone: () -> Unit, onL
 
     DimitrisScreen(
         title = "Τραγούδα ${s.index + 1}/${s.total}",
-        onBack = { vm.leave(); onLeave() },
+        onBack = { vm.leave(onLeave) },
         bottom = {
             // The tap pad: huge, at the bottom-left where his left thumb lives.
             BigButton(if (s.stage == SingStage.SPEAK) "Το είπα!" else "Χτύπα", onClick = { if (s.stage == SingStage.SPEAK) vm.completeRepetition() else vm.tap() },

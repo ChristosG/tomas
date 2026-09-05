@@ -19,7 +19,7 @@
 - Every Room change keeps sync-ready columns and a committed schema; auto-migration only.
 - Build from `/mnt/nvme2TB/tomas/.claude/worktrees/phase0`; instrumented tests with `ANDROID_SERIAL=emulator-5554`. Commits `feat(phase3): ...` ending with `Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>`.
 
-- **Module contract (after the phase-2 fix wave):** `Module.Screen(items, sessionId, onDone, onLeave)` — `onDone` = all exercises finished, `onLeave` = the user pressed back (the screen's `onBack` calls the module's own cleanup then `onLeave`). Attempt/schedule writes go on `graph.scope` (they must survive the screen); the last write is joined before `done` is published. Every module screen has `DisposableEffect(Unit) { onDispose { graph.voice.quiet() } }` semantics through the session/practice hosts. Sessions cap at 15 items across modules (`SessionBudget.allowance(n)`), so `planFor` lists may be truncated.
+- **Module contract (after the phase-2 fix wave):** `Module.Screen(items, sessionId, onDone, onLeave)` — `onDone` = all exercises finished, `onLeave` = the user pressed back (the screen's `onBack` calls `vm.leave(onLeave)`: the ViewModel cancels a running take, quiets the voice, joins its last app-scope write, then invokes `onLeave` — both callbacks are invoked only after the module's Attempt rows have landed). Attempt/schedule writes go on `graph.scope` (they must survive the screen); the last write is joined before `done` is published. Every module screen has `DisposableEffect(Unit) { onDispose { graph.voice.quiet() } }` semantics through the session/practice hosts. Sessions cap at 15 items across modules (`SessionBudget.allowance(n)`), so `planFor` lists may be truncated.
 
 ---
 
@@ -915,7 +915,7 @@ fun NumbersScreen(sessionId: String?, onDone: () -> Unit, onLeave: () -> Unit) {
     val e = s.exercise
     DimitrisScreen(
         title = "Αριθμοί ${s.index + 1}/${s.total}",
-        onBack = { vm.leave(); onLeave() },
+        onBack = { vm.leave(onLeave) },
         bottom = {
             if (s.correct == true) BigButton("Επόμενο", onClick = vm::next, tone = ButtonTone.Success)
             else QuietButton("Παράλειψη", onClick = vm::skip)
