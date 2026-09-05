@@ -25,6 +25,8 @@ data class ItemEditState(
     val text: String = "",
     val kind: ItemKind = ItemKind.WORD,
     val category: Category = Category.CUSTOM,
+    /** Caregiver-pinned to the talk board favourites. */
+    val pinned: Boolean = false,
     val imagePath: String? = null,
     val firstSyllableOverride: String = "",
     val autoSyllable: String? = null,
@@ -49,7 +51,7 @@ class ItemEditViewModel(private val graph: AppGraph, private val itemId: String?
             val item = graph.items.get(itemId) ?: return@launch
             val model = graph.items.modelRecording(item)
             _state.value = ItemEditState(
-                id = item.id, text = item.text, kind = item.kind, category = item.category, imagePath = item.imagePath,
+                id = item.id, text = item.text, kind = item.kind, category = item.category, pinned = item.pinned, imagePath = item.imagePath,
                 firstSyllableOverride = item.firstSyllableOverride ?: "", autoSyllable = Syllabifier.firstSyllable(item.text),
                 savedRecordingPath = model?.path,
             )
@@ -59,6 +61,7 @@ class ItemEditViewModel(private val graph: AppGraph, private val itemId: String?
     fun setText(text: String) = _state.update { it.copy(text = text, autoSyllable = Syllabifier.firstSyllable(text.trim()), error = null) }
     fun setKind(kind: ItemKind) = _state.update { it.copy(kind = kind) }
     fun setCategory(category: Category) = _state.update { it.copy(category = category) }
+    fun setPinned(on: Boolean) = _state.update { it.copy(pinned = on) }
     fun setOverride(value: String) = _state.update { it.copy(firstSyllableOverride = value) }
     fun clearError() = _state.update { it.copy(error = null) }
 
@@ -122,7 +125,8 @@ class ItemEditViewModel(private val graph: AppGraph, private val itemId: String?
             try {
                 val existing = s.id?.let { graph.items.get(it) }
                 val draft = (existing ?: Item(text = s.text)).copy(
-                    text = s.text, kind = s.kind, category = s.category, imagePath = s.imagePath, firstSyllableOverride = s.firstSyllableOverride,
+                    text = s.text, kind = s.kind, category = s.category, pinned = s.pinned, imagePath = s.imagePath,
+                    firstSyllableOverride = s.firstSyllableOverride,
                 )
                 val saved = graph.items.save(draft)
                 _state.value.newRecording?.let { graph.items.addRecording(saved.id, it.file, it.durationMs, Who.CAREGIVER) }
