@@ -19,6 +19,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextAlign
@@ -31,6 +32,10 @@ import java.io.File
 /**
  * [imageFile] is already resolved (see MediaFiles.resolve). A picture that was deleted or moved
  * falls back to the placeholder icon, so the item still works with its word and its voice.
+ *
+ * A card with [enabled] false is a card whose work is done — a word already used in the sentence
+ * he is building. It stays where it was, dimmed and dead: a board that removed or reshuffled its
+ * cards under his thumb would be a board he has to read again after every tap.
  */
 @Composable
 fun PictureCard(
@@ -39,14 +44,20 @@ fun PictureCard(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     selected: Boolean = false,
+    enabled: Boolean = true,
 ) {
     val feedback = LocalFeedback.current
     Card(
         onClick = { feedback.tap(); onClick() },
-        modifier = modifier.sizeIn(minWidth = Sizes.pictureCard, minHeight = Sizes.pictureCard),
+        enabled = enabled,
+        modifier = modifier.sizeIn(minWidth = Sizes.pictureCard, minHeight = Sizes.pictureCard)
+            .alpha(if (enabled) 1f else DIMMED),
         shape = RoundedCornerShape(Sizes.corner),
         border = if (selected) BorderStroke(4.dp, MaterialTheme.colorScheme.secondary) else null,
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface,
+            disabledContainerColor = MaterialTheme.colorScheme.surface,
+        ),
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(12.dp)) {
             Box(Modifier.fillMaxWidth().aspectRatio(1f), contentAlignment = Alignment.Center) {
@@ -69,3 +80,6 @@ fun PictureCard(
         }
     }
 }
+
+/** Used already, and still where he left it: visible, readable, plainly not on offer. */
+private const val DIMMED = 0.35f

@@ -38,6 +38,10 @@ class Settings(private val store: DataStore<Preferences>) {
     val numbersLevel: Flow<Int> = store.data.map { it[NUMBERS_LEVEL] ?: 1 }
     suspend fun setNumbersLevel(level: Int) { store.edit { it[NUMBERS_LEVEL] = level.coerceIn(1, 7) } }
 
+    /** How long a sentence he is building, 1..4. The sentence builder moves it; nothing else does. */
+    val sentencesLevel: Flow<Int> = store.data.map { it[SENTENCES_LEVEL] ?: 1 }
+    suspend fun setSentencesLevel(level: Int) { store.edit { it[SENTENCES_LEVEL] = level.coerceIn(1, 4) } }
+
     /**
      * Which modules Dimitris gets. Everything is on unless a caregiver switched it off, except the
      * few in [DEFAULT_OFF], which are on only once someone deliberately asks for them.
@@ -77,6 +81,7 @@ class Settings(private val store: DataStore<Preferences>) {
         private val SCRIPTS_SEED_VERSION = intPreferencesKey("scripts_seed_version")
         private val STT_ENABLED = booleanPreferencesKey("stt_enabled")
         private val NUMBERS_LEVEL = intPreferencesKey("numbers_level")
+        private val SENTENCES_LEVEL = intPreferencesKey("sentences_level")
         private val DISABLED_MODULES = stringSetPreferencesKey("disabled_modules")
 
         /** The [DEFAULT_OFF] ones someone has switched on. Meaningless for every other module. */

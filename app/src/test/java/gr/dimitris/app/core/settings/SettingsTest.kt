@@ -89,4 +89,14 @@ class SettingsTest {
         s.setNumbersLevel(9); assertEquals(7, s.numbersLevel.first())
         s.setNumbersLevel(0); assertEquals(1, s.numbersLevel.first())
     }
+
+    /** Its own counter with its own ceiling: four sentence levels, not the numbers module's seven. */
+    @Test fun `sentences level starts at 1 and is clamped to 1__4`() = runBlocking {
+        val s = newSettings()
+        assertEquals(1, s.sentencesLevel.first())
+        s.setSentencesLevel(9); assertEquals(4, s.sentencesLevel.first())
+        s.setSentencesLevel(0); assertEquals(1, s.sentencesLevel.first())
+        s.setSentencesLevel(3); assertEquals(3, s.sentencesLevel.first())
+        assertEquals(1, s.numbersLevel.first())
+    }
 }

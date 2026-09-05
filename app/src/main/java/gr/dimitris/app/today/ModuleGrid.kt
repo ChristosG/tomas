@@ -19,11 +19,15 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import gr.dimitris.app.modules.Module
 import gr.dimitris.app.ui.theme.LocalFeedback
 import gr.dimitris.app.ui.theme.Sizes
+
+/** The scrolling tile grid. Tagged so a test can scroll to a module below the fold. */
+const val MODULE_GRID_TAG = "module-grid"
 
 /**
  * The practice tiles on Today: two columns, and small enough that the modules there are now — five,
@@ -42,7 +46,7 @@ fun ModuleGrid(modules: List<Module>, onOpen: (Module) -> Unit, modifier: Modifi
         horizontalArrangement = Arrangement.spacedBy(Sizes.gapSmall),
         verticalArrangement = Arrangement.spacedBy(Sizes.gapSmall),
         contentPadding = PaddingValues(bottom = CONTENT_BOTTOM),
-        modifier = modifier.fillMaxWidth(),
+        modifier = modifier.fillMaxWidth().testTag(MODULE_GRID_TAG),
     ) {
         items(modules, key = { it.id.name }) { m ->
             Card(
