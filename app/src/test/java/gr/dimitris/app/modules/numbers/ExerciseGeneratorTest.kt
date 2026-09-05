@@ -63,6 +63,17 @@ class ExerciseGeneratorTest {
         assertTrue(list.none { it is NumberExercise.PriceCompare })
     }
 
+    @Test fun `a price no note covers never becomes a Pay exercise`() {
+        // Pay.answer is the smallest note that is enough: a 75 euro item would leave it with none.
+        val tooDear = listOf(Price("τηλέφωνο", 7500))
+        val all = List(100) { ExerciseGenerator(Random(it)).generate(7, tooDear) }
+        all.filterIsInstance<NumberExercise.Pay>().forEach { e ->
+            assertTrue("7500 must not become a Pay price", e.priceCents != 7500)
+            assertTrue(e.answer in e.options && e.answer >= e.priceCents)
+        }
+        assertTrue(all.any { it is NumberExercise.Pay })
+    }
+
     @Test fun `session has the requested size and only that level`() {
         val s = gen.session(3, prices, 10)
         assertEquals(10, s.size); assertTrue(s.all { it.level == 3 })

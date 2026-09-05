@@ -48,7 +48,9 @@ class ExerciseGenerator(private val random: Random = Random.Default) {
                 NumberExercise.PriceCompare(7, two.first, two.second)
             }
             else -> {
-                val price = if (prices.isNotEmpty() && random.nextBoolean()) prices[random.nextInt(prices.size)].cents else random.nextInt(1, 40) * 50
+                // Only a price a single note can cover: "με τι πληρώνεις;" has no answer above 50 €.
+                val payable = prices.filter { it.cents <= MAX_PAYABLE_CENTS }
+                val price = if (payable.isNotEmpty() && random.nextBoolean()) payable[random.nextInt(payable.size)].cents else random.nextInt(1, 40) * 50
                 val notes = Euro.denominations.filter { it >= 100 }
                 val enough = notes.filter { it >= price }.take(2)
                 val tooSmall = notes.filter { it < price }.shuffled(random).take(3 - enough.size)
@@ -56,5 +58,10 @@ class ExerciseGenerator(private val random: Random = Random.Default) {
                 NumberExercise.Pay(7, price, options.shuffled(random))
             }
         }
+    }
+
+    companion object {
+        /** The biggest note is 50 €. A price above it can never be paid with one, so [euro] skips it. */
+        val MAX_PAYABLE_CENTS: Int = Euro.denominations.max()
     }
 }
