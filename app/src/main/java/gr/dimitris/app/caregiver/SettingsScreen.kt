@@ -75,6 +75,27 @@ fun SettingsScreen(onBack: () -> Unit) {
             }
             Spacer(Modifier.height(Sizes.gap))
 
+            Text("Ασκήσεις", style = MaterialTheme.typography.titleLarge)
+            val enabled by graph.settings.enabledModules.collectAsStateWithLifecycle(initialValue = emptySet())
+            graph.modules.forEach { m ->
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                    Text(m.titleGreek, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+                    Switch(checked = m.id in enabled, onCheckedChange = { on -> scope.launch { graph.settings.setModuleEnabled(m.id, on) } })
+                }
+            }
+            Spacer(Modifier.height(Sizes.gap))
+
+            Text("Αναγνώριση ομιλίας (δοκιμαστικό)", style = MaterialTheme.typography.titleLarge)
+            val stt by graph.settings.sttEnabled.collectAsStateWithLifecycle(initialValue = false)
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                Text(
+                    if (graph.stt.isAvailable) "Δείχνει τι άκουσε το τηλέφωνο. Ποτέ δεν τον κόβει." else "Η συσκευή δεν έχει αναγνώριση ομιλίας.",
+                    style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f),
+                )
+                Switch(checked = stt && graph.stt.isAvailable, enabled = graph.stt.isAvailable, onCheckedChange = { on -> scope.launch { graph.settings.setSttEnabled(on) } })
+            }
+            Spacer(Modifier.height(Sizes.gap))
+
             Text("Σχετικά", style = MaterialTheme.typography.titleLarge)
             Text("Η εφαρμογή του Δημήτρη, έκδοση $version. Φτιαγμένη από φίλους, για έναν φίλο.", style = MaterialTheme.typography.bodyMedium)
             Spacer(Modifier.height(Sizes.gapSmall))
