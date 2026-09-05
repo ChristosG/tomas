@@ -1,0 +1,923 @@
+[
+ {
+  "text": "Ναι",
+  "category": "QUICK",
+  "kind": "PHRASE",
+  "search": "ναι",
+  "en": "yes"
+ },
+ {
+  "text": "Όχι",
+  "category": "QUICK",
+  "kind": "PHRASE",
+  "search": "όχι",
+  "en": "no"
+ },
+ {
+  "text": "Περίμενε",
+  "category": "QUICK",
+  "kind": "PHRASE",
+  "search": "περιμένω",
+  "en": "wait"
+ },
+ {
+  "text": "Βοήθεια",
+  "category": "QUICK",
+  "kind": "PHRASE",
+  "search": "βοήθεια",
+  "en": "help"
+ },
+ {
+  "text": "Πονάω",
+  "category": "QUICK",
+  "kind": "PHRASE",
+  "search": "πόνος",
+  "en": "pain"
+ },
+ {
+  "text": "Τουαλέτα",
+  "category": "QUICK",
+  "kind": "PHRASE",
+  "search": "τουαλέτα",
+  "en": "toilet"
+ },
+ {
+  "text": "Ευχαριστώ",
+  "category": "QUICK",
+  "kind": "PHRASE",
+  "search": "ευχαριστώ",
+  "en": "thank you"
+ },
+ {
+  "text": "Παρακαλώ",
+  "category": "QUICK",
+  "kind": "PHRASE",
+  "search": "παρακαλώ",
+  "en": "please"
+ },
+ {
+  "text": "Δεν ξέρω",
+  "category": "QUICK",
+  "kind": "PHRASE",
+  "search": "δεν ξέρω",
+  "en": "I don't know"
+ },
+ {
+  "text": "Δεν καταλαβαίνω",
+  "category": "QUICK",
+  "kind": "PHRASE",
+  "search": "δεν καταλαβαίνω",
+  "en": "I don't understand"
+ },
+ {
+  "text": "Ξανά",
+  "category": "QUICK",
+  "kind": "PHRASE",
+  "search": "ξανά",
+  "en": "again"
+ },
+ {
+  "text": "Τέλος",
+  "category": "QUICK",
+  "kind": "PHRASE",
+  "search": "τέλος",
+  "en": "finished"
+ },
+ {
+  "text": "καφές",
+  "category": "FOOD",
+  "en": "coffee"
+ },
+ {
+  "text": "νερό",
+  "category": "FOOD",
+  "en": "water"
+ },
+ {
+  "text": "ψωμί",
+  "category": "FOOD",
+  "en": "bread"
+ },
+ {
+  "text": "τυρί",
+  "category": "FOOD",
+  "en": "cheese"
+ },
+ {
+  "text": "γάλα",
+  "category": "FOOD",
+  "en": "milk"
+ },
+ {
+  "text": "τσάι",
+  "category": "FOOD",
+  "en": "tea"
+ },
+ {
+  "text": "μπύρα",
+  "category": "FOOD",
+  "en": "beer"
+ },
+ {
+  "text": "κρασί",
+  "category": "FOOD",
+  "en": "wine"
+ },
+ {
+  "text": "χυμός",
+  "category": "FOOD",
+  "en": "juice"
+ },
+ {
+  "text": "σουβλάκι",
+  "category": "FOOD",
+  "en": "kebab"
+ },
+ {
+  "text": "πίτσα",
+  "category": "FOOD",
+  "en": "pizza"
+ },
+ {
+  "text": "σαλάτα",
+  "category": "FOOD",
+  "en": "salad"
+ },
+ {
+  "text": "μακαρόνια",
+  "category": "FOOD",
+  "en": "pasta"
+ },
+ {
+  "text": "ρύζι",
+  "category": "FOOD",
+  "en": "rice"
+ },
+ {
+  "text": "κρέας",
+  "category": "FOOD",
+  "en": "meat"
+ },
+ {
+  "text": "κοτόπουλο",
+  "category": "FOOD",
+  "en": "chicken"
+ },
+ {
+  "text": "ψάρι",
+  "category": "FOOD",
+  "en": "fish"
+ },
+ {
+  "text": "αυγό",
+  "category": "FOOD",
+  "en": "egg"
+ },
+ {
+  "text": "μήλο",
+  "category": "FOOD",
+  "en": "apple"
+ },
+ {
+  "text": "μπανάνα",
+  "category": "FOOD",
+  "en": "banana"
+ },
+ {
+  "text": "πορτοκάλι",
+  "category": "FOOD",
+  "en": "orange"
+ },
+ {
+  "text": "σοκολάτα",
+  "category": "FOOD",
+  "en": "chocolate"
+ },
+ {
+  "text": "παγωτό",
+  "category": "FOOD",
+  "en": "ice cream"
+ },
+ {
+  "text": "γλυκό",
+  "category": "FOOD",
+  "en": "sweet"
+ },
+ {
+  "text": "σούπα",
+  "category": "FOOD",
+  "en": "soup"
+ },
+ {
+  "text": "πατάτες",
+  "category": "FOOD",
+  "en": "potatoes"
+ },
+ {
+  "text": "ζάχαρη",
+  "category": "FOOD",
+  "en": "sugar"
+ },
+ {
+  "text": "αλάτι",
+  "category": "FOOD",
+  "en": "salt"
+ },
+ {
+  "text": "πρωινό",
+  "category": "FOOD",
+  "en": "breakfast"
+ },
+ {
+  "text": "μεσημεριανό",
+  "category": "FOOD",
+  "en": "lunch"
+ },
+ {
+  "text": "βραδινό",
+  "category": "FOOD",
+  "en": "dinner"
+ },
+ {
+  "text": "φρούτα",
+  "category": "FOOD",
+  "en": "fruit"
+ },
+ {
+  "text": "σπίτι",
+  "category": "PLACES",
+  "en": "house"
+ },
+ {
+  "text": "καφετέρια",
+  "category": "PLACES",
+  "en": "cafe"
+ },
+ {
+  "text": "νοσοκομείο",
+  "category": "PLACES",
+  "en": "hospital"
+ },
+ {
+  "text": "φαρμακείο",
+  "category": "PLACES",
+  "en": "pharmacy"
+ },
+ {
+  "text": "σούπερ μάρκετ",
+  "category": "PLACES",
+  "en": "supermarket"
+ },
+ {
+  "text": "θάλασσα",
+  "category": "PLACES",
+  "en": "sea"
+ },
+ {
+  "text": "πάρκο",
+  "category": "PLACES",
+  "en": "park"
+ },
+ {
+  "text": "γυμναστήριο",
+  "category": "PLACES",
+  "en": "gym"
+ },
+ {
+  "text": "σχολείο",
+  "category": "PLACES",
+  "en": "school"
+ },
+ {
+  "text": "εκκλησία",
+  "category": "PLACES",
+  "en": "church"
+ },
+ {
+  "text": "τράπεζα",
+  "category": "PLACES",
+  "en": "bank"
+ },
+ {
+  "text": "ταξί",
+  "category": "PLACES",
+  "en": "taxi"
+ },
+ {
+  "text": "λεωφορείο",
+  "category": "PLACES",
+  "en": "bus"
+ },
+ {
+  "text": "αυτοκίνητο",
+  "category": "PLACES",
+  "en": "car"
+ },
+ {
+  "text": "δρόμος",
+  "category": "PLACES",
+  "en": "street"
+ },
+ {
+  "text": "ταβέρνα",
+  "category": "PLACES",
+  "en": "restaurant"
+ },
+ {
+  "text": "μπάνιο",
+  "category": "PLACES",
+  "en": "bathroom"
+ },
+ {
+  "text": "κουζίνα",
+  "category": "PLACES",
+  "en": "kitchen"
+ },
+ {
+  "text": "κρεβάτι",
+  "category": "PLACES",
+  "en": "bed"
+ },
+ {
+  "text": "δουλειά",
+  "category": "PLACES",
+  "en": "work"
+ },
+ {
+  "text": "γήπεδο",
+  "category": "PLACES",
+  "en": "stadium"
+ },
+ {
+  "text": "μπαλκόνι",
+  "category": "PLACES",
+  "en": "balcony"
+ },
+ {
+  "text": "μαμά",
+  "category": "PEOPLE",
+  "en": "mom"
+ },
+ {
+  "text": "μπαμπάς",
+  "category": "PEOPLE",
+  "en": "dad"
+ },
+ {
+  "text": "αδελφός",
+  "category": "PEOPLE",
+  "en": "brother"
+ },
+ {
+  "text": "αδελφή",
+  "category": "PEOPLE",
+  "en": "sister"
+ },
+ {
+  "text": "φίλος",
+  "category": "PEOPLE",
+  "en": "friend"
+ },
+ {
+  "text": "φίλη",
+  "category": "PEOPLE",
+  "en": "friend"
+ },
+ {
+  "text": "γιατρός",
+  "category": "PEOPLE",
+  "en": "doctor"
+ },
+ {
+  "text": "νοσοκόμα",
+  "category": "PEOPLE",
+  "en": "nurse"
+ },
+ {
+  "text": "λογοθεραπεύτρια",
+  "category": "PEOPLE",
+  "search": "λογοθεραπευτής",
+  "en": "speech therapist"
+ },
+ {
+  "text": "φυσιοθεραπευτής",
+  "category": "PEOPLE",
+  "en": "physiotherapist"
+ },
+ {
+  "text": "γείτονας",
+  "category": "PEOPLE",
+  "en": "neighbor"
+ },
+ {
+  "text": "παιδί",
+  "category": "PEOPLE",
+  "en": "child"
+ },
+ {
+  "text": "άντρας",
+  "category": "PEOPLE",
+  "en": "man"
+ },
+ {
+  "text": "γυναίκα",
+  "category": "PEOPLE",
+  "en": "woman"
+ },
+ {
+  "text": "εγώ",
+  "category": "PEOPLE",
+  "en": "me"
+ },
+ {
+  "text": "εσύ",
+  "category": "PEOPLE",
+  "en": "you"
+ },
+ {
+  "text": "θέλω",
+  "category": "VERBS",
+  "en": "want"
+ },
+ {
+  "text": "πάμε",
+  "category": "VERBS",
+  "search": "πηγαίνω",
+  "en": "go"
+ },
+ {
+  "text": "τρώω",
+  "category": "VERBS",
+  "en": "eat"
+ },
+ {
+  "text": "πίνω",
+  "category": "VERBS",
+  "en": "drink"
+ },
+ {
+  "text": "κοιμάμαι",
+  "category": "VERBS",
+  "en": "sleep"
+ },
+ {
+  "text": "περπατάω",
+  "category": "VERBS",
+  "en": "walk"
+ },
+ {
+  "text": "κάθομαι",
+  "category": "VERBS",
+  "en": "sit"
+ },
+ {
+  "text": "βλέπω",
+  "category": "VERBS",
+  "en": "see"
+ },
+ {
+  "text": "ακούω",
+  "category": "VERBS",
+  "en": "listen"
+ },
+ {
+  "text": "μιλάω",
+  "category": "VERBS",
+  "en": "talk"
+ },
+ {
+  "text": "διαβάζω",
+  "category": "VERBS",
+  "en": "read"
+ },
+ {
+  "text": "γράφω",
+  "category": "VERBS",
+  "en": "write"
+ },
+ {
+  "text": "παίζω",
+  "category": "VERBS",
+  "en": "play"
+ },
+ {
+  "text": "τηλεφωνώ",
+  "category": "VERBS",
+  "en": "call"
+ },
+ {
+  "text": "αγοράζω",
+  "category": "VERBS",
+  "en": "buy"
+ },
+ {
+  "text": "πληρώνω",
+  "category": "VERBS",
+  "en": "pay"
+ },
+ {
+  "text": "ανοίγω",
+  "category": "VERBS",
+  "en": "open"
+ },
+ {
+  "text": "κλείνω",
+  "category": "VERBS",
+  "en": "close"
+ },
+ {
+  "text": "έρχομαι",
+  "category": "VERBS",
+  "en": "come"
+ },
+ {
+  "text": "φεύγω",
+  "category": "VERBS",
+  "en": "leave"
+ },
+ {
+  "text": "βοηθάω",
+  "category": "VERBS",
+  "en": "help"
+ },
+ {
+  "text": "ξεκουράζομαι",
+  "category": "VERBS",
+  "en": "rest"
+ },
+ {
+  "text": "τραγουδάω",
+  "category": "VERBS",
+  "en": "sing"
+ },
+ {
+  "text": "χαρούμενος",
+  "category": "FEELINGS",
+  "en": "happy"
+ },
+ {
+  "text": "λυπημένος",
+  "category": "FEELINGS",
+  "en": "sad"
+ },
+ {
+  "text": "θυμωμένος",
+  "category": "FEELINGS",
+  "en": "angry"
+ },
+ {
+  "text": "κουρασμένος",
+  "category": "FEELINGS",
+  "en": "tired"
+ },
+ {
+  "text": "φοβισμένος",
+  "category": "FEELINGS",
+  "en": "scared"
+ },
+ {
+  "text": "πεινάω",
+  "category": "FEELINGS",
+  "en": "hungry"
+ },
+ {
+  "text": "διψάω",
+  "category": "FEELINGS",
+  "en": "thirsty"
+ },
+ {
+  "text": "κρυώνω",
+  "category": "FEELINGS",
+  "en": "cold"
+ },
+ {
+  "text": "ζεσταίνομαι",
+  "category": "FEELINGS",
+  "en": "hot"
+ },
+ {
+  "text": "βαριέμαι",
+  "category": "FEELINGS",
+  "en": "bored"
+ },
+ {
+  "text": "νευρικός",
+  "category": "FEELINGS",
+  "en": "nervous"
+ },
+ {
+  "text": "ήρεμος",
+  "category": "FEELINGS",
+  "en": "calm"
+ },
+ {
+  "text": "καλά",
+  "category": "FEELINGS",
+  "en": "fine"
+ },
+ {
+  "text": "άσχημα",
+  "category": "FEELINGS",
+  "en": "bad"
+ },
+ {
+  "text": "κεφάλι",
+  "category": "BODY",
+  "en": "head"
+ },
+ {
+  "text": "χέρι",
+  "category": "BODY",
+  "en": "hand"
+ },
+ {
+  "text": "πόδι",
+  "category": "BODY",
+  "en": "foot"
+ },
+ {
+  "text": "μάτι",
+  "category": "BODY",
+  "en": "eye"
+ },
+ {
+  "text": "αυτί",
+  "category": "BODY",
+  "en": "ear"
+ },
+ {
+  "text": "στόμα",
+  "category": "BODY",
+  "en": "mouth"
+ },
+ {
+  "text": "μύτη",
+  "category": "BODY",
+  "en": "nose"
+ },
+ {
+  "text": "δόντια",
+  "category": "BODY",
+  "en": "teeth"
+ },
+ {
+  "text": "στομάχι",
+  "category": "BODY",
+  "en": "stomach"
+ },
+ {
+  "text": "πλάτη",
+  "category": "BODY",
+  "en": "back"
+ },
+ {
+  "text": "καρδιά",
+  "category": "BODY",
+  "en": "heart"
+ },
+ {
+  "text": "γόνατο",
+  "category": "BODY",
+  "en": "knee"
+ },
+ {
+  "text": "δάχτυλο",
+  "category": "BODY",
+  "en": "finger"
+ },
+ {
+  "text": "λαιμός",
+  "category": "BODY",
+  "en": "neck"
+ },
+ {
+  "text": "ένα",
+  "category": "NUMBERS",
+  "kind": "NUMBER",
+  "search": "1",
+  "en": "one"
+ },
+ {
+  "text": "δύο",
+  "category": "NUMBERS",
+  "kind": "NUMBER",
+  "search": "2",
+  "en": "two"
+ },
+ {
+  "text": "τρία",
+  "category": "NUMBERS",
+  "kind": "NUMBER",
+  "search": "3",
+  "en": "three"
+ },
+ {
+  "text": "τέσσερα",
+  "category": "NUMBERS",
+  "kind": "NUMBER",
+  "search": "4",
+  "en": "four"
+ },
+ {
+  "text": "πέντε",
+  "category": "NUMBERS",
+  "kind": "NUMBER",
+  "search": "5",
+  "en": "five"
+ },
+ {
+  "text": "έξι",
+  "category": "NUMBERS",
+  "kind": "NUMBER",
+  "search": "6",
+  "en": "six"
+ },
+ {
+  "text": "επτά",
+  "category": "NUMBERS",
+  "kind": "NUMBER",
+  "search": "7",
+  "en": "seven"
+ },
+ {
+  "text": "οκτώ",
+  "category": "NUMBERS",
+  "kind": "NUMBER",
+  "search": "8",
+  "en": "eight"
+ },
+ {
+  "text": "εννέα",
+  "category": "NUMBERS",
+  "kind": "NUMBER",
+  "search": "9",
+  "en": "nine"
+ },
+ {
+  "text": "δέκα",
+  "category": "NUMBERS",
+  "kind": "NUMBER",
+  "search": "10",
+  "en": "ten"
+ },
+ {
+  "text": "τηλέφωνο",
+  "category": "THINGS",
+  "en": "phone"
+ },
+ {
+  "text": "τηλεόραση",
+  "category": "THINGS",
+  "en": "television"
+ },
+ {
+  "text": "κλειδιά",
+  "category": "THINGS",
+  "en": "keys"
+ },
+ {
+  "text": "πορτοφόλι",
+  "category": "THINGS",
+  "en": "wallet"
+ },
+ {
+  "text": "γυαλιά",
+  "category": "THINGS",
+  "en": "glasses"
+ },
+ {
+  "text": "ρούχα",
+  "category": "THINGS",
+  "en": "clothes"
+ },
+ {
+  "text": "παπούτσια",
+  "category": "THINGS",
+  "en": "shoes"
+ },
+ {
+  "text": "φάρμακα",
+  "category": "THINGS",
+  "en": "medicine"
+ },
+ {
+  "text": "χρήματα",
+  "category": "THINGS",
+  "en": "money"
+ },
+ {
+  "text": "ρολόι",
+  "category": "THINGS",
+  "en": "clock"
+ },
+ {
+  "text": "τσάντα",
+  "category": "THINGS",
+  "en": "bag"
+ },
+ {
+  "text": "ομπρέλα",
+  "category": "THINGS",
+  "en": "umbrella"
+ },
+ {
+  "text": "καρέκλα",
+  "category": "THINGS",
+  "en": "chair"
+ },
+ {
+  "text": "τραπέζι",
+  "category": "THINGS",
+  "en": "table"
+ },
+ {
+  "text": "πόρτα",
+  "category": "THINGS",
+  "en": "door"
+ },
+ {
+  "text": "παράθυρο",
+  "category": "THINGS",
+  "en": "window"
+ },
+ {
+  "text": "βιβλίο",
+  "category": "THINGS",
+  "en": "book"
+ },
+ {
+  "text": "μουσική",
+  "category": "THINGS",
+  "en": "music"
+ },
+ {
+  "text": "μπάλα",
+  "category": "THINGS",
+  "en": "ball"
+ },
+ {
+  "text": "ήλιος",
+  "category": "THINGS",
+  "en": "sun"
+ },
+ {
+  "text": "βροχή",
+  "category": "THINGS",
+  "en": "rain"
+ },
+ {
+  "text": "σήμερα",
+  "category": "TIME",
+  "en": "today"
+ },
+ {
+  "text": "αύριο",
+  "category": "TIME",
+  "en": "tomorrow"
+ },
+ {
+  "text": "χθες",
+  "category": "TIME",
+  "en": "yesterday"
+ },
+ {
+  "text": "τώρα",
+  "category": "TIME",
+  "en": "now"
+ },
+ {
+  "text": "μετά",
+  "category": "TIME",
+  "en": "later"
+ },
+ {
+  "text": "πρωί",
+  "category": "TIME",
+  "en": "morning"
+ },
+ {
+  "text": "μεσημέρι",
+  "category": "TIME",
+  "en": "noon"
+ },
+ {
+  "text": "βράδυ",
+  "category": "TIME",
+  "en": "evening"
+ },
+ {
+  "text": "Δευτέρα",
+  "category": "TIME",
+  "en": "Monday"
+ },
+ {
+  "text": "Σάββατο",
+  "category": "TIME",
+  "en": "Saturday"
+ },
+ {
+  "text": "Κυριακή",
+  "category": "TIME",
+  "en": "Sunday"
+ }
+]

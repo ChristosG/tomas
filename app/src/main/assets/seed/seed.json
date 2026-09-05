@@ -1,0 +1,1405 @@
+{
+ "version": 1,
+ "items": [
+  {
+   "text": "Ναι",
+   "kind": "PHRASE",
+   "category": "QUICK",
+   "image": "5583.png",
+   "arasaacId": 5583,
+   "via": "en"
+  },
+  {
+   "text": "Όχι",
+   "kind": "PHRASE",
+   "category": "QUICK",
+   "image": "5525.png",
+   "arasaacId": 5525,
+   "via": "en"
+  },
+  {
+   "text": "Περίμενε",
+   "kind": "PHRASE",
+   "category": "QUICK",
+   "image": "8109.png",
+   "arasaacId": 8109,
+   "via": "en"
+  },
+  {
+   "text": "Βοήθεια",
+   "kind": "PHRASE",
+   "category": "QUICK",
+   "image": "4570.png",
+   "arasaacId": 4570,
+   "via": "en"
+  },
+  {
+   "text": "Πονάω",
+   "kind": "PHRASE",
+   "category": "QUICK",
+   "image": "2367.png",
+   "arasaacId": 2367,
+   "via": "el"
+  },
+  {
+   "text": "Τουαλέτα",
+   "kind": "PHRASE",
+   "category": "QUICK",
+   "image": "2430.png",
+   "arasaacId": 2430,
+   "via": "en"
+  },
+  {
+   "text": "Ευχαριστώ",
+   "kind": "PHRASE",
+   "category": "QUICK",
+   "image": "8129.png",
+   "arasaacId": 8129,
+   "via": "en"
+  },
+  {
+   "text": "Παρακαλώ",
+   "kind": "PHRASE",
+   "category": "QUICK",
+   "image": "8194.png",
+   "arasaacId": 8194,
+   "via": "en"
+  },
+  {
+   "text": "Δεν ξέρω",
+   "kind": "PHRASE",
+   "category": "QUICK",
+   "image": "7180.png",
+   "arasaacId": 7180,
+   "via": "en"
+  },
+  {
+   "text": "Δεν καταλαβαίνω",
+   "kind": "PHRASE",
+   "category": "QUICK",
+   "image": "27363.png",
+   "arasaacId": 27363,
+   "via": "en"
+  },
+  {
+   "text": "Ξανά",
+   "kind": "PHRASE",
+   "category": "QUICK",
+   "image": "37163.png",
+   "arasaacId": 37163,
+   "via": "en"
+  },
+  {
+   "text": "Τέλος",
+   "kind": "PHRASE",
+   "category": "QUICK",
+   "image": "28429.png",
+   "arasaacId": 28429,
+   "via": "en"
+  },
+  {
+   "text": "καφές",
+   "kind": "WORD",
+   "category": "FOOD",
+   "image": "2296.png",
+   "arasaacId": 2296,
+   "via": "el"
+  },
+  {
+   "text": "νερό",
+   "kind": "WORD",
+   "category": "FOOD",
+   "image": "2248.png",
+   "arasaacId": 2248,
+   "via": "el"
+  },
+  {
+   "text": "ψωμί",
+   "kind": "WORD",
+   "category": "FOOD",
+   "image": "2494.png",
+   "arasaacId": 2494,
+   "via": "en"
+  },
+  {
+   "text": "τυρί",
+   "kind": "WORD",
+   "category": "FOOD",
+   "image": "2541.png",
+   "arasaacId": 2541,
+   "via": "en"
+  },
+  {
+   "text": "γάλα",
+   "kind": "WORD",
+   "category": "FOOD",
+   "image": "2445.png",
+   "arasaacId": 2445,
+   "via": "el"
+  },
+  {
+   "text": "τσάι",
+   "kind": "WORD",
+   "category": "FOOD",
+   "image": "29802.png",
+   "arasaacId": 29802,
+   "via": "en"
+  },
+  {
+   "text": "μπύρα",
+   "kind": "WORD",
+   "category": "FOOD",
+   "image": "2330.png",
+   "arasaacId": 2330,
+   "via": "el"
+  },
+  {
+   "text": "κρασί",
+   "kind": "WORD",
+   "category": "FOOD",
+   "image": "2614.png",
+   "arasaacId": 2614,
+   "via": "en"
+  },
+  {
+   "text": "χυμός",
+   "kind": "WORD",
+   "category": "FOOD",
+   "image": "11461.png",
+   "arasaacId": 11461,
+   "via": "en"
+  },
+  {
+   "text": "σουβλάκι",
+   "kind": "WORD",
+   "category": "FOOD",
+   "image": "36171.png",
+   "arasaacId": 36171,
+   "via": "en"
+  },
+  {
+   "text": "πίτσα",
+   "kind": "WORD",
+   "category": "FOOD",
+   "image": "2527.png",
+   "arasaacId": 2527,
+   "via": "en"
+  },
+  {
+   "text": "σαλάτα",
+   "kind": "WORD",
+   "category": "FOOD",
+   "image": "2377.png",
+   "arasaacId": 2377,
+   "via": "el"
+  },
+  {
+   "text": "μακαρόνια",
+   "kind": "WORD",
+   "category": "FOOD",
+   "image": "2383.png",
+   "arasaacId": 2383,
+   "via": "el"
+  },
+  {
+   "text": "ρύζι",
+   "kind": "WORD",
+   "category": "FOOD",
+   "image": "6911.png",
+   "arasaacId": 6911,
+   "via": "en"
+  },
+  {
+   "text": "κρέας",
+   "kind": "WORD",
+   "category": "FOOD",
+   "image": "2316.png",
+   "arasaacId": 2316,
+   "via": "el"
+  },
+  {
+   "text": "κοτόπουλο",
+   "kind": "WORD",
+   "category": "FOOD",
+   "image": "2404.png",
+   "arasaacId": 2404,
+   "via": "en"
+  },
+  {
+   "text": "ψάρι",
+   "kind": "WORD",
+   "category": "FOOD",
+   "image": "2519.png",
+   "arasaacId": 2519,
+   "via": "en"
+  },
+  {
+   "text": "αυγό",
+   "kind": "WORD",
+   "category": "FOOD",
+   "image": "2427.png",
+   "arasaacId": 2427,
+   "via": "en"
+  },
+  {
+   "text": "μήλο",
+   "kind": "WORD",
+   "category": "FOOD",
+   "image": "2462.png",
+   "arasaacId": 2462,
+   "via": "en"
+  },
+  {
+   "text": "μπανάνα",
+   "kind": "WORD",
+   "category": "FOOD",
+   "image": "2530.png",
+   "arasaacId": 2530,
+   "via": "en"
+  },
+  {
+   "text": "πορτοκάλι",
+   "kind": "WORD",
+   "category": "FOOD",
+   "image": "2483.png",
+   "arasaacId": 2483,
+   "via": "en"
+  },
+  {
+   "text": "σοκολάτα",
+   "kind": "WORD",
+   "category": "FOOD",
+   "image": "2334.png",
+   "arasaacId": 2334,
+   "via": "el"
+  },
+  {
+   "text": "παγωτό",
+   "kind": "WORD",
+   "category": "FOOD",
+   "image": "3348.png",
+   "arasaacId": 3348,
+   "via": "en"
+  },
+  {
+   "text": "γλυκό",
+   "kind": "WORD",
+   "category": "FOOD",
+   "image": "2686.png",
+   "arasaacId": 2686,
+   "via": "en"
+  },
+  {
+   "text": "σούπα",
+   "kind": "WORD",
+   "category": "FOOD",
+   "image": "2573.png",
+   "arasaacId": 2573,
+   "via": "en"
+  },
+  {
+   "text": "πατάτες",
+   "kind": "WORD",
+   "category": "FOOD",
+   "image": "2503.png",
+   "arasaacId": 2503,
+   "via": "en"
+  },
+  {
+   "text": "ζάχαρη",
+   "kind": "WORD",
+   "category": "FOOD",
+   "image": "25560.png",
+   "arasaacId": 25560,
+   "via": "en"
+  },
+  {
+   "text": "αλάτι",
+   "kind": "WORD",
+   "category": "FOOD",
+   "image": "5579.png",
+   "arasaacId": 5579,
+   "via": "en"
+  },
+  {
+   "text": "πρωινό",
+   "kind": "WORD",
+   "category": "FOOD",
+   "image": "4625.png",
+   "arasaacId": 4625,
+   "via": "en"
+  },
+  {
+   "text": "μεσημεριανό",
+   "kind": "WORD",
+   "category": "FOOD",
+   "image": "4609.png",
+   "arasaacId": 4609,
+   "via": "en"
+  },
+  {
+   "text": "βραδινό",
+   "kind": "WORD",
+   "category": "FOOD",
+   "image": "4592.png",
+   "arasaacId": 4592,
+   "via": "en"
+  },
+  {
+   "text": "φρούτα",
+   "kind": "WORD",
+   "category": "FOOD",
+   "image": "28339.png",
+   "arasaacId": 28339,
+   "via": "en"
+  },
+  {
+   "text": "σπίτι",
+   "kind": "WORD",
+   "category": "PLACES",
+   "image": "2317.png",
+   "arasaacId": 2317,
+   "via": "el"
+  },
+  {
+   "text": "καφετέρια",
+   "kind": "WORD",
+   "category": "PLACES",
+   "image": "28889.png",
+   "arasaacId": 28889,
+   "via": "en"
+  },
+  {
+   "text": "νοσοκομείο",
+   "kind": "WORD",
+   "category": "PLACES",
+   "image": "3116.png",
+   "arasaacId": 3116,
+   "via": "en"
+  },
+  {
+   "text": "φαρμακείο",
+   "kind": "WORD",
+   "category": "PLACES",
+   "image": "3313.png",
+   "arasaacId": 3313,
+   "via": "en"
+  },
+  {
+   "text": "σούπερ μάρκετ",
+   "kind": "WORD",
+   "category": "PLACES",
+   "image": "3389.png",
+   "arasaacId": 3389,
+   "via": "en"
+  },
+  {
+   "text": "θάλασσα",
+   "kind": "WORD",
+   "category": "PLACES",
+   "image": "2925.png",
+   "arasaacId": 2925,
+   "via": "en"
+  },
+  {
+   "text": "πάρκο",
+   "kind": "WORD",
+   "category": "PLACES",
+   "image": "5379.png",
+   "arasaacId": 5379,
+   "via": "en"
+  },
+  {
+   "text": "γυμναστήριο",
+   "kind": "WORD",
+   "category": "PLACES",
+   "image": "24785.png",
+   "arasaacId": 24785,
+   "via": "en"
+  },
+  {
+   "text": "σχολείο",
+   "kind": "WORD",
+   "category": "PLACES",
+   "image": "3082.png",
+   "arasaacId": 3082,
+   "via": "en"
+  },
+  {
+   "text": "εκκλησία",
+   "kind": "WORD",
+   "category": "PLACES",
+   "image": "3118.png",
+   "arasaacId": 3118,
+   "via": "en"
+  },
+  {
+   "text": "τράπεζα",
+   "kind": "WORD",
+   "category": "PLACES",
+   "image": "3062.png",
+   "arasaacId": 3062,
+   "via": "en"
+  },
+  {
+   "text": "ταξί",
+   "kind": "WORD",
+   "category": "PLACES",
+   "image": "2580.png",
+   "arasaacId": 2580,
+   "via": "en"
+  },
+  {
+   "text": "λεωφορείο",
+   "kind": "WORD",
+   "category": "PLACES",
+   "image": "2262.png",
+   "arasaacId": 2262,
+   "via": "el"
+  },
+  {
+   "text": "αυτοκίνητο",
+   "kind": "WORD",
+   "category": "PLACES",
+   "image": "2339.png",
+   "arasaacId": 2339,
+   "via": "el"
+  },
+  {
+   "text": "δρόμος",
+   "kind": "WORD",
+   "category": "PLACES",
+   "image": "2299.png",
+   "arasaacId": 2299,
+   "via": "el"
+  },
+  {
+   "text": "ταβέρνα",
+   "kind": "WORD",
+   "category": "PLACES",
+   "image": "10283.png",
+   "arasaacId": 10283,
+   "via": "en"
+  },
+  {
+   "text": "μπάνιο",
+   "kind": "WORD",
+   "category": "PLACES",
+   "image": "5921.png",
+   "arasaacId": 5921,
+   "via": "en"
+  },
+  {
+   "text": "κουζίνα",
+   "kind": "WORD",
+   "category": "PLACES",
+   "image": "5965.png",
+   "arasaacId": 5965,
+   "via": "en"
+  },
+  {
+   "text": "κρεβάτι",
+   "kind": "WORD",
+   "category": "PLACES",
+   "image": "2304.png",
+   "arasaacId": 2304,
+   "via": "el"
+  },
+  {
+   "text": "δουλειά",
+   "kind": "WORD",
+   "category": "PLACES",
+   "image": "2599.png",
+   "arasaacId": 2599,
+   "via": "en"
+  },
+  {
+   "text": "γήπεδο",
+   "kind": "WORD",
+   "category": "PLACES",
+   "image": "5993.png",
+   "arasaacId": 5993,
+   "via": "en"
+  },
+  {
+   "text": "μπαλκόνι",
+   "kind": "WORD",
+   "category": "PLACES",
+   "image": "8254.png",
+   "arasaacId": 8254,
+   "via": "en"
+  },
+  {
+   "text": "μαμά",
+   "kind": "WORD",
+   "category": "PEOPLE",
+   "image": "2458.png",
+   "arasaacId": 2458,
+   "via": "en"
+  },
+  {
+   "text": "μπαμπάς",
+   "kind": "WORD",
+   "category": "PEOPLE",
+   "image": "31146.png",
+   "arasaacId": 31146,
+   "via": "en"
+  },
+  {
+   "text": "αδελφός",
+   "kind": "WORD",
+   "category": "PEOPLE",
+   "image": "2423.png",
+   "arasaacId": 2423,
+   "via": "en"
+  },
+  {
+   "text": "αδελφή",
+   "kind": "WORD",
+   "category": "PEOPLE",
+   "image": "2422.png",
+   "arasaacId": 2422,
+   "via": "en"
+  },
+  {
+   "text": "φίλος",
+   "kind": "WORD",
+   "category": "PEOPLE",
+   "image": "8486.png",
+   "arasaacId": 8486,
+   "via": "en"
+  },
+  {
+   "text": "φίλη",
+   "kind": "WORD",
+   "category": "PEOPLE",
+   "image": "8486.png",
+   "arasaacId": 8486,
+   "via": "en"
+  },
+  {
+   "text": "γιατρός",
+   "kind": "WORD",
+   "category": "PEOPLE",
+   "image": "2467.png",
+   "arasaacId": 2467,
+   "via": "en"
+  },
+  {
+   "text": "νοσοκόμα",
+   "kind": "WORD",
+   "category": "PEOPLE",
+   "image": "2375.png",
+   "arasaacId": 2375,
+   "via": "en"
+  },
+  {
+   "text": "λογοθεραπεύτρια",
+   "kind": "WORD",
+   "category": "PEOPLE",
+   "image": "2454.png",
+   "arasaacId": 2454,
+   "via": "el"
+  },
+  {
+   "text": "φυσιοθεραπευτής",
+   "kind": "WORD",
+   "category": "PEOPLE",
+   "image": "2395.png",
+   "arasaacId": 2395,
+   "via": "en"
+  },
+  {
+   "text": "γείτονας",
+   "kind": "WORD",
+   "category": "PEOPLE",
+   "image": "37228.png",
+   "arasaacId": 37228,
+   "via": "en"
+  },
+  {
+   "text": "παιδί",
+   "kind": "WORD",
+   "category": "PEOPLE",
+   "image": "2485.png",
+   "arasaacId": 2485,
+   "via": "en"
+  },
+  {
+   "text": "άντρας",
+   "kind": "WORD",
+   "category": "PEOPLE",
+   "image": "4665.png",
+   "arasaacId": 4665,
+   "via": "en"
+  },
+  {
+   "text": "γυναίκα",
+   "kind": "WORD",
+   "category": "PEOPLE",
+   "image": "4703.png",
+   "arasaacId": 4703,
+   "via": "en"
+  },
+  {
+   "text": "εγώ",
+   "kind": "WORD",
+   "category": "PEOPLE",
+   "image": "2617.png",
+   "arasaacId": 2617,
+   "via": "en"
+  },
+  {
+   "text": "εσύ",
+   "kind": "WORD",
+   "category": "PEOPLE",
+   "image": "2608.png",
+   "arasaacId": 2608,
+   "via": "en"
+  },
+  {
+   "text": "θέλω",
+   "kind": "WORD",
+   "category": "VERBS",
+   "image": "5441.png",
+   "arasaacId": 5441,
+   "via": "en"
+  },
+  {
+   "text": "πάμε",
+   "kind": "WORD",
+   "category": "VERBS",
+   "image": "2432.png",
+   "arasaacId": 2432,
+   "via": "el"
+  },
+  {
+   "text": "τρώω",
+   "kind": "WORD",
+   "category": "VERBS",
+   "image": "2349.png",
+   "arasaacId": 2349,
+   "via": "el"
+  },
+  {
+   "text": "πίνω",
+   "kind": "WORD",
+   "category": "VERBS",
+   "image": "2276.png",
+   "arasaacId": 2276,
+   "via": "el"
+  },
+  {
+   "text": "κοιμάμαι",
+   "kind": "WORD",
+   "category": "VERBS",
+   "image": "2369.png",
+   "arasaacId": 2369,
+   "via": "el"
+  },
+  {
+   "text": "περπατάω",
+   "kind": "WORD",
+   "category": "VERBS",
+   "image": "3251.png",
+   "arasaacId": 3251,
+   "via": "en"
+  },
+  {
+   "text": "κάθομαι",
+   "kind": "WORD",
+   "category": "VERBS",
+   "image": "6611.png",
+   "arasaacId": 6611,
+   "via": "en"
+  },
+  {
+   "text": "βλέπω",
+   "kind": "WORD",
+   "category": "VERBS",
+   "image": "2474.png",
+   "arasaacId": 2474,
+   "via": "en"
+  },
+  {
+   "text": "ακούω",
+   "kind": "WORD",
+   "category": "VERBS",
+   "image": "2381.png",
+   "arasaacId": 2381,
+   "via": "el"
+  },
+  {
+   "text": "μιλάω",
+   "kind": "WORD",
+   "category": "VERBS",
+   "image": "3345.png",
+   "arasaacId": 3345,
+   "via": "en"
+  },
+  {
+   "text": "διαβάζω",
+   "kind": "WORD",
+   "category": "VERBS",
+   "image": "2387.png",
+   "arasaacId": 2387,
+   "via": "el"
+  },
+  {
+   "text": "γράφω",
+   "kind": "WORD",
+   "category": "VERBS",
+   "image": "2380.png",
+   "arasaacId": 2380,
+   "via": "el"
+  },
+  {
+   "text": "παίζω",
+   "kind": "WORD",
+   "category": "VERBS",
+   "image": "2439.png",
+   "arasaacId": 2439,
+   "via": "en"
+  },
+  {
+   "text": "τηλεφωνώ",
+   "kind": "WORD",
+   "category": "VERBS",
+   "image": "4686.png",
+   "arasaacId": 4686,
+   "via": "en"
+  },
+  {
+   "text": "αγοράζω",
+   "kind": "WORD",
+   "category": "VERBS",
+   "image": "6457.png",
+   "arasaacId": 6457,
+   "via": "en"
+  },
+  {
+   "text": "πληρώνω",
+   "kind": "WORD",
+   "category": "VERBS",
+   "image": "6457.png",
+   "arasaacId": 6457,
+   "via": "en"
+  },
+  {
+   "text": "ανοίγω",
+   "kind": "WORD",
+   "category": "VERBS",
+   "image": "4549.png",
+   "arasaacId": 4549,
+   "via": "en"
+  },
+  {
+   "text": "κλείνω",
+   "kind": "WORD",
+   "category": "VERBS",
+   "image": "2697.png",
+   "arasaacId": 2697,
+   "via": "en"
+  },
+  {
+   "text": "έρχομαι",
+   "kind": "WORD",
+   "category": "VERBS",
+   "image": "11708.png",
+   "arasaacId": 11708,
+   "via": "en"
+  },
+  {
+   "text": "φεύγω",
+   "kind": "WORD",
+   "category": "VERBS",
+   "image": "2806.png",
+   "arasaacId": 2806,
+   "via": "en"
+  },
+  {
+   "text": "βοηθάω",
+   "kind": "WORD",
+   "category": "VERBS",
+   "image": "4570.png",
+   "arasaacId": 4570,
+   "via": "en"
+  },
+  {
+   "text": "ξεκουράζομαι",
+   "kind": "WORD",
+   "category": "VERBS",
+   "image": "3299.png",
+   "arasaacId": 3299,
+   "via": "en"
+  },
+  {
+   "text": "τραγουδάω",
+   "kind": "WORD",
+   "category": "VERBS",
+   "image": "2315.png",
+   "arasaacId": 2315,
+   "via": "en"
+  },
+  {
+   "text": "χαρούμενος",
+   "kind": "WORD",
+   "category": "FEELINGS",
+   "image": "3245.png",
+   "arasaacId": 3245,
+   "via": "en"
+  },
+  {
+   "text": "λυπημένος",
+   "kind": "WORD",
+   "category": "FEELINGS",
+   "image": "2606.png",
+   "arasaacId": 2606,
+   "via": "en"
+  },
+  {
+   "text": "θυμωμένος",
+   "kind": "WORD",
+   "category": "FEELINGS",
+   "image": "2374.png",
+   "arasaacId": 2374,
+   "via": "el"
+  },
+  {
+   "text": "κουρασμένος",
+   "kind": "WORD",
+   "category": "FEELINGS",
+   "image": "2314.png",
+   "arasaacId": 2314,
+   "via": "el"
+  },
+  {
+   "text": "φοβισμένος",
+   "kind": "WORD",
+   "category": "FEELINGS",
+   "image": "2261.png",
+   "arasaacId": 2261,
+   "via": "en"
+  },
+  {
+   "text": "πεινάω",
+   "kind": "WORD",
+   "category": "FEELINGS",
+   "image": "4962.png",
+   "arasaacId": 4962,
+   "via": "en"
+  },
+  {
+   "text": "διψάω",
+   "kind": "WORD",
+   "category": "FEELINGS",
+   "image": "4963.png",
+   "arasaacId": 4963,
+   "via": "en"
+  },
+  {
+   "text": "κρυώνω",
+   "kind": "WORD",
+   "category": "FEELINGS",
+   "image": "4652.png",
+   "arasaacId": 4652,
+   "via": "en"
+  },
+  {
+   "text": "ζεσταίνομαι",
+   "kind": "WORD",
+   "category": "FEELINGS",
+   "image": "2300.png",
+   "arasaacId": 2300,
+   "via": "en"
+  },
+  {
+   "text": "βαριέμαι",
+   "kind": "WORD",
+   "category": "FEELINGS",
+   "image": "35531.png",
+   "arasaacId": 35531,
+   "via": "en"
+  },
+  {
+   "text": "νευρικός",
+   "kind": "WORD",
+   "category": "FEELINGS",
+   "image": "11312.png",
+   "arasaacId": 11312,
+   "via": "en"
+  },
+  {
+   "text": "ήρεμος",
+   "kind": "WORD",
+   "category": "FEELINGS",
+   "image": "31310.png",
+   "arasaacId": 31310,
+   "via": "en"
+  },
+  {
+   "text": "καλά",
+   "kind": "WORD",
+   "category": "FEELINGS",
+   "image": "5397.png",
+   "arasaacId": 5397,
+   "via": "en"
+  },
+  {
+   "text": "άσχημα",
+   "kind": "WORD",
+   "category": "FEELINGS",
+   "image": "4690.png",
+   "arasaacId": 4690,
+   "via": "en"
+  },
+  {
+   "text": "κεφάλι",
+   "kind": "WORD",
+   "category": "BODY",
+   "image": "2673.png",
+   "arasaacId": 2673,
+   "via": "en"
+  },
+  {
+   "text": "χέρι",
+   "kind": "WORD",
+   "category": "BODY",
+   "image": "2928.png",
+   "arasaacId": 2928,
+   "via": "en"
+  },
+  {
+   "text": "πόδι",
+   "kind": "WORD",
+   "category": "BODY",
+   "image": "2841.png",
+   "arasaacId": 2841,
+   "via": "en"
+  },
+  {
+   "text": "μάτι",
+   "kind": "WORD",
+   "category": "BODY",
+   "image": "6573.png",
+   "arasaacId": 6573,
+   "via": "en"
+  },
+  {
+   "text": "αυτί",
+   "kind": "WORD",
+   "category": "BODY",
+   "image": "2871.png",
+   "arasaacId": 2871,
+   "via": "en"
+  },
+  {
+   "text": "στόμα",
+   "kind": "WORD",
+   "category": "BODY",
+   "image": "2663.png",
+   "arasaacId": 2663,
+   "via": "en"
+  },
+  {
+   "text": "μύτη",
+   "kind": "WORD",
+   "category": "BODY",
+   "image": "2887.png",
+   "arasaacId": 2887,
+   "via": "en"
+  },
+  {
+   "text": "δόντια",
+   "kind": "WORD",
+   "category": "BODY",
+   "image": "2737.png",
+   "arasaacId": 2737,
+   "via": "en"
+  },
+  {
+   "text": "στομάχι",
+   "kind": "WORD",
+   "category": "BODY",
+   "image": "2786.png",
+   "arasaacId": 2786,
+   "via": "en"
+  },
+  {
+   "text": "πλάτη",
+   "kind": "WORD",
+   "category": "BODY",
+   "image": "2748.png",
+   "arasaacId": 2748,
+   "via": "en"
+  },
+  {
+   "text": "καρδιά",
+   "kind": "WORD",
+   "category": "BODY",
+   "image": "2715.png",
+   "arasaacId": 2715,
+   "via": "en"
+  },
+  {
+   "text": "γόνατο",
+   "kind": "WORD",
+   "category": "BODY",
+   "image": "2810.png",
+   "arasaacId": 2810,
+   "via": "en"
+  },
+  {
+   "text": "δάχτυλο",
+   "kind": "WORD",
+   "category": "BODY",
+   "image": "3298.png",
+   "arasaacId": 3298,
+   "via": "en"
+  },
+  {
+   "text": "λαιμός",
+   "kind": "WORD",
+   "category": "BODY",
+   "image": "2727.png",
+   "arasaacId": 2727,
+   "via": "en"
+  },
+  {
+   "text": "ένα",
+   "kind": "NUMBER",
+   "category": "NUMBERS",
+   "image": "2627.png",
+   "arasaacId": 2627,
+   "via": "en"
+  },
+  {
+   "text": "δύο",
+   "kind": "NUMBER",
+   "category": "NUMBERS",
+   "image": "2628.png",
+   "arasaacId": 2628,
+   "via": "en"
+  },
+  {
+   "text": "τρία",
+   "kind": "NUMBER",
+   "category": "NUMBERS",
+   "image": "2629.png",
+   "arasaacId": 2629,
+   "via": "en"
+  },
+  {
+   "text": "τέσσερα",
+   "kind": "NUMBER",
+   "category": "NUMBERS",
+   "image": "2630.png",
+   "arasaacId": 2630,
+   "via": "en"
+  },
+  {
+   "text": "πέντε",
+   "kind": "NUMBER",
+   "category": "NUMBERS",
+   "image": "39311.png",
+   "arasaacId": 39311,
+   "via": "en"
+  },
+  {
+   "text": "έξι",
+   "kind": "NUMBER",
+   "category": "NUMBERS",
+   "image": "2632.png",
+   "arasaacId": 2632,
+   "via": "en"
+  },
+  {
+   "text": "επτά",
+   "kind": "NUMBER",
+   "category": "NUMBERS",
+   "image": "2633.png",
+   "arasaacId": 2633,
+   "via": "en"
+  },
+  {
+   "text": "οκτώ",
+   "kind": "NUMBER",
+   "category": "NUMBERS",
+   "image": "2634.png",
+   "arasaacId": 2634,
+   "via": "en"
+  },
+  {
+   "text": "εννέα",
+   "kind": "NUMBER",
+   "category": "NUMBERS",
+   "image": "2635.png",
+   "arasaacId": 2635,
+   "via": "en"
+  },
+  {
+   "text": "δέκα",
+   "kind": "NUMBER",
+   "category": "NUMBERS",
+   "image": "7025.png",
+   "arasaacId": 7025,
+   "via": "en"
+  },
+  {
+   "text": "τηλέφωνο",
+   "kind": "WORD",
+   "category": "THINGS",
+   "image": "2791.png",
+   "arasaacId": 2791,
+   "via": "en"
+  },
+  {
+   "text": "τηλεόραση",
+   "kind": "WORD",
+   "category": "THINGS",
+   "image": "25498.png",
+   "arasaacId": 25498,
+   "via": "en"
+  },
+  {
+   "text": "κλειδιά",
+   "kind": "WORD",
+   "category": "THINGS",
+   "image": "2451.png",
+   "arasaacId": 2451,
+   "via": "el"
+  },
+  {
+   "text": "πορτοφόλι",
+   "kind": "WORD",
+   "category": "THINGS",
+   "image": "2689.png",
+   "arasaacId": 2689,
+   "via": "en"
+  },
+  {
+   "text": "γυαλιά",
+   "kind": "WORD",
+   "category": "THINGS",
+   "image": "3329.png",
+   "arasaacId": 3329,
+   "via": "en"
+  },
+  {
+   "text": "ρούχα",
+   "kind": "WORD",
+   "category": "THINGS",
+   "image": "7233.png",
+   "arasaacId": 7233,
+   "via": "en"
+  },
+  {
+   "text": "παπούτσια",
+   "kind": "WORD",
+   "category": "THINGS",
+   "image": "2622.png",
+   "arasaacId": 2622,
+   "via": "en"
+  },
+  {
+   "text": "φάρμακα",
+   "kind": "WORD",
+   "category": "THINGS",
+   "image": "8359.png",
+   "arasaacId": 8359,
+   "via": "en"
+  },
+  {
+   "text": "χρήματα",
+   "kind": "WORD",
+   "category": "THINGS",
+   "image": "4630.png",
+   "arasaacId": 4630,
+   "via": "en"
+  },
+  {
+   "text": "ρολόι",
+   "kind": "WORD",
+   "category": "THINGS",
+   "image": "5561.png",
+   "arasaacId": 5561,
+   "via": "en"
+  },
+  {
+   "text": "τσάντα",
+   "kind": "WORD",
+   "category": "THINGS",
+   "image": "2284.png",
+   "arasaacId": 2284,
+   "via": "el"
+  },
+  {
+   "text": "ομπρέλα",
+   "kind": "WORD",
+   "category": "THINGS",
+   "image": "2500.png",
+   "arasaacId": 2500,
+   "via": "en"
+  },
+  {
+   "text": "καρέκλα",
+   "kind": "WORD",
+   "category": "THINGS",
+   "image": "3155.png",
+   "arasaacId": 3155,
+   "via": "en"
+  },
+  {
+   "text": "τραπέζι",
+   "kind": "WORD",
+   "category": "THINGS",
+   "image": "3129.png",
+   "arasaacId": 3129,
+   "via": "en"
+  },
+  {
+   "text": "πόρτα",
+   "kind": "WORD",
+   "category": "THINGS",
+   "image": "3244.png",
+   "arasaacId": 3244,
+   "via": "en"
+  },
+  {
+   "text": "παράθυρο",
+   "kind": "WORD",
+   "category": "THINGS",
+   "image": "2611.png",
+   "arasaacId": 2611,
+   "via": "en"
+  },
+  {
+   "text": "βιβλίο",
+   "kind": "WORD",
+   "category": "THINGS",
+   "image": "2450.png",
+   "arasaacId": 2450,
+   "via": "el"
+  },
+  {
+   "text": "μουσική",
+   "kind": "WORD",
+   "category": "THINGS",
+   "image": "24795.png",
+   "arasaacId": 24795,
+   "via": "en"
+  },
+  {
+   "text": "μπάλα",
+   "kind": "WORD",
+   "category": "THINGS",
+   "image": "2269.png",
+   "arasaacId": 2269,
+   "via": "el"
+  },
+  {
+   "text": "ήλιος",
+   "kind": "WORD",
+   "category": "THINGS",
+   "image": "2798.png",
+   "arasaacId": 2798,
+   "via": "en"
+  },
+  {
+   "text": "βροχή",
+   "kind": "WORD",
+   "category": "THINGS",
+   "image": "3123.png",
+   "arasaacId": 3123,
+   "via": "en"
+  },
+  {
+   "text": "σήμερα",
+   "kind": "WORD",
+   "category": "TIME",
+   "image": "7131.png",
+   "arasaacId": 7131,
+   "via": "en"
+  },
+  {
+   "text": "αύριο",
+   "kind": "WORD",
+   "category": "TIME",
+   "image": "7152.png",
+   "arasaacId": 7152,
+   "via": "en"
+  },
+  {
+   "text": "χθες",
+   "kind": "WORD",
+   "category": "TIME",
+   "image": "6926.png",
+   "arasaacId": 6926,
+   "via": "en"
+  },
+  {
+   "text": "τώρα",
+   "kind": "WORD",
+   "category": "TIME",
+   "image": "13026.png",
+   "arasaacId": 13026,
+   "via": "en"
+  },
+  {
+   "text": "μετά",
+   "kind": "WORD",
+   "category": "TIME",
+   "image": "13080.png",
+   "arasaacId": 13080,
+   "via": "en"
+  },
+  {
+   "text": "πρωί",
+   "kind": "WORD",
+   "category": "TIME",
+   "image": "25704.png",
+   "arasaacId": 25704,
+   "via": "en"
+  },
+  {
+   "text": "μεσημέρι",
+   "kind": "WORD",
+   "category": "TIME",
+   "image": null,
+   "arasaacId": 4695,
+   "via": null
+  },
+  {
+   "text": "βράδυ",
+   "kind": "WORD",
+   "category": "TIME",
+   "image": "38567.png",
+   "arasaacId": 38567,
+   "via": "en"
+  },
+  {
+   "text": "Δευτέρα",
+   "kind": "WORD",
+   "category": "TIME",
+   "image": "6554.png",
+   "arasaacId": 6554,
+   "via": "en"
+  },
+  {
+   "text": "Σάββατο",
+   "kind": "WORD",
+   "category": "TIME",
+   "image": "6605.png",
+   "arasaacId": 6605,
+   "via": "en"
+  },
+  {
+   "text": "Κυριακή",
+   "kind": "WORD",
+   "category": "TIME",
+   "image": "6478.png",
+   "arasaacId": 6478,
+   "via": "en"
+  }
+ ]
+}
