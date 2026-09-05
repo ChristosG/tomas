@@ -18,7 +18,8 @@ class SeedImporter(private val graph: AppGraph) {
         try {
             val manifest = graph.app.assets.open("seed/seed.json").bufferedReader().use { SeedManifest.parse(it.readText()) }
             if (graph.settings.seedVersion.first() >= manifest.version) return@withContext
-            val existing = graph.db.items().activeOfSource(Source.SEED).map { it.text.trim() }.toSet()
+            // Every active item, not only the seeded ones: see newEntries.
+            val existing = graph.db.items().allActive().map { it.text }.toSet()
             for (entry in newEntries(manifest, existing)) {
                 val image = entry.image?.let { copyAsset("seed/$it") }
                 graph.items.save(Item(text = entry.text, kind = runCatching { ItemKind.valueOf(entry.kind) }.getOrDefault(ItemKind.WORD),
@@ -49,13 +50,20 @@ class SeedImporter(private val graph: AppGraph) {
          * What a version bump owes an install that already has the old seed: the entries whose text
          * is not on the device yet, and each of those once.
          *
-         * Matching on trimmed text and not on a row id is what makes a bump safe — the items the
-         * caregiver has edited, deleted or re-recorded keep their rows untouched, and a phrase
-         * added in version 2 arrives beside them instead of resetting them. Anything she deleted
-         * comes back, which is the price of not keeping a tombstone per seed text; it is a phrase
-         * she can delete once more, not work she loses.
+         * Matching on text and not on a row id is what makes a bump safe — the items the caregiver
+         * has edited, deleted or re-recorded keep their rows untouched, and a phrase added in
+         * version 2 arrives beside them instead of resetting them. Anything she deleted comes back,
+         * which is the price of not keeping a tombstone per seed text; it is a phrase she can
+         * delete once more, not work she loses.
+         *
+         * [existingTexts] is every active item on the device, whatever its source, compared through
+         * [SeedText.key]. Looking only at the seeded rows was the phase 4 defect: a phrase the
+         * caregiver had typed herself, or a seed text she had edited, counted as missing and the
+         * bump handed Dimitris a second card for a phrase he already had.
          */
-        fun newEntries(manifest: SeedManifest, existingTexts: Set<String>): List<SeedEntry> =
-            manifest.items.distinctBy { it.text.trim() }.filter { it.text.trim() !in existingTexts }
+        fun newEntries(manifest: SeedManifest, existingTexts: Set<String>): List<SeedEntry> {
+            val onDevice = existingTexts.mapTo(mutableSetOf(), SeedText::key)
+            return manifest.items.distinctBy { SeedText.key(it.text) }.filter { SeedText.key(it.text) !in onDevice }
+        }
     }
 }

@@ -18,6 +18,7 @@ interface ItemDao {
     fun observeByCategory(category: Category): Flow<List<Item>>
     @Query("SELECT * FROM items WHERE deleted = 0 AND kind IN (:kinds)") suspend fun activeOfKinds(kinds: List<ItemKind>): List<Item>
     @Query("SELECT * FROM items WHERE deleted = 0 AND source = :source") suspend fun activeOfSource(source: Source): List<Item>
+    @Query("SELECT * FROM items WHERE deleted = 0") suspend fun allActive(): List<Item>
     @Query("SELECT COUNT(*) FROM items WHERE deleted = 0") suspend fun countActive(): Int
     @Query("UPDATE items SET deleted = 1, updatedAt = :now WHERE id = :id") suspend fun softDelete(id: String, now: Long)
     @Query("SELECT * FROM items WHERE deleted = 0 AND pinned = 1 ORDER BY text") fun observePinned(): Flow<List<Item>>

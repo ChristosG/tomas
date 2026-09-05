@@ -15,6 +15,7 @@ class FakeItemDao : ItemDao {
     override fun observeByCategory(category: Category): Flow<List<Item>> = observeActive().map { l -> l.filter { it.category == category } }
     override suspend fun activeOfKinds(kinds: List<ItemKind>): List<Item> = active().filter { it.kind in kinds }
     override suspend fun activeOfSource(source: Source): List<Item> = active().filter { it.source == source }
+    override suspend fun allActive(): List<Item> = active()
     override suspend fun countActive(): Int = active().size
     override suspend fun softDelete(id: String, now: Long) { rows.value[id]?.let { upsert(it.copy(deleted = true, updatedAt = now)) } }
     override fun observePinned(): Flow<List<Item>> = observeActive().map { l -> l.filter { it.pinned }.sortedBy { it.text } }

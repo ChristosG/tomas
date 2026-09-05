@@ -39,6 +39,19 @@ class SeedImporterTest {
         assertEquals(1, SeedImporter.newEntries(manifest, existingTexts = emptySet()).size)
     }
 
+    /**
+     * The phase 4 defect: the "already here" set was built from the seeded rows alone, so a phrase
+     * the caregiver had typed herself, or a seed text she had edited, looked missing and the bump
+     * added it a second time. Accents and case are hers to get wrong, not his to pay for.
+     */
+    @Test fun `version bump adds only the texts that do not exist, whatever their source`() {
+        val manifest = SeedManifest(version = 2, items = v2.map(::entry))
+        // «καφες» she typed without its tonos; «ναι» is the seed row she edited to lower case.
+        val onDevice = setOf("ναι", "Όχι", "καφες")
+        val added = SeedImporter.newEntries(manifest, existingTexts = onDevice)
+        assertEquals(listOf("θέλω καφέ", "πάμε σπίτι"), added.map { it.text })
+    }
+
     @Test fun `a fresh install gets everything`() {
         val manifest = SeedManifest(version = 2, items = v2.map(::entry))
         assertEquals(v2, SeedImporter.newEntries(manifest, existingTexts = emptySet()).map { it.text })
