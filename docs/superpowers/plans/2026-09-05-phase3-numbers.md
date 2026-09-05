@@ -510,7 +510,7 @@ with imports `androidx.compose.foundation.text.KeyboardOptions`, `androidx.compo
 
 - [ ] **Step 3: Tests, schema, commit**
 
-Run: `./gradlew -q testDebugUnitTest && ANDROID_SERIAL=emulator-5554 ./gradlew -q connectedDebugAndroidTest --tests 'gr.dimitris.app.core.data.*'` — Expected: pass; `app/schemas/.../3.json` exists.
+Run: `./gradlew -q testDebugUnitTest && ANDROID_SERIAL=emulator-5554 ./gradlew -q connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.package=gr.dimitris.app.core.data` — Expected: pass; `app/schemas/.../3.json` exists.
 ```bash
 git add app/schemas app/src/main app/src/test app/src/androidTest
 git commit -m "feat(phase3): item prices (db v3), numbers level setting, price field in editor

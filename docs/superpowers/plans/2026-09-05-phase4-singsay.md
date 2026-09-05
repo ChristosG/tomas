@@ -350,7 +350,7 @@ with `val askSungMic = rememberLauncherForActivityResult(ActivityResultContracts
 
 - [ ] **Step 3: Tests, schema, commit**
 
-Run: `./gradlew -q testDebugUnitTest && ANDROID_SERIAL=emulator-5554 ./gradlew -q connectedDebugAndroidTest --tests 'gr.dimitris.app.core.data.*'` — pass; `app/schemas/.../4.json` exists.
+Run: `./gradlew -q testDebugUnitTest && ANDROID_SERIAL=emulator-5554 ./gradlew -q connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.package=gr.dimitris.app.core.data` — pass; `app/schemas/.../4.json` exists.
 ```bash
 git add app/schemas app/src/main app/src/test app/src/androidTest
 git commit -m "feat(phase4): sung model recordings (db v4) with caregiver button

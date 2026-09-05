@@ -111,7 +111,7 @@ Add to `ItemDaoTest.kt`:
     }
 ```
 
-Run: `ANDROID_SERIAL=emulator-5554 ./gradlew -q connectedDebugAndroidTest --tests '*ItemDaoTest*'` — Expected: compilation error (`pinned` unknown).
+Run: `ANDROID_SERIAL=emulator-5554 ./gradlew -q connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=gr.dimitris.app.core.data.ItemDaoTest` — Expected: compilation error (`pinned` unknown).
 
 - [ ] **Step 3: Entity, DAO and database changes**
 
@@ -140,7 +140,7 @@ with `import androidx.room.AutoMigration`.
 
 - [ ] **Step 4: Build and run the instrumented data tests**
 
-Run: `ANDROID_SERIAL=emulator-5554 ./gradlew -q connectedDebugAndroidTest --tests 'gr.dimitris.app.core.data.*'`
+Run: `ANDROID_SERIAL=emulator-5554 ./gradlew -q connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.package=gr.dimitris.app.core.data`
 Expected: MigrationTest 1 pass, ItemDaoTest 4 pass, and `app/schemas/gr.dimitris.app.core.data.AppDatabase/2.json` now exists (commit it).
 
 - [ ] **Step 5: Commit**
