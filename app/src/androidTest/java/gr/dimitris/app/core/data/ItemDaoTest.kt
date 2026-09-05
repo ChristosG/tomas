@@ -45,4 +45,24 @@ class ItemDaoTest {
         assertEquals(listOf(pinned), db.items().observePinned().first())
         assertEquals(setOf(pinned.id, plain.id), db.items().byIds(listOf(pinned.id, plain.id, gone.id)).map { it.id }.toSet())
     }
+
+    /**
+     * The seed importers' one query that must *not* filter deletions. A word or a dialogue the
+     * caregiver removed has to keep counting as "already on this device", or the next version bump
+     * hands it back to her — for ever, and with nothing said anywhere.
+     */
+    @Test fun deletedRowsAreStillOnTheDevice() = runTest {
+        val kept = Item(text = "νερό", category = Category.FOOD)
+        val removed = Item(text = "ψωμί", category = Category.FOOD, deleted = true)
+        db.items().upsertAll(listOf(kept, removed))
+        assertEquals(setOf("νερό", "ψωμί"), db.items().all().map { it.text }.toSet())
+        assertEquals(listOf("νερό"), db.items().allActive().map { it.text })
+
+        val live = Script(title = "Στην καφετέρια")
+        val deleted = Script(title = "Με έναν φίλο", deleted = true)
+        db.scripts().upsertScript(live)
+        db.scripts().upsertScript(deleted)
+        assertEquals(setOf("Στην καφετέρια", "Με έναν φίλο"), db.scripts().allScripts().map { it.title }.toSet())
+        assertEquals(listOf("Στην καφετέρια"), db.scripts().activeScripts().map { it.title })
+    }
 }

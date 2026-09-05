@@ -19,6 +19,13 @@ interface ItemDao {
     @Query("SELECT * FROM items WHERE deleted = 0 AND kind IN (:kinds)") suspend fun activeOfKinds(kinds: List<ItemKind>): List<Item>
     @Query("SELECT * FROM items WHERE deleted = 0 AND source = :source") suspend fun activeOfSource(source: Source): List<Item>
     @Query("SELECT * FROM items WHERE deleted = 0") suspend fun allActive(): List<Item>
+
+    /**
+     * Every row, deleted ones included. Only the seed importer wants this: a word the caregiver
+     * removed has to keep counting as "already on this device", or the next version bump hands it
+     * back to her and she has to delete it again.
+     */
+    @Query("SELECT * FROM items") suspend fun all(): List<Item>
     @Query("SELECT COUNT(*) FROM items WHERE deleted = 0") suspend fun countActive(): Int
     @Query("UPDATE items SET deleted = 1, updatedAt = :now WHERE id = :id") suspend fun softDelete(id: String, now: Long)
     @Query("SELECT * FROM items WHERE deleted = 0 AND pinned = 1 ORDER BY text") fun observePinned(): Flow<List<Item>>
@@ -67,6 +74,13 @@ interface ScriptDao {
     @Upsert suspend fun upsertLines(lines: List<ScriptLine>)
     @Query("SELECT * FROM scripts WHERE deleted = 0 ORDER BY title") fun observeScripts(): Flow<List<Script>>
     @Query("SELECT * FROM scripts WHERE deleted = 0 ORDER BY title") suspend fun activeScripts(): List<Script>
+
+    /**
+     * Every dialogue, deleted ones included — the seed importer's "already on this device" set. A
+     * dialogue the caregiver removed must not come back on the next version bump.
+     */
+    @Query("SELECT * FROM scripts") suspend fun allScripts(): List<Script>
+
     @Query("SELECT * FROM scripts WHERE id = :id") suspend fun get(id: String): Script?
     @Query("SELECT * FROM script_lines WHERE scriptId = :scriptId AND deleted = 0 ORDER BY position") suspend fun linesFor(scriptId: String): List<ScriptLine>
 

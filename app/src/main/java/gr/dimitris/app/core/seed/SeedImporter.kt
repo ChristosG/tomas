@@ -18,9 +18,8 @@ class SeedImporter(private val graph: AppGraph) {
         try {
             val manifest = graph.app.assets.open("seed/seed.json").bufferedReader().use { SeedManifest.parse(it.readText()) }
             if (graph.settings.seedVersion.first() >= manifest.version) return@withContext
-            // Every active item, not only the seeded ones: see newEntries.
-            val existing = graph.db.items().allActive().map { it.text }.toSet()
-            for (entry in newEntries(manifest, existing)) {
+            // Every item the device has ever had, not only the seeded ones: see newEntries.
+            for (entry in newEntries(manifest, onDevice(graph.db.items().all()))) {
                 val image = entry.image?.let { copyAsset("seed/$it") }
                 graph.items.save(Item(text = entry.text, kind = runCatching { ItemKind.valueOf(entry.kind) }.getOrDefault(ItemKind.WORD),
                     category = runCatching { Category.valueOf(entry.category) }.getOrDefault(Category.CUSTOM),
@@ -47,19 +46,31 @@ class SeedImporter(private val graph: AppGraph) {
 
     companion object {
         /**
+         * What counts as "already on this device" for the vocabulary seed.
+         *
+         * Deleted rows count. A word the caregiver removed is a decision, not an absence: matching
+         * only live rows handed it back to her on every version bump, for ever, with nothing said.
+         *
+         * Script lines do not count. They are ordinary `Item` rows made from dialogue turns, and a
+         * turn typed as «Ναι» or «Πάμε» would silently block the identically-worded talk-board card
+         * from ever arriving — the same filter the talk board and the word list already apply.
+         */
+        fun onDevice(items: List<Item>): Set<String> =
+            items.filter { it.kind != ItemKind.SCRIPT_LINE }.mapTo(mutableSetOf()) { it.text }
+
+        /**
          * What a version bump owes an install that already has the old seed: the entries whose text
          * is not on the device yet, and each of those once.
          *
          * Matching on text and not on a row id is what makes a bump safe — the items the caregiver
          * has edited, deleted or re-recorded keep their rows untouched, and a phrase added in
-         * version 2 arrives beside them instead of resetting them. Anything she deleted comes back,
-         * which is the price of not keeping a tombstone per seed text; it is a phrase she can
-         * delete once more, not work she loses.
+         * version 2 arrives beside them instead of resetting them.
          *
-         * [existingTexts] is every active item on the device, whatever its source, compared through
-         * [SeedText.key]. Looking only at the seeded rows was the phase 4 defect: a phrase the
-         * caregiver had typed herself, or a seed text she had edited, counted as missing and the
-         * bump handed Dimitris a second card for a phrase he already had.
+         * [existingTexts] is [onDevice] over every row the device holds, whatever its source and
+         * whether or not it is deleted, compared through [SeedText.key]. Looking only at the seeded
+         * rows was the phase 4 defect: a phrase the caregiver had typed herself, or a seed text she
+         * had edited, counted as missing and the bump handed Dimitris a second card for a phrase he
+         * already had. Looking only at the *live* rows was the same mistake for deletions.
          */
         fun newEntries(manifest: SeedManifest, existingTexts: Set<String>): List<SeedEntry> {
             val onDevice = existingTexts.mapTo(mutableSetOf(), SeedText::key)

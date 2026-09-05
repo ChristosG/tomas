@@ -11,6 +11,7 @@ class FakeScriptDao : ScriptDao {
     override suspend fun upsertLines(lines: List<ScriptLine>) { lines.forEach { this.lines[it.id] = it } }
     override fun observeScripts(): Flow<List<Script>> = scripts.map { m -> m.values.filter { !it.deleted }.sortedBy { it.title } }
     override suspend fun activeScripts(): List<Script> = scripts.value.values.filter { !it.deleted }.sortedBy { it.title }
+    override suspend fun allScripts(): List<Script> = scripts.value.values.toList()
     override suspend fun get(id: String): Script? = scripts.value[id]
     override suspend fun linesFor(scriptId: String): List<ScriptLine> = lines.values.filter { it.scriptId == scriptId && !it.deleted }.sortedBy { it.position }
     override suspend fun lineOfItem(itemId: String): ScriptLine? = lines.values.filter { it.itemId == itemId && !it.deleted }.maxByOrNull { it.updatedAt }

@@ -1,5 +1,7 @@
 package gr.dimitris.app.core.seed
 
+import gr.dimitris.app.core.data.Script
+import gr.dimitris.app.core.data.Source
 import gr.dimitris.app.core.data.Speaker
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -72,6 +74,20 @@ class ScriptSeedTest {
         val m = ScriptSeedManifest(version = 2, scripts = listOf(script("Στην καφετέρια"), script("Στον φούρνο")))
         val added = ScriptSeedImporter.newScripts(m, existingTitles = setOf("στην καφετερια"))
         assertEquals(listOf("Στον φούρνο"), added.map { it.title })
+    }
+
+    /**
+     * The dialogue she deleted stays deleted. This is the defect the task-3 upgrade check found:
+     * «Με έναν φίλο», removed by hand, came back beside «Στο ταξί» on the version bump — and would
+     * come back again on every bump after that.
+     */
+    @Test fun `a deleted dialogue does not come back on a version bump`() {
+        val m = ScriptSeedManifest(version = 2, scripts = listOf(script("Με έναν φίλο"), script("Στο ταξί")))
+        val rows = listOf(
+            Script(title = "Με έναν φίλο", source = Source.SEED, deleted = true),
+            Script(title = "Στην καφετέρια", source = Source.SEED),
+        )
+        assertEquals(listOf("Στο ταξί"), ScriptSeedImporter.newScripts(m, ScriptSeedImporter.onDevice(rows)).map { it.title })
     }
 
     @Test fun `the same title twice in one manifest is imported once`() {

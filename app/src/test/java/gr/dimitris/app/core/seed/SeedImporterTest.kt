@@ -1,5 +1,8 @@
 package gr.dimitris.app.core.seed
 
+import gr.dimitris.app.core.data.Item
+import gr.dimitris.app.core.data.ItemKind
+import gr.dimitris.app.core.data.Source
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -55,5 +58,33 @@ class SeedImporterTest {
     @Test fun `a fresh install gets everything`() {
         val manifest = SeedManifest(version = 2, items = v2.map(::entry))
         assertEquals(v2, SeedImporter.newEntries(manifest, existingTexts = emptySet()).map { it.text })
+    }
+
+    /**
+     * A word the caregiver deleted is a decision she made, not a gap to fill. Matching only the live
+     * rows handed it straight back on the next version bump, and would go on doing so for ever.
+     */
+    @Test fun `a deleted word still counts as being on the device`() {
+        val manifest = SeedManifest(version = 2, items = v2.map(::entry))
+        val rows = listOf(
+            Item(text = "Ναι", kind = ItemKind.PHRASE, source = Source.SEED),
+            Item(text = "Όχι", kind = ItemKind.PHRASE, source = Source.SEED, deleted = true),
+            Item(text = "καφές", kind = ItemKind.WORD, source = Source.SEED),
+        )
+        val added = SeedImporter.newEntries(manifest, SeedImporter.onDevice(rows))
+        assertEquals(listOf("θέλω καφέ", "πάμε σπίτι"), added.map { it.text })
+    }
+
+    /**
+     * A dialogue turn is an ordinary item too, and a caregiver who writes «Πάμε» as a turn would
+     * otherwise block the talk-board card of the same word from ever arriving — silently.
+     */
+    @Test fun `a dialogue turn does not block the card of the same words`() {
+        val manifest = SeedManifest(version = 2, items = listOf(entry("Πάμε"), entry("Ναι")))
+        val rows = listOf(
+            Item(text = "Πάμε", kind = ItemKind.SCRIPT_LINE, source = Source.CAREGIVER),
+            Item(text = "Ναι", kind = ItemKind.PHRASE, source = Source.SEED),
+        )
+        assertEquals(listOf("Πάμε"), SeedImporter.newEntries(manifest, SeedImporter.onDevice(rows)).map { it.text })
     }
 }
