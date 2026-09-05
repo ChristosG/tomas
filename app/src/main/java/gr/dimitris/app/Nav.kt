@@ -13,6 +13,8 @@ import gr.dimitris.app.caregiver.ErrorListScreen
 import gr.dimitris.app.caregiver.SettingsScreen
 import gr.dimitris.app.caregiver.content.ItemEditScreen
 import gr.dimitris.app.caregiver.content.ItemListScreen
+import gr.dimitris.app.caregiver.scripts.ScriptEditScreen
+import gr.dimitris.app.caregiver.scripts.ScriptListScreen
 import gr.dimitris.app.core.data.ModuleId
 import gr.dimitris.app.modules.talkboard.TalkBoardScreen
 import gr.dimitris.app.today.PracticeScreen
@@ -30,6 +32,10 @@ object Routes {
     const val ITEM_EDIT = "caregiver/items/{itemId}"
     const val NEW_ITEM = "new"
     fun itemEdit(id: String?) = "caregiver/items/${id ?: NEW_ITEM}"
+    const val SCRIPTS = "caregiver/scripts"
+    const val SCRIPT_EDIT = "caregiver/scripts/{scriptId}"
+    const val NEW_SCRIPT = "new"
+    fun scriptEdit(id: String?) = "caregiver/scripts/${id ?: NEW_SCRIPT}"
     const val ERRORS = "caregiver/errors"
     const val SETTINGS = "caregiver/settings"
     const val BACKUP = "caregiver/backup"
@@ -70,6 +76,13 @@ fun AppNav() {
             composable(Routes.ITEM_EDIT) { entry ->
                 val id = entry.arguments?.getString("itemId")?.takeIf { it != Routes.NEW_ITEM }
                 ItemEditScreen(itemId = id, onClose = { nav.popBackStack() })
+            }
+            composable(Routes.SCRIPTS) {
+                ScriptListScreen(onBack = { nav.popBackStack() }, onEdit = { id -> nav.navigate(Routes.scriptEdit(id)) })
+            }
+            composable(Routes.SCRIPT_EDIT) { entry ->
+                val id = entry.arguments?.getString("scriptId")?.takeIf { it != Routes.NEW_SCRIPT }
+                ScriptEditScreen(scriptId = id, onClose = { nav.popBackStack() })
             }
             composable(Routes.ERRORS) { ErrorListScreen(onBack = { nav.popBackStack() }) }
             composable(Routes.SETTINGS) { SettingsScreen(onBack = { nav.popBackStack() }) }

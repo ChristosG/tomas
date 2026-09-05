@@ -8,6 +8,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Backup
 import androidx.compose.material.icons.rounded.BugReport
+import androidx.compose.material.icons.rounded.Chat
 import androidx.compose.material.icons.rounded.Image
 import androidx.compose.material.icons.rounded.Person
 import androidx.compose.material.icons.rounded.Settings
@@ -26,6 +27,7 @@ data class CaregiverEntry(val title: String, val icon: ImageVector, val route: S
 
 val caregiverEntries: List<CaregiverEntry> = listOf(
     CaregiverEntry("Λέξεις και εικόνες", Icons.Rounded.Image, Routes.ITEMS),
+    CaregiverEntry("Διάλογοι", Icons.Rounded.Chat, Routes.SCRIPTS),
     CaregiverEntry("Ρυθμίσεις", Icons.Rounded.Settings, Routes.SETTINGS),
     CaregiverEntry("Σφάλματα", Icons.Rounded.BugReport, Routes.ERRORS),
     CaregiverEntry("Αντίγραφο ασφαλείας", Icons.Rounded.Backup, Routes.BACKUP),
