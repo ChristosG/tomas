@@ -96,7 +96,7 @@ today/
 
 ## 5. Data model
 
-Every table has `id: UUID`, `createdAt`, `updatedAt`, `deleted: Boolean`. Attempts, sessions and error log rows are append-only. This is the whole contract needed by the later sync: push rows changed since X, pull rows changed since Y, last-write-wins on content tables, union on log tables.
+Every table has `id: UUID`, `createdAt`, `updatedAt`, `deleted: Boolean`. Attempts and error log rows are append-only; a session row is written when it starts and finalized once when it ends. This is the whole contract needed by the later sync: push rows changed since X, pull rows changed since Y, last-write-wins on content tables and sessions, union on the append-only log tables.
 
 - **Item** — the unit of everything.
   `text` (Greek), `kind` (WORD, PHRASE, NUMBER, SCRIPT_LINE), `category` (e.g. FOOD, PLACES, PEOPLE, VERBS, FEELINGS, BODY, NUMBERS, CUSTOM), `tags`, `imagePath?`, `modelRecordingId?`, `firstSound` and `firstSyllable` (auto-derived, overridable), `source` (SEED, CAREGIVER), `enabledModules` (bitmask/set).
