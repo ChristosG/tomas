@@ -97,7 +97,9 @@ class SentencesViewModel(
             val first = sentences.firstOrNull()
             _state.value = SentencesState(
                 level = level,
-                total = sentences.size.coerceAtLeast(1),
+                // What was really built, not what was asked for: the title counts sentences he will
+                // actually be shown, and the session's own count comes from the rows he leaves.
+                total = sentences.size,
                 sentence = first,
                 shuffledTiles = first?.let(::board).orEmpty(),
                 // A device with no vocabulary has nothing to build and says so instead of holding him.
@@ -107,20 +109,37 @@ class SentencesViewModel(
     }
 
     /**
-     * [wanted] sentences at [level], dropping a level whenever the vocabulary cannot fill the shape:
-     * a talk board of four food words still gives him «θέλω καφέ» to build, which is the exercise.
+     * [wanted] sentences, all at one level: the highest level at or below his that the vocabulary
+     * can actually fill. A talk board of four food words still gives him «θέλω καφέ» to build,
+     * which is the exercise.
+     *
+     * One level and not a mixture, because the sitting is what the progression is judged on. A run
+     * that quietly slid from level 3 to level 1 halfway down, and then promoted him on the easy
+     * half, would pin him at a level he never plays.
      */
     private fun plan(level: Int, pool: List<Item>): List<Sentence> {
-        val out = mutableListOf<Sentence>()
-        var at = level
-        while (out.size < wanted && at >= SentenceTemplates.MIN_LEVEL) {
-            out += templates.session(at, pool, wanted - out.size)
+        var at = level.coerceAtMost(SentenceTemplates.MAX_LEVEL)
+        while (at >= SentenceTemplates.MIN_LEVEL) {
+            val made = templates.session(at, pool, wanted).toMutableList()
+            if (made.isNotEmpty()) {
+                // Short only because a shape came up empty by chance — ask again at the same level.
+                while (made.size < wanted) {
+                    val more = templates.session(at, pool, wanted - made.size)
+                    if (more.isEmpty()) break
+                    made += more
+                }
+                return made
+            }
             at--
         }
-        return out
+        return emptyList()
     }
 
-    /** The cards as they are laid out: shuffled, so the order on the board is never the answer. */
+    /**
+     * The cards as they are laid out. Plain shuffled, so at level 1 the board is in the answer's
+     * order about half the time: any rule that avoided it would be the giveaway in the other
+     * direction — "never the left one first" is a pattern he would learn instead of the sentence.
+     */
     private fun board(sentence: Sentence): List<Tile> = (sentence.tiles + listOfNotNull(sentence.distractor)).shuffled()
 
     /**
@@ -205,7 +224,11 @@ class SentencesViewModel(
         viewModelScope.launch {
             write?.join()
             val level = _state.value.level
-            val newLevel = LevelProgression.next(level, results, SentenceTemplates.MIN_LEVEL, SentenceTemplates.MAX_LEVEL)
+            // Judged on the level he actually played, which is not always the one he is set to: with
+            // a vocabulary too thin for level 3, a perfect sitting of level-1 sentences is evidence
+            // about level 1. Promoting him off it would pin him at a level nothing can build.
+            val played = sentences.minOfOrNull { it.level } ?: level
+            val newLevel = LevelProgression.next(played, results, SentenceTemplates.MIN_LEVEL, SentenceTemplates.MAX_LEVEL)
             // A settings write that fails must not strand him on a screen that never says "done".
             val moved = newLevel != level && runCatching { graph.settings.setSentencesLevel(newLevel) }
                 .onFailure { graph.errors.record("sentences level write", it) }.isSuccess

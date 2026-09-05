@@ -72,9 +72,13 @@ fun SentencesScreen(count: Int, sessionId: String?, onDone: () -> Unit, onLeave:
 
     if (s.done && endScreen) {
         DimitrisScreen(bottom = { BigButton("Εντάξει", onClick = onDone) }) {
-            // Nothing to build: every word on the device was deleted, or none has arrived yet.
+            // Nothing to build: every word on the device was deleted, or none has arrived yet. He
+            // is told why and let straight out; «Εντάξει» below is the way on, and inside a session
+            // the module has already handed back without showing him anything.
             if (s.sentence == null) {
-                Text("Δεν υπάρχουν λέξεις για προτάσεις. Ζήτα από κάποιον να προσθέσει.", style = MaterialTheme.typography.headlineMedium)
+                Text("Χρειάζονται περισσότερες λέξεις.", style = MaterialTheme.typography.headlineMedium)
+                Spacer(Modifier.height(Sizes.gapSmall))
+                Text("Ζήτα από κάποιον να προσθέσει.", style = MaterialTheme.typography.bodyLarge)
                 return@DimitrisScreen
             }
             SuccessMark(visible = true)
@@ -144,10 +148,12 @@ fun SentencesScreen(count: Int, sessionId: String?, onDone: () -> Unit, onLeave:
         ) {
             items(s.shuffledTiles, key = { it.item.id }) { tile ->
                 // A card he has already used is dimmed and dead rather than gone: a board that
-                // reshuffles itself under his thumb is a board he has to read again every tap.
+                // reshuffles itself under his thumb is a board he has to read again every tap. Once
+                // the sentence is right the whole board goes quiet — the odd card out at level 4 is
+                // the only one still lit, and a buzz from it would be an answer to a finished question.
                 PictureCard(
                     imageFile = picture(tile), label = tile.label, onClick = { vm.tap(tile) },
-                    enabled = s.chosen.none { it.item.id == tile.item.id },
+                    enabled = s.correct != true && s.chosen.none { it.item.id == tile.item.id },
                     modifier = Modifier.testTag(SENTENCE_TILE_TAG),
                 )
             }

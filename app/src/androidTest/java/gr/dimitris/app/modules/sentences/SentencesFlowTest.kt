@@ -18,6 +18,7 @@ import gr.dimitris.app.core.data.Attempt
 import gr.dimitris.app.core.data.ItemKind
 import gr.dimitris.app.core.data.ModuleId
 import gr.dimitris.app.core.data.Outcome
+import gr.dimitris.app.core.data.now
 import gr.dimitris.app.today.MODULE_GRID_TAG
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
@@ -29,8 +30,9 @@ import org.junit.Rule
 import org.junit.Test
 
 /**
- * The two things about the sentence builder that only a device can answer: that the right order is
- * an answer of his own, and that a wrong one is a sentence to copy rather than a dead end.
+ * The things about the sentence builder that only a device can answer: that the right order is an
+ * answer of his own, that a wrong one is a sentence to copy rather than a dead end, and that the
+ * level-4 board really does carry a card that no arrangement of it can use.
  */
 class SentencesFlowTest {
     @get:Rule val compose = createAndroidComposeRule<MainActivity>()
@@ -70,8 +72,68 @@ class SentencesFlowTest {
         assertEquals("one sentence, one row", 1, attempts().size)
     }
 
+    /**
+     * Level 4 puts one card on the board that belongs to no arrangement of it. The board is tapped
+     * along in the order it happens to be in until the app answers: either that order was the
+     * sentence, or the sentence is shown — and it is always shorter than the board, because one of
+     * the cards is not in it.
+     */
+    @Test fun theOddCardOutIsNeverPartOfTheSentence() {
+        runBlocking { graph.settings.setSentencesLevel(4) }
+        val board = openBoard()
+        assertTrue("level 4 owes him an extra card: $board", board.size >= 3)
+
+        for (label in board) {
+            tapInOrder(listOf(label))
+            if (answered()) break
+        }
+        val shown = correction()
+        if (shown == null) {
+            // The board happened to be in the sentence's own order: that is an answer of his own.
+            compose.waitUntil(TIMEOUT_MS) { attempts().any { it.itemId == LEVEL_4 && it.outcome == Outcome.CORRECT } }
+            return
+        }
+        assertTrue("the whole board is the sentence: $shown against $board", shown.size < board.size)
+        assertTrue("the sentence uses a card that is not on the board: $shown", board.containsAll(shown))
+
+        tapInOrder(shown)
+        compose.waitUntil(TIMEOUT_MS) { attempts().any { it.itemId == LEVEL_4 && it.outcome == Outcome.ASSISTED } }
+    }
+
+    /**
+     * A device whose words have all been deleted has no sentence to offer. It has to say so and let
+     * him straight out — the one thing it must never do is hold him on a screen with nothing on it.
+     */
+    @Test fun withNoWordsItSaysSoAndLetsHimOut() {
+        val words = runBlocking { graph.db.items().activeOfKinds(listOf(ItemKind.WORD)) }
+        assertTrue("nothing to take away", words.isNotEmpty())
+        runBlocking { words.forEach { graph.db.items().softDelete(it.id, now()) } }
+        try {
+            compose.onNodeWithTag(MODULE_GRID_TAG).performScrollToNode(hasText("Προτάσεις"))
+            compose.onNodeWithText("Προτάσεις").performClick()
+            compose.waitUntil(TIMEOUT_MS) {
+                compose.onAllNodes(hasText("Χρειάζονται περισσότερες λέξεις.")).fetchSemanticsNodes().isNotEmpty()
+            }
+            compose.onNodeWithText("Εντάξει").performClick()
+            // Back on Today, with nothing written and nothing counted.
+            compose.waitUntil(TIMEOUT_MS) { compose.onAllNodes(hasText("Ξεκίνα")).fetchSemanticsNodes().isNotEmpty() }
+            assertTrue("an empty board wrote an attempt", attempts().isEmpty())
+        } finally {
+            // His vocabulary is his: every row goes back exactly as it was.
+            runBlocking { words.forEach { graph.db.items().upsert(it) } }
+        }
+    }
+
     /** Opens free practice and returns the sentence's words in the order they have to be tapped. */
     private fun openPractice(): List<String> {
+        val labels = openBoard()
+        assertEquals("level 1 is a verb and its object: $labels", 2, labels.size)
+        val verb = labels.first { it in VERBS }
+        return listOf(verb, labels.first { it != verb })
+    }
+
+    /** Opens free practice and returns the words on the board, in the order they are laid out. */
+    private fun openBoard(): List<String> {
         // The vocabulary arrives on first launch, and a board built before it does has nothing on it.
         compose.waitUntil(TIMEOUT_MS) {
             runBlocking { graph.db.items().activeOfKinds(listOf(ItemKind.WORD)) }.map { it.text }.containsAll(SEED_WORDS)
@@ -79,16 +141,22 @@ class SentencesFlowTest {
         compose.onNodeWithTag(MODULE_GRID_TAG).performScrollToNode(hasText("Προτάσεις"))
         compose.onNodeWithText("Προτάσεις").performClick()
         compose.waitUntil(TIMEOUT_MS) { compose.onAllNodesWithTag(SENTENCE_TILE_TAG).fetchSemanticsNodes().size >= 2 }
-        val labels = compose.onAllNodesWithTag(SENTENCE_TILE_TAG).fetchSemanticsNodes()
+        return compose.onAllNodesWithTag(SENTENCE_TILE_TAG).fetchSemanticsNodes()
             .mapNotNull { n -> n.config.getOrNull(SemanticsProperties.Text)?.joinToString("") { it.text } }
-        assertEquals("level 1 is a verb and its object: $labels", 2, labels.size)
-        val verb = labels.first { it in VERBS }
-        return listOf(verb, labels.first { it != verb })
     }
 
     private fun tapInOrder(labels: List<String>) = labels.forEach { label ->
         compose.onNode(hasTestTag(SENTENCE_TILE_TAG) and hasText(label)).performClick()
     }
+
+    /** True once the sentence is finished, right or wrong. */
+    private fun answered(): Boolean = compose.onAllNodes(hasText("Επόμενο")).fetchSemanticsNodes().isNotEmpty() ||
+        correction() != null
+
+    /** The sentence the screen is showing him to copy, or null while there is nothing to copy. */
+    private fun correction(): List<String>? = compose.onAllNodes(hasText(CORRECTION, substring = true)).fetchSemanticsNodes()
+        .firstNotNullOfOrNull { n -> n.config.getOrNull(SemanticsProperties.Text)?.joinToString("") { it.text } }
+        ?.substringAfter(CORRECTION)?.trim()?.split(" ")
 
     private fun attempts(): List<Attempt> =
         runBlocking { graph.db.attempts().since(since) }.filter { it.module == ModuleId.SENTENCES }
@@ -100,6 +168,8 @@ class SentencesFlowTest {
         /** Enough of the seed to know the import has landed: one verb and one thing to want. */
         val SEED_WORDS = listOf("θέλω", "νερό")
 
+        const val CORRECTION = "Σωστά: "
+        const val LEVEL_4 = "sentences:level:4"
         const val TIMEOUT_MS = 15_000L
     }
 }
