@@ -107,3 +107,30 @@ Screenshots: `.superpowers/sdd/2026-09-05-phase6-sentences/shots/`.
 - The level-1 board is in the answer's order about half the time. Any rule against that would be the
   giveaway in the other direction — "never the left one first" is a pattern he would learn instead
   of the sentence.
+
+## Execution record (controller rulings, 2026-09-06)
+
+Copied from the SDD ledger at phase close. Combined task + final review: 1 Critical / 2 Important / 6 Minor, all fixed or ruled; fix-wave re-review clean. Also carried into this phase: the cue ladder skips a rung that repeats the previous one (all modules), listen buttons disabled while recording.
+
+## Pre-flight conflict scan (2026-09-05)
+
+| Tasks | Shared surface | Produces vs consumes | Finding |
+|---|---|---|---|
+| 1 / phase 3 | LevelProgression "same semantics as NumberProgression" — NumberProgression was revised in the phase-3 fix wave (current-session results only, hold under 5 results, up ≥ 0.8, down ≤ 0.4) | plan text says window 10 / down < 0.5 | Ruling: LevelProgression keeps the plan's parameters (window, up = 0.8, down = 0.5) but the revised semantics: hold when fewer than 5 results, promote at ≥ up, demote at < down; results = this session only — cost if wrong: none |
+| 1 / 2 | Tile(item, label), Sentence(level, tiles, distractor, text), SentenceTemplates.generate/session | ViewModel consumes exact names | consistent |
+| 1 / seed | pool roles need seed items "εγώ" (PEOPLE), "θέλω/τρώω/πίνω" (VERBS), TIME words τώρα/σήμερα/αύριο/μετά, PLACES | seed has 175 words + 20 MIT phrases (phase 4) | implementer must verify the seed texts exist (case/accents) and add any missing ones to tools/seed/words.json in the same commit |
+| 2 / phase 2+3 | Screen(items, …) — plan drops items (`SentencesScreen(sessionId, …)`) | SessionBudget truncates | Ruling: run exactly items.size sentences in a session (cap 8; free practice 8) — phase-3 ruling I1 |
+| 2 / phase 3 | planFor "up to 8 WORD items" | phase-3 ruling I-F: sizing lists are transient and constant | Ruling: planFor returns 8 transient items always |
+| 2 / phase 3 | end screen "like the numbers module" | numbers now auto-onDone in sessions unless the level changed | Ruling: same rule here |
+| 2 / phase 3 | speech Results | must be surfaced in the error slot; graph.errors | Ruling carried (phase-3 rule) |
+| 2 / phase 3 | Settings.sentencesLevel | same clamp pattern as numbersLevel | consistent |
+| all | Greek-only, 72dp (PictureCard tiles), no timers, wrong = nudge + show + copy (no fail state) | consistent |
+
+Scan result: four rulings carried into dispatches.
+
+## Task log
+Tasks 1+2: dispatched as one batch — BASE af3c3a0, model opus (with two carried fixes first: dead cue rung in CueLadder; listen button disabled while recording in scripts + word coach)
+Tasks 1+2: implementer DONE (00854c9 cue rung, a23bd70 listen button, db6098f, 56b227d; JVM 243, connected 49). Deviations accepted pending review: plural -ες keeps sigma, window as takeLast, four vehicle PLACES excluded from the πάμε shape, verdict spoken instead of the last tile, PictureCard(enabled), repeatCue no-op while recording, 3-per-row level-4 board. Review dispatched (opus) — this review doubles as the task review; the final whole-phase review follows.
+Review DONE (1 Critical / 2 Important / 6 Minor; all ✅). Fix wave — BASE 56b227d, resuming implementer a407ff1856db6ddcd (C1 distractor from the other filler set, I1 interior places excluded from πάμε, I2 progression on the level actually played + total honest, minors, Task 3 verification notes).
+Fix wave DONE (a22080a, d1c8db8, 3e90466; JVM 245, connected 51; Task 3 verification notes committed). Scoped re-review dispatched (sonnet).
+Fix-wave re-review: clean. Phase 6 closed — execution record commit deferred until the phase-7 implementer reports (no concurrent git writes in the worktree).
