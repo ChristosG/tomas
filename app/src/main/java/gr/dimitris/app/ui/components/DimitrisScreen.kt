@@ -1,5 +1,6 @@
 package gr.dimitris.app.ui.components
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
@@ -38,6 +39,9 @@ fun DimitrisScreen(
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val feedback = LocalFeedback.current
+    // The gesture and the arrow are the same "back" to him, so they do the same thing: a module that
+    // has an answer to save gets to save it either way, instead of the navigator popping under it.
+    BackHandler(enabled = onBack != null) { onBack?.invoke() }
     Column(
         Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)
             .safeDrawingPadding().padding(Sizes.screenPadding)
