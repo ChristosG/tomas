@@ -21,6 +21,7 @@ import androidx.compose.material.icons.rounded.VolumeUp
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -45,6 +46,9 @@ fun WordCoachScreen(items: List<Item>, sessionId: String?, onDone: () -> Unit, o
         key = "wordcoach-${sessionId ?: "practice"}-${items.size}-${items.firstOrNull()?.id}",
     ) { WordCoachViewModel(graph, items, sessionId) }
     val s by vm.state.collectAsStateWithLifecycle()
+    // Navigating away — «Μίλα», or the session moving on — is not a back press: the ViewModel is
+    // still alive on the back stack, so it is told to drop its take and stop its sound itself.
+    DisposableEffect(vm) { onDispose { vm.screenGone() } }
     val askMic = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) vm.toggleRecording() else vm.micDenied()
     }

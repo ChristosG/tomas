@@ -395,6 +395,18 @@ class SingSayViewModel(private val graph: AppGraph, private val items: List<Item
         viewModelScope.launch { write?.join(); then() }
     }
 
+    /**
+     * The screen has gone but the ViewModel has not — he tapped «Μίλα» and the module is still on
+     * the back stack. The take belongs to the phrase he was on, so it is dropped rather than left
+     * open over his talk board; and the state has to stop claiming it is recording, or the first
+     * button he finds on the way back is a «Στοπ» for a microphone that is no longer running.
+     */
+    fun screenGone() {
+        claimPlayback()
+        if (graph.voice.isRecording) graph.voice.cancelRecording()
+        _state.update { it.copy(isRecording = false, playing = false, lit = -1) }
+    }
+
     override fun onCleared() {
         loadJob?.cancel()
         claimPlayback()
