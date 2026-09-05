@@ -4,6 +4,7 @@ import gr.dimitris.app.core.data.ErrorLog
 import gr.dimitris.app.core.data.ErrorLogDao
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 
 /**
@@ -17,7 +18,11 @@ class CrashHandler(
 
     override fun uncaughtException(thread: Thread, e: Throwable) {
         try {
-            runBlocking(Dispatchers.IO) { withTimeout(2_000) { dao().insert(ErrorLog.from("crash:${thread.name}", e)) } }
+            runBlocking {
+                withTimeout(2_000) {
+                    withContext(Dispatchers.IO) { dao().insert(ErrorLog.from("crash:${thread.name}", e)) }
+                }
+            }
         } catch (_: Throwable) {
             // Nothing more we can do; the crash itself still propagates.
         }
