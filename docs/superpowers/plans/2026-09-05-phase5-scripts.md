@@ -485,3 +485,36 @@ Screenshots: `.superpowers/sdd/2026-09-05-phase5-scripts/shots/` (14–27 are th
   reasons in the fix-wave report. Neither is reachable by Dimitris; both are phase-10 tidiness.
 - A dialogue arriving by restore or sync does not pass through the editor's twelve-line cap, which is
   now the only place a dialogue's length is held.
+
+## Execution record (controller rulings, 2026-09-05/06)
+
+Copied from the SDD ledger at phase close. Final review: 0 Critical / 4 Important / 6 Minor, all fixed or ruled; fix-wave re-review: one Minor (listen button enabled during a take) carried into phase 6 with the dead-cue-rung fix. Parked to phase 10 tidiness: a deleted dialogue keeps its Leitner row; an orphan recording row after a failed save.
+
+## Pre-flight conflict scan (2026-09-05)
+
+| Tasks | Shared surface | Produces vs consumes | Finding |
+|---|---|---|---|
+| 1 / phase 4 | DB version | Task 1 brief says the next version; phase 4 Task 3 lands v4 (Recording.style) first | Ruling: phase 5 is DB v5 (auto-migration 4→5, `5.json`, MigrationTest 4→5 case inserting v4 columns) — carried into the Task 1 dispatch — cost if wrong: none |
+| 1 / 4 | script id for the Screen: plan proposes `ScriptsModule.nextScriptId` (@Volatile global) | Screen needs the script behind `items.first()` | Ruling: no global; Task 1 adds `ScriptDao.lineOfItem(itemId): ScriptLine?` and Task 4 resolves the script id from `items.first().id` — cost: one query |
+| 1 / 2 | ScriptRepository.save(id?, title, lines) creates SCRIPT_LINE items; ScriptSeedImporter uses it | consistent |
+| 2 / phase 0 | Settings.scriptsSeedVersion; DimitrisApp runs importer after SeedImporter | consistent (same pattern) |
+| 3 / phase 1 | editor recording "same as ItemEditViewModel" — plan text says `graph.recorder` | Ruling: use `graph.voice.startRecording/stopRecording` (all audio through Voice — phase 1 ruling); `graph.recorder` direct use is a defect |
+| 3 / 1 | existing recordings re-attached by passing the File to save → ItemRepository.addRecording copies? | check in review: addRecording must not move/delete the source file when it is already inside recordingsDir |
+| 4 / phase 2 | Module contract: plan says `onBack = onDone` and a tap-to-close end screen | Ruling: `onBack = { vm.leave(onLeave) }`; in a session `LaunchedEffect(done) { onDone() }` after the closing TTS; the «Εντάξει» end screen only in free practice (phase 3 ruling m10(b)) |
+| 4 / phase 2 | SessionBudget truncates planFor lists; a dialogue cannot be cut | Ruling: `planFor` returns the DIMITRIS lines' items of ONE script (they are what produce Attempts, so the planned count matches); the screen always runs the whole script whatever `items.size` |
+| 4 / phase 2 | cue ladder, CueLadder(item), ItemSpeaker.speak | reuse word coach code paths; speech Results surfaced in the error slot (phase 3 ruling) |
+| all | Greek-only, 72dp, no timers ("OTHER line waits for the utterance to end" = not a timer) | consistent |
+
+Scan result: five rulings carried into dispatches.
+
+## Task log
+Tasks 1+2: dispatched as one batch — BASE fb776f6, model opus (DB v5, repository, seed scripts, SeedImporter dedup fix from phase 4)
+Tasks 1+2: implementer DONE_WITH_CONCERNS (7fe46f9, 2d2bcce seed dedup fix, 0f36386; JVM 187, connected 40). Accepted: firstSound 'ε' (tonos stripped), SCRIPT_LINE filter added in TalkBoardViewModel + ItemListScreen now (Task 3 must not add it again), accent-stripping dedup key, cast per ruling. Ruling: the taxi dialogue comes back as a sixth seed script (scripts seed v2, dedup by title) in the Tasks 3+4 dispatch — cost: none. Review dispatched (sonnet).
+Tasks 1+2: review DONE (0 Critical / 1 Important / 2 Minor; both ✅). Fix round 1 — BASE 0f36386, resuming implementer a31b489be3462175b (transactional save).
+Tasks 1+2: fix round 1 DONE (d5b713f; JVM 188, connected 40). Unit-typed transaction runner accepted. Scoped re-review dispatched (sonnet); Tasks 3+4 dispatched in parallel — BASE d5b713f, model opus.
+Tasks 1+2: complete (commits 7fe46f9..d5b713f, re-review clean).
+Tasks 3+4: implementer DONE_WITH_CONCERNS (1d5ebd8, 5a7a0f5 taxi, 7f04302; JVM 189, connected 42). Rulings: (1) dialogues in every session accepted (as numbers m8); (2) free practice losing its place after a «Μίλα» detour — PracticeScreen keeps its plan in a route-scoped ViewModel: final fix wave (shared host); (3) seed importers must treat soft-deleted rows as present so a caregiver-deleted seed word/dialogue never returns on a version bump: final fix wave; (4) deviations accepted. Review dispatched (opus).
+Tasks 3+4: review DONE (0 Critical / 1 Important / 6 Minor; both ✅). Ruling: I1 (double-tap confirm across back-to-back DIMITRIS turns — finishing stays true until the screen signals turnReady) and the six minors go into the final fix wave with the host-level items, one dispatch — cost if wrong: none (branch not in use). Final whole-plan review dispatched (opus) over fb776f6..7f04302.
+Final review DONE: 0 Critical / 4 Important / 6 Minor (final-review.md). Rulings — I1: the due dialogue is the due schedule with the oldest lastSeenAt (order kept, no toSet), fallback least-recently-practised; I2: SCRIPTS is exempt from SessionBudget truncation (a dialogue counts whole in plannedItemCount) and the editor caps a dialogue at 12 lines; I3: unit tests for the choice rule and the worstCue→outcome mapping; I4: record + compare («Ηχογράφηση»/«Άκου») on DIMITRIS lines as in the word coach; minors: vocabulary seed dedup ignores SCRIPT_LINE items, unchanged lines keep their item and recording on re-save (no orphans/duplicates), Today grid fits or visibly scrolls, an always-enabled «Συνέχεια» while the other side speaks (no timer), CueLadder strips punctuation from cues (all modules), flow tests for two OTHER lines in a row / OTHER last / vanished dialogue. Plus task-review I1 + six minors, PracticeScreen route-scoped plan, seed importers treating soft-deleted rows as present, Task 5 verification. ONE fix-wave dispatch (opus), BASE 7f04302.
+Fix wave DONE (6b263bc..dcb0e1d, 11 commits; JVM 212, connected 47; Task 5 verification notes committed). Left: final M7 (deleted dialogue's Leitner row) and task M4 (orphan recording row after a failed save) — parked to phase 10 tidiness; 12-line cap only in the editor — accepted. Ruling: the dead cue rung (level 1 and level 2 cues identical for vowel-initial words) is fixed in CueLadder by skipping level 2 whenever its cue equals level 1's — carried into the phase 6 dispatch as a first fix(phase2) commit — cost: none. Scoped re-review dispatched (opus).
+Fix-wave re-review: 1 Minor open — «Άκου ξανά» enabled while recording (scripts + word coach). Ruling: fixed in the phase 6 dispatch together with the dead cue rung (small fix(phase2)/fix(phase5) commits first) — cost: none. Phase 5 closed.
