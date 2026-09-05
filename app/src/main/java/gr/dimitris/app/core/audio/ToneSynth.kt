@@ -57,7 +57,10 @@ class ToneSynth {
                     .setTransferMode(AudioTrack.MODE_STATIC)
                     .build()
                 t = built
-                if (built.state == AudioTrack.STATE_INITIALIZED) written = built.write(pcm, 0, pcm.size)
+                // A MODE_STATIC track reports STATE_NO_STATIC_DATA until its buffer has been
+                // filled: STATE_INITIALIZED is what it *becomes* once the whole melody is written,
+                // never what it starts as. Only STATE_UNINITIALIZED means the platform refused.
+                if (built.state != AudioTrack.STATE_UNINITIALIZED) written = built.write(pcm, 0, pcm.size)
             }
 
             val built = t
