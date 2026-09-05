@@ -31,8 +31,17 @@ class ExerciseGeneratorTest {
             assertTrue("the answer is always one of the places", e.target in e.candidates)
             assertEquals(e.target, e.answer)
             assertEquals("ascending, like the line", e.candidates.sorted(), e.candidates)
-            assertGapsAtLeastTwoTicks(e)
+            assertGapsAreWideEnough(e)
         }
+    }
+
+    /** Every number on the line must be askable, at both line sizes. */
+    @Test fun `every tick is reachable as a target`() {
+        val small = List(400) { ExerciseGenerator(Random(it)).generate(2, prices) }.map { (it as NumberExercise.NumberLine).target }
+        assertEquals((0..10).toSet(), small.toSet())
+        val big = List(800) { ExerciseGenerator(Random(it)).generate(6, prices) }
+            .filterIsInstance<NumberExercise.NumberLine>().map { it.target }
+        assertEquals((0..1000 step 100).toSet(), big.toSet())
     }
 
     @Test fun `level 3 counting offers three options including the count`() {
@@ -65,9 +74,11 @@ class ExerciseGeneratorTest {
                 is NumberExercise.Compare -> assertTrue(it.a in 0..1000 && it.b in 0..1000 && it.a != it.b)
                 is NumberExercise.NumberLine -> {
                     assertEquals((0..1000 step 100).toList(), it.ticks)
-                    assertEquals(ExerciseGenerator.BIG_LINE_CANDIDATES, it.candidates.size)
+                    // Four places wherever the target leaves room for four; three otherwise, because
+                    // a target that cannot be asked at all is worse than one option fewer.
+                    assertTrue("${it.candidates}", it.candidates.size in 3..ExerciseGenerator.BIG_LINE_CANDIDATES)
                     assertTrue(it.target in it.candidates)
-                    assertGapsAtLeastTwoTicks(it)
+                    assertGapsAreWideEnough(it)
                 }
                 else -> throw AssertionError("unexpected $it")
             }
@@ -187,7 +198,7 @@ class ExerciseGeneratorTest {
         (1..7).forEach { level -> assertTrue(gen.generate(level, prices).prompt.isNotBlank()) }
     }
 
-    private fun assertGapsAtLeastTwoTicks(e: NumberExercise.NumberLine) {
+    private fun assertGapsAreWideEnough(e: NumberExercise.NumberLine) {
         val indices = e.candidates.map { e.ticks.indexOf(it) }
         assertTrue("all candidates are ticks", indices.none { it < 0 })
         indices.sorted().zipWithNext().forEach { (a, b) ->

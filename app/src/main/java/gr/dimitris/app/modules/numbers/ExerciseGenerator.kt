@@ -47,19 +47,30 @@ class ExerciseGenerator(private val random: Random = Random.Default) {
     }
 
     /**
-     * [count] places he may tap, [target] always among them and no two closer than [MIN_TICK_GAP]
-     * ticks: two 72dp buttons on neighbouring ticks would overlap, and the pair would read as one
-     * place. Greedy over a shuffled order — with eleven ticks a maximal set is at least four, so the
-     * requested count is always reached.
+     * Up to [count] places he may tap, [target] always among them and no two closer than
+     * [MIN_TICK_GAP] ticks — that is what a 72dp circle needs on an eleven-tick line at his screen
+     * width, and two that overlap are one place with a hidden half.
+     *
+     * [count] is a ceiling, not a promise: on a line of eleven ticks four places at that gap take
+     * nine of the ten steps, so a target in the wrong third of the line (200, 500, 800 at level 6)
+     * gets three instead. Every target stays askable, which matters more than a constant option count.
      */
     private fun candidates(ticks: List<Int>, target: Int, count: Int): List<Int> {
-        val picked = mutableListOf(ticks.indexOf(target))
-        for (i in ticks.indices.shuffled(random)) {
-            if (picked.size >= count) break
-            if (picked.none { kotlin.math.abs(it - i) < MIN_TICK_GAP }) picked += i
-        }
-        return picked.sorted().map { ticks[it] }
+        val n = ticks.size
+        val t = ticks.indexOf(target)
+        val k = (2..count).lastOrNull { slotsFor(it, t, n).isNotEmpty() } ?: return listOf(target)
+        val picked = IntArray(k)
+        // Which place from the left the target takes; the rest are filled around it.
+        val mine = slotsFor(k, t, n).random(random)
+        picked[mine] = t
+        for (i in mine - 1 downTo 0) picked[i] = random.nextInt(i * MIN_TICK_GAP, picked[i + 1] - MIN_TICK_GAP + 1)
+        for (i in mine + 1 until k) picked[i] = random.nextInt(picked[i - 1] + MIN_TICK_GAP, n - (k - 1 - i) * MIN_TICK_GAP)
+        return picked.map { ticks[it] }
     }
+
+    /** Which places from the left the target at tick [t] may take, if [count] are to fit on [n] ticks. */
+    private fun slotsFor(count: Int, t: Int, n: Int): List<Int> =
+        (0 until count).filter { j -> j * MIN_TICK_GAP <= t && (count - 1 - j) * MIN_TICK_GAP <= n - 1 - t }
 
     /** Three distinct options: the answer plus two neighbours within [range]. */
     private fun optionsAround(answer: Int, range: IntRange): List<Int> {
@@ -121,8 +132,12 @@ class ExerciseGenerator(private val random: Random = Random.Default) {
          */
         val MIN_PAYABLE_CENTS: Int = Euro.denominations.filter { it >= 100 }.sorted()[1] + 1
 
-        /** Two 72dp buttons a tick apart would overlap on a phone-wide 0..10 line. */
-        const val MIN_TICK_GAP = 2
+        /**
+         * Ticks between two tap targets. His screen is 411dp wide, so an eleven-tick line puts its
+         * ticks 30dp apart: at two ticks a 72dp circle overlaps its neighbour by twelve, at three it
+         * clears it. Measured on the device, not guessed.
+         */
+        const val MIN_TICK_GAP = 3
 
         /** Tap targets on a line: as many as the neighbouring levels' option counts, not eleven. */
         const val SMALL_LINE_CANDIDATES = 3
