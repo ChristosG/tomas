@@ -777,14 +777,61 @@ Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
 
 ### Task 5: Phase 1 verification
 
-- [ ] **Step 1: Full suites**
+- [x] **Step 1: Full suites**
 
 Run: `./gradlew -q testDebugUnitTest && ANDROID_SERIAL=emulator-5554 ./gradlew -q connectedDebugAndroidTest` — Expected: all green.
 
-- [ ] **Step 2: Install on the phone and walk through**
+- [x] **Step 2: Install on the phone and walk through**
 
 `ANDROID_SERIAL=R5CWC2C1KSJ ./gradlew -q installDebug`, then: Today → Μίλα → quick "Ναι" speaks immediately; FOOD tab → tap καφές (speaks, strip shows "καφές"); VERBS → θέλω; "Πες το" speaks "καφές θέλω"; backspace twice empties the strip; favourites now lists καφές and θέλω. Record a caregiver voice for καφές, tap it again: the recording plays instead of TTS.
 
-- [ ] **Step 3: Note and commit**
+- [x] **Step 3: Note and commit**
 
 Append "Phase 1 verified on <date>, <device>" with any problems under this task in this plan file; commit with `docs(phase1): verification notes`.
+
+---
+
+#### Phase 1 verified on 2026-09-05 (emulator-5554)
+
+Chris's phone (R5CWC2C1KSJ) was disconnected for this session, so the physical-device install/walkthrough in Step 2 was run on `emulator-5554` instead; the phone step itself was skipped.
+
+**Test suites**
+
+| Suite | Command | Result |
+|---|---|---|
+| Unit tests | `./gradlew -q testDebugUnitTest` | 51/51 passed, 0 failures, 0 errors (13 test classes) |
+| Instrumented tests | `ANDROID_SERIAL=emulator-5554 ./gradlew -q connectedDebugAndroidTest` | 21/21 passed, 0 failures, 0 errors, run on `Medium_Phone_API_36(AVD)` |
+
+`connectedDebugAndroidTest` uninstalled the app afterwards as expected; `installDebug` was re-run before the manual walkthrough.
+
+**Manual walkthrough checklist**
+
+| Step | Result |
+|---|---|
+| Today → Μίλα | Talk board opens, quick-phrase row and category tabs render |
+| Quick "Ναι" speaks immediately | Confirmed — tapping "Ναι" triggered a real Greek TTS synthesis (`GoogleTTSServiceImpl: Synthesis request for locale ell-GRC`, dispatch `el-gr-x-vfz-seanet-embedded`) |
+| FOOD tab → tap καφές (speaks, strip shows "καφές") | Confirmed — TTS synthesis fired and the sentence strip showed "καφές" |
+| VERBS tab → θέλω | Confirmed — added to strip |
+| "Πες το" speaks the strip | Confirmed — TTS synthesis fired for the full strip text |
+| Backspace twice empties the strip | Confirmed once tapped on the actual button bounds (see "odd" note below) |
+| Favourites lists καφές and θέλω | Confirmed, see note below — the ranking briefly failed to surface the top-used items within one long-lived screen instance, then was correct after reopening the board |
+| Record a caregiver voice for καφές, save | Confirmed — recorded via caregiver → Λέξεις και εικόνες → καφές → Ηχογράφηση → Στοπ → Αποθήκευση. Row and file verified in `recordings` table and on disk (`recordings/59228fd5-….m4a`, ~603 KB, `who=CAREGIVER`) |
+| Tap καφές again: recording plays instead of TTS | Confirmed — logcat showed `MediaPlayerService` activity and no `GoogleTTSServiceImpl`/"Synthesis request" line for that tap |
+| Caregiver home → Ρυθμίσεις → talk icon (top-right) opens the board | Confirmed — opens Μίλα directly from Settings, and back navigation returns to Ρυθμίσεις |
+| Caregiver → Σφάλματα | Confirmed empty: "Κανένα σφάλμα. Ωραία." |
+| Crash → restart-to-Today | Not exercised — no in-app crash trigger available (`adb shell am crash` kills the process externally and does not go through the app's handler); covered instead by `CrashHandlerTest` for the log-write path |
+
+**Database check**
+
+Pulled `dimitris.db` (+ `-wal`/`-shm`) via `run-as` after the walkthrough:
+- `attempts`: 11 rows, all with `module='TALKBOARD'` (0 rows for any other module)
+- `error_logs`: 0 rows
+- `recordings`: 1 row for καφές (`who=CAREGIVER`), backing file present under `files/recordings/`
+
+**Findings / anything odd**
+
+1. **Favourites ranking can go stale within one screen instance.** While rapidly tapping several items in the same `TalkBoardScreen`/`TalkBoardViewModel` instance, the "Αγαπημένα" tab twice rendered only 4 of the ≥6 used items and — reproducibly — omitted the two items with the *highest* usage counts (θέλω, n=3; Ναι, n=2), while showing several n=1 items instead. A direct SQL replica of `AttemptsDao.mostUsed` against the pulled DB returned the correct, complete ranking, so the DB and query are fine; the discrepancy is in the ViewModel's in-memory `usage` `MutableStateFlow`. `refreshUsage()` is fired fire-and-forget (`viewModelScope.launch`) on every tap with no de-duplication/sequencing, so out-of-order completion of concurrent `mostUsed` queries can let an older result overwrite a newer one. Re-entering the Talk board (fresh ViewModel) immediately showed the correct order (θέλω, Ναι, καφές, …). Not a data-loss issue (the DB itself is always correct) and not blocking for Phase 1, but worth a defensive fix later (e.g. track a monotonic request id, or use `mapLatest`/`collectLatest` instead of ad-hoc launches).
+2. **Quick-phrase and item-grid ordering follows raw SQLite text ordering, not Greek alphabetical order.** `observeActive()` uses `ORDER BY category, text`, which is byte/codepoint order under SQLite's default `BINARY` collation. Accented capitals like "Ό" (U+038C) sort before plain capitals like "Β"/"Δ"/"Ν" (U+0392+), so the QUICK row shows "Όχι" before "Ναι", "Βοήθεια", etc. instead of true alphabetical order. Purely cosmetic (everything is still reachable and correct), but worth a note for a future polish pass (e.g. a Greek-aware collation or explicit ordering).
+3. **No app code changes were made for this task** — both findings above are recorded for a future task, per the brief.
+
+Commit: `docs(phase1): verification notes`.
