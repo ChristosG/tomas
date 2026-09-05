@@ -1,11 +1,14 @@
 package gr.dimitris.app.core.greek
 
+import java.text.Normalizer
+
 /**
  * Rule-based Greek syllable splitter.
  *
  * Rules implemented (modern Greek school grammar):
  *  1. Vowel units: single vowels α ε η ι ο υ ω, the digraphs ου αι ει οι υι, and αυ ευ ηυ each count as ONE vowel.
  *     Two vowel units next to each other that do not form a digraph split: α-έ-ρας, σί-α.
+ *     A vowel carrying dialytika (ϊ ϋ ΐ ΰ) never joins the preceding vowel into a digraph: μα-ϊ-μού, προ-ϊ-όν.
  *  2. A single consonant between vowels goes with the following vowel: κα-φές, νε-ρό.
  *  3. Two consonants between vowels stay together if a Greek word can begin with them
  *     (βλ βρ γλ γν γρ δρ θλ θν θρ κλ κν κρ κτ μν μπ ντ γκ πλ πν πρ πτ σβ σγ σθ σκ σλ σμ σν σπ στ σφ σχ τζ τμ τρ τσ φθ φλ φρ φτ χθ χλ χν χρ χτ);
@@ -26,9 +29,15 @@ object Syllabifier {
     /** Accent-stripped, lower-cased single-character key used for rule lookups only; the original char is kept in the output. */
     private fun bareChar(c: Char): Char = Greek.stripAccents(c.toString()).lowercase().firstOrNull() ?: c
 
+    /** True if [c]'s NFD decomposition contains a combining diaeresis (ϊ ϋ ΐ ΰ): dialytika mark vowels that must stay separate from what precedes them. */
+    private fun hasDialytika(c: Char): Boolean =
+        Normalizer.normalize(c.toString(), Normalizer.Form.NFD).contains('\u0308')
+
     private fun isVowel(c: Char): Boolean = bareChar(c) in vowels
 
-    private fun isDigraph(a: Char, b: Char): Boolean = "${bareChar(a)}${bareChar(b)}" in vowelDigraphs
+    /** [a] followed by [b] forms a digraph only when [b] carries no dialytika (rule 1). */
+    private fun isDigraph(a: Char, b: Char): Boolean =
+        !hasDialytika(b) && "${bareChar(a)}${bareChar(b)}" in vowelDigraphs
 
     private fun isWordInitialCluster(a: Char, b: Char): Boolean = "${bareChar(a)}${bareChar(b)}" in wordInitialClusters
 
@@ -68,7 +77,7 @@ object Syllabifier {
 
     // CHRIS: rewrite me.
     // Claude wrote this first version so the app could ship tonight; SyllabifierTest spells out the intended
-    // contract in full, so treat those nine cases as the spec if you want to rebuild this as a learning exercise.
+    // contract in full, so treat those ten cases as the spec if you want to rebuild this as a learning exercise.
     fun syllables(word: String): List<String>? {
         if (word.isBlank()) return null
         val units = vowelUnits(word)

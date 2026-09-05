@@ -6,7 +6,7 @@ import org.junit.Test
 
 class SyllabifierTest {
 
-    /** Holds for the stub (null) and for a correct implementation. */
+    /** Holds for any implementation: null only for blank input, otherwise a prefix. */
     @Test fun `firstSyllable is null or a prefix of the word`() {
         val s = Syllabifier.firstSyllable("καφές")
         assertTrue(s == null || "καφές".startsWith(s))
@@ -22,4 +22,5 @@ class SyllabifierTest {
     @Test fun `double consonants split`() { check("ελλάδα", "ελ", "λά", "δα"); check("εκκλησία", "εκ", "κλη", "σί", "α") }
     @Test fun `adjacent vowels split`() { check("αέρας", "α", "έ", "ρας") }
     @Test fun `blank is null`() { assertEquals(null, Syllabifier.syllables("  ")) }
+    @Test fun `dialytika keep vowels apart`() { check("μαϊμού", "μα", "ϊ", "μού"); check("προϊόν", "προ", "ϊ", "όν") }
 }
