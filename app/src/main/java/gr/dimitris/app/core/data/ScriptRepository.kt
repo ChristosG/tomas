@@ -39,9 +39,17 @@ class ScriptRepository(
     suspend fun scriptOf(itemId: String): ScriptWithLines? = scripts.lineOfItem(itemId)?.let { load(it.scriptId) }
 
     /**
-     * Creates or replaces a script. Old lines are soft-deleted and fresh ones are written, so a
-     * re-ordered dialogue never leaves two rows claiming the same position; the old lines' items
-     * stay behind because the attempt history still points at them.
+     * Creates or replaces a script.
+     *
+     * A turn whose text *and* speaker are unchanged keeps everything it had: its [ScriptLine] row,
+     * its [Item], and every recording pointing at that item. Only what she actually changed — a
+     * reworded line, a speaker flipped, a turn added — becomes a new item. Rebuilding every line on
+     * every save was harmless to look at and unbounded underneath: ten passes over an eight-line
+     * dialogue left eighty items nothing pointed at, in the database, in the backup and in the
+     * seed importer's "already here" set. Reordering alone changes nothing but positions.
+     *
+     * The item of a line she really did change is *not* deleted: the attempt history points at it,
+     * and that is what keeps her earlier work readable.
      *
      * Two stages, in this order for a reason. The items and their recordings are built first: that
      * is the slow part (file I/O), and it is additive — an item nothing points at is invisible, so
@@ -51,17 +59,32 @@ class ScriptRepository(
      *
      * A line that keeps a recording it already had passes the same [File] back in. That is safe:
      * [ItemRepository.addRecording] only writes a row and relativizes the path — it never copies,
-     * moves or deletes the file — so a take already sitting in the recordings dir is simply
-     * pointed at a second time, and the previous line's row keeps working too.
+     * moves or deletes the file — and it recognises the take it already holds, so no second row is
+     * written for it.
      */
     suspend fun save(id: String?, title: String, lines: List<LineDraft>, source: Source = Source.CAREGIVER): Script {
         val t = clock()
         val existing = id?.let { scripts.get(it) }
         val script = (existing ?: Script(title = title.trim(), source = source, createdAt = t)).copy(title = title.trim(), updatedAt = t)
+        // The turns as they stand, so an unchanged one can be recognised and kept. Each is claimed
+        // at most once: two identical turns in one dialogue keep one row each, not the same row.
+        val reusable = if (existing == null) mutableListOf() else scripts.linesFor(script.id)
+            .mapNotNull { line -> items.get(line.itemId)?.let { line to it } }
+            .toMutableList()
         val rows = lines.filter { it.text.isNotBlank() }.mapIndexed { i, d ->
-            val item = items.save(Item(text = d.text, kind = ItemKind.SCRIPT_LINE, category = Category.CUSTOM, source = source))
-            if (d.recordingFile != null) items.addRecording(item.id, d.recordingFile, d.recordingMs, Who.CAREGIVER)
-            ScriptLine(scriptId = script.id, position = i, speaker = d.speaker, itemId = item.id, createdAt = t, updatedAt = t)
+            val text = d.text.trim()
+            val kept = reusable.firstOrNull { (line, item) -> line.speaker == d.speaker && item.text == text }
+            val itemId = if (kept != null) {
+                reusable.remove(kept)
+                kept.second.id
+            } else {
+                items.save(Item(text = text, kind = ItemKind.SCRIPT_LINE, category = Category.CUSTOM, source = source)).id
+            }
+            if (d.recordingFile != null) items.addRecording(itemId, d.recordingFile, d.recordingMs, Who.CAREGIVER)
+            // The kept row's own id, so nothing that pointed at the turn has to be rewritten; the
+            // soft-delete below is undone by this very upsert, inside the same transaction.
+            kept?.first?.copy(position = i, updatedAt = t, deleted = false)
+                ?: ScriptLine(scriptId = script.id, position = i, speaker = d.speaker, itemId = itemId, createdAt = t, updatedAt = t)
         }
         inTransaction {
             scripts.upsertScript(script)

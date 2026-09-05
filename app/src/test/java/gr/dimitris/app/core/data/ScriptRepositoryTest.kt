@@ -46,6 +46,67 @@ class ScriptRepositoryTest {
         assertEquals(2, scriptDao.lines.values.count { !it.deleted })
     }
 
+    /**
+     * A turn she did not touch keeps everything it had. Rebuilding every line on every save was
+     * invisible and unbounded: ten passes over an eight-line dialogue left eighty items nothing
+     * pointed at — in the database, in the backup zip, and in the seed importer's "already here"
+     * set — plus a second recording row per pass for one file on disk.
+     */
+    @Test fun `an unchanged line keeps its row, its item and its take`() = runTest {
+        val s = repo.save(null, "Καφές", coffee)
+        val before = repo.load(s.id)!!.lines
+        val itemsAfterFirst = itemDao.rows.value.size
+        val recordingsAfterFirst = recDao.rows.size
+
+        repo.save(s.id, "Καφές", coffee)
+
+        val after = repo.load(s.id)!!.lines
+        assertEquals("the rows themselves", before.map { it.first.id }, after.map { it.first.id })
+        assertEquals("the items behind them", before.map { it.second.id }, after.map { it.second.id })
+        assertEquals("no orphan items", itemsAfterFirst, itemDao.rows.value.size)
+        assertEquals("no duplicate recording rows", recordingsAfterFirst, recDao.rows.size)
+        assertEquals("/tmp/z.m4a", items.modelRecording(after[2].second)?.path)
+    }
+
+    /** Reordering is not editing: the turns keep their items, and with them their recorded voices. */
+    @Test fun `reordering keeps every line's item and moves only its position`() = runTest {
+        val s = repo.save(null, "Καφές", coffee)
+        val before = repo.load(s.id)!!.lines.associate { it.first.speaker to it.second.id }
+        val itemsAfterFirst = itemDao.rows.value.size
+
+        repo.save(s.id, "Καφές", listOf(coffee[2], coffee[3], coffee[0], coffee[1]))
+
+        val after = repo.load(s.id)!!.lines
+        assertEquals(listOf(0, 1, 2, 3), after.map { it.first.position })
+        assertEquals(listOf("Ζάχαρη;", "Μέτριο.", "Καλημέρα! Τι θα πάρετε;", "Έναν καφέ, παρακαλώ."), after.map { it.second.text })
+        assertEquals("no new items for a reorder", itemsAfterFirst, itemDao.rows.value.size)
+        assertEquals("the take travels with its turn", "/tmp/z.m4a", items.modelRecording(after[0].second)?.path)
+        assertEquals(before[Speaker.OTHER], after.first { it.first.speaker == Speaker.OTHER }.second.id)
+    }
+
+    /** A turn she reworded, or gave to the other speaker, is a new turn: its history stays readable. */
+    @Test fun `only the lines she really changed get new items`() = runTest {
+        val s = repo.save(null, "Καφές", coffee)
+        val before = repo.load(s.id)!!.lines
+        val itemsAfterFirst = itemDao.rows.value.size
+
+        repo.save(s.id, "Καφές", listOf(
+            coffee[0],
+            coffee[1].copy(text = "Έναν καφέ χωρίς ζάχαρη."),
+            coffee[2].copy(speaker = Speaker.DIMITRIS),
+            coffee[3],
+        ))
+
+        val after = repo.load(s.id)!!.lines
+        assertEquals("the untouched first turn", before[0].second.id, after[0].second.id)
+        assertEquals("the untouched last turn", before[3].second.id, after[3].second.id)
+        assertTrue("a reworded turn is a new item", before[1].second.id != after[1].second.id)
+        assertTrue("a turn given to the other speaker is a new item", before[2].second.id != after[2].second.id)
+        assertEquals("exactly two new items, nothing more", itemsAfterFirst + 2, itemDao.rows.value.size)
+        // The replaced items are still there, undeleted: the attempts written against them stay readable.
+        assertEquals(before[1].second, itemDao.get(before[1].second.id))
+    }
+
     @Test fun `delete is soft and hides the script`() = runTest {
         val s = repo.save(null, "Ταξί", coffee.take(1))
         repo.delete(s.id)

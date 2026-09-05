@@ -38,10 +38,22 @@ class ItemRepository(
      * recording becomes what the talk board and the word coach play back.
      */
     suspend fun addRecording(itemId: String, file: File, durationMs: Long, who: Who, style: RecordingStyle = RecordingStyle.SPOKEN): Recording {
-        val recording = Recording(itemId = itemId, path = relativize(file), who = who, style = style, durationMs = durationMs, recordedAt = clock())
+        val path = relativize(file)
+        // The same take, offered again: a re-saved dialogue line hands its existing file straight
+        // back in. Writing a second row for it would leave a duplicate pointing at one file, and
+        // ten passes over a dialogue would leave ten. Every real new take is a new file, so this
+        // only ever catches the re-attachment.
+        recordings.latestFor(itemId, who, style)?.takeIf { it.path == path }?.let { return link(itemId, it, who, style) }
+        val recording = Recording(itemId = itemId, path = path, who = who, style = style, durationMs = durationMs, recordedAt = clock())
         recordings.upsert(recording)
+        return link(itemId, recording, who, style)
+    }
+
+    /** A spoken caregiver take is the item's model voice; anything else is a second recording of it. */
+    private suspend fun link(itemId: String, recording: Recording, who: Who, style: RecordingStyle): Recording {
         if (who == Who.CAREGIVER && style == RecordingStyle.SPOKEN) {
-            items.get(itemId)?.let { items.upsert(it.copy(modelRecordingId = recording.id, updatedAt = clock())) }
+            items.get(itemId)?.takeIf { it.modelRecordingId != recording.id }
+                ?.let { items.upsert(it.copy(modelRecordingId = recording.id, updatedAt = clock())) }
         }
         return recording
     }
