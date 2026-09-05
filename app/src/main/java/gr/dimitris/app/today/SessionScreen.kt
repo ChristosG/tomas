@@ -40,10 +40,10 @@ fun SessionScreen(onDone: () -> Unit) {
                 Spacer(Modifier.height(Sizes.gap))
                 Text("Μπράβο Δημήτρη!", style = MaterialTheme.typography.displayLarge)
                 Spacer(Modifier.height(Sizes.gapSmall))
-                Text("Έκανες ${s.completed} ασκήσεις σήμερα.", style = MaterialTheme.typography.bodyLarge)
+                Text(SessionWording.summary(s.completed, s.titles), style = MaterialTheme.typography.bodyLarge)
             } else {
                 // No Μπράβο for a session he walked away from: an invitation, not a score.
-                Text(SessionViewModel.NOTHING_DONE, style = MaterialTheme.typography.headlineMedium)
+                Text(SessionWording.NOTHING_DONE, style = MaterialTheme.typography.headlineMedium)
             }
         }
     }
