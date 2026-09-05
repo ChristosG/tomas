@@ -6,6 +6,7 @@ import gr.dimitris.app.core.audio.ImageStore
 import gr.dimitris.app.core.audio.MediaFiles
 import gr.dimitris.app.core.audio.Player
 import gr.dimitris.app.core.audio.Recorder
+import gr.dimitris.app.core.audio.ToneSynth
 import gr.dimitris.app.core.audio.Voice
 import gr.dimitris.app.core.data.AppDatabase
 import gr.dimitris.app.core.data.ItemRepository
@@ -46,6 +47,7 @@ class AppGraph(context: Context) {
     val stt: SpeechToText = AndroidSpeechToText(app)
     val recorder = Recorder(app, files)
     val player = Player()
+    val synth = ToneSynth()
 
     /** The only way in: everything that makes sound goes through here, one at a time. */
     val voice = Voice(app, tts, player, recorder)
