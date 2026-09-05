@@ -12,7 +12,8 @@ data class Tile(val item: Item, val label: String)
 
 /**
  * One sentence to build, in the order it has to come out in. [distractor] is a card on the board
- * that belongs to no sentence at all — the level-4 way of asking "which words does this need?".
+ * that could not fill any slot of this sentence, whichever way he arranges it — the level-4 way of
+ * asking "which words does this need?", and the reason there is only ever one right answer.
  */
 data class Sentence(val level: Int, val tiles: List<Tile>, val distractor: Tile?) {
     val text: String = tiles.joinToString(" ") { it.label }
@@ -142,11 +143,23 @@ private class Roles(pool: List<Item>, private val random: Random) {
         return listOf(Tile(verb, verb.text), objectTile(place), Tile(time, time.text))
     }
 
-    /** A card that looks like it belongs — same kind of word, same accusative — and does not. */
+    /**
+     * The odd card out: a word that could not fill any slot of this sentence, whichever way he
+     * arranges the board. It is drawn from the far side of the sentence's own filler set — a place
+     * next to «θέλω/τρώω/πίνω», something to eat or to hold next to «πάμε».
+     *
+     * Drawing it from the same set as the object was the defect this is written to stop. With
+     * «εγώ θέλω νερό τώρα» on the board and «καφέ» beside it, nothing on the screen said which of
+     * the two the app had in mind: he built «εγώ θέλω καφέ τώρα», faultless Greek, and was answered
+     * with «Όχι έτσι.» and an assisted mark. A correction he could not have avoided teaches him
+     * nothing about word order, which is the one thing this module is for.
+     */
     fun distractor(tiles: List<Tile>): Tile? {
+        val verb = tiles.firstOrNull { it.item.category == Category.VERBS } ?: return null
+        val elsewhere = if (key(verb.item) == GO) food + things else places
         val used = tiles.mapTo(mutableSetOf()) { it.item.id }
         val said = tiles.mapTo(mutableSetOf()) { it.label }
-        return (food + things + places).asSequence()
+        return elsewhere.asSequence()
             .filterNot { it.id in used }.map(::objectTile).filterNot { it.label in said }
             .toList().randomOrNull(random)
     }
@@ -174,11 +187,16 @@ private val DRINKABLE = setOf("νερο", "καφες", "τσαι", "γαλα", 
 private val TIME_WORDS = setOf("τωρα", "σημερα", "αυριο", "μετα")
 
 /**
- * The PLACES cards also hold what takes him to a place, and «πάμε αυτοκίνητο» is not a sentence —
- * a vehicle needs a preposition he is not being asked for here, and this module must not model an
- * error. «πάμε σπίτι», «πάμε καφετέρια», «πάμε δουλειά» are all the whole sentence as they stand.
+ * The PLACES cards also hold what takes him to a place and where he goes once he is inside it, and
+ * neither follows a bare «πάμε»: «πάμε αυτοκίνητο», «πάμε κρεβάτι» want a preposition he is not
+ * being asked for here, and a module for a man whose deficit is dropped function words must not
+ * model one. «πάμε σπίτι», «πάμε καφετέρια», «πάμε δουλειά», «πάμε θάλασσα», «πάμε μπάνιο» are all
+ * the whole sentence as they stand.
+ *
+ * Swept once against the seed's twenty-two PLACES words: three vehicles, the street, and the three
+ * rooms of a house are the whole of it; the other fifteen are bare-noun goals.
  */
-private val NOT_DESTINATIONS = setOf("ταξι", "λεωφορειο", "αυτοκινητο", "δρομος")
+private val NOT_DESTINATIONS = setOf("ταξι", "λεωφορειο", "αυτοκινητο", "δρομος", "κουζινα", "κρεβατι", "μπαλκονι")
 
 /** Enough goes at a shape to fill a sitting, few enough that a pool which cannot fill it gives up. */
 private const val TRIES_PER_SENTENCE = 4

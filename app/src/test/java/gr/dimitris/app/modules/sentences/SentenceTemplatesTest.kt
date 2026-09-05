@@ -5,6 +5,7 @@ import gr.dimitris.app.core.data.Item
 import gr.dimitris.app.core.data.ItemKind
 import gr.dimitris.app.core.greek.Greek
 import gr.dimitris.app.core.greek.accusative
+import gr.dimitris.app.core.seed.SeedManifest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
@@ -32,6 +33,9 @@ class SentenceTemplatesTest {
         word("σπίτι", Category.PLACES), word("καφετέρια", Category.PLACES),
         word("τώρα", Category.TIME), word("αύριο", Category.TIME), word("Δευτέρα", Category.TIME),
     )
+
+    /** What «πίνω» takes and «τρώω» does not, written out here rather than read from the templates. */
+    private val drinkable = setOf("νερό", "καφές", "τσάι", "γάλα", "μπύρα", "κρασί", "χυμός")
 
     private fun many(level: Int, times: Int = 60): List<Sentence> =
         List(times) { templates.generate(level, pool) }.map { assertNotNull("level $level made nothing", it); it!! }
@@ -80,7 +84,6 @@ class SentenceTemplatesTest {
 
     /** He drinks water and eats bread, and the pictures he is given never say otherwise. */
     @Test fun `πίνω never pairs with ψωμί`() {
-        val drinkable = setOf("νερό", "καφές", "τσάι", "γάλα", "μπύρα", "κρασί", "χυμός")
         for (level in 1..4) for (s in many(level, times = 60)) {
             val verb = s.tiles.firstOrNull { it.label == "πίνω" } ?: continue
             val after = s.tiles[s.tiles.indexOf(verb) + 1]
@@ -90,7 +93,6 @@ class SentenceTemplatesTest {
 
     /** Nor does he eat water: what a verb takes is part of the verb. */
     @Test fun `τρώω never pairs with a drink`() {
-        val drinkable = setOf("νερό", "καφές", "τσάι", "γάλα", "μπύρα", "κρασί", "χυμός")
         for (level in 1..4) for (s in many(level, times = 60)) {
             val verb = s.tiles.firstOrNull { it.label == "τρώω" } ?: continue
             val after = s.tiles[s.tiles.indexOf(verb) + 1]
@@ -117,6 +119,48 @@ class SentenceTemplatesTest {
         assertNull(templates.generate(3, timeless.filterNot { it.text == "εγώ" }))
     }
 
+    /**
+     * The level-4 defect: with «εγώ θέλω νερό τώρα» on the board and «καφέ» beside it, his own
+     * «εγώ θέλω καφέ τώρα» is faultless Greek and nothing on the screen ever said which of the two
+     * the app meant. Over the vocabulary he actually has, no distractor may be a word that could
+     * stand in the slot it is sitting next to — the sentence on the board has one right answer.
+     */
+    @Test fun `no level 4 distractor could fill the slot it stands next to`() {
+        val pool = seedPool()
+        repeat(500) {
+            val s = templates.generate(4, pool) ?: throw AssertionError("the seed cannot build level 4")
+            val verb = s.tiles.first { it.item.category == Category.VERBS }.label
+            val odd = s.distractor!!.item
+            assertTrue("«${odd.text}» could fill the object of «$verb» in «${s.text}»", !couldFollow(verb, odd))
+            assertTrue("«${odd.text}» could be the time word of «${s.text}»", odd.category != Category.TIME)
+            assertTrue("«${odd.text}» could be the subject of «${s.text}»", odd.category != Category.PEOPLE)
+        }
+    }
+
+    /** What each verb can really take, written out here rather than read from the templates. */
+    private fun couldFollow(verb: String, item: Item): Boolean = when (verb) {
+        "πάμε" -> item.category == Category.PLACES
+        "θέλω" -> item.category in setOf(Category.FOOD, Category.THINGS)
+        "τρώω" -> item.category == Category.FOOD && item.text !in drinkable
+        "πίνω" -> item.text in drinkable
+        else -> throw AssertionError("unknown verb $verb")
+    }
+
+    /**
+     * «πάμε» takes a bare place only where Greek lets it. A room or a car needs the preposition he
+     * is not being asked for, and this module must not put «πάμε κρεβάτι» on the screen as the
+     * model sentence.
+     */
+    @Test fun `πάμε only ever goes somewhere it can go without a preposition`() {
+        val pool = seedPool()
+        val notDestinations = setOf("ταξί", "λεωφορείο", "αυτοκίνητο", "δρόμος", "κουζίνα", "κρεβάτι", "μπαλκόνι")
+        for (level in 2..4) repeat(200) {
+            val s = templates.generate(level, pool)!!
+            val words = (s.tiles + listOfNotNull(s.distractor)).map { it.item.text }
+            assertTrue("«${s.text}» goes where it cannot go", words.none { it in notDestinations })
+        }
+    }
+
     @Test fun `session returns the count it was asked for`() {
         assertEquals(8, templates.session(1, pool).size)
         assertEquals(5, templates.session(3, pool, count = 5).size)
@@ -126,5 +170,26 @@ class SentenceTemplatesTest {
     /** Skipping nulls means skipping them, not looping for ever over a pool that cannot fill the shape. */
     @Test fun `session comes back empty rather than hanging when nothing can be built`() {
         assertEquals(emptyList<Sentence>(), templates.session(1, pool.filterNot { it.category == Category.VERBS }))
+    }
+
+    /**
+     * The vocabulary he actually has: the bundled seed manifest, single words only, exactly as the
+     * importer would put them in the database. A hand-written pool proves the rules; only the real
+     * one proves they hold over the cards on his phone.
+     */
+    private fun seedPool(): List<Item> = SeedManifest.parse(asset("seed/seed.json").readText()).items
+        .filter { it.kind == ItemKind.WORD.name }
+        .map { Item(text = it.text, kind = ItemKind.WORD, category = Category.valueOf(it.category)) }
+
+    /** Assets are not on the unit-test classpath, so the file is found by walking up from wherever Gradle started us. */
+    private fun asset(name: String): java.io.File {
+        var dir: java.io.File? = java.io.File(".").absoluteFile
+        while (dir != null) {
+            for (candidate in listOf(java.io.File(dir, "src/main/assets/$name"), java.io.File(dir, "app/src/main/assets/$name"))) {
+                if (candidate.exists()) return candidate
+            }
+            dir = dir.parentFile
+        }
+        throw AssertionError("δεν βρέθηκε το asset $name")
     }
 }
