@@ -59,6 +59,7 @@ dependencies {
     implementation(libs.biometric)
     implementation(libs.security.crypto)
     implementation(libs.gson)
+    implementation(libs.exifinterface)
     debugImplementation(libs.compose.ui.tooling)
 
     testImplementation(libs.junit)
