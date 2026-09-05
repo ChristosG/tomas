@@ -5,6 +5,8 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import gr.dimitris.app.caregiver.CaregiverHomeScreen
+import gr.dimitris.app.caregiver.ErrorListScreen
+import gr.dimitris.app.caregiver.SettingsScreen
 import gr.dimitris.app.caregiver.content.ItemEditScreen
 import gr.dimitris.app.caregiver.content.ItemListScreen
 import gr.dimitris.app.today.SessionScreen
@@ -43,6 +45,8 @@ fun AppNav() {
             val id = entry.arguments?.getString("itemId")?.takeIf { it != Routes.NEW_ITEM }
             ItemEditScreen(itemId = id, onClose = { nav.popBackStack() })
         }
-        // Tasks 12–14 add: ERRORS, SETTINGS, BACKUP
+        composable(Routes.ERRORS) { ErrorListScreen(onBack = { nav.popBackStack() }) }
+        composable(Routes.SETTINGS) { SettingsScreen(onBack = { nav.popBackStack() }) }
+        // Task 13 adds: BACKUP
     }
 }
