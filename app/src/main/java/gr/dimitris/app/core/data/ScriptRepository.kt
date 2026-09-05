@@ -16,6 +16,12 @@ data class ScriptWithLines(val script: Script, val lines: List<Pair<ScriptLine, 
 class ScriptRepository(
     private val scripts: ScriptDao,
     private val items: ItemRepository,
+    /**
+     * How a group of writes becomes one commit. The app passes Room's withTransaction; JVM tests
+     * pass a runner they can make fail. It stays before [clock] so `ScriptRepository(dao, items) { now }`
+     * still binds its trailing lambda to the clock.
+     */
+    private val inTransaction: suspend (suspend () -> Unit) -> Unit = { block -> block() },
     private val clock: () -> Long = ::now,
 ) {
     fun observeAll(): Flow<List<Script>> = scripts.observeScripts()
@@ -37,6 +43,12 @@ class ScriptRepository(
      * re-ordered dialogue never leaves two rows claiming the same position; the old lines' items
      * stay behind because the attempt history still points at them.
      *
+     * Two stages, in this order for a reason. The items and their recordings are built first: that
+     * is the slow part (file I/O), and it is additive — an item nothing points at is invisible, so
+     * a crash halfway through costs nothing. Only then does one transaction swap the lines over, so
+     * there is never a moment where the old lines are gone and the new ones have not landed. A
+     * process death used to be able to leave the caregiver's whole dialogue empty and say nothing.
+     *
      * A line that keeps a recording it already had passes the same [File] back in. That is safe:
      * [ItemRepository.addRecording] only writes a row and relativizes the path — it never copies,
      * moves or deletes the file — so a take already sitting in the recordings dir is simply
@@ -46,21 +58,28 @@ class ScriptRepository(
         val t = clock()
         val existing = id?.let { scripts.get(it) }
         val script = (existing ?: Script(title = title.trim(), source = source, createdAt = t)).copy(title = title.trim(), updatedAt = t)
-        scripts.upsertScript(script)
-        if (existing != null) scripts.softDeleteLinesOf(script.id, t)
         val rows = lines.filter { it.text.isNotBlank() }.mapIndexed { i, d ->
             val item = items.save(Item(text = d.text, kind = ItemKind.SCRIPT_LINE, category = Category.CUSTOM, source = source))
             if (d.recordingFile != null) items.addRecording(item.id, d.recordingFile, d.recordingMs, Who.CAREGIVER)
             ScriptLine(scriptId = script.id, position = i, speaker = d.speaker, itemId = item.id, createdAt = t, updatedAt = t)
         }
-        scripts.upsertLines(rows)
+        inTransaction {
+            scripts.upsertScript(script)
+            if (existing != null) scripts.softDeleteLinesOf(script.id, t)
+            scripts.upsertLines(rows)
+        }
         return script
     }
 
-    /** Soft, like everything else: a script the caregiver removes is still in the backup and the sync log. */
+    /**
+     * Soft, like everything else: a script the caregiver removes is still in the backup and the
+     * sync log. One transaction too, so a script is never left visible with its lines already gone.
+     */
     suspend fun delete(id: String) {
         val t = clock()
-        scripts.softDeleteLinesOf(id, t)
-        scripts.softDeleteScript(id, t)
+        inTransaction {
+            scripts.softDeleteLinesOf(id, t)
+            scripts.softDeleteScript(id, t)
+        }
     }
 }

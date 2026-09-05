@@ -77,6 +77,49 @@ class ScriptRepositoryTest {
     }
 
     /**
+     * The whole point of the transaction. The soft-delete of the old lines and the write of the new
+     * ones are one commit, so a failure in the middle — a full disk, a process death — leaves the
+     * dialogue she had. Before this, the same failure left a script with no lines at all and said
+     * nothing about it.
+     */
+    @Test fun `a save that fails halfway leaves the dialogue it was replacing intact`() = runTest {
+        val dao = FakeScriptDao()
+        val working = ScriptRepository(dao, items, rollingBack(dao)) { clock }
+        val s = working.save(null, "Καφές", coffee)
+        val lineIds = dao.lines.values.filter { !it.deleted }.map { it.id }.toSet()
+        assertEquals(4, lineIds.size)
+
+        // The same dao, but the write of the new lines throws — which is what the runner rolls back.
+        val breaking = ScriptRepository(FailingLinesDao(dao), items, rollingBack(dao)) { clock }
+        val attempt = runCatching { breaking.save(s.id, "Καφές το πρωί", coffee.take(2)) }
+        assertTrue("the save should have failed", attempt.isFailure)
+
+        val after = working.load(s.id)!!
+        assertEquals("Καφές", after.script.title)
+        assertEquals(4, after.lines.size)
+        assertEquals(lineIds, dao.lines.values.filter { !it.deleted }.map { it.id }.toSet())
+    }
+
+    /** What Room's withTransaction does for real: nothing the block wrote survives it throwing. */
+    private fun rollingBack(dao: FakeScriptDao): suspend (suspend () -> Unit) -> Unit = { block ->
+        val scriptsBefore = dao.scripts.value
+        val linesBefore = dao.lines.toMap()
+        try {
+            block()
+        } catch (e: Throwable) {
+            dao.scripts.value = scriptsBefore
+            dao.lines.clear()
+            dao.lines.putAll(linesBefore)
+            throw e
+        }
+    }
+
+    /** A disk that fills up exactly when the new lines are written. */
+    private class FailingLinesDao(delegate: FakeScriptDao) : ScriptDao by delegate {
+        override suspend fun upsertLines(lines: List<ScriptLine>): Unit = error("δεν υπάρχει χώρος στη συσκευή")
+    }
+
+    /**
      * Re-saving a dialogue must not cost the caregiver the takes she already recorded: the file she
      * hands back in is the one already in the recordings dir, and it has to still be there
      * afterwards, under the same name, once.

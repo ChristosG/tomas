@@ -2,6 +2,7 @@ package gr.dimitris.app
 
 import android.content.Context
 import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.room.withTransaction
 import gr.dimitris.app.core.audio.ImageStore
 import gr.dimitris.app.core.audio.MediaFiles
 import gr.dimitris.app.core.audio.Player
@@ -61,8 +62,15 @@ class AppGraph(context: Context) {
     /** Always built from the current db, so it survives a backup import. */
     val items: ItemRepository get() = ItemRepository(db.items(), db.recordings(), files::relativize)
 
-    /** Always built from the current db, so it survives a backup import. */
-    val scripts: ScriptRepository get() = ScriptRepository(db.scripts(), items)
+    /**
+     * Always built from the current db, so it survives a backup import. The database is read once
+     * into a local, so the dao and the transaction it commits in are always the same instance even
+     * if a restore swaps [db] mid-save.
+     */
+    val scripts: ScriptRepository get() {
+        val database = db
+        return ScriptRepository(database.scripts(), items, inTransaction = { block -> database.withTransaction { block() } })
+    }
 
     /** Always built from the current db, so it survives a backup import. */
     val scheduler: Scheduler get() = Scheduler(db.schedules())
