@@ -2,6 +2,7 @@ package gr.dimitris.app.core.data
 
 import androidx.room.testing.MigrationTestHelper
 import androidx.test.platform.app.InstrumentationRegistry
+import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
 
@@ -20,7 +21,7 @@ class MigrationTest {
         helper.runMigrationsAndValidate(name, 2, true).use { db ->
             db.query("SELECT pinned FROM items WHERE id = 'a'").use { c ->
                 c.moveToFirst()
-                assert(c.getInt(0) == 0) { "pinned should default to 0" }
+                assertEquals("pinned should default to 0", 0, c.getInt(0))
             }
         }
     }
