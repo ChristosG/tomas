@@ -38,9 +38,11 @@ data class ScriptEditState(
     val recordingIndex: Int? = null,
     val loading: Boolean = false,
     val saving: Boolean = false,
+    /** The dialogue she opened is gone (a restore, a sync). This form is not a new one: it is a dead end. */
+    val notFound: Boolean = false,
     val error: String? = null,
 ) {
-    val isNew: Boolean get() = id == null
+    val isNew: Boolean get() = id == null && !notFound
 }
 
 /**
@@ -66,7 +68,9 @@ class ScriptEditViewModel(private val graph: AppGraph, private val scriptId: Str
                 null
             }
             if (loaded == null) {
-                _state.update { it.copy(loading = false, error = NOT_FOUND) }
+                // Not a blank new dialogue: saving here would write a second copy of something she
+                // thinks she is editing, so the form says what happened and refuses to save.
+                _state.update { it.copy(loading = false, notFound = true, error = NOT_FOUND) }
                 return@launch
             }
             val lines = loaded.lines.map { (line, item) ->
@@ -86,6 +90,7 @@ class ScriptEditViewModel(private val graph: AppGraph, private val scriptId: Str
 
     /** A new turn takes the other speaker's side, which is what a dialogue almost always wants next. */
     fun addLine() = _state.update {
+        if (it.lines.size >= MAX_LINES) return@update it.copy(error = TOO_MANY_LINES)
         val next = if (it.lines.lastOrNull()?.speaker == Speaker.OTHER) Speaker.DIMITRIS else Speaker.OTHER
         it.copy(lines = it.lines + EditLine(next, ""), error = null)
     }
@@ -145,8 +150,15 @@ class ScriptEditViewModel(private val graph: AppGraph, private val scriptId: Str
             }
     }
 
-    /** The microphone was refused: say so instead of a button that does nothing. */
-    fun micDenied() = _state.update { it.copy(recordingIndex = null, error = MIC_DENIED) }
+    /**
+     * The microphone was refused: say so instead of a button that does nothing. A take that somehow
+     * *is* running is closed first — a state that says nothing is recording while the recorder is
+     * open refuses every later play and every later take until the editor is left.
+     */
+    fun micDenied() {
+        if (graph.voice.isRecording) graph.voice.cancelRecording()
+        _state.update { it.copy(recordingIndex = null, error = MIC_DENIED) }
+    }
 
     fun playLine(index: Int) {
         val s = _state.value
@@ -167,9 +179,15 @@ class ScriptEditViewModel(private val graph: AppGraph, private val scriptId: Str
      * that give him something to say, so saving one would be saving something that never appears.
      */
     fun save(onSaved: () -> Unit) {
-        if (_state.value.saving) return
+        if (_state.value.saving || _state.value.notFound) return
         // A take still running belongs to this dialogue: it is closed and kept, not thrown away.
-        _state.value.recordingIndex?.let { toggleRecording(it) }
+        // If closing it failed — too short to be a voice — that is what she needs to read, so the
+        // save stops here instead of silently writing the line without the take she just made.
+        val open = _state.value.recordingIndex
+        if (open != null) {
+            toggleRecording(open)
+            if (_state.value.error != null) return
+        }
         val s = _state.value
         if (s.title.isBlank()) {
             _state.update { it.copy(error = NO_TITLE) }
@@ -182,6 +200,12 @@ class ScriptEditViewModel(private val graph: AppGraph, private val scriptId: Str
         }
         if (lines.none { it.speaker == Speaker.DIMITRIS }) {
             _state.update { it.copy(error = NO_TURN_FOR_HIM) }
+            return
+        }
+        // A dialogue is one sitting's work: the session budget leaves it whole, so the length has to
+        // be held here or a twenty-turn script would be the whole hour by itself.
+        if (lines.size > MAX_LINES) {
+            _state.update { it.copy(error = TOO_MANY_LINES) }
             return
         }
         _state.update { it.copy(saving = true, error = null) }
@@ -289,7 +313,14 @@ class ScriptEditViewModel(private val graph: AppGraph, private val scriptId: Str
     }
 
     companion object {
+        /**
+         * The longest dialogue worth one sitting. The session runs a dialogue whole, so this is the
+         * only place its length is held: twelve turns is about four of his, said and cued.
+         */
+        const val MAX_LINES = 12
+
         const val NOT_FOUND = "Ο διάλογος δεν βρέθηκε."
+        const val TOO_MANY_LINES = "Έως 12 γραμμές"
         const val NO_TITLE = "Γράψε πρώτα έναν τίτλο."
         const val NO_LINES = "Γράψε τουλάχιστον μία γραμμή."
         const val NO_TURN_FOR_HIM = "Χρειάζεται τουλάχιστον μία γραμμή του Δημήτρη."

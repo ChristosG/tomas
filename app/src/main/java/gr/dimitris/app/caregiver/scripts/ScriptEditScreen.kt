@@ -78,7 +78,9 @@ fun ScriptEditScreen(scriptId: String?, onClose: () -> Unit) {
                 Text(s.error!!, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyLarge)
                 Spacer(Modifier.height(Sizes.gapSmall))
             }
-            BigButton("Αποθήκευση", onClick = { vm.save(onClose) }, tone = ButtonTone.Success, enabled = !s.saving && !s.loading)
+            // A dialogue that is not there any more cannot be saved: the button would write a second
+            // copy of the one she opened.
+            BigButton("Αποθήκευση", onClick = { vm.save(onClose) }, tone = ButtonTone.Success, enabled = !s.saving && !s.loading && !s.notFound)
         },
     ) {
         Column(Modifier.verticalScroll(rememberScrollState())) {
@@ -102,7 +104,12 @@ fun ScriptEditScreen(scriptId: String?, onClose: () -> Unit) {
                         locked = s.recordingIndex != null && s.recordingIndex != i,
                         onSpeaker = { vm.toggleSpeaker(i) },
                         onText = { vm.setLineText(i, it) },
-                        onRecord = { pending = i; askMic.launch(Manifest.permission.RECORD_AUDIO) },
+                        // Stopping is not a permission question: it goes straight to the ViewModel,
+                        // so a second launcher round trip can never close the take onto another line.
+                        onRecord = {
+                            if (s.recordingIndex == i) vm.toggleRecording(i)
+                            else { pending = i; askMic.launch(Manifest.permission.RECORD_AUDIO) }
+                        },
                         onPlay = { vm.playLine(i) },
                         onUp = { vm.moveUp(i) },
                         onDown = { vm.moveDown(i) },
@@ -111,6 +118,8 @@ fun ScriptEditScreen(scriptId: String?, onClose: () -> Unit) {
                     Spacer(Modifier.height(Sizes.gapSmall))
                 }
 
+                // Twelve turns is one sitting. The button stays live past the cap on purpose: a tap
+                // that says «Έως 12 γραμμές» explains itself, where a dead button would not.
                 QuietButton("Προσθήκη γραμμής", onClick = vm::addLine, icon = Icons.Rounded.Add, enabled = s.recordingIndex == null)
                 Spacer(Modifier.height(Sizes.gap))
 
