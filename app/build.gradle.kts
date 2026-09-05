@@ -44,26 +44,15 @@ ksp {
     arg("room.schemaLocation", "$projectDir/schemas")
 }
 
-/**
- * Room 2.8.4's migration-bundle classes (used by auto-migrations and MigrationTestHelper) are
- * compiled against a kotlinx-serialization-core that made `typeParametersSerializers()` a default
- * method (1.8.0+). androidx.savedstate 1.5.0 pulls in a strict kotlinx-serialization-bom(1.7.3),
- * where that method is still abstract, so without this pin the app and test classpaths silently
- * resolve to 1.7.3 and MigrationTestHelper crashes with AbstractMethodError. Force the newer,
- * Room-compatible version everywhere.
- */
-configurations.all {
-    resolutionStrategy {
-        force(
-            "org.jetbrains.kotlinx:kotlinx-serialization-core:1.8.1",
-            "org.jetbrains.kotlinx:kotlinx-serialization-core-jvm:1.8.1",
-            "org.jetbrains.kotlinx:kotlinx-serialization-json:1.8.1",
-            "org.jetbrains.kotlinx:kotlinx-serialization-json-jvm:1.8.1",
-        )
-    }
-}
-
 dependencies {
+    constraints {
+        // Room 2.8.4's MigrationTestHelper needs kotlinx-serialization 1.8.x; savedstate 1.5.0 pins 1.7.3
+        // through lifecycle-viewmodel-compose, which throws AbstractMethodError on the instrumented test.
+        // Raising the floor (not forcing) keeps main and androidTest aligned.
+        implementation("org.jetbrains.kotlinx:kotlinx-serialization-core:1.8.1") { because("Room 2.8.4 MigrationTestHelper vs savedstate 1.5.0 (AbstractMethodError)") }
+        implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.8.1") { because("same as serialization-core") }
+    }
+
     implementation(libs.core.ktx)
     implementation(libs.activity.compose)
     implementation(libs.lifecycle.viewmodel.compose)
