@@ -92,8 +92,10 @@ fun WordCoachScreen(items: List<Item>, sessionId: String?, onDone: () -> Unit, o
             Spacer(Modifier.height(Sizes.gapSmall))
             // Once he has said it, the word is done: only listening again and "Επόμενο" are left.
             Row {
-                // Nothing to say at level 0: the picture is the cue.
-                QuietButton("Άκου", onClick = vm::repeatCue, icon = Icons.Rounded.VolumeUp, enabled = s.level > 0, modifier = Modifier.weight(1f))
+                // Nothing to say at level 0: the picture is the cue. Nothing to say while the
+                // microphone is open either — a tap here mid-take came back as «Δεν ακούγεται η
+                // φωνή», an error about a phone that was working exactly as it should.
+                QuietButton("Άκου", onClick = vm::repeatCue, icon = Icons.Rounded.VolumeUp, enabled = s.level > 0 && !s.isRecording, modifier = Modifier.weight(1f))
                 if (!s.confirmed) {
                     Spacer(Modifier.width(Sizes.gapSmall))
                     QuietButton(

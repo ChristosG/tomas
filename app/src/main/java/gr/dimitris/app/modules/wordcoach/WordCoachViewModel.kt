@@ -89,7 +89,12 @@ class WordCoachViewModel(private val graph: AppGraph, private val items: List<It
         speakCue()
     }
 
-    fun repeatCue() = speakCue()
+    /**
+     * The picture is a listen button too, and it has no disabled state to show: while a take is
+     * running it simply says nothing, instead of answering with «Δεν ακούγεται η φωνή» — the
+     * refusal the one-sound-at-a-time rule owes the microphone, not a fault he can do anything about.
+     */
+    fun repeatCue() { if (!_state.value.isRecording) speakCue() }
 
     private fun speakCue() {
         val s = _state.value

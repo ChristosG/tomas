@@ -243,8 +243,10 @@ private fun TurnCard(
                 Spacer(Modifier.height(Sizes.gapSmall))
                 // One under the other, not side by side: «Ηχογράφηση» at his text size wraps onto
                 // three lines in half a card, and a word broken across three lines is not a word.
-                // Nothing to say at level 0: the invitation is the whole of the cue.
-                QuietButton("Άκου ξανά", onClick = onListen, icon = Icons.Rounded.VolumeUp, enabled = level > 0)
+                // Nothing to say at level 0: the invitation is the whole of the cue. Nothing to say
+                // while the microphone is open either — one sound at a time is the rule, and a tap
+                // here mid-take came back as «Δεν ακούγεται η φωνή», which is not what happened.
+                QuietButton("Άκου ξανά", onClick = onListen, icon = Icons.Rounded.VolumeUp, enabled = level > 0 && !recording)
                 Spacer(Modifier.height(Sizes.gapSmall))
                 QuietButton(
                     if (recording) "Στοπ" else "Ηχογράφηση", onClick = onRecord,
