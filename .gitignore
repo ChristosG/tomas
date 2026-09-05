@@ -1,0 +1,27 @@
+# Session memory plugin
+.remember/
+
+# Gradle / Android
+.gradle/
+build/
+app/build/
+local.properties
+*.apk
+*.aab
+*.ap_
+*.dex
+*.class
+captures/
+.externalNativeBuild/
+.cxx/
+
+# IDE
+.idea/
+*.iml
+.vscode/
+.DS_Store
+
+# Secrets
+*.keystore
+*.jks
+secrets.properties
