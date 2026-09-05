@@ -13,7 +13,9 @@ import java.io.File
  * as cross-stop calls at every call site.
  *
  * Every operation silences the outputs first. A recording in progress is deliberately left running:
- * asking to record while already recording is a bug, and [Recorder] says so in Greek.
+ * asking to record while already recording is a bug, and [Recorder] says so in Greek. Asking to
+ * speak or play while it records is the same kind of bug — the microphone would hear the answer —
+ * so those refuse in Greek instead of talking over the take.
  *
  * Audio focus is advisory and best effort — a refused request never blocks Dimitris from being
  * heard, so failures are ignored and the operation goes ahead anyway.
@@ -51,9 +53,10 @@ class Voice(
     }
 
     suspend fun speak(text: String, rate: Float): Result<Unit> {
+        if (isRecording) return Result.failure(IllegalStateException(RECORDING_NOW))
         quiet()
-        holdOutputFocus()
         return try {
+            holdOutputFocus()
             tts.speak(text, rate)
         } finally {
             releaseOutputFocus()
@@ -61,21 +64,29 @@ class Voice(
     }
 
     suspend fun play(file: File): Result<Unit> {
+        if (isRecording) return Result.failure(IllegalStateException(RECORDING_NOW))
         quiet()
-        holdOutputFocus()
         return try {
+            holdOutputFocus()
             player.play(file)
         } finally {
             releaseOutputFocus()
         }
     }
 
-    /** Throws (in Greek) if a recording is already running — focus is taken only once one starts. */
+    /**
+     * Throws (in Greek) if a recording is already running. Focus is taken before the recorder starts,
+     * so the first millisecond is not another app's music, and handed straight back if it never does.
+     */
     fun startRecording(): File {
         quiet()
-        val file = recorder.start()
         audio.requestAudioFocus(recordFocus)
-        return file
+        return try {
+            recorder.start()
+        } catch (e: Throwable) {
+            audio.abandonAudioFocusRequest(recordFocus)
+            throw e
+        }
     }
 
     fun stopRecording(): Recorded = try {
@@ -92,13 +103,23 @@ class Voice(
         }
     }
 
+    /** Counted only once the request itself has returned, so a throwing request leaves no phantom holder. */
     private fun holdOutputFocus() {
-        synchronized(this) { if (outputHolders++ == 0) audio.requestAudioFocus(outputFocus) }
+        synchronized(this) {
+            if (outputHolders == 0) audio.requestAudioFocus(outputFocus)
+            outputHolders++
+        }
     }
 
+    /** The floor at zero matters: the paired hold may have thrown before it ever counted. */
     private fun releaseOutputFocus() {
-        synchronized(this) { if (--outputHolders == 0) audio.abandonAudioFocusRequest(outputFocus) }
+        synchronized(this) { if (outputHolders > 0 && --outputHolders == 0) audio.abandonAudioFocusRequest(outputFocus) }
     }
 
     private fun focusRequest(gain: Int) = AudioFocusRequest.Builder(gain).setAudioAttributes(attributes).build()
+
+    companion object {
+        /** Said when output is asked for mid-recording: the microphone is open and must stay clean. */
+        const val RECORDING_NOW = "Ηχογραφεί τώρα"
+    }
 }
