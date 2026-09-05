@@ -8,6 +8,7 @@ import android.speech.tts.UtteranceProgressListener
 import kotlinx.coroutines.CancellableContinuation
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withTimeoutOrNull
 import java.util.Locale
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
@@ -39,19 +40,22 @@ class AndroidTextToSpeech(context: Context) : TextToSpeech {
         })
     }
 
+    private suspend fun isReady(): Boolean = withTimeoutOrNull(INIT_TIMEOUT_MS) { ready.await() } ?: false
+
     override suspend fun isGreekAvailable(): Boolean =
-        ready.await() && engine.isLanguageAvailable(greek) >= AndroidTts.LANG_AVAILABLE
+        isReady() && engine.isLanguageAvailable(greek) >= AndroidTts.LANG_AVAILABLE
 
     override suspend fun speak(text: String, rate: Float): Result<Unit> {
-        if (!ready.await()) return Result.failure(TtsException("Η φωνή δεν ξεκίνησε"))
-        engine.setLanguage(greek)
+        if (!isReady()) return Result.failure(TtsException("Η φωνή δεν ξεκίνησε"))
+        if (engine.setLanguage(greek) < AndroidTts.LANG_AVAILABLE) {
+            return Result.failure(TtsException("Δεν υπάρχει ελληνική φωνή"))
+        }
         engine.setSpeechRate(rate)
         val id = UUID.randomUUID().toString()
         return suspendCancellableCoroutine { cont ->
             waiting[id] = cont
             val queued = engine.speak(text, AndroidTts.QUEUE_FLUSH, null, id)
-            if (queued != AndroidTts.SUCCESS) {
-                waiting.remove(id)
+            if (queued != AndroidTts.SUCCESS && waiting.remove(id) != null) {
                 cont.resume(Result.failure(TtsException("Δεν μπόρεσα να μιλήσω")))
             }
             cont.invokeOnCancellation { waiting.remove(id); engine.stop() }
@@ -60,7 +64,17 @@ class AndroidTextToSpeech(context: Context) : TextToSpeech {
 
     override fun stop() { engine.stop() }
 
-    fun shutdown() { engine.shutdown() }
+    fun shutdown() {
+        engine.stop()
+        val pending = waiting.values.toList()
+        waiting.clear()
+        pending.forEach { if (it.isActive) it.resume(Result.failure(TtsException("Η φωνή έκλεισε"))) }
+        engine.shutdown()
+    }
+
+    private companion object {
+        const val INIT_TIMEOUT_MS = 10_000L
+    }
 }
 
 /** Opens the system screen where the Greek voice can be installed. Falls back to the TTS settings, then general settings. */
