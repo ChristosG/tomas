@@ -9,6 +9,7 @@ import gr.dimitris.app.core.data.ModuleId
 import gr.dimitris.app.core.data.Who
 import gr.dimitris.app.core.data.now
 import gr.dimitris.app.core.speech.SpeechMatch
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -16,6 +17,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 data class WordCoachState(
     val index: Int = 0,
@@ -60,7 +62,11 @@ class WordCoachViewModel(private val graph: AppGraph, private val items: List<It
     val state: StateFlow<WordCoachState> = _state.asStateFlow()
 
     init {
-        viewModelScope.launch { _state.update { it.copy(sttOn = graph.settings.sttEnabled.first() && graph.stt.isAvailable) } }
+        viewModelScope.launch {
+            // isAvailable asks the package manager across a binder: not on the thread drawing the word.
+            val on = graph.settings.sttEnabled.first() && withContext(Dispatchers.Default) { graph.stt.isAvailable }
+            _state.update { it.copy(sttOn = on) }
+        }
     }
 
     private fun publishLadder() = _state.update {
@@ -81,8 +87,8 @@ class WordCoachViewModel(private val graph: AppGraph, private val items: List<It
         val s = _state.value
         viewModelScope.launch {
             when (s.level) {
-                1, 2 -> ladder.cueText()?.let { heard(graph.speaker.speakText(it)) }
-                3, 4 -> heard(graph.speaker.speak(s.item))
+                1, 2 -> ladder.cueText()?.let { report(graph.speaker.speakText(it)) }
+                3, 4 -> report(graph.speaker.speak(s.item))
                 else -> Unit
             }
         }
@@ -92,7 +98,7 @@ class WordCoachViewModel(private val graph: AppGraph, private val items: List<It
      * Records the outcome of one speak or play attempt. Silence is the one failure Dimitris cannot
      * diagnose himself, so it is said on the screen and cleared by the next sound that comes out.
      */
-    private fun heard(result: Result<*>) = result.fold(
+    private fun report(result: Result<*>) = result.fold(
         onSuccess = { _state.update { if (it.error == SPEECH_FAILED) it.copy(error = null) else it } },
         onFailure = { e -> graph.errors.record("wordcoach speak", e); _state.update { it.copy(error = SPEECH_FAILED) } },
     )
@@ -123,8 +129,8 @@ class WordCoachViewModel(private val graph: AppGraph, private val items: List<It
     fun playComparison() {
         val path = _state.value.selfRecordingPath ?: return
         viewModelScope.launch {
-            heard(graph.speaker.speak(_state.value.item))
-            heard(graph.voice.play(graph.files.resolve(path)))
+            report(graph.speaker.speak(_state.value.item))
+            report(graph.voice.play(graph.files.resolve(path)))
         }
     }
 

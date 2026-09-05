@@ -10,6 +10,8 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Compare
 import androidx.compose.material.icons.rounded.Hearing
@@ -71,54 +73,58 @@ fun WordCoachScreen(items: List<Item>, sessionId: String?, onDone: () -> Unit, o
             }
         },
     ) {
-        Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-            PictureCard(imageFile = s.item.imagePath?.let { graph.files.resolve(it) }, label = if (s.showsWord) s.item.text else null, onClick = vm::repeatCue,
-                modifier = Modifier.fillMaxWidth(0.7f))
-            SuccessMark(visible = s.confirmed)
-        }
-        Spacer(Modifier.height(Sizes.gapSmall))
-        if (s.level in 1..2) {
-            Text(s.cueText ?: "", style = MaterialTheme.typography.displayLarge, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
-        }
-        Spacer(Modifier.height(Sizes.gapSmall))
-        // Once he has said it, the word is done: only listening again and "Επόμενο" are left.
-        Row {
-            // Nothing to say at level 0: the picture is the cue.
-            QuietButton("Άκου", onClick = vm::repeatCue, icon = Icons.Rounded.VolumeUp, enabled = s.level > 0, modifier = Modifier.weight(1f))
-            if (!s.confirmed) {
-                Spacer(Modifier.width(Sizes.gapSmall))
-                QuietButton(
-                    if (s.isRecording) "Στοπ" else "Πες το",
-                    onClick = { askMic.launch(Manifest.permission.RECORD_AUDIO) },
-                    icon = if (s.isRecording) Icons.Rounded.Stop else Icons.Rounded.Mic,
-                    modifier = Modifier.weight(1f),
-                )
+        // A big picture, a big cue and up to four buttons do not always fit a small screen at
+        // his text size: scrolling is better than a button he cannot reach.
+        Column(Modifier.verticalScroll(rememberScrollState())) {
+            Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                PictureCard(imageFile = s.item.imagePath?.let { graph.files.resolve(it) }, label = if (s.showsWord) s.item.text else null, onClick = vm::repeatCue,
+                    modifier = Modifier.fillMaxWidth(0.7f))
+                SuccessMark(visible = s.confirmed)
             }
-        }
-        if (!s.confirmed && s.selfRecordingPath != null && !s.isRecording) {
             Spacer(Modifier.height(Sizes.gapSmall))
-            QuietButton("Σύγκριση", onClick = vm::playComparison, icon = Icons.Rounded.Compare)
-        }
-        if (!s.confirmed && s.sttOn) {
+            if (s.level in 1..2) {
+                Text(s.cueText ?: "", style = MaterialTheme.typography.displayLarge, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
+            }
             Spacer(Modifier.height(Sizes.gapSmall))
-            QuietButton(
-                if (s.listening) "Ακούω..." else "Άκουσέ με",
-                onClick = { askListen.launch(Manifest.permission.RECORD_AUDIO) },
-                icon = Icons.Rounded.Hearing,
-            )
-            if (s.heard != null) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
-                    Text(
-                        // A miss is the phone's uncertainty, never a verdict on how he said it.
-                        if (s.heardMatched) "Άκουσα «${s.heard}». Μπράβο!" else "Άκουσα «${s.heard}». Το τηλέφωνο δεν είναι σίγουρο.",
-                        style = MaterialTheme.typography.bodyLarge, textAlign = TextAlign.Center,
+            // Once he has said it, the word is done: only listening again and "Επόμενο" are left.
+            Row {
+                // Nothing to say at level 0: the picture is the cue.
+                QuietButton("Άκου", onClick = vm::repeatCue, icon = Icons.Rounded.VolumeUp, enabled = s.level > 0, modifier = Modifier.weight(1f))
+                if (!s.confirmed) {
+                    Spacer(Modifier.width(Sizes.gapSmall))
+                    QuietButton(
+                        if (s.isRecording) "Στοπ" else "Πες το",
+                        onClick = { askMic.launch(Manifest.permission.RECORD_AUDIO) },
+                        icon = if (s.isRecording) Icons.Rounded.Stop else Icons.Rounded.Mic,
+                        modifier = Modifier.weight(1f),
                     )
                 }
             }
-        }
-        if (s.error != null) {
-            Spacer(Modifier.height(Sizes.gapSmall))
-            Text(s.error!!, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyLarge)
+            if (!s.confirmed && s.selfRecordingPath != null && !s.isRecording) {
+                Spacer(Modifier.height(Sizes.gapSmall))
+                QuietButton("Σύγκριση", onClick = vm::playComparison, icon = Icons.Rounded.Compare)
+            }
+            if (!s.confirmed && s.sttOn) {
+                Spacer(Modifier.height(Sizes.gapSmall))
+                QuietButton(
+                    if (s.listening) "Ακούω..." else "Άκουσέ με",
+                    onClick = { askListen.launch(Manifest.permission.RECORD_AUDIO) },
+                    icon = Icons.Rounded.Hearing,
+                )
+                if (s.heard != null) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
+                        Text(
+                            // A miss is the phone's uncertainty, never a verdict on how he said it.
+                            if (s.heardMatched) "Άκουσα «${s.heard}». Μπράβο!" else "Άκουσα «${s.heard}». Το τηλέφωνο δεν είναι σίγουρο.",
+                            style = MaterialTheme.typography.bodyLarge, textAlign = TextAlign.Center,
+                        )
+                    }
+                }
+            }
+            if (s.error != null) {
+                Spacer(Modifier.height(Sizes.gapSmall))
+                Text(s.error!!, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyLarge)
+            }
         }
     }
 }

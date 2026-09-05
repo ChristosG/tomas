@@ -34,7 +34,8 @@ fun PracticeScreen(moduleId: ModuleId, onDone: () -> Unit) {
     when (val list = items) {
         null -> DimitrisScreen { Text("Ετοιμάζω...", style = MaterialTheme.typography.headlineMedium) }
         else -> if (module == null || list.isEmpty()) DimitrisScreen(bottom = { BigButton("Εντάξει", onClick = onDone) }) {
-            Text("Δεν υπάρχουν λέξεις ακόμα. Ζήτα από κάποιον να προσθέσει.", style = MaterialTheme.typography.headlineMedium)
+            // Every module lands here, and not all of them are made of words.
+            Text("Δεν υπάρχει υλικό ακόμα. Ζήτα από κάποιον να προσθέσει.", style = MaterialTheme.typography.headlineMedium)
         // Free practice has nowhere to go next: finishing and leaving both pop back to Today.
         } else module.Screen(items = list, sessionId = null, onDone = onDone, onLeave = onDone)
     }

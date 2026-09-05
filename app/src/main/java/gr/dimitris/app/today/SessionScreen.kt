@@ -28,8 +28,11 @@ fun SessionScreen(onDone: () -> Unit) {
 
     when (val s = step) {
         SessionStep.Loading -> DimitrisScreen { Text("Ετοιμάζω τη σημερινή άσκηση...", style = MaterialTheme.typography.headlineMedium) }
-        SessionStep.Empty -> DimitrisScreen(bottom = { BigButton("Εντάξει", onClick = onDone) }) {
-            Text("Τίποτα για σήμερα. Τα λέμε αύριο!", style = MaterialTheme.typography.headlineMedium)
+        is SessionStep.Empty -> DimitrisScreen(bottom = { BigButton("Εντάξει", onClick = onDone) }) {
+            Text(
+                if (s.allOff) SessionViewModel.ALL_MODULES_OFF else SessionViewModel.NOTHING_TODAY,
+                style = MaterialTheme.typography.headlineMedium,
+            )
         }
         is SessionStep.Run -> key(s.index) {
             s.module.Screen(items = s.items, sessionId = s.sessionId, onDone = vm::moduleDone, onLeave = vm::leaveSession)

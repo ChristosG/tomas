@@ -3,6 +3,7 @@ package gr.dimitris.app.today
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.test.core.app.ApplicationProvider
@@ -45,5 +46,22 @@ class SessionFlowTest {
         compose.onNodeWithText("Βοήθεια").assertIsDisplayed()
         compose.onNodeWithText("Το είπα!").performClick()
         compose.onNodeWithText("Επόμενο").assertIsDisplayed()
+    }
+
+    /**
+     * Back is not "next module": the session ends there, and it ends with what he actually did —
+     * one exercise, said in the singular, with the module he did it in.
+     */
+    @Test fun backArrowEndsTheSessionWithAnHonestCount() {
+        compose.onNodeWithText("Ξεκίνα").performClick()
+        compose.waitUntil(15_000) { compose.onAllNodes(hasText("Το είπα!")).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithText("Το είπα!").performClick()
+        // The attempt is written off the screen's scope; the count is only honest once it has landed.
+        compose.waitUntil(15_000) { runBlocking { graph.db.attempts().since(0).any { it.itemId == seededId } } }
+        compose.onNodeWithContentDescription("Πίσω").performClick()
+        compose.waitUntil(15_000) {
+            compose.onAllNodes(hasText("Έκανες 1 άσκηση σήμερα: Λέξεις.")).fetchSemanticsNodes().isNotEmpty()
+        }
+        compose.onNodeWithText("Μπράβο Δημήτρη!").assertIsDisplayed()
     }
 }
