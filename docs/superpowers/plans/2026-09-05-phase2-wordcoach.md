@@ -1378,6 +1378,49 @@ Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
 
 ### Task 8: Phase 2 verification
 
-- [ ] `./gradlew -q testDebugUnitTest && ANDROID_SERIAL=emulator-5554 ./gradlew -q connectedDebugAndroidTest` — all green.
-- [ ] `ANDROID_SERIAL=R5CWC2C1KSJ ./gradlew -q installDebug`; on the phone: run a full session, use every button once (Βοήθεια ×4, Άκου, Πες το/Στοπ, Σύγκριση, Το είπα!, Παράλειψη, Επόμενο), enable recognition and say a word, finish and hear the summary. Caregiver → Σφάλματα must stay empty.
-- [ ] Append "Phase 2 verified on <date>, <device>" with problems under this task; commit `docs(phase2): verification notes`.
+- [x] `./gradlew -q testDebugUnitTest && ANDROID_SERIAL=emulator-5554 ./gradlew -q connectedDebugAndroidTest` — all green.
+- [x] `ANDROID_SERIAL=R5CWC2C1KSJ ./gradlew -q installDebug`; on the phone: run a full session, use every button once (Βοήθεια ×4, Άκου, Πες το/Στοπ, Σύγκριση, Το είπα!, Παράλειψη, Επόμενο), enable recognition and say a word, finish and hear the summary. Caregiver → Σφάλματα must stay empty. — Chris's phone (R5CWC2C1KSJ) was disconnected; walkthrough done on `emulator-5554` instead (see notes below).
+- [x] Append "Phase 2 verified on <date>, <device>" with problems under this task; commit `docs(phase2): verification notes`.
+
+#### Phase 2 verified on 2026-09-05 (emulator-5554)
+
+Chris's phone (`R5CWC2C1KSJ`) was disconnected today; the full walkthrough below ran on `emulator-5554` instead, per instructions. No app code was changed.
+
+**Test totals**
+
+| Suite | Command | Result |
+|---|---|---|
+| Unit | `./gradlew -q testDebugUnitTest` | 84 tests, 0 failures, 0 errors, 0 skipped |
+| Instrumented | `ANDROID_SERIAL=emulator-5554 ./gradlew -q connectedDebugAndroidTest` | 24 tests, 0 failures, 0 errors, 0 skipped |
+
+**Walkthrough checklist**
+
+Setup: `adb shell pm clear gr.dimitris.app` (forces reseed, all 175 items new), `installDebug`, `pm grant gr.dimitris.app android.permission.RECORD_AUDIO`, launch.
+
+| Step | Result |
+|---|---|
+| Today screen loads, "Λέξεις" tile + "Ξεκίνα" | OK |
+| "Ξεκίνα" starts an 8-item WORDCOACH session (Λέξεις 1/8…8/8) | OK |
+| Item 1 ("Ναι"): Βοήθεια ×4 climbs cue ladder | OK — level 1 shows first-sound letter (lowercase "ν", visually looks like a Latin "v" — correct Greek typography, not a bug), level 2 shows first syllable ("Ναι", same as whole word since it's monosyllabic — expected per `CueLadder`), level 3 speaks the word with no text, level 4 shows word written + speaks; Βοήθεια then disables (max level reached) |
+| Άκου on item 1 | Plays TTS (el-GR, confirmed in logcat: `GoogleTTSServiceImpl` synthesis requests on every Βοήθεια/Άκου tap) |
+| Πες το → Στοπ | Recording starts (mic icon in status bar), Πες το becomes Στοπ, stopping reveals a new "Σύγκριση" button |
+| Σύγκριση | Plays TTS word then the recording back-to-back (AudioFlinger/MediaPlayer activity in logcat) |
+| Το είπα! on item 1 | Shows green checkmark overlay, reveals "Επόμενο" |
+| Παράλειψη on item 2 | Skips immediately to item 3, no confirm screen (by design — nothing to celebrate on a skip) |
+| Items 3–8 confirmed with Το είπα! → Επόμενο | All advanced correctly, images/audio all present |
+| End-of-session summary | "Μπράβο Δημήτρη! Έκανες 7 ασκήσεις σήμερα." — correctly counts only the 7 completed items (8 attempted minus the 1 skipped), matching the "honest session counts" fix (commit 45346b5); summary is spoken via TTS (confirmed in logcat) |
+| Free practice "Λέξεις" from Today grid | Opens an independent 8-item practice run (different item order/seed than the daily session), works standalone |
+| Caregiver → Σφάλματα | "Κανένα σφάλμα. Ωραία." — empty, as required |
+| Caregiver → Ρυθμίσεις → enable "Αναγνώριση ομιλίας (δοκιμαστικό)" | Toggle switches on |
+| "Άκουσέ με" (free practice, recognition enabled) | Shows "Ακούω…" with mic icon in status bar; after ~5s with no audio input the Android recognizer returns `NO_SPEECH_DETECTED` (logcat: `RecognitionClient`/`RecognitionServiceImpl`); UI reverts cleanly to idle "Άκουσέ με" — no crash, no dialog, no block on Βοήθεια/Το είπα!/Παράλειψη. Expected on an emulator with no audio input, exactly as anticipated in the brief. |
+
+**Database checks** (`adb pull` of `dimitris.db`, `-wal`, `-shm` from `databases/`, read with `sqlite3`)
+
+- `items`: 175 rows (full reseed after `pm clear`).
+- `attempts`: 8 rows for the session, one per item — 6× `CORRECT` at `cueLevel 0`, 1× `SKIPPED` at `cueLevel 0` (item 2, Παράλειψη), 1× `ASSISTED` at `cueLevel 4` with a non-null `selfRecordingId` (item 1, "Ναι"). Matches `CueLadder.outcomeFor`.
+- `schedules`: only the 8 touched items have rows (lazily created). The 6 `CORRECT` items moved from box 1 → box 2 with `streak=1`, `nextDueAt` ≈ +2 days from session start (2026-09-07), matching the box-2 interval. The `SKIPPED` and `ASSISTED` items stayed at box 1 with `streak=0`, `nextDueAt` ≈ +1 day (2026-09-06). Matches the Leitner policy (CORRECT at cue 0–1 moves up; ASSISTED stays; SKIPPED stays at the floor box).
+- `sessions`: 1 row, `plannedItemCount=8`, `completedItemCount=7`, `endedAt` set (finalized) — matches the spoken/written summary.
+- `recordings`: 1 row for the self-recording made on item 1; the referenced `.m4a` file exists under `files/recordings/` on device (239 KB).
+- `error_logs`: 0 rows — matches the empty Σφάλματα screen. The `NO_SPEECH_DETECTED` recognition timeout did not produce an error-log row (correct: it's an expected non-error outcome, not a crash/failure).
+
+**Anomalies / concerns:** none found. The one thing that looked odd at first — the level-1 cue letter rendering as what looks like a Latin "V" — is the correct lowercase Greek letter ν (nu) from `Greek.firstSound("Ναι")`; verified against the `items` table (`firstSound='ν'`, `firstSyllable='Ναι'`). No code changes were made.
