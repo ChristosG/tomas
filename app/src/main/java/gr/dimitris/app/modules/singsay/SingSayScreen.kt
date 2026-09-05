@@ -9,18 +9,23 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.Compare
 import androidx.compose.material.icons.rounded.Mic
 import androidx.compose.material.icons.rounded.Stop
 import androidx.compose.material.icons.rounded.VolumeUp
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -86,7 +91,9 @@ fun SingSayScreen(items: List<Item>, sessionId: String?, onDone: () -> Unit, onL
                 BigButton("Το έκανα", onClick = vm::completeRepetition, tone = ButtonTone.Success, enabled = !s.playing)
                 Spacer(Modifier.height(Sizes.gapSmall))
             }
-            QuietButton("Παράλειψη", onClick = vm::skip)
+            // Not while the phrase is still loading: a skip landing then would finish a phrase whose
+            // own sung model has not even been looked up yet.
+            QuietButton("Παράλειψη", onClick = vm::skip, enabled = !s.loading)
         },
     ) {
         // Five stages, a row of syllables and up to three buttons do not always fit a small screen
@@ -96,7 +103,18 @@ fun SingSayScreen(items: List<Item>, sessionId: String?, onDone: () -> Unit, onL
                 SingStage.label(s.stage) + if (s.stage == SingStage.FADING) " (${s.repetition + 1}/${SingStage.FADING_REPS})" else "",
                 style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.secondary,
             )
-            Text("Βήμα ${s.stage} από ${SingStage.SPEAK}", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("Βήμα ${s.stage} από ${SingStage.SPEAK}", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                // The icon half of "icon + sound + haptic": every finished step leaves a tick behind,
+                // so a success he did not hear is still a success he can see.
+                repeat(s.stage - SingStage.LISTEN) {
+                    Spacer(Modifier.width(6.dp))
+                    Icon(
+                        Icons.Rounded.CheckCircle, contentDescription = if (it == 0) "Ολοκληρωμένα βήματα" else null,
+                        tint = MaterialTheme.colorScheme.tertiary, modifier = Modifier.size(28.dp),
+                    )
+                }
+            }
             Spacer(Modifier.height(Sizes.gap))
             // High syllables sit higher than low ones, so the melody is visible as well as audible.
             FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -123,6 +141,9 @@ fun SingSayScreen(items: List<Item>, sessionId: String?, onDone: () -> Unit, onL
                 if (s.isRecording) "Στοπ" else "Ηχογράφηση",
                 onClick = { askMic.launch(Manifest.permission.RECORD_AUDIO) },
                 icon = if (s.isRecording) Icons.Rounded.Stop else Icons.Rounded.Mic,
+                // Refused while the model is playing, rather than silently killing it. A running
+                // take leaves `playing` false, so «Στοπ» is always reachable.
+                enabled = !s.playing,
             )
             if (s.selfRecordingPath != null && !s.isRecording) {
                 Spacer(Modifier.height(Sizes.gapSmall))

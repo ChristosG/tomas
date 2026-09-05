@@ -176,6 +176,9 @@ fun ItemEditScreen(itemId: String?, onClose: () -> Unit) {
                     onClick = { askMic.launch(Manifest.permission.RECORD_AUDIO) },
                     icon = if (s.isRecording) Icons.Rounded.Stop else Icons.Rounded.Mic,
                     tone = if (s.isRecording) ButtonTone.Secondary else ButtonTone.Primary,
+                    // One microphone: starting the other take would be refused in Greek by Voice
+                    // while the first one kept running, which reads as a broken button.
+                    enabled = !s.isRecordingSung,
                     modifier = Modifier.weight(1f),
                 )
                 if (s.recordingPath != null && !s.isRecording) {
@@ -194,6 +197,7 @@ fun ItemEditScreen(itemId: String?, onClose: () -> Unit) {
                         onClick = { askSungMic.launch(Manifest.permission.RECORD_AUDIO) },
                         icon = if (s.isRecordingSung) Icons.Rounded.Stop else Icons.Rounded.MusicNote,
                         tone = if (s.isRecordingSung) ButtonTone.Secondary else ButtonTone.Primary,
+                        enabled = !s.isRecording,
                         modifier = Modifier.weight(1f),
                     )
                     if (s.sungPath != null && !s.isRecordingSung) {

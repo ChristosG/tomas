@@ -9,6 +9,7 @@ import gr.dimitris.app.core.data.ModuleId
 import gr.dimitris.app.core.data.Outcome
 import gr.dimitris.app.core.data.Who
 import gr.dimitris.app.core.data.now
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
@@ -28,6 +29,8 @@ data class SingSayState(
     /** Index of the syllable currently lit, or -1. */
     val lit: Int = -1,
     val playing: Boolean = false,
+    /** True until this phrase's sung model has been looked up: nothing may be finished before that. */
+    val loading: Boolean = true,
     val hasSungModel: Boolean = false,
     val isRecording: Boolean = false,
     val selfRecordingPath: String? = null,
@@ -65,23 +68,36 @@ class SingSayViewModel(private val graph: AppGraph, private val items: List<Item
     /** True from the moment a phrase is finished or skipped until the next one is ready. */
     private var finishing = false
 
-    /** Whatever is being played right now: the model, the melody, or a comparison. */
+    /** Whatever is being played right now: the model, the melody, or a tapped note. */
     private var playJob: Job? = null
+
+    /**
+     * Bumped by every new playback. A cancelled job's `finally` can land after the next one has
+     * already started, and it must not clear the flags of a playback that is still going.
+     */
+    private var playToken = 0
+
+    /** This phrase's sung-model lookup. Cancelled the moment another phrase loads. */
+    private var loadJob: Job? = null
 
     init { load(0) }
 
     private fun load(i: Int) {
         val item = items[i]
+        // The phrase being left must not finish loading: its sung model would be played under the
+        // syllables of this one, its "no sung voice" line shown against this one, and its clock
+        // started here — the Room executor is a pool, so the two lookups can land out of order.
+        loadJob?.cancel()
         recordingSave = null
         sungModelPath = null
         // playing from the first frame: the model is about to start, and a stage button tapped in
         // the gap would belong to the phrase he has just left.
         _state.value = SingSayState(index = i, total = items.size, item = item, notes = Melody.forPhrase(item.text), playing = true)
-        viewModelScope.launch {
+        loadJob = viewModelScope.launch {
             val sung = runCatching { graph.items.sungRecording(item) }
                 .onFailure { graph.errors.record("singsay sung model", it) }.getOrNull()
             sungModelPath = sung?.path
-            _state.update { it.copy(hasSungModel = sung != null) }
+            _state.update { it.copy(hasSungModel = sung != null, loading = false) }
             // Not before the query: its wait is not his time on the phrase.
             startedAt = now()
             finishing = false
@@ -91,16 +107,33 @@ class SingSayViewModel(private val graph: AppGraph, private val items: List<Item
 
     /** Stage 1 and «Άκου»: the caregiver's sung model if there is one, else TTS, then the melody. */
     fun playModel() {
-        playJob?.cancel()
+        val token = claimPlayback()
         playJob = viewModelScope.launch {
             _state.update { it.copy(playing = true, lit = -1) }
             try {
                 sayModel()
                 playMelody(gain = 1f)
             } finally {
-                _state.update { it.copy(playing = false, lit = -1) }
+                releasePlayback(token)
             }
         }
+    }
+
+    /**
+     * Silences whatever is sounding and claims the play job for the caller. Cancelling the job is
+     * not enough on its own: the melody deliberately sits outside [gr.dimitris.app.core.audio.Voice],
+     * so `Voice.quiet()` does not touch it, and [Job.cancel] only lands at the next suspension
+     * point — a voice started meanwhile would be heard over a tone that is still sounding.
+     */
+    private fun claimPlayback(): Int {
+        playJob?.cancel()
+        graph.synth.stop()
+        return ++playToken
+    }
+
+    /** Only the newest playback owns the flags; an older job's `finally` can land after it started. */
+    private fun releasePlayback(token: Int) {
+        if (playToken == token) _state.update { it.copy(playing = false, lit = -1) }
     }
 
     /**
@@ -135,7 +168,11 @@ class SingSayViewModel(private val graph: AppGraph, private val items: List<Item
         val next = (s.lit + 1) % s.notes.size
         _state.update { it.copy(lit = next) }
         val gain = SingStage.gainFor(s.stage, s.repetition)
-        if (gain > 0f) viewModelScope.launch {
+        if (gain <= 0f) return
+        // The tapped note belongs to the same job as every other playback: a second tap replaces the
+        // first note instead of racing it for the one track, and finish/leave silence it too.
+        claimPlayback()
+        playJob = viewModelScope.launch {
             report(graph.synth.play(listOf(s.notes[next].pitch), noteMs = TAP_NOTE_MS, gapMs = 0, gain = gain), SYNTH_FAILED, "singsay tap")
         }
     }
@@ -161,16 +198,22 @@ class SingSayViewModel(private val graph: AppGraph, private val items: List<Item
                     _state.update { it.copy(isRecording = false, selfRecordingPath = graph.files.relativize(rec.file)) }
                     // The app scope, not this screen's: the take is on disk, its row must land too.
                     recordingSave = graph.scope.async {
-                        runCatching { graph.items.addRecording(itemId, rec.file, rec.durationMs, Who.DIMITRIS).id }
-                            .getOrElse { graph.errors.record("singsay save recording", it); null }
+                        try {
+                            graph.items.addRecording(itemId, rec.file, rec.durationMs, Who.DIMITRIS).id
+                        } catch (ce: CancellationException) {
+                            // A cancelled write is not a failed one, and must not be logged as one.
+                            throw ce
+                        } catch (e: Exception) {
+                            graph.errors.record("singsay save recording", e)
+                            null
+                        }
                     }
                 }
                 .onFailure { e -> graph.errors.record("singsay record stop", e); _state.update { it.copy(isRecording = false, error = TOO_SHORT) } }
         } else {
             // The melody is not under Voice, so it has to be silenced here: the microphone would
             // otherwise record the phone singing over him.
-            playJob?.cancel()
-            graph.synth.stop()
+            claimPlayback()
             runCatching { graph.voice.startRecording() }
                 .onSuccess { _state.update { it.copy(isRecording = true, playing = false, error = null) } }
                 .onFailure { e -> graph.errors.record("singsay record start", e); _state.update { it.copy(error = NO_RECORDING) } }
@@ -187,14 +230,14 @@ class SingSayViewModel(private val graph: AppGraph, private val items: List<Item
      */
     fun playComparison() {
         val path = _state.value.selfRecordingPath ?: return
-        playJob?.cancel()
+        val token = claimPlayback()
         playJob = viewModelScope.launch {
             _state.update { it.copy(playing = true, lit = -1) }
             try {
                 sayModel()
                 report(graph.voice.play(graph.files.resolve(path)), SPEECH_FAILED, "singsay play self")
             } finally {
-                _state.update { it.copy(playing = false, lit = -1) }
+                releasePlayback(token)
             }
         }
     }
@@ -208,8 +251,7 @@ class SingSayViewModel(private val graph: AppGraph, private val items: List<Item
     private fun finish(skipped: Boolean) {
         if (finishing) return
         finishing = true
-        playJob?.cancel()
-        graph.synth.stop()
+        claimPlayback()
         // A take still running belongs to this phrase: it is stopped and kept, not thrown away.
         if (_state.value.isRecording) toggleRecording()
         val s = _state.value
@@ -225,9 +267,10 @@ class SingSayViewModel(private val graph: AppGraph, private val items: List<Item
         // The app scope, not this screen's: pressing back must not lose the phrase he just sang.
         lastWrite = graph.scope.launch {
             prev?.join()
-            // The recording row carries the id the attempt points at, so let its write land first.
-            val recordingId = save?.await()
             runCatching {
+                // Inside the guard, not before it: the app scope has no exception handler, so a
+                // throw from the await would be an uncaught crash rather than a logged failure.
+                val recordingId = save?.await()
                 graph.db.attempts().insert(
                     Attempt(
                         itemId = s.item.id, module = ModuleId.SINGSAY, sessionId = sessionId, startedAt = began,
@@ -255,8 +298,8 @@ class SingSayViewModel(private val graph: AppGraph, private val items: List<Item
      * the row lands would lose the phrase he had just finished.
      */
     fun leave(then: () -> Unit) {
-        playJob?.cancel()
-        graph.synth.stop()
+        loadJob?.cancel()
+        claimPlayback()
         if (graph.voice.isRecording) graph.voice.cancelRecording()
         graph.voice.quiet()
         val write = lastWrite
@@ -264,8 +307,8 @@ class SingSayViewModel(private val graph: AppGraph, private val items: List<Item
     }
 
     override fun onCleared() {
-        playJob?.cancel()
-        graph.synth.stop()
+        loadJob?.cancel()
+        claimPlayback()
         if (graph.voice.isRecording) graph.voice.cancelRecording()
     }
 
