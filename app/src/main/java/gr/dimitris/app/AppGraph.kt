@@ -10,6 +10,7 @@ import gr.dimitris.app.core.audio.ToneSynth
 import gr.dimitris.app.core.audio.Voice
 import gr.dimitris.app.core.data.AppDatabase
 import gr.dimitris.app.core.data.ItemRepository
+import gr.dimitris.app.core.data.ScriptRepository
 import gr.dimitris.app.core.log.ErrorReporter
 import gr.dimitris.app.core.scheduler.Scheduler
 import gr.dimitris.app.core.settings.Settings
@@ -59,6 +60,9 @@ class AppGraph(context: Context) {
 
     /** Always built from the current db, so it survives a backup import. */
     val items: ItemRepository get() = ItemRepository(db.items(), db.recordings(), files::relativize)
+
+    /** Always built from the current db, so it survives a backup import. */
+    val scripts: ScriptRepository get() = ScriptRepository(db.scripts(), items)
 
     /** Always built from the current db, so it survives a backup import. */
     val scheduler: Scheduler get() = Scheduler(db.schedules())

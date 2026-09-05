@@ -44,6 +44,15 @@ class SettingsTest {
         assertEquals(3, s.seedVersion.first())
     }
 
+    /** Its own counter, so bumping the dialogues never re-imports the vocabulary or the other way round. */
+    @Test fun `scripts seed version defaults to zero and persists`() = runBlocking {
+        val s = newSettings()
+        assertEquals(0, s.scriptsSeedVersion.first())
+        s.setScriptsSeedVersion(2)
+        assertEquals(2, s.scriptsSeedVersion.first())
+        assertEquals(0, s.seedVersion.first())
+    }
+
     @Test fun `speech recognition is off by default`() = runBlocking {
         val s = newSettings()
         assertEquals(false, s.sttEnabled.first())

@@ -2,6 +2,7 @@ package gr.dimitris.app
 
 import android.app.Application
 import gr.dimitris.app.core.log.CrashHandler
+import gr.dimitris.app.core.seed.ScriptSeedImporter
 import gr.dimitris.app.core.seed.SeedImporter
 import kotlinx.coroutines.launch
 
@@ -18,6 +19,11 @@ class DimitrisApp : Application() {
             graph.db.errorLogs()
         }
         graph = AppGraph(this)
-        graph.scope.launch { SeedImporter(graph).importIfNeeded() }
+        // One coroutine, in order: the dialogues are imported after the vocabulary, never beside it,
+        // so two importers are never writing items at the same moment on a first run.
+        graph.scope.launch {
+            SeedImporter(graph).importIfNeeded()
+            ScriptSeedImporter(graph).importIfNeeded()
+        }
     }
 }

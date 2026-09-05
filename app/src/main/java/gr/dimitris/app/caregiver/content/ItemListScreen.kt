@@ -32,6 +32,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
+import kotlinx.coroutines.flow.map
 import gr.dimitris.app.LocalAppGraph
 import gr.dimitris.app.core.data.Item
 import gr.dimitris.app.core.data.ItemKind
@@ -44,7 +45,9 @@ fun ItemListScreen(onBack: () -> Unit, onEdit: (String?) -> Unit) {
     val graph = LocalAppGraph.current
     // Re-subscribe after a backup import: the old database's flow never emits again.
     val generation by graph.dbGeneration.collectAsStateWithLifecycle()
-    val flow = remember(graph, generation) { graph.items.observeAll() }
+    // Script lines are items too, but they belong to their dialogue: they are edited in the script
+    // editor, and forty of them would bury the words this screen is for.
+    val flow = remember(graph, generation) { graph.items.observeAll().map { l -> l.filter { it.kind != ItemKind.SCRIPT_LINE } } }
     val all by flow.collectAsStateWithLifecycle(initialValue = emptyList())
     var query by remember { mutableStateOf("") }
     val shown = remember(all, query) { ItemSearch.filter(all, query) }

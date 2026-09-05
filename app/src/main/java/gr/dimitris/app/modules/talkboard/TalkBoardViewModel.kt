@@ -7,6 +7,7 @@ import gr.dimitris.app.core.data.Attempt
 import gr.dimitris.app.core.data.Category
 import gr.dimitris.app.core.data.Item
 import gr.dimitris.app.core.data.ItemCount
+import gr.dimitris.app.core.data.ItemKind
 import gr.dimitris.app.core.data.ModuleId
 import gr.dimitris.app.core.data.Outcome
 import gr.dimitris.app.core.data.now
@@ -32,7 +33,13 @@ sealed class Tab(val label: String) {
 class TalkBoardViewModel(private val graph: AppGraph) : ViewModel() {
     val strip = SentenceStrip()
 
+    /**
+     * Script lines are items of category CUSTOM, so without this filter the dialogues would take
+     * over the «Δικά μας» tab and the favourites. A line is practised inside its script, not tapped
+     * out of context here.
+     */
     private val all: StateFlow<List<Item>> = graph.items.observeAll()
+        .map { l -> l.filter { it.kind != ItemKind.SCRIPT_LINE } }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     /** Room re-emits this on every attempt insert, so a tap re-ranks favourites with no nudging. */

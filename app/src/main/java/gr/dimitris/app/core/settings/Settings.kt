@@ -27,6 +27,10 @@ class Settings(private val store: DataStore<Preferences>) {
     val seedVersion: Flow<Int> = store.data.map { it[SEED_VERSION] ?: 0 }
     suspend fun setSeedVersion(version: Int) { store.edit { it[SEED_VERSION] = version } }
 
+    /** Its own counter: the dialogues and the vocabulary are bumped on different days. */
+    val scriptsSeedVersion: Flow<Int> = store.data.map { it[SCRIPTS_SEED_VERSION] ?: 0 }
+    suspend fun setScriptsSeedVersion(version: Int) { store.edit { it[SCRIPTS_SEED_VERSION] = version } }
+
     val sttEnabled: Flow<Boolean> = store.data.map { it[STT_ENABLED] ?: false }
     suspend fun setSttEnabled(on: Boolean) { store.edit { it[STT_ENABLED] = on } }
 
@@ -70,6 +74,7 @@ class Settings(private val store: DataStore<Preferences>) {
         private val SPEECH_RATE = floatPreferencesKey("speech_rate")
         private val CAREGIVER_LOCK = booleanPreferencesKey("caregiver_lock")
         private val SEED_VERSION = intPreferencesKey("seed_version")
+        private val SCRIPTS_SEED_VERSION = intPreferencesKey("scripts_seed_version")
         private val STT_ENABLED = booleanPreferencesKey("stt_enabled")
         private val NUMBERS_LEVEL = intPreferencesKey("numbers_level")
         private val DISABLED_MODULES = stringSetPreferencesKey("disabled_modules")

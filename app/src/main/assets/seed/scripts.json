@@ -1,0 +1,52 @@
+{"version": 1, "scripts": [
+ {"title": "Στην καφετέρια", "lines": [
+  {"speaker": "OTHER", "text": "Καλημέρα! Τι θα πάρετε;"},
+  {"speaker": "DIMITRIS", "text": "Έναν καφέ, παρακαλώ."},
+  {"speaker": "OTHER", "text": "Τι καφέ θέλετε;"},
+  {"speaker": "DIMITRIS", "text": "Φραπέ μέτριο με γάλα."},
+  {"speaker": "OTHER", "text": "Κάτι άλλο;"},
+  {"speaker": "DIMITRIS", "text": "Όχι, ευχαριστώ."},
+  {"speaker": "OTHER", "text": "Τρία ευρώ."},
+  {"speaker": "DIMITRIS", "text": "Ορίστε."}
+ ]},
+ {"title": "Στον φούρνο", "lines": [
+  {"speaker": "OTHER", "text": "Καλημέρα! Τι θα θέλατε;"},
+  {"speaker": "DIMITRIS", "text": "Ένα ψωμί, παρακαλώ."},
+  {"speaker": "OTHER", "text": "Μεγάλο ή μικρό;"},
+  {"speaker": "DIMITRIS", "text": "Μεγάλο."},
+  {"speaker": "OTHER", "text": "Κάτι άλλο;"},
+  {"speaker": "DIMITRIS", "text": "Δύο τυρόπιτες."},
+  {"speaker": "OTHER", "text": "Τέσσερα ευρώ."},
+  {"speaker": "DIMITRIS", "text": "Ορίστε. Ευχαριστώ."}
+ ]},
+ {"title": "Τηλέφωνο στον πατέρα", "lines": [
+  {"speaker": "OTHER", "text": "Ναι, Δημήτρη. Πώς πάει;"},
+  {"speaker": "DIMITRIS", "text": "Γεια σου μπαμπά. Καλά."},
+  {"speaker": "OTHER", "text": "Τι έκανες σήμερα;"},
+  {"speaker": "DIMITRIS", "text": "Πήγα φυσικοθεραπεία."},
+  {"speaker": "OTHER", "text": "Ωραία. Θα σε δω το βράδυ;"},
+  {"speaker": "DIMITRIS", "text": "Ναι, θα έρθω."},
+  {"speaker": "OTHER", "text": "Εντάξει, σε περιμένω."},
+  {"speaker": "DIMITRIS", "text": "Τα λέμε. Γεια."}
+ ]},
+ {"title": "Στη φυσικοθεραπεία", "lines": [
+  {"speaker": "OTHER", "text": "Καλημέρα Δημήτρη. Πώς είσαι σήμερα;"},
+  {"speaker": "DIMITRIS", "text": "Καλά. Λίγο κουρασμένος."},
+  {"speaker": "OTHER", "text": "Πονάει το χέρι;"},
+  {"speaker": "DIMITRIS", "text": "Όχι, δεν πονάει."},
+  {"speaker": "OTHER", "text": "Ξεκινάμε με το χέρι."},
+  {"speaker": "DIMITRIS", "text": "Εντάξει."},
+  {"speaker": "OTHER", "text": "Μπράβο, τελειώσαμε."},
+  {"speaker": "DIMITRIS", "text": "Ευχαριστώ. Τα λέμε την Τρίτη."}
+ ]},
+ {"title": "Με έναν φίλο", "lines": [
+  {"speaker": "OTHER", "text": "Γεια σου Δημήτρη! Τι κάνεις;"},
+  {"speaker": "DIMITRIS", "text": "Γεια! Καλά, εσύ;"},
+  {"speaker": "OTHER", "text": "Μια χαρά. Πάμε για καφέ;"},
+  {"speaker": "DIMITRIS", "text": "Ναι, πάμε."},
+  {"speaker": "OTHER", "text": "Πού θέλεις;"},
+  {"speaker": "DIMITRIS", "text": "Στη θάλασσα."},
+  {"speaker": "OTHER", "text": "Τέλεια, πάμε."},
+  {"speaker": "DIMITRIS", "text": "Πάμε!"}
+ ]}
+]}
