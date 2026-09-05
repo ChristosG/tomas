@@ -1,6 +1,7 @@
 package gr.dimitris.app.core.settings
 
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
+import gr.dimitris.app.core.data.ModuleId
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -50,12 +51,26 @@ class SettingsTest {
         assertEquals(true, s.sttEnabled.first())
     }
 
-    @Test fun `all modules enabled by default and can be switched off one at a time`() = runBlocking {
+    @Test fun `every module but the default-off ones is enabled to begin with`() = runBlocking {
         val s = newSettings()
-        assertEquals(gr.dimitris.app.core.data.ModuleId.entries.toSet(), s.enabledModules.first())
-        s.setModuleEnabled(gr.dimitris.app.core.data.ModuleId.WORDCOACH, false)
-        assertEquals(gr.dimitris.app.core.data.ModuleId.entries.toSet() - gr.dimitris.app.core.data.ModuleId.WORDCOACH, s.enabledModules.first())
-        s.setModuleEnabled(gr.dimitris.app.core.data.ModuleId.WORDCOACH, true)
-        assertEquals(gr.dimitris.app.core.data.ModuleId.entries.toSet(), s.enabledModules.first())
+        assertEquals(ModuleId.entries.toSet() - Settings.DEFAULT_OFF, s.enabledModules.first())
+        assertEquals(setOf(ModuleId.ARCADE), Settings.DEFAULT_OFF)
+    }
+
+    @Test fun `a default-off module stays on once someone asks for it`() = runBlocking {
+        val s = newSettings()
+        s.setModuleEnabled(ModuleId.ARCADE, true)
+        assertEquals(ModuleId.entries.toSet(), s.enabledModules.first())
+        s.setModuleEnabled(ModuleId.ARCADE, false)
+        assertEquals(ModuleId.entries.toSet() - ModuleId.ARCADE, s.enabledModules.first())
+    }
+
+    @Test fun `an ordinary module can be switched off and back on`() = runBlocking {
+        val s = newSettings()
+        val defaults = ModuleId.entries.toSet() - Settings.DEFAULT_OFF
+        s.setModuleEnabled(ModuleId.WORDCOACH, false)
+        assertEquals(defaults - ModuleId.WORDCOACH, s.enabledModules.first())
+        s.setModuleEnabled(ModuleId.WORDCOACH, true)
+        assertEquals(defaults, s.enabledModules.first())
     }
 }

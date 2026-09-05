@@ -30,20 +30,36 @@ class Settings(private val store: DataStore<Preferences>) {
     val sttEnabled: Flow<Boolean> = store.data.map { it[STT_ENABLED] ?: false }
     suspend fun setSttEnabled(on: Boolean) { store.edit { it[STT_ENABLED] = on } }
 
-    /** Modules switched off by caregivers; everything is on unless listed here. */
+    /**
+     * Which modules Dimitris gets. Everything is on unless a caregiver switched it off, except the
+     * few in [DEFAULT_OFF], which are on only once someone deliberately asks for them.
+     *
+     * Two keys, because "never switched on" and "switched off" are different states: absence cannot
+     * mean on for most modules and off for the extras at the same time.
+     */
     val enabledModules: Flow<Set<ModuleId>> = store.data.map { p ->
         val off = p[DISABLED_MODULES].orEmpty()
-        ModuleId.entries.filter { it.name !in off }.toSet()
+        val extras = p[ENABLED_EXTRAS].orEmpty()
+        ModuleId.entries.filter { it.name !in off && (it !in DEFAULT_OFF || it.name in extras) }.toSet()
     }
     suspend fun setModuleEnabled(id: ModuleId, on: Boolean) {
         store.edit { p ->
-            val off = p[DISABLED_MODULES].orEmpty().toMutableSet()
-            if (on) off.remove(id.name) else off.add(id.name)
-            p[DISABLED_MODULES] = off
+            if (id in DEFAULT_OFF) {
+                val extras = p[ENABLED_EXTRAS].orEmpty().toMutableSet()
+                if (on) extras.add(id.name) else extras.remove(id.name)
+                p[ENABLED_EXTRAS] = extras
+            } else {
+                val off = p[DISABLED_MODULES].orEmpty().toMutableSet()
+                if (on) off.remove(id.name) else off.add(id.name)
+                p[DISABLED_MODULES] = off
+            }
         }
     }
 
     companion object {
+        /** Off until asked for: the arcade is a reward, not part of the daily work. */
+        val DEFAULT_OFF = setOf(ModuleId.ARCADE)
+
         const val DEFAULT_RATE = 0.8f
         const val MIN_RATE = 0.5f
         const val MAX_RATE = 1.3f
@@ -52,5 +68,8 @@ class Settings(private val store: DataStore<Preferences>) {
         private val SEED_VERSION = intPreferencesKey("seed_version")
         private val STT_ENABLED = booleanPreferencesKey("stt_enabled")
         private val DISABLED_MODULES = stringSetPreferencesKey("disabled_modules")
+
+        /** The [DEFAULT_OFF] ones someone has switched on. Meaningless for every other module. */
+        private val ENABLED_EXTRAS = stringSetPreferencesKey("enabled_extras")
     }
 }
