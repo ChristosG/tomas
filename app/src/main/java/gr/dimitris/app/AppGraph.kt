@@ -18,6 +18,7 @@ import gr.dimitris.app.core.speech.ItemSpeaker
 import gr.dimitris.app.core.speech.SpeechToText
 import gr.dimitris.app.core.speech.TextToSpeech
 import gr.dimitris.app.modules.Module
+import gr.dimitris.app.modules.wordcoach.WordCoachModule
 import gr.dimitris.app.ui.theme.Feedback
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -65,7 +66,7 @@ class AppGraph(context: Context) {
         get() = ItemSpeaker(voice::speak, recordingFor = { items.modelRecording(it) }, play = { voice.play(it) }, rate = { settings.speechRate.first() }, resolve = { files.resolve(it) })
 
     /** Therapy modules in Today-screen order. Empty in phase 0; each later phase adds one. */
-    val modules: List<Module> = emptyList()
+    val modules: List<Module> = listOf(WordCoachModule)
 
     /**
      * Bumped every time [db] is replaced. Screens key their flows on it, because a Flow from the

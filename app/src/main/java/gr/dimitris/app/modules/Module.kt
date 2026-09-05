@@ -15,6 +15,9 @@ interface Module {
     /** Items this module wants in today's mixed session. Empty means "nothing today". */
     suspend fun planFor(graph: AppGraph): List<Item>
 
+    /** Items for free practice from the Today grid. Defaults to the session plan; modules may fall back to random items. */
+    suspend fun practiceFor(graph: AppGraph): List<Item> = planFor(graph)
+
     /** The exercise over [items]. Must call [onDone] when finished. */
     @Composable
     fun Screen(items: List<Item>, sessionId: String?, onDone: () -> Unit)
