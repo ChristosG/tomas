@@ -774,3 +774,37 @@ with nobody listening, so the two pitches, the 550/80 ms tempo, the note envelop
 fade and the new silent tail on the last note are unverified by ear, and no sung model has been
 recorded by a person. That, and a run on `R5CWC2C1KSJ` with the speaker on, is what Task 5 still
 wants.
+
+## Execution record (controller rulings, 2026-09-05)
+
+Copied from the SDD ledger at phase close. Final review: 0 Critical / 5 Important / 12 Minor, all fixed or ruled; fix-wave re-review: one Minor carried into phase 5 Task 2 (SeedImporter dedup by text). Nothing in this phase has been heard by a human yet (emulator runs were -no-audio): Chris must listen to the melody, the tempo and the stage prompts on the phone.
+
+## Pre-flight conflict scan (2026-09-05)
+
+| Tasks | Shared surface | Produces vs consumes | Finding |
+|---|---|---|---|
+| 1 / 2 | Pitch (hz), Melody.NOTE_MS/GAP_MS | ToneSynth defaults | consistent; ToneSynth (core/audio) imports modules/singsay — Ruling: acceptable cross-package import; alternatively move Pitch to core/audio — implementer may do so and note it (cost: none) |
+| 2 / 4 | ToneSynth.play(notes, noteMs, gapMs, gain, onNote), stop() | ViewModel uses exact names | consistent |
+| 3 / 4 | Recording.style, ItemRepository.addRecording(style), sungRecording | ViewModel reads sungRecording; recordings via graph.voice.startRecording/stopRecording + items.addRecording(..., SUNG) in the editor | consistent |
+| 3 / phase 1 | RecordingDao.latestFor gains style — FakeRecordingDao must change; ItemSpeaker uses modelRecording (unchanged) | consistent |
+| 3 / phase 3 | DB v3 → v4; MigrationTest 3→4 INSERT lists v3 recording columns | schema 3.json committed by phase 3 | consistent |
+| 4 / phase 2 | Module.Screen(…, onDone, onLeave); writes on graph.scope; SessionBudget | plan patched (onBack = { vm.leave(onLeave) }); VM must add leave(then) and lastWrite join | Ruling: carried into the dispatch |
+| 4 / phase 1 | graph.voice.play (sung model), graph.speaker.speak (TTS fallback), synth | playModel cancels playJob; synth.stop on clear | consistent |
+| 4 alone | playComparison must not recurse into playModel (brief note) | implement inline | Ruling: carried into the dispatch |
+| all | Greek-only, 72dp, no timers (melody tempo is not a timer) | consistent |
+
+Scan result: two rulings carried into dispatches.
+
+## Task log
+Tasks 1+2: dispatched as one batch — BASE 47392d1, model sonnet
+Tasks 1+2: implementer DONE (ec69e7c, d7cec4c; JVM 149). Deviation: Melody.forPhrase lowercases via Greek.normalize and raises the last note when no stress is found (plan code failed its own tests) — accepted pending review. Review dispatched (sonnet).
+Tasks 1+2: review DONE (1 Critical / 2 Important / 4 Minor). Ruling: ToneSynth.play returns Result<Unit> (plan said Unit) so the ViewModel surfaces failures like every other audio entry point — carried into the Task 4 dispatch — cost if wrong: none. Fix round 1 — BASE d7cec4c, resuming implementer a8c3c8891e3305668.
+Tasks 1+2: fix round 1 DONE (d4d62d7; JVM 153, ToneSynthTest 2/2). Note: the connected run also hit Chris's attached phone (R5CWC2C1KSJ) because ANDROID_SERIAL was unset — every later dispatch sets ANDROID_SERIAL=emulator-5554. Scoped re-review dispatched (sonnet); Tasks 3+4 dispatched in parallel (read-only re-review cannot conflict) — BASE d4d62d7, model opus.
+Tasks 1+2: re-review — 2 open (ToneSynth: AudioTrack.Builder.build() can throw unwrapped; concurrent play()/stop() release race). Ruling: bundle both into the Tasks 3+4 fix round (no parallel implementers): wrap build() in runCatching, and serialize play() with a Mutex so at most one track exists — cost if wrong: none.
+Tasks 3+4: implementer DONE_WITH_CONCERNS (30d186f, b2ebbf7 unplanned ToneSynth STATE_NO_STATIC_DATA fix, 9696e52; JVM 157, connected 32). Concerns: 11 brief deviations (Result checks, graph.scope writes, leave, Deferred take id) — in line with the conventions, accepted pending review; WordCoachViewModel latent race on the take id — parked for the final fix wave; DataStore survives reinstall (clear app data before connected runs). Review dispatched (opus).
+Tasks 3+4: review DONE (1 Critical / 3 Important / 7 Minor; both ✅). Fix round 1 — BASE 9696e52, resuming implementer acfc0b0ba05db1811 with the review plus the two queued ToneSynth items (build() wrapped; play() serialised with a Mutex).
+Tasks 3+4: fix round 1 DONE (8c15fc7; JVM 157, connected 36). Scoped re-review dispatched (opus — concurrency). Rulings for the final fix wave: (a) the melody takes audio focus through Voice — add Voice.playMelody(notes, ...) that wraps graph.synth.play inside the same transient-focus/outputHolders path as play(), and the ViewModel calls only Voice — cost if wrong: none; (b) WordCoachViewModel's @Volatile selfRecordingId gets the same Deferred take-id pattern — cost: none.
+Tasks 3+4: complete (commits 30d186f..8c15fc7; re-review 2 Minor open: R1 runCatching swallows the load cancellation in SingSayViewModel.load, R2 spoken record button dead during a sung take — both ruled into the final fix wave). Task 5 (verification) folded into the fix wave as in phase 3. Final whole-plan review dispatched (opus) over 47392d1..8c15fc7.
+Final review DONE: 0 Critical / 5 Important / 12 Minor (final-review.md). Rulings — I1: Voice owns the synth (Voice.playMelody with transient focus; quiet() stops the synth; ViewModels never touch graph.synth); I2: outcome by stage reached — stage 5 CORRECT (cueLevel 0), «Το έκανα» at stages 3–4 ASSISTED (cueLevel 5-stage), «Παράλειψη» SKIPPED; detail carries the stage; I3: every stage change speaks a one-line Greek prompt from a fixed table and stage 2 auto-plays the backing melody once; I4: SingSayModule caps its plan at 3 phrases per session (free practice 5) — the budget counts items, not effort; I5: 20 MIT seed PHRASE items (θέλω καφέ, πάμε σπίτι, …) with ARASAAC pictograms via the fetch script and a seed-version bump that adds without duplicating; minors: real defects fixed (mic open on nav-away, sung take after switching to WORD, flash, «Το έκανα» during a take, last-note clip, PCM off the main thread, lazy-grid test); parked: audio-focus-change listener for phone calls (app-wide, phase 10 polish), monosyllable HIGH and dropped digits (accepted). Plus R1, R2, WordCoach Deferred take id. Nothing has been heard yet (-no-audio) — Chris verifies on the phone. ONE fix-wave dispatch (opus), BASE 8c15fc7.
+Fix wave DONE (837b789..230438d, 9 commits; JVM 173, connected 39; seed v2 with 20 MIT phrases, 194/195 pictograms). Deviation accepted: a full pass over the syllables on the tap pad completes a repetition and advances the stage (no extra button); «Το έκανα» at stages 3–4 finishes the phrase. Two extra defects fixed (stage advance cancelled by an in-time tap; host-side mic close vs module isRecording). Nothing audible verified — Chris must listen on the phone. Scoped re-review dispatched (opus).
+Fix-wave re-review: 1 Minor open — SeedImporter dedups against SEED-source rows only, so a v1→v2 bump can duplicate a caregiver-typed phrase. Ruling: fixed in phase 5 Task 2 (same implementer touches the seed code): the existing set is built from all active items by text (case/accent-normalised) — cost if wrong: none. Residuals accepted: ToneSynth.stop() release on the caller thread; SingSayFlowTest without a settling @Before. Phase 4 closed.
