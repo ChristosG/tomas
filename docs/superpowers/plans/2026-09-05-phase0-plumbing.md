@@ -2894,7 +2894,7 @@ fun ItemListScreen(onBack: () -> Unit, onEdit: (String?) -> Unit) {
     val all by graph.items.observeAll().collectAsStateWithLifecycle(initialValue = emptyList())
     var query by remember { mutableStateOf("") }
     val shown = ItemSearch.filter(all, query)
-    val grouped = shown.groupBy { it.category }
+    val grouped = shown.groupBy { it.category }.toSortedMap(compareBy { it.ordinal })   // declaration order: Γρήγορα, Φαγητό, ...
 
     DimitrisScreen(
         title = "Λέξεις και εικόνες",
