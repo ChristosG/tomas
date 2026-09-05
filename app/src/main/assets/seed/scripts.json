@@ -1,4 +1,4 @@
-{"version": 1, "scripts": [
+{"version": 2, "scripts": [
  {"title": "Στην καφετέρια", "lines": [
   {"speaker": "OTHER", "text": "Καλημέρα! Τι θα πάρετε;"},
   {"speaker": "DIMITRIS", "text": "Έναν καφέ, παρακαλώ."},
@@ -48,5 +48,15 @@
   {"speaker": "DIMITRIS", "text": "Στη θάλασσα."},
   {"speaker": "OTHER", "text": "Τέλεια, πάμε."},
   {"speaker": "DIMITRIS", "text": "Πάμε!"}
+ ]},
+ {"title": "Στο ταξί", "lines": [
+  {"speaker": "OTHER", "text": "Καλησπέρα. Πού πάτε;"},
+  {"speaker": "DIMITRIS", "text": "Στην πλατεία, παρακαλώ."},
+  {"speaker": "OTHER", "text": "Από ποιον δρόμο να πάμε;"},
+  {"speaker": "DIMITRIS", "text": "Όπως θέλετε εσείς."},
+  {"speaker": "OTHER", "text": "Εντάξει, φτάσαμε."},
+  {"speaker": "DIMITRIS", "text": "Πόσο κάνει;"},
+  {"speaker": "OTHER", "text": "Επτά ευρώ."},
+  {"speaker": "DIMITRIS", "text": "Ορίστε. Ευχαριστώ."}
  ]}
 ]}

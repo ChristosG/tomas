@@ -18,15 +18,27 @@ class ScriptSeedTest {
     @Test fun `the bundled dialogues parse and are all his and someone else`() {
         val json = asset("seed/scripts.json").readText()
         val m = ScriptSeedManifest.parse(json)
-        assertEquals(1, m.version)
-        assertEquals(5, m.scripts.size)
-        assertEquals(5, m.scripts.map { it.title }.distinct().size)
+        assertEquals(2, m.version)
+        assertEquals(6, m.scripts.size)
+        assertEquals(6, m.scripts.map { it.title }.distinct().size)
         for (s in m.scripts) {
             assertTrue("${s.title} should have lines", s.lines.size >= 4)
             assertTrue("${s.title} needs a turn for Dimitris", s.lines.any { speakerOf(it) == Speaker.DIMITRIS })
             assertTrue("${s.title} needs a turn for the other person", s.lines.any { speakerOf(it) == Speaker.OTHER })
             assertTrue("${s.title} should have no blank line", s.lines.none { it.text.isBlank() })
         }
+    }
+
+    /**
+     * The version has to move with the file or a device already in use never sees a dialogue added
+     * later: [ScriptSeedImporter.importIfNeeded] returns early while the stored version is not
+     * behind the manifest's, and the dedup by title is what keeps the bump from duplicating the five
+     * that are already there.
+     */
+    @Test fun `the taxi dialogue is what the version bump owes a device already in use`() {
+        val m = ScriptSeedManifest.parse(asset("seed/scripts.json").readText())
+        val onDevice = m.scripts.map { it.title }.filter { it != "Στο ταξί" }.toSet()
+        assertEquals(listOf("Στο ταξί"), ScriptSeedImporter.newScripts(m, onDevice).map { it.title })
     }
 
     private fun speakerOf(line: SeedLine) = ScriptSeedImporter.speakerOf(line.speaker)
