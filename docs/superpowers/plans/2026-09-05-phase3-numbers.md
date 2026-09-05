@@ -1016,3 +1016,35 @@ in `.superpowers/sdd/2026-09-05-phase3-numbers/shots/`.
 - No caregiver control for the numbers level (deferred to phase 9); level 7 was reached by climbing.
 - The euro levels still show amounts as text — no coin or note pictures exist yet.
 - Level 5 covers digit ↔ word, not the spec's third representation (quantity).
+
+## Execution record (controller rulings, 2026-09-05)
+
+Copied from the SDD ledger at phase close. Final review: 0 Critical / 7 Important / 10 Minor, all fixed or ruled; fix-wave re-review clean. Observations left open: MIN_TICK_GAP 3 overlaps below 360dp width; the number-line circles' contentDescription names the answer (screen readers are not used by Dimitris).
+
+## Pre-flight conflict scan (2026-09-05)
+
+| Tasks | Shared surface | Produces vs consumes | Finding |
+|---|---|---|---|
+| 1 / 2 | GreekNumbers.words, Euro.format/denominations | Exercises prompt text, generator options | consistent |
+| 2 / 4 | NumberExercise types, ExerciseGenerator.session, NumberProgression.next/MIN/MAX | ViewModel + views use exact names | consistent |
+| 3 / 4 | Item.priceCents, ItemDao.withPrices, Settings.numbersLevel | ViewModel loads prices and level | consistent |
+| 3 / phase 1 | DB v2 → v3 auto-migration; MigrationTest 2→3 INSERT lists v2 columns incl. pinned | schema 2.json committed in phase 1 | consistent |
+| 3 / phase 0 | ItemEditViewModel/Screen price field | editor already has try/catch save; add priceText + parse error | consistent |
+| 4 / phase 2 | Module.practiceFor default, AppGraph.modules list, SessionScreen runner, Today grid | NumbersModule appended; planFor returns 10 NUMBER items or transient placeholders | consistent (runner counts items only) |
+| 4 / phase 1 | graph.speaker.speakText (Result), feedback, files | ExerciseViews use feedback via LocalFeedback; speech results ignored | Ruling (revised after the phase-2 review): number prompts must surface speech failures like the word coach — record via graph.errors and show the Greek line in the screen's error slot; carried into the Task 4 dispatch — cost: none |
+| 4 alone | Attempt.itemId = "numbers:level:N" synthetic | AttemptDao has no FK | consistent (spec §7 phase 3 amended in plan) |
+| all | Greek-only, 72dp, no timers | OptionButton min 96dp/72dp | consistent |
+
+Scan result: one ruling recorded.
+
+## Task log
+Tasks 1+2: dispatched as one batch — BASE 243108b, model sonnet
+Tasks 1+2: implementer DONE (2c59873, 4d86178; JVM 119), review dispatched
+Tasks 1+2: complete (commits 243108b..4d86178, review clean). Important carried into the next dispatch: Pay must never throw for prices above 50 € (exclude such prices from Pay; PriceCompare may keep them). Minor: KDoc vs // marker — accepted.
+Tasks 3+4: dispatched as one batch — BASE 4d86178, model opus
+Tasks 3+4: implementer DONE (0861711, 0c3343b; JVM 121, connected 26), review dispatched. Ruling: NumbersScreen must run exactly items.size exercises (the Module contract + SessionBudget; the implementer reported a 14-planned/17-done session) — fix in the task fix round — cost if wrong: none (levels still cycle within the shorter list).
+Tasks 3+4: review DONE (0 Critical / 6 Important / 10 Minor; Task 4 ❌ items ignored). Fix round 1 — BASE 0c3343b, resuming implementer a8c455b921a34cc52 with .superpowers/sdd/2026-09-05-phase3-numbers/task-3-4-review.md
+Tasks 3+4: fix round 1 DONE (15937db; JVM 126, connected 26). Scoped re-review dispatched (sonnet) on review-0c3343b..15937db.diff. Rulings on the parked minors: m6 (no BackHandler app-wide) — add a BackHandler in DimitrisScreen that invokes onBack, in the phase-3 final fix wave — cost if wrong: none. m7 (recentResults query) — parked to phase 9 (queries). m8 (numbers in every session) — accepted as specified: daily number practice mirrors the therapist; Empty stays reachable when all modules are off. m9 (synthetic ids) — already a spec amendment; phase 9/10 handle joins. m10(b) (double end screen in sessions) — in the final fix wave: when sessionId != null and the level did not change, NumbersScreen calls onDone via LaunchedEffect(done) like the word coach; the tap-to-close end screen stays for free practice and for level changes — cost if wrong: one extra tap. spokenPrompt concern — accepted for now; phase 6 sentences will get a shared spoken-form helper if needed.
+Tasks 3+4: complete (commits 4d86178..15937db, re-review clean: 0 open). Task 5 (verification) folded into the final fix wave: the fix-wave implementer runs both suites, the emulator session check, and writes the verification notes. Final whole-plan review dispatched (opus) over 243108b..15937db.
+Final review DONE: 0 Critical / 7 Important / 10 Minor, all pedagogy (final-review.md). Rulings — I-A: Pay offers exactly one covering option (take(1)); I-B: CoinPick prompt shows the amount in Greek words (and speaks it), options show numerals — cross-channel matching, no string match; I-C: NumberLine draws a real horizontal line (0/5/10 labelled) with 3 (level 3) or 4 (level 6) candidate ticks as 72dp round buttons at true positions, prompt 'Πού είναι το N;'; I-D: second wrong tap reveals + speaks the answer, records ASSISTED; skips count as false in progression results; I-E: progression uses the current session's results only, min sample 5 (hold otherwise); I-F: planFor returns 10 transient items always (sizing only); I-G: WordMatch speaks the number word. Plus m6 (BackHandler in DimitrisScreen) and m10(b) (auto onDone in sessions unless the level changed). Cost if wrong: layout rework of the number line only. ONE fix-wave dispatch (opus), BASE 15937db.
+Fix wave DONE (5001d3a, bb5d2d1, cae2aab, 430566d, 8c68812; JVM 136, connected 28; Task 5 verification notes committed). Deviations accepted: MIN_TICK_GAP 3 (2 overlaps at 411dp), level-6 targets 200/500/800 get 3 candidates, ruling's 'level 3' meant the plan's level 2. Scoped re-review dispatched (opus).
