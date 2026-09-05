@@ -6,6 +6,12 @@ import kotlin.math.sin
 
 /** 16-bit mono PCM helpers. Pure Kotlin so the shapes can be unit-tested. */
 object Pcm {
+    /**
+     * 44.1kHz mono 16-bit: universally supported, so this is not read from the device's native
+     * rate / `getMinBufferSize` — the platform resamples if a particular output needs something
+     * else. The single source of truth: [ToneSynth.SAMPLE_RATE] reads this constant rather than
+     * repeating it, so the generated PCM and the `AudioTrack` it is played through never disagree.
+     */
     const val SAMPLE_RATE = 44_100
     private const val ATTACK_MS = 20
     private const val RELEASE_MS = 60

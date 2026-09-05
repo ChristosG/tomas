@@ -22,4 +22,16 @@ class PcmTest {
         val a = shortArrayOf(1, 2); val b = shortArrayOf(3)
         assertEquals(listOf<Short>(1, 2, 3), Pcm.concat(listOf(a, b)).toList())
     }
+
+    // Bounds the "wrote exactly what I meant to write" contract ToneSynth.play relies on to turn
+    // an AudioTrack.write() short-count into a Result.failure: these edge inputs must never throw
+    // and must always produce the exact size a caller would ask AudioTrack to write.
+    @Test fun `zero-duration tone is empty, not a crash`() = assertEquals(0, Pcm.tone(440.0, 0, 1f).size)
+    @Test fun `zero-duration silence is empty, not a crash`() = assertEquals(0, Pcm.silence(0).size)
+    @Test fun `negative gain clamps to silence instead of throwing`() = assertTrue(Pcm.tone(440.0, 50, -1f).all { it == 0.toShort() })
+    @Test fun `gain above one clamps to the same peak as gain one`() {
+        val normal = Pcm.tone(440.0, 200, 1f).maxOf { abs(it.toInt()) }
+        val overdriven = Pcm.tone(440.0, 200, 5f).maxOf { abs(it.toInt()) }
+        assertEquals(normal, overdriven)
+    }
 }
