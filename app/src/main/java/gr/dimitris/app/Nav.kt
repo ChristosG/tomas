@@ -4,6 +4,7 @@ import androidx.compose.runtime.Composable
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import gr.dimitris.app.caregiver.BackupScreen
 import gr.dimitris.app.caregiver.CaregiverHomeScreen
 import gr.dimitris.app.caregiver.ErrorListScreen
 import gr.dimitris.app.caregiver.SettingsScreen
@@ -47,6 +48,8 @@ fun AppNav() {
         }
         composable(Routes.ERRORS) { ErrorListScreen(onBack = { nav.popBackStack() }) }
         composable(Routes.SETTINGS) { SettingsScreen(onBack = { nav.popBackStack() }) }
-        // Task 13 adds: BACKUP
+        composable(Routes.BACKUP) {
+            BackupScreen(onBack = { nav.popBackStack() }, onImported = { nav.popBackStack(Routes.TODAY, inclusive = false) })
+        }
     }
 }

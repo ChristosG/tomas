@@ -3,6 +3,7 @@ package gr.dimitris.app.caregiver
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Backup
 import androidx.compose.material.icons.rounded.BugReport
 import androidx.compose.material.icons.rounded.Image
 import androidx.compose.material.icons.rounded.Person
@@ -20,11 +21,11 @@ import gr.dimitris.app.ui.theme.Sizes
 
 data class CaregiverEntry(val title: String, val icon: ImageVector, val route: String)
 
-/** One entry per caregiver screen. Task 13 adds theirs here as the screen appears. */
 val caregiverEntries: List<CaregiverEntry> = listOf(
     CaregiverEntry("Λέξεις και εικόνες", Icons.Rounded.Image, Routes.ITEMS),
     CaregiverEntry("Ρυθμίσεις", Icons.Rounded.Settings, Routes.SETTINGS),
     CaregiverEntry("Σφάλματα", Icons.Rounded.BugReport, Routes.ERRORS),
+    CaregiverEntry("Αντίγραφο ασφαλείας", Icons.Rounded.Backup, Routes.BACKUP),
 )
 
 @Composable
