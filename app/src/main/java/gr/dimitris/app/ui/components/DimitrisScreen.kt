@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.rounded.Forum
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -19,17 +20,20 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import gr.dimitris.app.LocalOpenTalkBoard
 import gr.dimitris.app.ui.theme.LocalFeedback
 import gr.dimitris.app.ui.theme.Sizes
 
 /**
- * Every screen: cream background, big optional back button top-left, title, content, then a
- * bottom slot for the primary action where a left thumb lands.
+ * Every screen: cream background, big optional back button top-left, title, the talk board one tap
+ * away top-right, content, then a bottom slot for the primary action where a left thumb lands.
  */
 @Composable
 fun DimitrisScreen(
     title: String? = null,
     onBack: (() -> Unit)? = null,
+    /** The small chat icon top-right. Off on screens that offer the talk board some other way. */
+    talkButton: Boolean = true,
     bottom: (@Composable ColumnScope.() -> Unit)? = null,
     content: @Composable ColumnScope.() -> Unit,
 ) {
@@ -38,14 +42,23 @@ fun DimitrisScreen(
         Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)
             .safeDrawingPadding().padding(Sizes.screenPadding)
     ) {
-        if (onBack != null || title != null) {
+        val openTalk = LocalOpenTalkBoard.current
+        if (onBack != null || title != null || (talkButton && openTalk != null)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 if (onBack != null) {
                     IconButton(onClick = { feedback.tap(); onBack() }, modifier = Modifier.size(Sizes.touchMin)) {
                         Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Πίσω", modifier = Modifier.size(Sizes.icon))
                     }
                 }
-                if (title != null) Text(title, style = MaterialTheme.typography.headlineMedium)
+                // Weighted, so a long title wraps instead of pushing the talk icon off the screen.
+                if (title != null) Text(title, style = MaterialTheme.typography.headlineMedium, modifier = Modifier.weight(1f))
+                if (talkButton && openTalk != null) {
+                    if (title == null) Spacer(Modifier.weight(1f))
+                    IconButton(onClick = { feedback.tap(); openTalk() }, modifier = Modifier.size(Sizes.touchMin)) {
+                        Icon(Icons.Rounded.Forum, contentDescription = "Μίλα", modifier = Modifier.size(Sizes.icon),
+                            tint = MaterialTheme.colorScheme.secondary)
+                    }
+                }
             }
             Spacer(Modifier.height(Sizes.gap))
         }

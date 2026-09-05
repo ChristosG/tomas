@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Forum
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
@@ -31,10 +32,12 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import gr.dimitris.app.LocalAppGraph
+import gr.dimitris.app.LocalOpenTalkBoard
 import gr.dimitris.app.caregiver.authenticateCaregiver
 import gr.dimitris.app.caregiver.canAuthenticate
 import gr.dimitris.app.core.speech.openTtsInstaller
 import gr.dimitris.app.ui.components.BigButton
+import gr.dimitris.app.ui.components.ButtonTone
 import gr.dimitris.app.ui.components.DimitrisScreen
 import gr.dimitris.app.ui.components.QuietButton
 import gr.dimitris.app.ui.components.longHold
@@ -60,7 +63,15 @@ fun TodayScreen(onStart: () -> Unit, onCaregiver: () -> Unit) {
     }
 
     DimitrisScreen(
-        bottom = { BigButton("Ξεκίνα", onClick = onStart, icon = Icons.Rounded.PlayArrow) },
+        talkButton = false,   // Today has its own big "Μίλα" button.
+        bottom = {
+            val openTalk = LocalOpenTalkBoard.current
+            if (openTalk != null) {
+                BigButton("Μίλα", onClick = openTalk, icon = Icons.Rounded.Forum, tone = ButtonTone.Secondary)
+                Spacer(Modifier.height(Sizes.gapSmall))
+            }
+            BigButton("Ξεκίνα", onClick = onStart, icon = Icons.Rounded.PlayArrow)
+        },
     ) {
         Text(
             "Δημήτρης",
