@@ -58,7 +58,7 @@ fun WordCoachScreen(items: List<Item>, sessionId: String?, onDone: () -> Unit, o
     DimitrisScreen(
         title = "Λέξεις ${s.index + 1}/${s.total}",
         // Back is "I want out", not "I finished": the module drops what it was doing and says so.
-        onBack = { vm.leave(); onLeave() },
+        onBack = { vm.leave(onLeave) },
         bottom = {
             if (s.confirmed) {
                 BigButton("Επόμενο", onClick = vm::next, tone = ButtonTone.Success)

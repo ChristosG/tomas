@@ -66,6 +66,8 @@ class SessionViewModel(private val graph: AppGraph) : ViewModel() {
 
     /** A module ran out of exercises: on to the next one, or the summary if it was the last. */
     fun moduleDone() {
+        // A module finishing as the session is already winding down changes nothing.
+        if (ending) return
         val step = _state.value as? SessionStep.Run ?: return
         val next = step.index + 1
         if (next < plans.size) {

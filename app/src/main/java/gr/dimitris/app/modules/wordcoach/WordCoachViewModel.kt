@@ -55,7 +55,10 @@ class WordCoachViewModel(private val graph: AppGraph, private val items: List<It
      */
     private var lastWrite: Job? = null
 
-    /** True from "Το είπα!"/"Παράλειψη" until the next word starts: one attempt per word, not two. */
+    /**
+     * True from "Το είπα!"/"Παράλειψη" until the next word starts. It carries both guards: one
+     * attempt per word, and one advance per finished word.
+     */
     private var finishing = false
 
     private val _state = MutableStateFlow(WordCoachState(total = items.size, item = items.first()))
@@ -142,7 +145,7 @@ class WordCoachViewModel(private val graph: AppGraph, private val items: List<It
         if (!_state.value.sttOn || _state.value.listening) return
         _state.update { it.copy(listening = true, heard = null, heardMatched = false, error = null) }
         viewModelScope.launch {
-            graph.stt.listen(5).fold(
+            graph.stt.listen().fold(
                 onSuccess = { t ->
                     val matched = SpeechMatch.matches(t.text, _state.value.item.text)
                     if (matched) graph.feedback.success()
@@ -198,6 +201,10 @@ class WordCoachViewModel(private val graph: AppGraph, private val items: List<It
     }
 
     fun next() {
+        // Only a word that was finished moves on. A second tap on «Επόμενο» — the button is still
+        // there for a frame after the first — would otherwise skip the word that just arrived.
+        if (!finishing) return
+        finishing = false
         // A take still running belongs to the word being left behind.
         if (graph.voice.isRecording) graph.voice.cancelRecording()
         val i = _state.value.index + 1
@@ -208,7 +215,6 @@ class WordCoachViewModel(private val graph: AppGraph, private val items: List<It
             viewModelScope.launch { write?.join(); _state.update { it.copy(done = true) } }
             return
         }
-        finishing = false
         ladder = CueLadder(items[i])
         startedAt = now()
         selfRecordingId = null
@@ -216,10 +222,16 @@ class WordCoachViewModel(private val graph: AppGraph, private val items: List<It
         _state.value = WordCoachState(index = i, total = items.size, item = items[i], sttOn = _state.value.sttOn)
     }
 
-    /** The user pressed back. Whatever the microphone or the speaker was doing stops here. */
-    fun leave() {
+    /**
+     * The user pressed back. Whatever the microphone or the speaker was doing stops here, and [then]
+     * waits for the last word's write: the session counts rows the moment it is told, so leaving
+     * before the row lands would lose the word he had just said.
+     */
+    fun leave(then: () -> Unit) {
         if (graph.voice.isRecording) graph.voice.cancelRecording()
         graph.voice.quiet()
+        val write = lastWrite
+        viewModelScope.launch { write?.join(); then() }
     }
 
     override fun onCleared() {

@@ -20,6 +20,9 @@ import gr.dimitris.app.core.data.ModuleId
  * - [Screen] ends exactly one of two ways: [onDone] when every exercise is finished, [onLeave] when
  *   the user pressed back. Finished and wanting out are different events and the session runner
  *   treats them differently.
+ * - `onDone` and `onLeave` are both invoked only after the module's Attempt rows for finished
+ *   exercises have landed. The session counts those rows as soon as it is told, so a module that
+ *   calls back while a write is still in flight reports him as having done less than he did.
  */
 interface Module {
     val id: ModuleId

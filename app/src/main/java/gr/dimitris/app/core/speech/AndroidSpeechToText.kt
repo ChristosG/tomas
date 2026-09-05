@@ -16,12 +16,12 @@ class AndroidSpeechToText(private val context: Context) : SpeechToText {
     override val isAvailable: Boolean get() = SpeechRecognizer.isRecognitionAvailable(context)
 
     /**
-     * [maxSeconds] is not a stopwatch on him. Aphasia means long pauses before a word arrives, so
-     * the take ends when he has been quiet for [SILENCE_MS], not when a timer runs out. The only
-     * hard bound is [TIMEOUT_MS], and that is on the recognition service: if it never calls back,
-     * the screen must not sit on "Ακούω..." forever.
+     * No stopwatch on him. Aphasia means long pauses before a word arrives, so the take ends when he
+     * has been quiet for [SILENCE_MS], not when a timer runs out. The only hard bound is
+     * [TIMEOUT_MS], and that is on the recognition service: if it never calls back, the screen must
+     * not sit on "Ακούω..." forever.
      */
-    override suspend fun listen(maxSeconds: Int): Result<Transcript> = withContext(Dispatchers.Main) {
+    override suspend fun listen(): Result<Transcript> = withContext(Dispatchers.Main) {
         if (!isAvailable) return@withContext Result.failure(IllegalStateException("Δεν υπάρχει αναγνώριση ομιλίας"))
         val recognizer = SpeechRecognizer.createSpeechRecognizer(context)
         try {
