@@ -4,13 +4,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
 import gr.dimitris.app.LocalAppGraph
-import gr.dimitris.app.core.data.Item
 import gr.dimitris.app.core.data.ModuleId
 import gr.dimitris.app.ui.components.BigButton
 import gr.dimitris.app.ui.components.DimitrisScreen
@@ -30,14 +27,11 @@ fun PracticeScreen(moduleId: ModuleId, onDone: () -> Unit) {
         }
     }
 
-    // Null only if the route outlived the module registry; the empty screen is the answer either way.
-    val module = remember(moduleId) { graph.modules.firstOrNull { it.id == moduleId } }
-    var items by remember { mutableStateOf<List<Item>?>(null) }
-
-    LaunchedEffect(moduleId) {
-        items = module?.let { m -> runCatching { m.practiceFor(graph) }.getOrElse { graph.errors.record("practice ${m.id}", it); emptyList() } }
-            ?: emptyList()
-    }
+    // Scoped to this route entry, not to the composition: a «Μίλα» detour and back resumes the same
+    // items instead of asking the module for a fresh plan and losing his place.
+    val vm: PracticeViewModel = viewModel(key = "practice-${moduleId.name}") { PracticeViewModel(graph, moduleId) }
+    val items by vm.items.collectAsStateWithLifecycle()
+    val module = vm.module
 
     when (val list = items) {
         null -> DimitrisScreen { Text("Ετοιμάζω...", style = MaterialTheme.typography.headlineMedium) }
