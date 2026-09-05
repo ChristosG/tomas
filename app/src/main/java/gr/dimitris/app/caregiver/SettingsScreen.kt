@@ -7,10 +7,13 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.VolumeUp
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
@@ -31,6 +34,18 @@ import gr.dimitris.app.ui.components.DimitrisScreen
 import gr.dimitris.app.ui.components.QuietButton
 import gr.dimitris.app.ui.theme.Sizes
 import kotlinx.coroutines.launch
+
+/** One of the two hands, as a 72dp target: a chip the size of a chip is not a caregiver's tap either. */
+@Composable
+private fun HandChip(label: String, value: String, chosen: String, modifier: Modifier = Modifier, onPick: (String) -> Unit) {
+    FilterChip(
+        selected = chosen == value,
+        onClick = { onPick(value) },
+        label = { Text(label, style = MaterialTheme.typography.bodyLarge) },
+        shape = RoundedCornerShape(Sizes.corner),
+        modifier = modifier.heightIn(min = Sizes.touchMin),
+    )
+}
 
 @Composable
 fun SettingsScreen(onBack: () -> Unit) {
@@ -90,6 +105,20 @@ fun SettingsScreen(onBack: () -> Unit) {
                     Text(m.titleGreek, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
                     Switch(checked = moduleOn, onCheckedChange = { on -> scope.launch { graph.settings.setModuleEnabled(m.id, on) } })
                 }
+            }
+            Spacer(Modifier.height(Sizes.gapSmall))
+
+            // Which hand «Γράψε» tells him to use. It is the one thing on the writing screen he
+            // cannot work out for himself, and the wrong answer sends a hemiplegic hand at the glass.
+            Text("Χέρι για γράψιμο", style = MaterialTheme.typography.bodyLarge)
+            val hand by graph.settings.traceHand.collectAsStateWithLifecycle(initialValue = Settings.HAND_LEFT)
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth().heightIn(min = Sizes.touchMin),
+            ) {
+                HandChip("Αριστερό", Settings.HAND_LEFT, hand, Modifier.weight(1f)) { scope.launch { graph.settings.setTraceHand(it) } }
+                Spacer(Modifier.width(Sizes.gapSmall))
+                HandChip("Δεξί", Settings.HAND_RIGHT, hand, Modifier.weight(1f)) { scope.launch { graph.settings.setTraceHand(it) } }
             }
             Spacer(Modifier.height(Sizes.gap))
 

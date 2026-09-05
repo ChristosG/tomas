@@ -99,4 +99,27 @@ class SettingsTest {
         s.setSentencesLevel(3); assertEquals(3, s.sentencesLevel.first())
         assertEquals(1, s.numbersLevel.first())
     }
+
+    /** Five writing levels of its own: capitals, small letters, his name, words, words from memory. */
+    @Test fun `trace level starts at 1 and is clamped to 1__5`() = runBlocking {
+        val s = newSettings()
+        assertEquals(1, s.traceLevel.first())
+        s.setTraceLevel(9); assertEquals(5, s.traceLevel.first())
+        s.setTraceLevel(0); assertEquals(1, s.traceLevel.first())
+        s.setTraceLevel(4); assertEquals(4, s.traceLevel.first())
+        assertEquals(1, s.sentencesLevel.first())
+    }
+
+    /**
+     * The left hand by default: his right is the side the stroke took. Nothing but the two hands can
+     * ever come out, so a store written by a future version cannot leave the screen with no hint.
+     */
+    @Test fun `writing hand is the left one until someone says otherwise`() = runBlocking {
+        val s = newSettings()
+        assertEquals(Settings.HAND_LEFT, s.traceHand.first())
+        s.setTraceHand(Settings.HAND_RIGHT)
+        assertEquals(Settings.HAND_RIGHT, s.traceHand.first())
+        s.setTraceHand("BOTH")
+        assertEquals(Settings.HAND_LEFT, s.traceHand.first())
+    }
 }

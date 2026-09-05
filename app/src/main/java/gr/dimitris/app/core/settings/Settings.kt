@@ -7,6 +7,7 @@ import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.intPreferencesKey
+import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import gr.dimitris.app.core.data.ModuleId
@@ -42,6 +43,21 @@ class Settings(private val store: DataStore<Preferences>) {
     val sentencesLevel: Flow<Int> = store.data.map { it[SENTENCES_LEVEL] ?: 1 }
     suspend fun setSentencesLevel(level: Int) { store.edit { it[SENTENCES_LEVEL] = level.coerceIn(1, 4) } }
 
+    /** What he is writing, 1..5: capitals, small letters, his name, words, words from memory. */
+    val traceLevel: Flow<Int> = store.data.map { it[TRACE_LEVEL] ?: 1 }
+    suspend fun setTraceLevel(level: Int) { store.edit { it[TRACE_LEVEL] = level.coerceIn(1, 5) } }
+
+    /**
+     * Which hand he writes with, [HAND_LEFT] or [HAND_RIGHT]. It is the left one by default because
+     * his right is the side the stroke took, and the writing screen says so out loud on every letter
+     * — one line of certainty for a man who cannot ask which hand he is supposed to use.
+     *
+     * A caregiver sets it, and anything else that ever lands in the store reads as left rather than
+     * as an empty hint.
+     */
+    val traceHand: Flow<String> = store.data.map { p -> p[TRACE_HAND]?.takeIf { it in HANDS } ?: HAND_LEFT }
+    suspend fun setTraceHand(hand: String) { store.edit { it[TRACE_HAND] = if (hand in HANDS) hand else HAND_LEFT } }
+
     /**
      * Which modules Dimitris gets. Everything is on unless a caregiver switched it off, except the
      * few in [DEFAULT_OFF], which are on only once someone deliberately asks for them.
@@ -72,6 +88,10 @@ class Settings(private val store: DataStore<Preferences>) {
         /** Off until asked for: the arcade is a reward, not part of the daily work. */
         val DEFAULT_OFF = setOf(ModuleId.ARCADE)
 
+        const val HAND_LEFT = "LEFT"
+        const val HAND_RIGHT = "RIGHT"
+        val HANDS = setOf(HAND_LEFT, HAND_RIGHT)
+
         const val DEFAULT_RATE = 0.8f
         const val MIN_RATE = 0.5f
         const val MAX_RATE = 1.3f
@@ -82,6 +102,8 @@ class Settings(private val store: DataStore<Preferences>) {
         private val STT_ENABLED = booleanPreferencesKey("stt_enabled")
         private val NUMBERS_LEVEL = intPreferencesKey("numbers_level")
         private val SENTENCES_LEVEL = intPreferencesKey("sentences_level")
+        private val TRACE_LEVEL = intPreferencesKey("trace_level")
+        private val TRACE_HAND = stringPreferencesKey("trace_hand")
         private val DISABLED_MODULES = stringSetPreferencesKey("disabled_modules")
 
         /** The [DEFAULT_OFF] ones someone has switched on. Meaningless for every other module. */
