@@ -25,3 +25,7 @@ captures/
 *.keystore
 *.jks
 secrets.properties
+
+# Claude Code worktrees and SDD workspaces
+.claude/
+.superpowers/
