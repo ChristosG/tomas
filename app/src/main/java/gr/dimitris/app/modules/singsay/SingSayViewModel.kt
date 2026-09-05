@@ -119,11 +119,20 @@ class SingSayViewModel(private val graph: AppGraph, private val items: List<Item
      * and stage 2 the backing he is being asked to sing along with; the later stages are silent on
      * purpose, because taking the music away is the whole point of them.
      */
-    private fun enterStage(stage: Int) {
+    private fun enterStage(stage: Int, lead: Note? = null, leadGain: Float = 0f) {
         val token = claimPlayback()
         playJob = viewModelScope.launch {
-            _state.update { it.copy(playing = true, lit = -1) }
+            _state.update { it.copy(playing = true) }
             try {
+                // The syllable that finished the pass still sounds, and stays lit while it does:
+                // the pass ends on his tap, not on the phone interrupting it.
+                if (lead != null && leadGain > 0f) {
+                    report(
+                        graph.voice.playMelody(listOf(lead.pitch), noteMs = TAP_NOTE_MS, gapMs = 0, gain = leadGain),
+                        SYNTH_FAILED, "singsay tap",
+                    )
+                }
+                _state.update { it.copy(lit = -1) }
                 announce(stage)
             } finally {
                 releasePlayback(token)
@@ -209,44 +218,50 @@ class SingSayViewModel(private val graph: AppGraph, private val items: List<Item
         val s = _state.value
         if (s.playing || s.isRecording || finishing || s.done || s.notes.isEmpty()) return
         val next = (s.lit + 1) % s.notes.size
-        _state.update { it.copy(lit = next) }
         val gain = SingStage.gainFor(s.stage, s.repetition)
-        val passDone = next == s.notes.lastIndex
-        // A silent stage in mid-phrase has nothing to play and nothing to move on to: the lit
-        // syllable above is the whole of it, and clearing it here would undo that.
-        if (gain <= 0f && !passDone) return
-        // The tapped note belongs to the same job as every other playback: a second tap replaces the
-        // first note instead of racing it for the one track, and finish/leave silence it too.
-        val token = claimPlayback()
+        _state.update { it.copy(lit = next) }
+        if (next == s.notes.lastIndex) advance(s.notes[next], gain) else soundTap(s.notes[next], gain)
+    }
+
+    /**
+     * The tapped note, in the same job as every other playback: a second tap replaces the first note
+     * instead of racing it for the one track, and finish/leave silence it too. A stage with no
+     * backing left has nothing to sound — the lit syllable is the whole of the tap.
+     */
+    private fun soundTap(note: Note, gain: Float) {
+        if (gain <= 0f) return
+        claimPlayback()
         playJob = viewModelScope.launch {
-            if (gain > 0f) {
-                report(
-                    graph.voice.playMelody(listOf(s.notes[next].pitch), noteMs = TAP_NOTE_MS, gapMs = 0, gain = gain),
-                    SYNTH_FAILED, "singsay tap",
-                )
-            }
-            if (passDone) advance(token)
+            report(
+                graph.voice.playMelody(listOf(note.pitch), noteMs = TAP_NOTE_MS, gapMs = 0, gain = gain),
+                SYNTH_FAILED, "singsay tap",
+            )
         }
     }
 
     /**
      * A pass through the phrase is finished. The fading stage wants three of them, one quieter than
      * the last; every other stage moves on, and the new one says what it wants out loud.
+     *
+     * The move is made here and now, on the caller's thread, and never inside a playback job: he
+     * taps in time with the phrase, so the tap after this one lands within milliseconds and cancels
+     * whatever job is in flight — a stage change that lived in one would simply never happen.
      */
-    private suspend fun advance(token: Int) {
+    private fun advance(last: Note, gain: Float) {
         val s = _state.value
         when {
-            s.stage == SingStage.FADING && s.repetition + 1 < SingStage.FADING_REPS ->
-                _state.update { it.copy(repetition = it.repetition + 1, lit = -1) }
+            s.stage == SingStage.FADING && s.repetition + 1 < SingStage.FADING_REPS -> {
+                // The lit syllable stays where his tap left it; the next tap wraps round to the first.
+                _state.update { it.copy(repetition = it.repetition + 1) }
+                soundTap(last, gain)
+            }
             s.stage < SingStage.SPEAK -> {
                 val next = s.stage + 1
                 graph.feedback.success()
-                _state.update { it.copy(stage = next, repetition = 0, lit = -1, playing = true) }
-                try {
-                    announce(next)
-                } finally {
-                    releasePlayback(token)
-                }
+                // playing from this instant and not from inside the job: the pad must be closed
+                // before the tap after this one can reach it.
+                _state.update { it.copy(stage = next, repetition = 0, playing = true) }
+                enterStage(next, lead = last, leadGain = gain)
             }
             // Stage 5 has no tap pad — «Το είπα!» stands where it was — so there is nowhere to go.
             else -> Unit
