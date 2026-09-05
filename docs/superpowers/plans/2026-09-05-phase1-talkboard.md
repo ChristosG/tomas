@@ -835,3 +835,17 @@ Pulled `dimitris.db` (+ `-wal`/`-shm`) via `run-as` after the walkthrough:
 3. **No app code changes were made for this task** — both findings above are recorded for a future task, per the brief.
 
 Commit: `docs(phase1): verification notes`.
+
+## Execution record: rulings made by the controller (2026-09-05)
+
+- Task 0: complete (commits e527e34..0bf2231, review clean). Minor (deferred): stop/cancel abandon focus unconditionally; recording focus requested after start; editor speak button not gated on recording.
+- Tasks 1+2: review — 2 Important (process): Task 1 commit alone fails JVM test compile (FakeItemDao overrides landed in Task 2) — Ruling: park, no history rewrite; branch head compiles; cost: one non-bisectable commit. Global resolutionStrategy.force on kotlinx-serialization — Ruling: replace with a documented Gradle constraint (raise to 1.8.1 with because()), which is explicit and applies consistently — cost: none. Fix round 1/5 dispatched.
+- Tasks 1+2: complete (commits 0bf2231..13c60f2, review clean after 1 fix round). Parked: Task 1 commit alone does not compile the JVM test set (ruling: no history rewrite).
+- Tasks 3+4: complete (commits 13c60f2..94833b4, review clean). Minor (deferred): icon-only undo/clear lack contentDescription; tab chips 56dp; full-strip tap still logs strip:true; Session screen gained a header row for the talk icon; quick row collation puts Όχι before Ναι.
+- Phase 1 final review (opus): no Critical; 10 Important; "with fixes". Rulings:
+- - #8 log strip:true only when added; "Πες το" logs nothing extra (items already logged) — RULING.
+- - #10 phone unavailable; Chris's phone never had a pre-index v1 db (install never happened) — PARK; Chris installs when awake.
+- Phase 1 fix wave DONE (9e45dc8..9a184f4; JVM 55, connected 22). Follow-up requested: refused second recording must keep focus (Ruling: guard isRecording before focus); favourites fallback skips QUICK.
+- Phase 1 fix-wave re-review (opus): all 10 ADDRESSED; 2 new Important regressions (undefined titleMedium → 16sp labels; false check mark when a tap interrupts "Πες το"). Ruling: load-bearing for phase 6 (strip is copied) — one small residual commit by the same implementer (typography, snapshot guard, strip auto-scroll, .catch on usage flow), then a cheap scoped re-review; no further waves — cost if wrong: one more review cycle.
+- Residual commit ce9fd5c (JVM 57; talkboard 2/2; audio 10/10). Deferred: strip pictures 40dp vs 26sp words (bump to 56dp when phase 6 reuses the strip); grid label clipping; speechError cleared by any success. Scoped re-review dispatched (sonnet).
+- Phase 1: COMPLETE (head ce9fd5c; JVM 57, connected 23). Rulings copied to the plan; workspace deleted.
