@@ -1424,3 +1424,15 @@ Setup: `adb shell pm clear gr.dimitris.app` (forces reseed, all 175 items new), 
 - `error_logs`: 0 rows — matches the empty Σφάλματα screen. The `NO_SPEECH_DETECTED` recognition timeout did not produce an error-log row (correct: it's an expected non-error outcome, not a crash/failure).
 
 **Anomalies / concerns:** none found. The one thing that looked odd at first — the level-1 cue letter rendering as what looks like a Latin "V" — is the correct lowercase Greek letter ν (nu) from `Greek.firstSound("Ναι")`; verified against the `items` table (`firstSound='ν'`, `firstSyllable='Ναι'`). No code changes were made.
+
+## Execution record: rulings made by the controller (2026-09-05)
+
+- | 6 / phase 1 | SessionScreen rewrite | phase-1 Task 0 added DisposableEffect { graph.voice.quiet() } to SessionScreen | Ruling: T6 must keep a DisposableEffect(Unit) { onDispose { graph.voice.quiet() } } in the rewritten SessionScreen — cost if wrong: speech continues after leaving the session |
+- Tasks 1+2: implementer DONE (216023b, 5ba2cf4) but changed the daily-cap rule to box==1. Ruling: revert to the brief rule and fix the test data (old createdAt on due/later schedules) — cost if wrong: none. Follow-up requested before review.
+- Tasks 1+2: complete (commits 6322afd..29512cc, review clean). Minor (deferred): redundant outer clamp in nextBox; even-size sandwich asymmetry (Chris rewrite).
+- Tasks 5+6+7: review — 3 Important: speech Results dropped silently; running recording survives next(); back arrow writes a false completedItemCount. Ruling: fix all; completedItemCount = attempts with this sessionId and outcome != SKIPPED (no Module interface change); summary softens when 0; finalize abandoned sessions from onCleared. Minors 1,2,3,5,6,7,8,10,12 in the same round; 4, 11 dropped. Fix round 1/5 dispatched.
+- Tasks 5+6+7: fix round 1/5 (all addressed; commits fbddc04..45346b5). Complete. Deferred: "1 ασκήσεις" grammar; playComparison error clearing; finalized flag non-atomic.
+- Phase 2 final review (opus): no Critical; 8 Important; "with fixes". Rulings:
+- - #6 level-1 cue spoken as the Greek letter name — ACCEPTED: every Greek letter name begins with its own sound (κάπα, πι, μι…), so it is a valid phonemic cue; documented — cost if wrong: Chris/therapist can ask for show-only later.
+- Phase 2 fix-wave re-review (opus): A–G ADDRESSED; residuals: moduleDone() ignores ending; leave() does not join lastWrite before onLeave (can under-count a confirmed item). Ruling: load-bearing for every later module — one residual commit (leave(then) joins lastWrite; ending guard; next() re-entrancy guard; contract KDoc), cheap re-review, then close — cost if wrong: one more cycle.
+- Residual b901cd2 re-reviewed clean. Phase 2: COMPLETE (JVM 94, connected 25). Deferred: STT listen not cancelled by leave(); all-modules-off screen verified by reading; instrumented tests write the live db.
