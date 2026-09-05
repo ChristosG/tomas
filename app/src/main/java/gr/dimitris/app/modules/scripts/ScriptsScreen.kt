@@ -241,19 +241,15 @@ private fun TurnCard(
                     )
                 }
                 Spacer(Modifier.height(Sizes.gapSmall))
-                Row {
-                    // Nothing to say at level 0: the invitation is the whole of the cue.
-                    QuietButton(
-                        "Άκου ξανά", onClick = onListen, icon = Icons.Rounded.VolumeUp,
-                        enabled = level > 0, modifier = Modifier.weight(1f),
-                    )
-                    Spacer(Modifier.width(Sizes.gapSmall))
-                    QuietButton(
-                        if (recording) "Στοπ" else "Ηχογράφηση", onClick = onRecord,
-                        icon = if (recording) Icons.Rounded.Stop else Icons.Rounded.Mic,
-                        modifier = Modifier.weight(1f),
-                    )
-                }
+                // One under the other, not side by side: «Ηχογράφηση» at his text size wraps onto
+                // three lines in half a card, and a word broken across three lines is not a word.
+                // Nothing to say at level 0: the invitation is the whole of the cue.
+                QuietButton("Άκου ξανά", onClick = onListen, icon = Icons.Rounded.VolumeUp, enabled = level > 0)
+                Spacer(Modifier.height(Sizes.gapSmall))
+                QuietButton(
+                    if (recording) "Στοπ" else "Ηχογράφηση", onClick = onRecord,
+                    icon = if (recording) Icons.Rounded.Stop else Icons.Rounded.Mic,
+                )
                 // Only once there is something of his to compare the model against.
                 if (hasTake && !recording) {
                     Spacer(Modifier.height(Sizes.gapSmall))
