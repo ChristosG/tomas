@@ -17,15 +17,18 @@ class ImageStore(private val files: MediaFiles) {
     /** Reads [uri] (gallery or camera), writes a ≤ MAX_SIDE JPEG into the photos dir, returns it. */
     fun import(resolver: ContentResolver, uri: Uri): File {
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-        resolver.openInputStream(uri).use { BitmapFactory.decodeStream(it, null, bounds) }
+        open(resolver, uri).use { BitmapFactory.decodeStream(it, null, bounds) }
         val options = BitmapFactory.Options().apply { inSampleSize = sampleSize(bounds.outWidth, bounds.outHeight) }
-        val decoded = resolver.openInputStream(uri).use { BitmapFactory.decodeStream(it, null, options) }
+        val decoded = open(resolver, uri).use { BitmapFactory.decodeStream(it, null, options) }
             ?: throw IOException("Δεν άνοιξε η εικόνα $uri")
-        val rotation = resolver.openInputStream(uri)?.use { rotationOf(it) } ?: 0
+        val rotation = open(resolver, uri).use { rotationOf(it) }
         val out = files.newPhotoFile()
         write(rotate(scaleDown(decoded), rotation), out)
         return out
     }
+
+    private fun open(resolver: ContentResolver, uri: Uri): InputStream =
+        resolver.openInputStream(uri) ?: throw IOException("Δεν άνοιξε η εικόνα $uri")
 
     /** Camera photos land directly in the photos dir; shrink and straighten them in place. */
     fun shrinkInPlace(file: File) {

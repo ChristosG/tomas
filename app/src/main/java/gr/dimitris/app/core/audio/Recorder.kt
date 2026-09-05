@@ -36,7 +36,7 @@ class Recorder(private val context: Context, private val files: MediaFiles) {
 
     fun stop(): Recorded {
         val r = recorder ?: error("Δεν ηχογραφεί")
-        val file = current!!
+        val file = current ?: error("Δεν ηχογραφεί")
         val duration = SystemClock.elapsedRealtime() - startedAt
         try {
             r.stop()

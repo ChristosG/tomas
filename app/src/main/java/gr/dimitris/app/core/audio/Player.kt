@@ -1,23 +1,24 @@
 package gr.dimitris.app.core.audio
 
 import android.media.MediaPlayer
+import kotlinx.coroutines.CancellableContinuation
 import kotlinx.coroutines.suspendCancellableCoroutine
 import java.io.File
 import java.io.IOException
 import kotlin.coroutines.resume
 
-/** Plays one file at a time and suspends until it ends. */
+/** Plays one file at a time and suspends until it ends. Starting a new file ends the previous caller's wait with success. */
 class Player {
     private var player: MediaPlayer? = null
+    private var waiting: CancellableContinuation<Result<Unit>>? = null
 
     suspend fun play(file: File): Result<Unit> = suspendCancellableCoroutine { cont ->
         stop()
         val p = MediaPlayer()
-        player = p
-        p.setOnCompletionListener { release(p); if (cont.isActive) cont.resume(Result.success(Unit)) }
+        synchronized(this) { player = p; waiting = cont }
+        p.setOnCompletionListener { finish(p, Result.success(Unit)) }
         p.setOnErrorListener { _, what, extra ->
-            release(p)
-            if (cont.isActive) cont.resume(Result.failure(IOException("MediaPlayer error $what/$extra")))
+            finish(p, Result.failure(IOException("Σφάλμα αναπαραγωγής $what/$extra")))
             true
         }
         try {
@@ -25,19 +26,28 @@ class Player {
             p.prepare()
             p.start()
         } catch (e: Exception) {
-            release(p)
-            if (cont.isActive) cont.resume(Result.failure(e))
+            finish(p, Result.failure(e))
         }
-        cont.invokeOnCancellation { stop() }
+        cont.invokeOnCancellation { if (player === p) finish(p, Result.success(Unit)) }
     }
 
+    /** Stops whatever is playing. An interrupted caller gets success, like an interrupted utterance. */
     fun stop() {
-        player?.let { runCatching { if (it.isPlaying) it.stop() }; it.release() }
-        player = null
+        val p = player ?: return
+        finish(p, Result.success(Unit))
     }
 
-    private fun release(p: MediaPlayer) {
+    /** Exactly one finish per player: the first caller to pass the identity check releases it and resumes the waiter. */
+    private fun finish(p: MediaPlayer, result: Result<Unit>) {
+        val cont: CancellableContinuation<Result<Unit>>?
+        synchronized(this) {
+            if (player !== p) return
+            player = null
+            cont = waiting
+            waiting = null
+        }
+        runCatching { if (p.isPlaying) p.stop() }
         p.release()
-        if (player === p) player = null
+        if (cont != null && cont.isActive) cont.resume(result)
     }
 }
