@@ -9,6 +9,12 @@
     <uses-feature android:name="android.hardware.camera" android:required="false" />
     <uses-feature android:name="android.hardware.microphone" android:required="false" />
 
+    <!-- Package visibility: without this the recognizer is invisible and speech recognition
+         silently reports itself unavailable on Android 11 and later. -->
+    <queries>
+        <intent><action android:name="android.speech.RecognitionService" /></intent>
+    </queries>
+
     <application
         android:name=".DimitrisApp"
         android:label="@string/app_name"

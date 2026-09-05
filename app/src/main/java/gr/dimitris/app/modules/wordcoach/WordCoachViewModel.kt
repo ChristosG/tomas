@@ -128,16 +128,25 @@ class WordCoachViewModel(private val graph: AppGraph, private val items: List<It
         }
     }
 
-    /** Optional soft recognition: encouragement only, never a gate. */
+    /**
+     * Optional soft recognition: encouragement only, never a gate. A failed recognition is the
+     * phone's problem, not his, and it is said plainly instead of leaving "Ακούω..." hanging.
+     */
     fun listen() {
         if (!_state.value.sttOn || _state.value.listening) return
-        _state.update { it.copy(listening = true, heard = null, heardMatched = false) }
+        _state.update { it.copy(listening = true, heard = null, heardMatched = false, error = null) }
         viewModelScope.launch {
-            val result = graph.stt.listen(5)
-            val text = result.getOrNull()?.text
-            val matched = text != null && SpeechMatch.matches(text, _state.value.item.text)
-            if (matched) graph.feedback.success()
-            _state.update { it.copy(listening = false, heard = text, heardMatched = matched) }
+            graph.stt.listen(5).fold(
+                onSuccess = { t ->
+                    val matched = SpeechMatch.matches(t.text, _state.value.item.text)
+                    if (matched) graph.feedback.success()
+                    _state.update { it.copy(listening = false, heard = t.text, heardMatched = matched) }
+                },
+                onFailure = { e ->
+                    graph.errors.record("wordcoach listen", e)
+                    _state.update { it.copy(listening = false, heard = null, heardMatched = false, error = HEARD_NOTHING) }
+                },
+            )
         }
     }
 
@@ -217,5 +226,8 @@ class WordCoachViewModel(private val graph: AppGraph, private val items: List<It
         /** Said on the screen when a tap made no sound at all. */
         const val SPEECH_FAILED = "Δεν ακούγεται η φωνή. Δες τις ρυθμίσεις."
         const val MIC_DENIED = "Χωρίς άδεια μικροφώνου"
+
+        /** Recognition came back with nothing. Never a verdict on him: the invitation stays open. */
+        const val HEARD_NOTHING = "Δεν άκουσα τίποτα. Δοκίμασε ξανά αν θέλεις."
     }
 }

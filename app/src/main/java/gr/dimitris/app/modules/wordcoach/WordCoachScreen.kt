@@ -46,6 +46,10 @@ fun WordCoachScreen(items: List<Item>, sessionId: String?, onDone: () -> Unit, o
     val askMic = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) vm.toggleRecording() else vm.micDenied()
     }
+    // Recognition opens the microphone too, so it asks for the same permission before it starts.
+    val askListen = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) vm.listen() else vm.micDenied()
+    }
 
     LaunchedEffect(s.done) { if (s.done) onDone() }
 
@@ -97,11 +101,16 @@ fun WordCoachScreen(items: List<Item>, sessionId: String?, onDone: () -> Unit, o
         }
         if (!s.confirmed && s.sttOn) {
             Spacer(Modifier.height(Sizes.gapSmall))
-            QuietButton(if (s.listening) "Ακούω..." else "Άκουσέ με", onClick = vm::listen, icon = Icons.Rounded.Hearing)
+            QuietButton(
+                if (s.listening) "Ακούω..." else "Άκουσέ με",
+                onClick = { askListen.launch(Manifest.permission.RECORD_AUDIO) },
+                icon = Icons.Rounded.Hearing,
+            )
             if (s.heard != null) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
                     Text(
-                        if (s.heardMatched) "Άκουσα «${s.heard}». Μπράβο!" else "Άκουσα «${s.heard}». Δοκίμασε ξανά αν θέλεις.",
+                        // A miss is the phone's uncertainty, never a verdict on how he said it.
+                        if (s.heardMatched) "Άκουσα «${s.heard}». Μπράβο!" else "Άκουσα «${s.heard}». Το τηλέφωνο δεν είναι σίγουρο.",
                         style = MaterialTheme.typography.bodyLarge, textAlign = TextAlign.Center,
                     )
                 }
