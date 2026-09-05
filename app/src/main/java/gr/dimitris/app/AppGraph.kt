@@ -50,9 +50,12 @@ class AppGraph(context: Context) {
     /** Always built from the current db, so it survives a backup import. */
     val items: ItemRepository get() = ItemRepository(db.items(), db.recordings(), files::relativize)
 
-    /** Recording-or-TTS voice for items. Built per use so it always sees the current db and settings. */
+    /**
+     * Recording-or-TTS voice for items. Built per use so it always sees the current db and settings,
+     * and routed through [voice] so the one-sound-at-a-time rule still holds for spoken items.
+     */
     val speaker: ItemSpeaker
-        get() = ItemSpeaker(tts, recordingFor = { items.modelRecording(it) }, play = { voice.play(it) }, rate = { settings.speechRate.first() }, resolve = { files.resolve(it) })
+        get() = ItemSpeaker(voice::speak, recordingFor = { items.modelRecording(it) }, play = { voice.play(it) }, rate = { settings.speechRate.first() }, resolve = { files.resolve(it) })
 
     /** Therapy modules in Today-screen order. Empty in phase 0; each later phase adds one. */
     val modules: List<Module> = emptyList()

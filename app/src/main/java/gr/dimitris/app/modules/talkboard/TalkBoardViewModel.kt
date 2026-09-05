@@ -19,6 +19,9 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
+/** Shown under the strip when a tap made no sound at all. */
+const val SPEECH_FAILED = "Δεν ακούγεται η φωνή. Δες τις ρυθμίσεις."
+
 sealed class Tab(val label: String) {
     object Favourites : Tab("Αγαπημένα")
     data class Cat(val category: Category) : Tab(category.greek)
@@ -55,6 +58,13 @@ class TalkBoardViewModel(private val graph: AppGraph) : ViewModel() {
     private val _stripFull = MutableStateFlow(false)
     val stripFull: StateFlow<Boolean> = _stripFull.asStateFlow()
 
+    /**
+     * Set when a speak attempt made no sound, cleared by the next one that does. Silence is the one
+     * failure Dimitris cannot diagnose himself, so it is said on the screen instead of only logged.
+     */
+    private val _speechError = MutableStateFlow<String?>(null)
+    val speechError: StateFlow<String?> = _speechError.asStateFlow()
+
     init { refreshUsage() }
 
     fun selectTab(t: Tab) { _tab.value = t }
@@ -62,25 +72,33 @@ class TalkBoardViewModel(private val graph: AppGraph) : ViewModel() {
     /** Grid tap: say it and add it to the sentence. */
     fun tap(item: Item) {
         _stripFull.value = !strip.add(item)
-        viewModelScope.launch { graph.speaker.speak(item); log(item, inStrip = true) }
+        viewModelScope.launch { heard(graph.speaker.speak(item)); log(item, inStrip = true) }
     }
 
     /** Quick row tap: say it immediately, never added to the sentence. */
     fun tapQuick(item: Item) {
-        viewModelScope.launch { graph.speaker.speak(item); log(item, inStrip = false) }
+        viewModelScope.launch { heard(graph.speaker.speak(item)); log(item, inStrip = false) }
     }
 
     fun speakStrip() {
         val items = strip.items.value
         if (items.isEmpty()) return
         viewModelScope.launch {
-            graph.speaker.speakText(strip.text)
-            graph.feedback.success()
+            if (heard(graph.speaker.speakText(strip.text))) graph.feedback.success()
         }
     }
 
     fun undo() { strip.removeLast(); _stripFull.value = false }
     fun clear() { strip.clear(); _stripFull.value = false }
+
+    /** Records the outcome of one speak attempt and reports whether anything was actually heard. */
+    private fun heard(result: Result<*>): Boolean {
+        result.fold(
+            onSuccess = { _speechError.value = null },
+            onFailure = { graph.errors.record("talkboard speak", it); _speechError.value = SPEECH_FAILED },
+        )
+        return result.isSuccess
+    }
 
     private suspend fun log(item: Item, inStrip: Boolean) {
         val t = now()

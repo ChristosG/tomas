@@ -50,6 +50,7 @@ fun TalkBoardScreen(onBack: () -> Unit) {
     val tab by vm.tab.collectAsStateWithLifecycle()
     val quick by vm.quick.collectAsStateWithLifecycle()
     val shown by vm.shown.collectAsStateWithLifecycle()
+    val speechError by vm.speechError.collectAsStateWithLifecycle()
 
     DimitrisScreen(
         title = "Μίλα",
@@ -67,6 +68,10 @@ fun TalkBoardScreen(onBack: () -> Unit) {
         },
     ) {
         StripRow(strip, stripFull)
+        speechError?.let {
+            Spacer(Modifier.height(Sizes.gapSmall))
+            Text(it, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.error)
+        }
         Spacer(Modifier.height(Sizes.gapSmall))
 
         if (quick.isNotEmpty()) {
