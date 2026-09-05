@@ -5,6 +5,7 @@ import gr.dimitris.app.core.data.Category
 import gr.dimitris.app.core.data.Item
 import gr.dimitris.app.core.data.ItemKind
 import gr.dimitris.app.core.data.Source
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
@@ -14,27 +15,22 @@ import java.io.File
 class SeedImporter(private val graph: AppGraph) {
 
     suspend fun importIfNeeded() = withContext(Dispatchers.IO) {
-        val manifest = runCatching {
-            graph.app.assets.open("seed/seed.json").bufferedReader().use { SeedManifest.parse(it.readText()) }
-        }.getOrElse { graph.errors.record("seed manifest", it); return@withContext }
-
-        if (graph.settings.seedVersion.first() >= manifest.version) return@withContext
-
-        val existing = graph.db.items().activeOfSource(Source.SEED).map { it.text }.toSet()
-        for (entry in manifest.items) {
-            if (entry.text in existing) continue
-            val image = entry.image?.let { copyAsset("seed/$it") }
-            graph.items.save(
-                Item(
-                    text = entry.text,
-                    kind = runCatching { ItemKind.valueOf(entry.kind) }.getOrDefault(ItemKind.WORD),
-                    category = runCatching { Category.valueOf(entry.category) }.getOrDefault(Category.CUSTOM),
-                    imagePath = image?.absolutePath,
-                    source = Source.SEED,
-                )
-            )
+        try {
+            val manifest = graph.app.assets.open("seed/seed.json").bufferedReader().use { SeedManifest.parse(it.readText()) }
+            if (graph.settings.seedVersion.first() >= manifest.version) return@withContext
+            val existing = graph.db.items().activeOfSource(Source.SEED).map { it.text.trim() }.toSet()
+            for (entry in manifest.items) {
+                if (entry.text.trim() in existing) continue
+                val image = entry.image?.let { copyAsset("seed/$it") }
+                graph.items.save(Item(text = entry.text, kind = runCatching { ItemKind.valueOf(entry.kind) }.getOrDefault(ItemKind.WORD),
+                    category = runCatching { Category.valueOf(entry.category) }.getOrDefault(Category.CUSTOM), imagePath = image?.absolutePath, source = Source.SEED))
+            }
+            graph.settings.setSeedVersion(manifest.version)
+        } catch (ce: CancellationException) {
+            throw ce
+        } catch (e: Throwable) {
+            graph.errors.record("seed import", e)
         }
-        graph.settings.setSeedVersion(manifest.version)
     }
 
     private fun copyAsset(name: String): File? = runCatching {

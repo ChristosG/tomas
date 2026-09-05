@@ -57,10 +57,14 @@ for (const w of words) {
   let image = null;
   if (pick) {
     const id = pick._id;
-    const png = await fetch(`https://static.arasaac.org/pictograms/${id}/${id}_300.png`);
-    if (png.ok) {
-      image = `${id}.png`;
-      await fs.writeFile(new URL(image, outDir), Buffer.from(await png.arrayBuffer()));
+    try {
+      const png = await fetch(`https://static.arasaac.org/pictograms/${id}/${id}_300.png`);
+      if (png.ok) {
+        image = `${id}.png`;
+        await fs.writeFile(new URL(image, outDir), Buffer.from(await png.arrayBuffer()));
+      }
+    } catch (e) {
+      console.warn(`image download failed for ${w.text} (id ${id}): ${e.message}`);
     }
   }
   if (!image) {
