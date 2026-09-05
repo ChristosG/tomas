@@ -961,6 +961,58 @@ Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
 
 ### Task 5: Phase 3 verification
 
-- [ ] Full unit + instrumented suites green.
-- [ ] Install on `R5CWC2C1KSJ`; play a full numbers session; add a price to "καφές" (2,50) and "σουβλάκι" (3,80); confirm the Σφάλματα screen stays empty.
-- [ ] Append "Phase 3 verified on <date>, <device>" here; commit `docs(phase3): verification notes`.
+- [x] Full unit + instrumented suites green.
+- [x] Play a full numbers session; add a price to "καφές" (2,50) and "σουβλάκι" (3,80); confirm the Σφάλματα screen stays empty.
+- [x] Append "Phase 3 verified on <date>, <device>" here; commit `docs(phase3): verification notes`.
+
+---
+
+## Verification notes
+
+**Phase 3 verified on 2026-09-05 on `emulator-5554` (AVD Medium_Phone_API_36, Android 16, 1080×2400
+@ 420dpi — the same 411dp width as his phone).** Not yet run on `R5CWC2C1KSJ`: the physical device
+was attached but the phase-3 fix wave was driven on the emulator, so the install there is still owed.
+
+### Suites
+
+| Suite | Command | Result |
+| --- | --- | --- |
+| Unit | `./gradlew -q testDebugUnitTest` | **136 tests, 0 failures, 0 errors, 0 skipped** (126 before the fix wave) |
+| Instrumented | `ANDROID_SERIAL=emulator-5554 ./gradlew connectedDebugAndroidTest` | **28 tests, 0 failures**, including the new `NumbersFlowTest` (wrong-wrong-reveal, and the number line's three tap places) |
+
+The connected run uninstalls the app; it was reinstalled with `adb install -r -t` before the manual
+checks below, and again after the suite was re-run at the last commit — so the emulator now holds a
+fresh install, without the prices and the level 7 the checks below describe.
+
+### Played on the device
+
+Driven through `uiautomator dump` + `input tap` (`adb shell input text` cannot type Greek), screenshots
+in `.superpowers/sdd/2026-09-05-phase3-numbers/shots/`.
+
+- **Every level, climbed the way he would climb it.** Free practice at level 1 answered right → «Ανεβαίνεις
+  στο επίπεδο 2», and so on through 3 (counting), 4, 5 (digit ↔ word), 6 (compare + line) to 7. 93
+  attempt rows across `numbers:level:1` … `numbers:level:7`.
+- **The number line is a line** (shot 02): one rule the full width, a tick at every number, labels at 0,
+  5 and 10 only, and three blank 72dp circles standing on their own places. Measured from the dump:
+  72dp buttons, centres on the true positions, no two overlapping.
+- **Wrong-wrong-reveal** (shots 03, 04): first miss → haptic + «Ξανά.», «Παράλειψη» still the only way
+  on; second miss → the right circle turns green, «Να το σωστό.» on the screen, the answer spoken, and
+  «Επόμενο» appears. The row lands as ASSISTED.
+- **Mixed session** (shot 05): word coach 7 + numbers 7 = the planned 14, and the summary says
+  «Έκανες 14 ασκήσεις σήμερα: Λέξεις, Αριθμοί.» — 14 attempt rows carry that session id. The numbers
+  module handed straight back: no «Τέλος με τους αριθμούς!» screen inside the session.
+- **The system back gesture** during a numbers exercise (shot 06) leaves to Today through the module's
+  own `onBack`, and the answer just given is in the database (`numbers:level:2`, CORRECT, one more row).
+- **Level 7 with his real prices** (shots 09-11): «Ποιο είναι πενήντα λεπτά;» / «Ποιο είναι δέκα ευρώ;»
+  ask in words over numeral buttons, every «Κοστίζει X. Με τι πληρώνεις;» offers exactly one note that
+  covers the price, and «Ποιο είναι πιο ακριβό;» compares καφές 2,50 € against σουβλάκι 3,80 € — both
+  typed into the caregiver editor on the device during this run.
+- **A skip** records SKIPPED and moves on.
+- **`error_logs` empty** after all of it (database pulled with `-wal` and `-shm`: 0 rows).
+
+### Known gaps
+
+- Nothing has been run on `R5CWC2C1KSJ` yet.
+- No caregiver control for the numbers level (deferred to phase 9); level 7 was reached by climbing.
+- The euro levels still show amounts as text — no coin or note pictures exist yet.
+- Level 5 covers digit ↔ word, not the spec's third representation (quantity).
