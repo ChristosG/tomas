@@ -10,7 +10,6 @@ import gr.dimitris.app.core.data.Outcome
 import gr.dimitris.app.core.data.now
 import gr.dimitris.app.core.greek.Euro
 import gr.dimitris.app.core.greek.GreekNumbers
-import gr.dimitris.app.core.scheduler.startOfDay
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -30,6 +29,8 @@ data class NumbersState(
     val chosen: Int? = null,
     val correct: Boolean? = null,
     val wrongTries: Int = 0,
+    /** Two misses: the right option is lit and said, and the only thing left to do is «Επόμενο». */
+    val revealed: Boolean = false,
     val done: Boolean = false,
     val levelChanged: Int? = null,
     /** Said on the screen when a prompt made no sound at all. */
@@ -74,22 +75,12 @@ class NumbersViewModel(
                 .getOrElse { graph.errors.record("numbers prices", it); emptyList() }
             // Through the same rule the module used, so the list is never empty whatever it was handed.
             exercises = ExerciseGenerator().session(level, prices, exercisesFor(count))
-            results += recentResults(level)
+            // Not before the settings read and the price query: their wait is not his thinking time.
+            startedAt = now()
             _state.value = NumbersState(level = level, exercise = exercises.first(), total = exercises.size)
             speakPrompt()
         }
     }
-
-    /**
-     * The first-try results already stored at this level. Skips are left out, exactly as they are
-     * while he plays ([record]): a question he passed on is not evidence either way.
-     */
-    private suspend fun recentResults(level: Int): List<Boolean> =
-        runCatching {
-            graph.db.attempts().since(startOfDay(now()) - 30L * 24 * 60 * 60 * 1000)
-                .filter { it.module == ModuleId.NUMBERS && it.itemId == "numbers:level:$level" && it.outcome != Outcome.SKIPPED }
-                .map { it.outcome == Outcome.CORRECT }
-        }.getOrDefault(emptyList())
 
     fun speakPrompt() {
         val e = _state.value.exercise ?: return
@@ -119,18 +110,28 @@ class NumbersViewModel(
     fun choose(value: Int) {
         val s = _state.value
         val e = s.exercise ?: return
-        // Answered already: the question stays as it is until «Επόμενο».
-        if (s.correct == true) return
+        // Answered already (right, or shown after two misses): the question stays as it is until
+        // «Επόμενο», and the last screen of a finished run takes no answers at all.
+        if (finishing || ending) return
         if (value == e.answer) {
             graph.feedback.success()
             finishing = true
             _state.update { it.copy(chosen = value, correct = true) }
             viewModelScope.launch { report(graph.speaker.speakText(sayAnswer(e) + ". Σωστά!")) }
             record(e, firstTry = s.wrongTries == 0, given = value)
+        } else if (s.wrongTries + 1 >= WRONG_TRIES_BEFORE_REVEAL) {
+            // Second miss: he is shown and told the answer instead of being left to tap on. It counts
+            // as helped, and a helped answer is what lets the progression step him back down from a
+            // level he cannot do — being stuck is exactly the thing it has to notice.
+            graph.feedback.nudge()
+            finishing = true
+            _state.update { it.copy(chosen = value, correct = false, wrongTries = it.wrongTries + 1, revealed = true) }
+            viewModelScope.launch { report(graph.speaker.speakText("Να το σωστό: ${sayAnswer(e)}.")) }
+            record(e, firstTry = false, given = value)
         } else {
             graph.feedback.nudge()
             _state.update { it.copy(chosen = value, correct = false, wrongTries = it.wrongTries + 1) }
-            viewModelScope.launch { report(graph.speaker.speakText("Όχι αυτό. Δοκίμασε ξανά.")) }
+            viewModelScope.launch { report(graph.speaker.speakText("Ξανά.")) }
         }
     }
 
@@ -138,7 +139,7 @@ class NumbersViewModel(
         val e = _state.value.exercise ?: return
         // One skip per exercise: the button is still there for a frame, and a second tap would pass
         // on the exercise that has not been shown yet.
-        if (finishing) return
+        if (finishing || ending) return
         finishing = true
         graph.feedback.nudge()
         record(e, firstTry = false, given = null, skipped = true)
@@ -161,7 +162,7 @@ class NumbersViewModel(
         val i = s.index + 1
         if (i >= exercises.size) { finishSession(); return }
         startedAt = now()
-        _state.update { it.copy(index = i, exercise = exercises[i], tapped = 0, chosen = null, correct = null, wrongTries = 0) }
+        _state.update { it.copy(index = i, exercise = exercises[i], tapped = 0, chosen = null, correct = null, wrongTries = 0, revealed = false) }
         speakPrompt()
     }
 
@@ -195,7 +196,9 @@ class NumbersViewModel(
 
     private fun record(e: NumberExercise, firstTry: Boolean, given: Int?, skipped: Boolean = false) {
         val outcome = when { skipped -> Outcome.SKIPPED; firstTry -> Outcome.CORRECT; else -> Outcome.ASSISTED }
-        if (!skipped) results += firstTry
+        // Every finished exercise is evidence, a skip included: passing on a question is not neutral,
+        // it is one he could not do, and a level he skips his way through has to be steppable down.
+        results += (outcome == Outcome.CORRECT)
         val detail = gson.toJson(mapOf("type" to e.type, "exercise" to e, "given" to given, "answer" to e.answer))
         // Read eagerly: the clock is restarted the moment the next exercise arrives.
         val began = startedAt
@@ -224,5 +227,8 @@ class NumbersViewModel(
     companion object {
         /** Said on the screen when a tap made no sound at all. */
         const val SPEECH_FAILED = "Δεν ακούγεται η φωνή. Δες τις ρυθμίσεις."
+
+        /** One free retry, then the answer. Tapping on blind past that teaches nothing. */
+        const val WRONG_TRIES_BEFORE_REVEAL = 2
     }
 }

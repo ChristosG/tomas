@@ -11,6 +11,7 @@ import androidx.compose.material.icons.rounded.VolumeUp
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -31,7 +32,16 @@ fun NumbersScreen(count: Int, sessionId: String?, onDone: () -> Unit, onLeave: (
     val vm: NumbersViewModel = viewModel(key = "numbers-${sessionId ?: "practice"}-$count") { NumbersViewModel(graph, sessionId, count) }
     val s by vm.state.collectAsStateWithLifecycle()
 
-    if (s.done) {
+    /**
+     * A mixed session ends with its own summary, so a second "well done" screen in the middle of it
+     * is one tap of noise: the module hands straight back. Free practice keeps the end screen — it is
+     * the only ending there is — and so does a level change, whichever it is, because the level is
+     * announced on it and he has to be able to read and hear it before it goes.
+     */
+    val endScreen = sessionId == null || s.levelChanged != null
+    LaunchedEffect(s.done) { if (s.done && !endScreen) onDone() }
+
+    if (s.done && endScreen) {
         DimitrisScreen(bottom = { BigButton("Εντάξει", onClick = onDone) }) {
             SuccessMark(visible = true)
             Spacer(Modifier.height(Sizes.gap))
@@ -55,7 +65,10 @@ fun NumbersScreen(count: Int, sessionId: String?, onDone: () -> Unit, onLeave: (
         // Back is "I want out", not "I finished": the module drops what it was doing and says so.
         onBack = { vm.leave(onLeave) },
         bottom = {
+            // Answered, or shown after two misses: either way the question is over and the only way
+            // on is «Επόμενο». Green only when he found it himself.
             if (s.correct == true) BigButton("Επόμενο", onClick = vm::next, tone = ButtonTone.Success)
+            else if (s.revealed) BigButton("Επόμενο", onClick = vm::next)
             else QuietButton("Παράλειψη", onClick = vm::skip)
         },
     ) {
@@ -68,6 +81,19 @@ fun NumbersScreen(count: Int, sessionId: String?, onDone: () -> Unit, onLeave: (
             }
             Spacer(Modifier.height(Sizes.gapSmall))
             QuietButton("Άκου ξανά", onClick = vm::speakPrompt, icon = Icons.Rounded.VolumeUp)
+            // Above the options, not under them: eleven buttons below it would put the tick he is
+            // owed for a right answer off the bottom of the screen, and the icon is one of the three
+            // things a success is made of.
+            SuccessMark(visible = s.correct == true, modifier = Modifier.fillMaxWidth())
+            // A miss says so in writing as well as out loud: the sound may be off, or missed.
+            if (s.correct == false) {
+                Spacer(Modifier.height(Sizes.gapSmall))
+                Text(
+                    if (s.revealed) "Να το σωστό." else "Ξανά.",
+                    style = MaterialTheme.typography.headlineMedium,
+                    color = MaterialTheme.colorScheme.secondary,
+                )
+            }
             Spacer(Modifier.height(Sizes.gap))
             when (e) {
                 is NumberExercise.Compare -> CompareView(e, s, vm::choose)
@@ -79,7 +105,6 @@ fun NumbersScreen(count: Int, sessionId: String?, onDone: () -> Unit, onLeave: (
                 is NumberExercise.Pay -> PayView(e, s, vm::choose)
             }
             Spacer(Modifier.height(Sizes.gap))
-            SuccessMark(visible = s.correct == true, modifier = Modifier.fillMaxWidth())
         }
     }
 }
