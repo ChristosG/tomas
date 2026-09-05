@@ -18,16 +18,18 @@ import gr.dimitris.app.ui.components.DimitrisScreen
 @Composable
 fun PracticeScreen(moduleId: ModuleId, onDone: () -> Unit) {
     val graph = LocalAppGraph.current
-    val module = remember(moduleId) { graph.modules.first { it.id == moduleId } }
+    // Null only if the route outlived the module registry; the empty screen is the answer either way.
+    val module = remember(moduleId) { graph.modules.firstOrNull { it.id == moduleId } }
     var items by remember { mutableStateOf<List<Item>?>(null) }
 
     LaunchedEffect(moduleId) {
-        items = runCatching { module.practiceFor(graph) }.getOrElse { graph.errors.record("practice ${module.id}", it); emptyList() }
+        items = module?.let { m -> runCatching { m.practiceFor(graph) }.getOrElse { graph.errors.record("practice ${m.id}", it); emptyList() } }
+            ?: emptyList()
     }
 
     when (val list = items) {
         null -> DimitrisScreen { Text("Ετοιμάζω...", style = MaterialTheme.typography.headlineMedium) }
-        else -> if (list.isEmpty()) DimitrisScreen(bottom = { BigButton("Εντάξει", onClick = onDone) }) {
+        else -> if (module == null || list.isEmpty()) DimitrisScreen(bottom = { BigButton("Εντάξει", onClick = onDone) }) {
             Text("Δεν υπάρχουν λέξεις ακόμα. Ζήτα από κάποιον να προσθέσει.", style = MaterialTheme.typography.headlineMedium)
         } else module.Screen(items = list, sessionId = null, onDone = onDone)
     }

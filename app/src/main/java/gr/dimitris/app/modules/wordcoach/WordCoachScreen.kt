@@ -39,9 +39,13 @@ import gr.dimitris.app.ui.theme.Sizes
 @Composable
 fun WordCoachScreen(items: List<Item>, sessionId: String?, onDone: () -> Unit) {
     val graph = LocalAppGraph.current
-    val vm: WordCoachViewModel = viewModel(key = "wordcoach-${sessionId ?: "practice"}-${items.size}") { WordCoachViewModel(graph, items, sessionId) }
+    val vm: WordCoachViewModel = viewModel(
+        key = "wordcoach-${sessionId ?: "practice"}-${items.size}-${items.firstOrNull()?.id}",
+    ) { WordCoachViewModel(graph, items, sessionId) }
     val s by vm.state.collectAsStateWithLifecycle()
-    val askMic = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted -> if (granted) vm.toggleRecording() }
+    val askMic = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) vm.toggleRecording() else vm.micDenied()
+    }
 
     LaunchedEffect(s.done) { if (s.done) onDone() }
 
@@ -72,21 +76,25 @@ fun WordCoachScreen(items: List<Item>, sessionId: String?, onDone: () -> Unit) {
             Text(s.cueText ?: "", style = MaterialTheme.typography.displayLarge, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
         }
         Spacer(Modifier.height(Sizes.gapSmall))
+        // Once he has said it, the word is done: only listening again and "Επόμενο" are left.
         Row {
-            QuietButton("Άκου", onClick = vm::repeatCue, icon = Icons.Rounded.VolumeUp, modifier = Modifier.weight(1f))
-            Spacer(Modifier.width(Sizes.gapSmall))
-            QuietButton(
-                if (s.isRecording) "Στοπ" else "Πες το",
-                onClick = { askMic.launch(Manifest.permission.RECORD_AUDIO) },
-                icon = if (s.isRecording) Icons.Rounded.Stop else Icons.Rounded.Mic,
-                modifier = Modifier.weight(1f),
-            )
+            // Nothing to say at level 0: the picture is the cue.
+            QuietButton("Άκου", onClick = vm::repeatCue, icon = Icons.Rounded.VolumeUp, enabled = s.level > 0, modifier = Modifier.weight(1f))
+            if (!s.confirmed) {
+                Spacer(Modifier.width(Sizes.gapSmall))
+                QuietButton(
+                    if (s.isRecording) "Στοπ" else "Πες το",
+                    onClick = { askMic.launch(Manifest.permission.RECORD_AUDIO) },
+                    icon = if (s.isRecording) Icons.Rounded.Stop else Icons.Rounded.Mic,
+                    modifier = Modifier.weight(1f),
+                )
+            }
         }
-        if (s.selfRecordingPath != null && !s.isRecording) {
+        if (!s.confirmed && s.selfRecordingPath != null && !s.isRecording) {
             Spacer(Modifier.height(Sizes.gapSmall))
             QuietButton("Σύγκριση", onClick = vm::playComparison, icon = Icons.Rounded.Compare)
         }
-        if (s.sttOn) {
+        if (!s.confirmed && s.sttOn) {
             Spacer(Modifier.height(Sizes.gapSmall))
             QuietButton(if (s.listening) "Ακούω..." else "Άκουσέ με", onClick = vm::listen, icon = Icons.Rounded.Hearing)
             if (s.heard != null) {

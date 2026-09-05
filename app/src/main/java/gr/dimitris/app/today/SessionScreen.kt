@@ -33,11 +33,16 @@ fun SessionScreen(onDone: () -> Unit) {
         }
         is SessionStep.Run -> key(s.index) { s.module.Screen(items = s.items, sessionId = s.sessionId, onDone = vm::moduleDone) }
         is SessionStep.Summary -> DimitrisScreen(bottom = { BigButton("Εντάξει", onClick = onDone) }) {
-            SuccessMark(visible = true)
-            Spacer(Modifier.height(Sizes.gap))
-            Text("Μπράβο Δημήτρη!", style = MaterialTheme.typography.displayLarge)
-            Spacer(Modifier.height(Sizes.gapSmall))
-            Text("Έκανες ${s.completed} από ${s.planned} ασκήσεις σήμερα.", style = MaterialTheme.typography.bodyLarge)
+            if (s.completed > 0) {
+                SuccessMark(visible = true)
+                Spacer(Modifier.height(Sizes.gap))
+                Text("Μπράβο Δημήτρη!", style = MaterialTheme.typography.displayLarge)
+                Spacer(Modifier.height(Sizes.gapSmall))
+                Text("Έκανες ${s.completed} ασκήσεις σήμερα.", style = MaterialTheme.typography.bodyLarge)
+            } else {
+                // No Μπράβο for a session he walked away from: an invitation, not a score.
+                Text(SessionViewModel.NOTHING_DONE, style = MaterialTheme.typography.headlineMedium)
+            }
         }
     }
 }

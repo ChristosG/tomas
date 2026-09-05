@@ -9,6 +9,7 @@ import gr.dimitris.app.core.data.ModuleId
 import gr.dimitris.app.core.data.Who
 import gr.dimitris.app.core.data.now
 import gr.dimitris.app.core.speech.SpeechMatch
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -41,6 +42,9 @@ class WordCoachViewModel(private val graph: AppGraph, private val items: List<It
     private var startedAt = now()
     private var selfRecordingId: String? = null
 
+    /** The write of the last take. The attempt waits for it, so it can point at the recording. */
+    private var recordingSave: Job? = null
+
     private val _state = MutableStateFlow(WordCoachState(total = items.size, item = items.first()))
     val state: StateFlow<WordCoachState> = _state.asStateFlow()
 
@@ -66,20 +70,30 @@ class WordCoachViewModel(private val graph: AppGraph, private val items: List<It
         val s = _state.value
         viewModelScope.launch {
             when (s.level) {
-                1, 2 -> ladder.cueText()?.let { graph.speaker.speakText(it) }
-                3, 4 -> graph.speaker.speak(s.item)
+                1, 2 -> ladder.cueText()?.let { heard(graph.speaker.speakText(it)) }
+                3, 4 -> heard(graph.speaker.speak(s.item))
                 else -> Unit
             }
         }
     }
+
+    /**
+     * Records the outcome of one speak or play attempt. Silence is the one failure Dimitris cannot
+     * diagnose himself, so it is said on the screen and cleared by the next sound that comes out.
+     */
+    private fun heard(result: Result<*>) = result.fold(
+        onSuccess = { _state.update { if (it.error == SPEECH_FAILED) it.copy(error = null) else it } },
+        onFailure = { e -> graph.errors.record("wordcoach speak", e); _state.update { it.copy(error = SPEECH_FAILED) } },
+    )
 
     fun toggleRecording() {
         if (_state.value.isRecording) {
             runCatching { graph.voice.stopRecording() }
                 .onSuccess { rec ->
                     _state.update { it.copy(isRecording = false, selfRecordingPath = graph.files.relativize(rec.file)) }
-                    viewModelScope.launch {
-                        selfRecordingId = graph.items.addRecording(_state.value.item.id, rec.file, rec.durationMs, Who.DIMITRIS).id
+                    recordingSave = viewModelScope.launch {
+                        runCatching { graph.items.addRecording(_state.value.item.id, rec.file, rec.durationMs, Who.DIMITRIS).id }
+                            .fold({ selfRecordingId = it }, { graph.errors.record("wordcoach save recording", it) })
                     }
                 }
                 .onFailure { e -> graph.errors.record("wordcoach record stop", e); _state.update { it.copy(isRecording = false, error = "Πολύ σύντομη ηχογράφηση") } }
@@ -90,12 +104,15 @@ class WordCoachViewModel(private val graph: AppGraph, private val items: List<It
         }
     }
 
+    /** The microphone was refused: say so instead of a button that does nothing. */
+    fun micDenied() = _state.update { it.copy(error = MIC_DENIED) }
+
     /** Model voice, then his own recording. */
     fun playComparison() {
         val path = _state.value.selfRecordingPath ?: return
         viewModelScope.launch {
-            graph.speaker.speak(_state.value.item)
-            graph.voice.play(graph.files.resolve(path)).onFailure { graph.errors.record("wordcoach compare", it) }
+            heard(graph.speaker.speak(_state.value.item))
+            heard(graph.voice.play(graph.files.resolve(path)))
         }
     }
 
@@ -119,14 +136,20 @@ class WordCoachViewModel(private val graph: AppGraph, private val items: List<It
         if (_state.value.isRecording) toggleRecording()
         val s = _state.value
         val outcome = ladder.outcomeFor(confirmed)
+        // Read eagerly: the ladder is replaced the moment the next word starts.
+        val level = ladder.level
+        val save = recordingSave
         val detail = s.heard?.let { """{"heard":${jsonString(it)},"matched":${s.heardMatched}}""" } ?: "{}"
         viewModelScope.launch {
+            // The recording row carries the id the attempt points at, so let its write land first.
+            save?.join()
+            val recordingId = selfRecordingId
             runCatching {
                 graph.db.attempts().insert(
                     Attempt(itemId = s.item.id, module = ModuleId.WORDCOACH, sessionId = sessionId, startedAt = startedAt,
-                        durationMs = now() - startedAt, outcome = outcome, cueLevel = ladder.level, selfRecordingId = selfRecordingId, detail = detail)
+                        durationMs = now() - startedAt, outcome = outcome, cueLevel = level, selfRecordingId = recordingId, detail = detail)
                 )
-                graph.scheduler.record(s.item.id, ModuleId.WORDCOACH, outcome, ladder.level)
+                graph.scheduler.record(s.item.id, ModuleId.WORDCOACH, outcome, level)
             }.onFailure { graph.errors.record("wordcoach finish", it) }
         }
         if (confirmed) {
@@ -139,11 +162,14 @@ class WordCoachViewModel(private val graph: AppGraph, private val items: List<It
     }
 
     fun next() {
+        // A take still running belongs to the word being left behind.
+        if (graph.voice.isRecording) graph.voice.cancelRecording()
         val i = _state.value.index + 1
         if (i >= items.size) { _state.update { it.copy(done = true) }; return }
         ladder = CueLadder(items[i])
         startedAt = now()
         selfRecordingId = null
+        recordingSave = null
         _state.value = WordCoachState(index = i, total = items.size, item = items[i], sttOn = _state.value.sttOn)
     }
 
@@ -152,4 +178,10 @@ class WordCoachViewModel(private val graph: AppGraph, private val items: List<It
     }
 
     private fun jsonString(s: String) = "\"" + s.replace("\\", "\\\\").replace("\"", "\\\"") + "\""
+
+    companion object {
+        /** Said on the screen when a tap made no sound at all. */
+        const val SPEECH_FAILED = "Δεν ακούγεται η φωνή. Δες τις ρυθμίσεις."
+        const val MIC_DENIED = "Χωρίς άδεια μικροφώνου"
+    }
 }

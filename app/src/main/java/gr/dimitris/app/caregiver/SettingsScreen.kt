@@ -41,6 +41,8 @@ fun SettingsScreen(onBack: () -> Unit) {
     val lock by graph.settings.caregiverLock.collectAsStateWithLifecycle(initialValue = false)
     var draftRate by remember(rate) { mutableFloatStateOf(rate) }
     val lockAvailable = remember { canAuthenticate(context) }
+    // A PackageManager query: asked once, not on every recomposition.
+    val sttAvailable = remember { graph.stt.isAvailable }
     val version = remember {
         runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }.getOrNull() ?: "?"
     }
@@ -78,21 +80,31 @@ fun SettingsScreen(onBack: () -> Unit) {
             Text("Ασκήσεις", style = MaterialTheme.typography.titleLarge)
             val enabled by graph.settings.enabledModules.collectAsStateWithLifecycle(initialValue = emptySet())
             graph.modules.forEach { m ->
-                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                val moduleOn = m.id in enabled
+                // Whole row, 72dp, like the lock above: one thumb, no aiming at the switch.
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth().heightIn(min = Sizes.touchMin)
+                        .clickable { scope.launch { graph.settings.setModuleEnabled(m.id, !moduleOn) } },
+                ) {
                     Text(m.titleGreek, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
-                    Switch(checked = m.id in enabled, onCheckedChange = { on -> scope.launch { graph.settings.setModuleEnabled(m.id, on) } })
+                    Switch(checked = moduleOn, onCheckedChange = { on -> scope.launch { graph.settings.setModuleEnabled(m.id, on) } })
                 }
             }
             Spacer(Modifier.height(Sizes.gap))
 
             Text("Αναγνώριση ομιλίας (δοκιμαστικό)", style = MaterialTheme.typography.titleLarge)
             val stt by graph.settings.sttEnabled.collectAsStateWithLifecycle(initialValue = false)
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth().heightIn(min = Sizes.touchMin)
+                    .clickable(enabled = sttAvailable) { scope.launch { graph.settings.setSttEnabled(!stt) } },
+            ) {
                 Text(
-                    if (graph.stt.isAvailable) "Δείχνει τι άκουσε το τηλέφωνο. Ποτέ δεν τον κόβει." else "Η συσκευή δεν έχει αναγνώριση ομιλίας.",
+                    if (sttAvailable) "Δείχνει τι άκουσε το τηλέφωνο. Ποτέ δεν τον κόβει." else "Η συσκευή δεν έχει αναγνώριση ομιλίας.",
                     style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f),
                 )
-                Switch(checked = stt && graph.stt.isAvailable, enabled = graph.stt.isAvailable, onCheckedChange = { on -> scope.launch { graph.settings.setSttEnabled(on) } })
+                Switch(checked = stt && sttAvailable, enabled = sttAvailable, onCheckedChange = { on -> scope.launch { graph.settings.setSttEnabled(on) } })
             }
             Spacer(Modifier.height(Sizes.gap))
 

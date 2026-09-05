@@ -64,12 +64,14 @@ fun QuietButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     icon: ImageVector? = null,
+    enabled: Boolean = true,
     contentDescription: String? = null,
     iconOnly: Boolean = false,
 ) {
     val feedback = LocalFeedback.current
     OutlinedButton(
         onClick = { feedback.tap(); onClick() },
+        enabled = enabled,
         modifier = modifier.fillMaxWidth().heightIn(min = Sizes.touchMin),
         shape = RoundedCornerShape(Sizes.corner),
         contentPadding = contentPadding(iconOnly),
