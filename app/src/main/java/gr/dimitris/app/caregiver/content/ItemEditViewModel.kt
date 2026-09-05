@@ -71,7 +71,16 @@ class ItemEditViewModel(private val graph: AppGraph, private val itemId: String?
     }
 
     fun setText(text: String) = _state.update { it.copy(text = text, autoSyllable = Syllabifier.firstSyllable(text.trim()), error = null) }
-    fun setKind(kind: ItemKind) = _state.update { it.copy(kind = kind) }
+    /**
+     * The sung row — its «Στοπ» included — is drawn only for a phrase, so switching to «Λέξη» while
+     * a sung take runs would take away the only control that could stop it and leave the spoken
+     * button disabled behind it. The take is closed here first, and kept: it is hers, and switching
+     * back to «Φράση» finds it where she left it.
+     */
+    fun setKind(kind: ItemKind) {
+        if (kind != ItemKind.PHRASE && _state.value.isRecordingSung) toggleSungRecording()
+        _state.update { it.copy(kind = kind) }
+    }
     fun setCategory(category: Category) = _state.update { it.copy(category = category) }
     fun setPinned(on: Boolean) = _state.update { it.copy(pinned = on) }
     fun setPriceText(t: String) = _state.update { it.copy(priceText = t, error = null) }
@@ -169,11 +178,17 @@ class ItemEditViewModel(private val graph: AppGraph, private val itemId: String?
                 )
                 val saved = graph.items.save(draft)
                 _state.value.newRecording?.let { graph.items.addRecording(saved.id, it.file, it.durationMs, Who.CAREGIVER) }
-                _state.value.newSungRecording?.let { graph.items.addRecording(saved.id, it.file, it.durationMs, Who.CAREGIVER, RecordingStyle.SUNG) }
+                // Only a phrase is ever sung: attaching the take to a word would leave an .m4a on
+                // disk that no module will ever look for, so a take orphaned by the kind switch is
+                // deleted rather than saved.
+                val sung = _state.value.newSungRecording?.takeIf { s.kind == ItemKind.PHRASE }
+                sung?.let { graph.items.addRecording(saved.id, it.file, it.durationMs, Who.CAREGIVER, RecordingStyle.SUNG) }
+                if (sung == null) _state.value.newSungRecording?.file?.delete()
                 _state.update {
                     it.copy(
                         id = saved.id, newRecording = null, savedRecordingPath = it.recordingPath,
-                        newSungRecording = null, savedSungPath = it.sungPath, saving = false,
+                        newSungRecording = null, savedSungPath = if (sung != null) it.sungPath else it.savedSungPath,
+                        saving = false,
                     )
                 }
                 graph.feedback.success()
