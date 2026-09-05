@@ -9,16 +9,17 @@ import androidx.compose.runtime.staticCompositionLocalOf
 
 /** The three signals of the app. Success is always icon + sound + haptic, never colour alone. */
 class Feedback(context: Context) {
-    private val tones = ToneGenerator(AudioManager.STREAM_MUSIC, 70)
+    /** The tone generator refuses to open when the audio hardware is busy; the app must still run, silently. */
+    private val tones: ToneGenerator? = runCatching { ToneGenerator(AudioManager.STREAM_MUSIC, 70) }.getOrNull()
     private val vibrator: Vibrator? = context.getSystemService(Vibrator::class.java)
 
     fun success() {
-        tones.startTone(ToneGenerator.TONE_PROP_ACK, 150)
+        tones?.startTone(ToneGenerator.TONE_PROP_ACK, 150)
         vibrate(longArrayOf(0, 40, 60, 40))
     }
 
     fun nudge() {
-        tones.startTone(ToneGenerator.TONE_PROP_BEEP, 80)
+        tones?.startTone(ToneGenerator.TONE_PROP_BEEP, 80)
         vibrate(longArrayOf(0, 30))
     }
 

@@ -11,8 +11,13 @@ class DimitrisApp : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        // First, so a crash while the graph is being built is still written down. Until the graph
+        // exists the dao lambda throws, which CrashHandler swallows.
+        CrashHandler.install(this) {
+            check(::graph.isInitialized) { "Η βάση δεν έχει ανοίξει ακόμα" }
+            graph.db.errorLogs()
+        }
         graph = AppGraph(this)
-        CrashHandler.install { graph.db.errorLogs() }
         graph.scope.launch { SeedImporter(graph).importIfNeeded() }
     }
 }
