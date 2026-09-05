@@ -85,33 +85,28 @@ class ItemEditViewModel(private val graph: AppGraph, private val itemId: String?
         if (_state.value.isRecording) stopRecording() else startRecording()
     }
 
-    /** Only one thing makes sound at a time: recording silences both the voice and the player. */
     private fun startRecording() {
-        graph.tts.stop()
-        graph.player.stop()
-        runCatching { graph.recorder.start() }
+        runCatching { graph.voice.startRecording() }
             .onSuccess { _state.update { it.copy(isRecording = true, error = null) } }
             .onFailure { e -> graph.errors.record("recorder start", e); _state.update { it.copy(error = "Δεν ξεκίνησε η ηχογράφηση") } }
     }
 
     private fun stopRecording() {
-        runCatching { graph.recorder.stop() }
+        runCatching { graph.voice.stopRecording() }
             .onSuccess { rec -> _state.value.newRecording?.file?.delete(); _state.update { it.copy(isRecording = false, newRecording = rec) } }
             .onFailure { e -> graph.errors.record("recorder stop", e); _state.update { it.copy(isRecording = false, error = "Πολύ σύντομη ηχογράφηση, δοκίμασε ξανά") } }
     }
 
     fun playRecording() {
         val path = _state.value.recordingPath ?: return
-        graph.tts.stop()
-        viewModelScope.launch { graph.player.play(graph.files.resolve(path)).onFailure { graph.errors.record("play recording", it) } }
+        viewModelScope.launch { graph.voice.play(graph.files.resolve(path)).onFailure { graph.errors.record("play recording", it) } }
     }
 
     fun speakWithTts() {
         val text = _state.value.text.trim()
         if (text.isEmpty()) return
-        graph.player.stop()
         viewModelScope.launch {
-            graph.tts.speak(text, graph.settings.speechRate.first()).onFailure { graph.errors.record("tts", it) }
+            graph.voice.speak(text, graph.settings.speechRate.first()).onFailure { graph.errors.record("tts", it) }
         }
     }
 
@@ -149,7 +144,7 @@ class ItemEditViewModel(private val graph: AppGraph, private val itemId: String?
     }
 
     override fun onCleared() {
-        if (graph.recorder.isRecording) graph.recorder.cancel()
+        if (graph.voice.isRecording) graph.voice.cancelRecording()
         _state.value.newRecording?.file?.delete()
     }
 }

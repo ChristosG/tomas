@@ -56,7 +56,7 @@ fun SettingsScreen(onBack: () -> Unit) {
                 steps = 7,
             )
             Text(String.format(java.util.Locale.US, "%.1f", draftRate), style = MaterialTheme.typography.bodyLarge)
-            QuietButton("Δοκίμασε", onClick = { scope.launch { graph.tts.speak("Καλημέρα Δημήτρη. Πάμε για καφέ;", draftRate) } }, icon = Icons.Rounded.VolumeUp)
+            QuietButton("Δοκίμασε", onClick = { scope.launch { graph.voice.speak("Καλημέρα Δημήτρη. Πάμε για καφέ;", draftRate) } }, icon = Icons.Rounded.VolumeUp)
             Spacer(Modifier.height(Sizes.gap))
 
             Text("Κλείδωμα φροντιστή", style = MaterialTheme.typography.titleLarge)

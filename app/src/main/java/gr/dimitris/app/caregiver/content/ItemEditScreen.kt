@@ -91,7 +91,7 @@ fun ItemEditScreen(itemId: String?, onClose: () -> Unit) {
     }
 
     // Leaving the editor stops whatever it started saying or playing.
-    DisposableEffect(Unit) { onDispose { graph.tts.stop(); graph.player.stop() } }
+    DisposableEffect(Unit) { onDispose { graph.voice.quiet() } }
 
     DimitrisScreen(
         title = if (s.isNew) "Νέα λέξη" else "Επεξεργασία",

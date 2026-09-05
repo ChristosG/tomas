@@ -15,9 +15,9 @@ fun SessionScreen(onDone: () -> Unit) {
     val graph = LocalAppGraph.current
     val message = if (graph.modules.isEmpty()) "Δεν υπάρχει άσκηση ακόμα. Έρχεται σύντομα!" else "Ξεκινάμε."
 
-    LaunchedEffect(message) { graph.tts.speak(message, graph.settings.speechRate.first()) }
+    LaunchedEffect(message) { graph.voice.speak(message, graph.settings.speechRate.first()) }
     // Leaving the session stops whatever it was saying or playing.
-    DisposableEffect(Unit) { onDispose { graph.tts.stop(); graph.player.stop() } }
+    DisposableEffect(Unit) { onDispose { graph.voice.quiet() } }
 
     DimitrisScreen(bottom = { BigButton("Εντάξει", onClick = onDone) }) {
         Text(message, style = MaterialTheme.typography.headlineMedium)

@@ -6,6 +6,7 @@ import gr.dimitris.app.core.audio.ImageStore
 import gr.dimitris.app.core.audio.MediaFiles
 import gr.dimitris.app.core.audio.Player
 import gr.dimitris.app.core.audio.Recorder
+import gr.dimitris.app.core.audio.Voice
 import gr.dimitris.app.core.data.AppDatabase
 import gr.dimitris.app.core.data.ItemRepository
 import gr.dimitris.app.core.log.ErrorReporter
@@ -37,6 +38,10 @@ class AppGraph(context: Context) {
     val tts: TextToSpeech = AndroidTextToSpeech(app)
     val recorder = Recorder(app, files)
     val player = Player()
+
+    /** The only way in: everything that makes sound goes through here, one at a time. */
+    val voice = Voice(app, tts, player, recorder)
+
     val feedback = Feedback(app)
     val errors = ErrorReporter(scope) { db.errorLogs() }
 
