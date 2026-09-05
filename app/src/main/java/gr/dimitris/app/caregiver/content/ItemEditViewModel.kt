@@ -15,6 +15,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.io.File
@@ -84,7 +85,10 @@ class ItemEditViewModel(private val graph: AppGraph, private val itemId: String?
         if (_state.value.isRecording) stopRecording() else startRecording()
     }
 
+    /** Only one thing makes sound at a time: recording silences both the voice and the player. */
     private fun startRecording() {
+        graph.tts.stop()
+        graph.player.stop()
         runCatching { graph.recorder.start() }
             .onSuccess { _state.update { it.copy(isRecording = true, error = null) } }
             .onFailure { e -> graph.errors.record("recorder start", e); _state.update { it.copy(error = "Δεν ξεκίνησε η ηχογράφηση") } }
@@ -98,14 +102,21 @@ class ItemEditViewModel(private val graph: AppGraph, private val itemId: String?
 
     fun playRecording() {
         val path = _state.value.recordingPath ?: return
+        graph.tts.stop()
         viewModelScope.launch { graph.player.play(graph.files.resolve(path)).onFailure { graph.errors.record("play recording", it) } }
     }
 
     fun speakWithTts() {
         val text = _state.value.text.trim()
         if (text.isEmpty()) return
-        viewModelScope.launch { graph.tts.speak(text, 0.8f).onFailure { graph.errors.record("tts", it) } }
+        graph.player.stop()
+        viewModelScope.launch {
+            graph.tts.speak(text, graph.settings.speechRate.first()).onFailure { graph.errors.record("tts", it) }
+        }
     }
+
+    fun micDenied() = _state.update { it.copy(isRecording = false, error = "Χωρίς άδεια μικροφώνου") }
+    fun cameraDenied() = _state.update { it.copy(error = "Χωρίς άδεια κάμερας") }
 
     fun save(onSaved: () -> Unit) {
         val s = _state.value
@@ -121,6 +132,7 @@ class ItemEditViewModel(private val graph: AppGraph, private val itemId: String?
                 val saved = graph.items.save(draft)
                 _state.value.newRecording?.let { graph.items.addRecording(saved.id, it.file, it.durationMs, Who.CAREGIVER) }
                 _state.update { it.copy(id = saved.id, newRecording = null, savedRecordingPath = it.recordingPath, saving = false) }
+                graph.feedback.success()
                 onSaved()
             } catch (ce: CancellationException) {
                 throw ce

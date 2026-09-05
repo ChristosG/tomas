@@ -33,7 +33,9 @@ import java.util.Locale
 fun ErrorListScreen(onBack: () -> Unit) {
     val graph = LocalAppGraph.current
     val scope = rememberCoroutineScope()
-    val flow = remember(graph) { graph.db.errorLogs().observeRecent(200) }
+    // Re-subscribe after a backup import: the old database's flow never emits again.
+    val generation by graph.dbGeneration.collectAsStateWithLifecycle()
+    val flow = remember(graph, generation) { graph.db.errorLogs().observeRecent(200) }
     val logs by flow.collectAsStateWithLifecycle(initialValue = emptyList())
     var expanded by remember { mutableStateOf<String?>(null) }
     val format = remember { DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT, Locale("el")) }

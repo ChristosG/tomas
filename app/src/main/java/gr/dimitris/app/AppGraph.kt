@@ -17,6 +17,8 @@ import gr.dimitris.app.ui.theme.Feedback
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.update
 
 /**
  * Every long-lived object the app needs, wired by hand in one place. No DI framework:
@@ -44,10 +46,17 @@ class AppGraph(context: Context) {
     /** Therapy modules in Today-screen order. Empty in phase 0; each later phase adds one. */
     val modules: List<Module> = emptyList()
 
+    /**
+     * Bumped every time [db] is replaced. Screens key their flows on it, because a Flow from the
+     * old database never emits again once that database is closed.
+     */
+    val dbGeneration = MutableStateFlow(0)
+
     /** After a backup import, close and reopen so the restored file is read. */
     fun reopenDatabase() {
         db.close()
         db = AppDatabase.open(app)
+        dbGeneration.update { it + 1 }
     }
 }
 

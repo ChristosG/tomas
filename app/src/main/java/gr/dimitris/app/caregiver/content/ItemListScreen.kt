@@ -42,7 +42,9 @@ import gr.dimitris.app.ui.theme.Sizes
 @Composable
 fun ItemListScreen(onBack: () -> Unit, onEdit: (String?) -> Unit) {
     val graph = LocalAppGraph.current
-    val flow = remember(graph) { graph.items.observeAll() }
+    // Re-subscribe after a backup import: the old database's flow never emits again.
+    val generation by graph.dbGeneration.collectAsStateWithLifecycle()
+    val flow = remember(graph, generation) { graph.items.observeAll() }
     val all by flow.collectAsStateWithLifecycle(initialValue = emptyList())
     var query by remember { mutableStateOf("") }
     val shown = remember(all, query) { ItemSearch.filter(all, query) }

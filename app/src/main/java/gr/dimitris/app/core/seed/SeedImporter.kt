@@ -34,9 +34,14 @@ class SeedImporter(private val graph: AppGraph) {
         }
     }
 
+    /** Written to a .tmp file and renamed, so an interrupted copy never leaves a half a pictogram behind. */
     private fun copyAsset(name: String): File? = runCatching {
         val out = File(graph.files.photosDir, name.substringAfterLast('/'))
-        if (!out.exists()) graph.app.assets.open(name).use { input -> out.outputStream().use { input.copyTo(it) } }
+        if (!out.exists()) {
+            val tmp = File(out.path + ".tmp")
+            graph.app.assets.open(name).use { input -> tmp.outputStream().use { input.copyTo(it) } }
+            if (!tmp.renameTo(out)) { tmp.delete(); error("Δεν αντιγράφηκε το $name") }
+        }
         out
     }.getOrElse { graph.errors.record("seed asset $name", it); null }
 }

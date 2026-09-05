@@ -16,17 +16,19 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.testTag
 import androidx.compose.ui.unit.dp
 import androidx.fragment.app.FragmentActivity
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import gr.dimitris.app.LocalAppGraph
 import gr.dimitris.app.caregiver.authenticateCaregiver
@@ -44,13 +46,18 @@ const val CAREGIVER_HOLD_MS = 2000L
 @Composable
 fun TodayScreen(onStart: () -> Unit, onCaregiver: () -> Unit) {
     val graph = LocalAppGraph.current
-    val activity = LocalActivity.current as FragmentActivity
+    val context = LocalContext.current
+    // Null in a preview or a bare-Activity host: the caregiver area then opens without the lock.
+    val activity = LocalActivity.current as? FragmentActivity
     val scope = rememberCoroutineScope()
     var greekVoice by remember { mutableStateOf(true) }
     var askCaregiver by remember { mutableStateOf(false) }
     val lock by graph.settings.caregiverLock.collectAsStateWithLifecycle(initialValue = false)
 
-    LaunchedEffect(Unit) { greekVoice = graph.tts.isGreekAvailable() }
+    // Re-checked on every resume, so coming back from the voice installer clears the card.
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
+        scope.launch { greekVoice = graph.tts.isGreekAvailable() }
+    }
 
     DimitrisScreen(
         bottom = { BigButton("Ξεκίνα", onClick = onStart, icon = Icons.Rounded.PlayArrow) },
@@ -66,7 +73,7 @@ fun TodayScreen(onStart: () -> Unit, onCaregiver: () -> Unit) {
         Text("Καλώς ήρθες. Πάτα «Ξεκίνα» όταν είσαι έτοιμος.", style = MaterialTheme.typography.bodyLarge)
         Spacer(Modifier.height(Sizes.gap))
         if (!greekVoice) {
-            TtsMissingCard(onInstall = { openTtsInstaller(activity) })
+            TtsMissingCard(onInstall = { openTtsInstaller(activity ?: context) })
         }
     }
 
@@ -78,7 +85,8 @@ fun TodayScreen(onStart: () -> Unit, onCaregiver: () -> Unit) {
                 TextButton(modifier = Modifier.heightIn(min = Sizes.touchMin), onClick = {
                     askCaregiver = false
                     scope.launch {
-                        val allowed = !lock || !canAuthenticate(activity) || authenticateCaregiver(activity)
+                        // No FragmentActivity means no BiometricPrompt; the area still opens.
+                        val allowed = activity == null || !lock || !canAuthenticate(activity) || authenticateCaregiver(activity)
                         if (allowed) onCaregiver()
                     }
                 }) { Text("Ναι", style = MaterialTheme.typography.labelLarge) }

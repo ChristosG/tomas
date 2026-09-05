@@ -1,7 +1,10 @@
 package gr.dimitris.app.caregiver
 
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Backup
 import androidx.compose.material.icons.rounded.BugReport
@@ -34,11 +37,14 @@ fun CaregiverHomeScreen(onBack: () -> Unit, onOpen: (String) -> Unit) {
         title = "Φροντιστής",
         bottom = { QuietButton("Πίσω στον Δημήτρη", onClick = onBack, icon = Icons.Rounded.Person) },
     ) {
-        Text("Εδώ προσθέτεις λέξεις, φωτογραφίες και φωνές, και βλέπεις πώς πάει.", style = MaterialTheme.typography.bodyLarge)
-        Spacer(Modifier.height(Sizes.gap))
-        caregiverEntries.forEach { entry ->
-            BigButton(entry.title, onClick = { onOpen(entry.route) }, icon = entry.icon)
-            Spacer(Modifier.height(Sizes.gapSmall))
+        // Scrolls, so later phases can keep adding entries without pushing any off a small screen.
+        Column(Modifier.verticalScroll(rememberScrollState())) {
+            Text("Εδώ προσθέτεις λέξεις, φωτογραφίες και φωνές, και βλέπεις πώς πάει.", style = MaterialTheme.typography.bodyLarge)
+            Spacer(Modifier.height(Sizes.gap))
+            caregiverEntries.forEach { entry ->
+                BigButton(entry.title, onClick = { onOpen(entry.route) }, icon = entry.icon)
+                Spacer(Modifier.height(Sizes.gapSmall))
+            }
         }
     }
 }

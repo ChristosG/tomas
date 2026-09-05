@@ -1,6 +1,7 @@
 package gr.dimitris.app.caregiver.content
 
 import android.Manifest
+import android.content.Context
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
@@ -33,9 +34,11 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.rememberVectorPainter
@@ -56,7 +59,8 @@ import gr.dimitris.app.ui.components.QuietButton
 import gr.dimitris.app.ui.theme.Sizes
 import java.io.File
 
-const val FILE_AUTHORITY = "gr.dimitris.app.files"
+/** Derived, not spelled out, so a renamed package or a build suffix cannot break the camera. */
+fun fileAuthority(context: Context): String = "${context.packageName}.files"
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -68,15 +72,26 @@ fun ItemEditScreen(itemId: String?, onClose: () -> Unit) {
     var confirmDelete by remember { mutableStateOf(false) }
 
     val pickPhoto = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri: Uri? -> uri?.let(vm::photoPicked) }
-    var cameraFile by remember { mutableStateOf<File?>(null) }
-    val takePhoto = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { ok -> cameraFile?.let { vm.photoTaken(it, ok) } }
-    val askMic = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted -> if (granted) vm.toggleRecording() }
+    // Survives the process death that taking a photo can cause, so the picture is not lost.
+    var cameraPath by rememberSaveable { mutableStateOf<String?>(null) }
+    val takePhoto = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { ok ->
+        cameraPath?.let { vm.photoTaken(File(it), ok) }
+    }
+    val askMic = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) vm.toggleRecording() else vm.micDenied()
+    }
     val askCamera = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) {
-            val f = graph.files.newPhotoFile(); cameraFile = f
-            takePhoto.launch(FileProvider.getUriForFile(context, FILE_AUTHORITY, f))
+            val f = graph.files.newPhotoFile()
+            cameraPath = f.absolutePath
+            takePhoto.launch(FileProvider.getUriForFile(context, fileAuthority(context), f))
+        } else {
+            vm.cameraDenied()
         }
     }
+
+    // Leaving the editor stops whatever it started saying or playing.
+    DisposableEffect(Unit) { onDispose { graph.tts.stop(); graph.player.stop() } }
 
     DimitrisScreen(
         title = if (s.isNew) "Νέα λέξη" else "Επεξεργασία",

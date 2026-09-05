@@ -9,7 +9,8 @@ import kotlin.coroutines.resume
 
 /** Plays one file at a time and suspends until it ends. Starting a new file ends the previous caller's wait with success. */
 class Player {
-    private var player: MediaPlayer? = null
+    /** Read outside the lock by stop() and by the cancellation callback, so it must not be cached. */
+    @Volatile private var player: MediaPlayer? = null
     private var waiting: CancellableContinuation<Result<Unit>>? = null
 
     suspend fun play(file: File): Result<Unit> = suspendCancellableCoroutine { cont ->
