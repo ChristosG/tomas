@@ -1,6 +1,166 @@
 {
- "version": 1,
+ "version": 2,
  "items": [
+  {
+   "text": "θέλω καφέ",
+   "kind": "PHRASE",
+   "category": "FOOD",
+   "image": "2296.png",
+   "arasaacId": 2296,
+   "via": "el"
+  },
+  {
+   "text": "πάμε σπίτι",
+   "kind": "PHRASE",
+   "category": "PLACES",
+   "image": "2317.png",
+   "arasaacId": 2317,
+   "via": "el"
+  },
+  {
+   "text": "καλημέρα σας",
+   "kind": "PHRASE",
+   "category": "QUICK",
+   "image": "6944.png",
+   "arasaacId": 6944,
+   "via": "en"
+  },
+  {
+   "text": "τι κάνεις",
+   "kind": "PHRASE",
+   "category": "QUICK",
+   "image": "39109.png",
+   "arasaacId": 39109,
+   "via": "en"
+  },
+  {
+   "text": "πεινάω πολύ",
+   "kind": "PHRASE",
+   "category": "FOOD",
+   "image": "4962.png",
+   "arasaacId": 4962,
+   "via": "en"
+  },
+  {
+   "text": "δώσε μου νερό",
+   "kind": "PHRASE",
+   "category": "FOOD",
+   "image": "2248.png",
+   "arasaacId": 2248,
+   "via": "el"
+  },
+  {
+   "text": "πάμε βόλτα",
+   "kind": "PHRASE",
+   "category": "PLACES",
+   "image": "3251.png",
+   "arasaacId": 3251,
+   "via": "en"
+  },
+  {
+   "text": "είμαι καλά",
+   "kind": "PHRASE",
+   "category": "FEELINGS",
+   "image": "5397.png",
+   "arasaacId": 5397,
+   "via": "en"
+  },
+  {
+   "text": "ευχαριστώ πολύ",
+   "kind": "PHRASE",
+   "category": "QUICK",
+   "image": "8129.png",
+   "arasaacId": 8129,
+   "via": "en"
+  },
+  {
+   "text": "τα λέμε αύριο",
+   "kind": "PHRASE",
+   "category": "TIME",
+   "image": "7152.png",
+   "arasaacId": 7152,
+   "via": "en"
+  },
+  {
+   "text": "θέλω ύπνο",
+   "kind": "PHRASE",
+   "category": "VERBS",
+   "image": "2369.png",
+   "arasaacId": 2369,
+   "via": "en"
+  },
+  {
+   "text": "πονάει το χέρι",
+   "kind": "PHRASE",
+   "category": "BODY",
+   "image": "2669.png",
+   "arasaacId": 2669,
+   "via": "en"
+  },
+  {
+   "text": "άνοιξε την πόρτα",
+   "kind": "PHRASE",
+   "category": "THINGS",
+   "image": "6875.png",
+   "arasaacId": 6875,
+   "via": "en"
+  },
+  {
+   "text": "κλείσε το φως",
+   "kind": "PHRASE",
+   "category": "THINGS",
+   "image": "8027.png",
+   "arasaacId": 8027,
+   "via": "en"
+  },
+  {
+   "text": "πάμε για φαγητό",
+   "kind": "PHRASE",
+   "category": "FOOD",
+   "image": "4610.png",
+   "arasaacId": 4610,
+   "via": "en"
+  },
+  {
+   "text": "θέλω μπάνιο",
+   "kind": "PHRASE",
+   "category": "PLACES",
+   "image": "5921.png",
+   "arasaacId": 5921,
+   "via": "en"
+  },
+  {
+   "text": "καλή όρεξη",
+   "kind": "PHRASE",
+   "category": "FOOD",
+   "image": "35917.png",
+   "arasaacId": 35917,
+   "via": "en"
+  },
+  {
+   "text": "καληνύχτα",
+   "kind": "PHRASE",
+   "category": "TIME",
+   "image": "6942.png",
+   "arasaacId": 6942,
+   "via": "en"
+  },
+  {
+   "text": "πού είναι το κινητό",
+   "kind": "PHRASE",
+   "category": "THINGS",
+   "image": "2586.png",
+   "arasaacId": 2586,
+   "via": "en"
+  },
+  {
+   "text": "έλα εδώ",
+   "kind": "PHRASE",
+   "category": "VERBS",
+   "image": "11708.png",
+   "arasaacId": 11708,
+   "via": "en"
+  },
   {
    "text": "Ναι",
    "kind": "PHRASE",

@@ -1,5 +1,145 @@
 [
  {
+  "text": "θέλω καφέ",
+  "category": "FOOD",
+  "kind": "PHRASE",
+  "search": "καφές",
+  "en": "coffee"
+ },
+ {
+  "text": "πάμε σπίτι",
+  "category": "PLACES",
+  "kind": "PHRASE",
+  "search": "σπίτι",
+  "en": "house"
+ },
+ {
+  "text": "καλημέρα σας",
+  "category": "QUICK",
+  "kind": "PHRASE",
+  "search": "καλημέρα",
+  "en": "good morning"
+ },
+ {
+  "text": "τι κάνεις",
+  "category": "QUICK",
+  "kind": "PHRASE",
+  "search": "χαιρετισμός",
+  "en": "how are you"
+ },
+ {
+  "text": "πεινάω πολύ",
+  "category": "FOOD",
+  "kind": "PHRASE",
+  "search": "πεινάω",
+  "en": "hungry"
+ },
+ {
+  "text": "δώσε μου νερό",
+  "category": "FOOD",
+  "kind": "PHRASE",
+  "search": "νερό",
+  "en": "water"
+ },
+ {
+  "text": "πάμε βόλτα",
+  "category": "PLACES",
+  "kind": "PHRASE",
+  "search": "βόλτα",
+  "en": "walk"
+ },
+ {
+  "text": "είμαι καλά",
+  "category": "FEELINGS",
+  "kind": "PHRASE",
+  "search": "καλά",
+  "en": "well"
+ },
+ {
+  "text": "ευχαριστώ πολύ",
+  "category": "QUICK",
+  "kind": "PHRASE",
+  "search": "ευχαριστώ",
+  "en": "thank you"
+ },
+ {
+  "text": "τα λέμε αύριο",
+  "category": "TIME",
+  "kind": "PHRASE",
+  "search": "αύριο",
+  "en": "tomorrow"
+ },
+ {
+  "text": "θέλω ύπνο",
+  "category": "VERBS",
+  "kind": "PHRASE",
+  "search": "ύπνος",
+  "en": "sleep"
+ },
+ {
+  "text": "πονάει το χέρι",
+  "category": "BODY",
+  "kind": "PHRASE",
+  "search": "χέρι",
+  "en": "arm"
+ },
+ {
+  "text": "άνοιξε την πόρτα",
+  "category": "THINGS",
+  "kind": "PHRASE",
+  "search": "πόρτα",
+  "en": "open the door"
+ },
+ {
+  "text": "κλείσε το φως",
+  "category": "THINGS",
+  "kind": "PHRASE",
+  "search": "φως",
+  "en": "turn off the light"
+ },
+ {
+  "text": "πάμε για φαγητό",
+  "category": "FOOD",
+  "kind": "PHRASE",
+  "search": "φαγητό",
+  "en": "food"
+ },
+ {
+  "text": "θέλω μπάνιο",
+  "category": "PLACES",
+  "kind": "PHRASE",
+  "search": "μπάνιο",
+  "en": "bathroom"
+ },
+ {
+  "text": "καλή όρεξη",
+  "category": "FOOD",
+  "kind": "PHRASE",
+  "search": "καλή όρεξη",
+  "en": "enjoy your meal"
+ },
+ {
+  "text": "καληνύχτα",
+  "category": "TIME",
+  "kind": "PHRASE",
+  "search": "καληνύχτα",
+  "en": "good night"
+ },
+ {
+  "text": "πού είναι το κινητό",
+  "category": "THINGS",
+  "kind": "PHRASE",
+  "search": "κινητό",
+  "en": "mobile phone"
+ },
+ {
+  "text": "έλα εδώ",
+  "category": "VERBS",
+  "kind": "PHRASE",
+  "search": "έλα",
+  "en": "come"
+ },
+ {
   "text": "Ναι",
   "category": "QUICK",
   "kind": "PHRASE",

@@ -4,9 +4,35 @@
 // its pictograms are language-neutral images), writes PNGs + seed.json into app assets.
 import fs from 'node:fs/promises';
 
+// Bump when words.json changes: SeedImporter only looks at the manifest again when this is higher
+// than the version the device has, and then adds only the texts it does not already have.
+const VERSION = 2;
+
 const words = JSON.parse(await fs.readFile(new URL('./words.json', import.meta.url), 'utf8'));
 const outDir = new URL('../../app/src/main/assets/seed/', import.meta.url);
 await fs.mkdir(outDir, { recursive: true });
+
+// Whatever the last run already chose and downloaded. ARASAAC's search results move over time, so
+// re-picking a pictogram for a word that already has one would churn every image in the repo and
+// change pictures he has learned; only the words without one are looked up again.
+const previous = new Map();
+try {
+  const old = JSON.parse(await fs.readFile(new URL('seed.json', outDir), 'utf8'));
+  for (const it of old.items ?? []) previous.set(it.text, it);
+} catch {
+  // No previous manifest: everything is fetched.
+}
+
+async function alreadyHave(word) {
+  const prev = previous.get(word.text);
+  if (!prev?.image) return null;
+  try {
+    await fs.access(new URL(prev.image, outDir));
+    return prev;
+  } catch {
+    return null;
+  }
+}
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -29,7 +55,18 @@ const missing = [];
 let viaEl = 0;
 let viaEn = 0;
 
+let reused = 0;
+
 for (const w of words) {
+  const kept = await alreadyHave(w);
+  if (kept) {
+    items.push({ text: w.text, kind: w.kind ?? 'WORD', category: w.category, image: kept.image, arasaacId: kept.arasaacId ?? null, via: kept.via ?? null });
+    if (kept.via === 'en') viaEn++; else viaEl++;
+    reused++;
+    process.stdout.write('=');
+    continue;
+  }
+
   const term = (w.search ?? w.text).trim();
   const listEl = await searchPictograms('el', 'search', term);
   let pick = exactMatch(listEl, term);
@@ -80,5 +117,5 @@ for (const w of words) {
   await sleep(150);
 }
 
-await fs.writeFile(new URL('seed.json', outDir), JSON.stringify({ version: 1, items }, null, 1));
-console.log(`\n${items.length} items, ${items.length - missing.length} with pictograms (${viaEl} via el, ${viaEn} via en). Missing: ${missing.join(', ') || 'none'}`);
+await fs.writeFile(new URL('seed.json', outDir), JSON.stringify({ version: VERSION, items }, null, 1));
+console.log(`\nv${VERSION}: ${items.length} items, ${items.length - missing.length} with pictograms (${viaEl} via el, ${viaEn} via en, ${reused} kept from the last run). Missing: ${missing.join(', ') || 'none'}`);

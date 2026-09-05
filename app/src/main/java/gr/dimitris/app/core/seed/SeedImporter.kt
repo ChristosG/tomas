@@ -19,8 +19,7 @@ class SeedImporter(private val graph: AppGraph) {
             val manifest = graph.app.assets.open("seed/seed.json").bufferedReader().use { SeedManifest.parse(it.readText()) }
             if (graph.settings.seedVersion.first() >= manifest.version) return@withContext
             val existing = graph.db.items().activeOfSource(Source.SEED).map { it.text.trim() }.toSet()
-            for (entry in manifest.items) {
-                if (entry.text.trim() in existing) continue
+            for (entry in newEntries(manifest, existing)) {
                 val image = entry.image?.let { copyAsset("seed/$it") }
                 graph.items.save(Item(text = entry.text, kind = runCatching { ItemKind.valueOf(entry.kind) }.getOrDefault(ItemKind.WORD),
                     category = runCatching { Category.valueOf(entry.category) }.getOrDefault(Category.CUSTOM),
@@ -44,4 +43,19 @@ class SeedImporter(private val graph: AppGraph) {
         }
         out
     }.getOrElse { graph.errors.record("seed asset $name", it); null }
+
+    companion object {
+        /**
+         * What a version bump owes an install that already has the old seed: the entries whose text
+         * is not on the device yet, and each of those once.
+         *
+         * Matching on trimmed text and not on a row id is what makes a bump safe — the items the
+         * caregiver has edited, deleted or re-recorded keep their rows untouched, and a phrase
+         * added in version 2 arrives beside them instead of resetting them. Anything she deleted
+         * comes back, which is the price of not keeping a tombstone per seed text; it is a phrase
+         * she can delete once more, not work she loses.
+         */
+        fun newEntries(manifest: SeedManifest, existingTexts: Set<String>): List<SeedEntry> =
+            manifest.items.distinctBy { it.text.trim() }.filter { it.text.trim() !in existingTexts }
+    }
 }
