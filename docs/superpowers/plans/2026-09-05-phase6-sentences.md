@@ -55,3 +55,55 @@
 ### Task 3: Phase 6 verification
 
 - [ ] Full suites green; on the phone build "θέλω καφέ", "εγώ θέλω νερό τώρα", handle a distractor; Σφάλματα empty. Append notes; commit `docs(phase6): verification notes`.
+
+
+---
+
+## Verification notes
+
+Verified on 2026-09-06 against `emulator-5554` (the phone attached to this machine was never
+addressed). Base `af3c3a0`; phase 6 is `00854c9`, `a23bd70`, `db6098f`, `56b227d`, and the fix wave
+`a22080a`, `d1c8db8`.
+
+### Suites
+
+- `./gradlew -q testDebugUnitTest` — **245 tests, 0 failures** (212 before the phase).
+- `adb shell pm clear gr.dimitris.app` then `./gradlew connectedDebugAndroidTest` —
+  **51 tests, 0 failures** (47 before the phase). The four new ones are `SentencesFlowTest`:
+  the right order recorded as CORRECT, a wrong order shown as «Σωστά: …» and recorded as ASSISTED
+  with nothing written for the miss, the level-4 board carrying a card the sentence cannot use, and
+  a device stripped of every word saying so and letting him out.
+- `./gradlew installDebug` afterwards, so the emulator is left with the build these notes describe.
+
+### On the device
+
+| Check | What happened |
+|---|---|
+| «Προτάσεις» on Today | fifth tile, reachable without scrolling |
+| Level 1 | «τρώω ζάχαρη», «θέλω νερό» — verb then object, object in the accusative |
+| A wrong order | «Όχι έτσι.» spoken and written, «Σωστά: τρώω ζάχαρη» left on screen, cards handed back, unlimited tries |
+| Level 3 | «εγώ τρώω σουβλάκι τώρα» — four cards, ending on the time word |
+| Level 4 | «εγώ τρώω σαλάτα τώρα» with «τράπεζα» on the board: a bank is not something you eat, so the board has one answer and he found it first try. Five cards go three to a row, all above the fold |
+| A finished board | every card dimmed, the odd one out included; only «Επόμενο» is live |
+| «πάμε» sentences | γήπεδο, νοσοκομείο, φαρμακείο, καφετέρια, εκκλησία, σούπερ μάρκετ, μπάνιο, σπίτι, δουλειά, πάρκο — no room, no vehicle, no street |
+| Levels | played up 1 → 2 → 3 → 4 in three sittings; each end screen announced the move («Ανεβαίνεις στο επίπεδο 2. Μπράβο!») |
+| A session with Προτάσεις | two sentences done, back pressed mid-third: «Έκανες 2 ασκήσεις σήμερα: Προτάσεις.» — the count comes from the rows he left, and the last row was in the database before it was counted |
+| Σφάλματα | «Κανένα σφάλμα. Ωραία.» — `error_logs` empty after 27 sentences |
+
+Database after the run: attempts at `sentences:level:1..4` — the level actually played — with
+`module = SENTENCES`, `cueLevel = null`, `detail {tiles, chosen, firstTry}`, the session rows
+carrying their session id, and no `schedules` row for this module.
+
+Screenshots: `.superpowers/sdd/2026-09-05-phase6-sentences/shots/`.
+
+### Left as they are
+
+- `planFor` returns eight placeholders on every device, so the module joins a session even where the
+  vocabulary cannot fill a single sentence; the screen then hands straight back and the session
+  counts the nothing he did. That is ruling I-F (sizing lists are transient and constant).
+- `Greek.accusative` reads an unaccented «καφες» as a plural and would take the sigma off an oxytone
+  feminine plural («φορές»). Neither form is in his vocabulary; the rule was swept over all 153 seed
+  words and every form it produces is right.
+- The level-1 board is in the answer's order about half the time. Any rule against that would be the
+  giveaway in the other direction — "never the left one first" is a pattern he would learn instead
+  of the sentence.
