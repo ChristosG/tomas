@@ -149,3 +149,36 @@ data class ErrorLog(
         )
     }
 }
+
+/** Who says a line in a rehearsed dialogue. OTHER is the waiter, the father, the physio, whoever. */
+enum class Speaker { OTHER, DIMITRIS }
+
+/**
+ * A rehearsed dialogue ("Στην καφετέρια"). Its lines live in script_lines and point at
+ * SCRIPT_LINE items, so a line gets a picture, a model voice and a Leitner box like anything else.
+ */
+@Entity(tableName = "scripts", indices = [Index("updatedAt")])
+data class Script(
+    @PrimaryKey val id: String = newId(),
+    val title: String,
+    val source: Source = Source.CAREGIVER,
+    val createdAt: Long = now(),
+    val updatedAt: Long = now(),
+    val deleted: Boolean = false,
+)
+
+/**
+ * One turn of a dialogue. The index on itemId is what lets a session item find its way back to the
+ * script it came from, so nothing has to remember "the script we are in" between screens.
+ */
+@Entity(tableName = "script_lines", indices = [Index("scriptId"), Index("itemId"), Index("updatedAt")])
+data class ScriptLine(
+    @PrimaryKey val id: String = newId(),
+    val scriptId: String,
+    val position: Int,
+    val speaker: Speaker,
+    val itemId: String,
+    val createdAt: Long = now(),
+    val updatedAt: Long = now(),
+    val deleted: Boolean = false,
+)

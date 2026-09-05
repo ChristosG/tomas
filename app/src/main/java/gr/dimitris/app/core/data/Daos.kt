@@ -61,6 +61,27 @@ interface SessionDao {
 }
 
 @Dao
+interface ScriptDao {
+    @Upsert suspend fun upsertScript(script: Script)
+    @Upsert suspend fun upsertLines(lines: List<ScriptLine>)
+    @Query("SELECT * FROM scripts WHERE deleted = 0 ORDER BY title") fun observeScripts(): Flow<List<Script>>
+    @Query("SELECT * FROM scripts WHERE deleted = 0 ORDER BY title") suspend fun activeScripts(): List<Script>
+    @Query("SELECT * FROM scripts WHERE id = :id") suspend fun get(id: String): Script?
+    @Query("SELECT * FROM script_lines WHERE scriptId = :scriptId AND deleted = 0 ORDER BY position") suspend fun linesFor(scriptId: String): List<ScriptLine>
+
+    /**
+     * The live line an item belongs to, or null when the item is not a script line. This is how a
+     * session item finds its script: nothing keeps "the script we are practising" anywhere, so two
+     * screens can never disagree about which one it is.
+     */
+    @Query("SELECT * FROM script_lines WHERE itemId = :itemId AND deleted = 0 ORDER BY updatedAt DESC LIMIT 1")
+    suspend fun lineOfItem(itemId: String): ScriptLine?
+
+    @Query("UPDATE scripts SET deleted = 1, updatedAt = :now WHERE id = :id") suspend fun softDeleteScript(id: String, now: Long)
+    @Query("UPDATE script_lines SET deleted = 1, updatedAt = :now WHERE scriptId = :scriptId AND deleted = 0") suspend fun softDeleteLinesOf(scriptId: String, now: Long)
+}
+
+@Dao
 interface ErrorLogDao {
     @Insert suspend fun insert(log: ErrorLog)
     @Query("SELECT * FROM error_logs WHERE deleted = 0 ORDER BY at DESC LIMIT :limit") fun observeRecent(limit: Int): Flow<List<ErrorLog>>

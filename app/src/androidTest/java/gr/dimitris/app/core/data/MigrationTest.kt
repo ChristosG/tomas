@@ -57,4 +57,33 @@ class MigrationTest {
             }
         }
     }
+
+    /** Phase 5 only adds tables, so the rows a caregiver already has must come through untouched. */
+    @Test fun migrate4To5CreatesScriptTablesAndKeepsTheOldRows() {
+        val name = "migration-test-5.db"
+        helper.createDatabase(name, 4).use { db ->
+            db.execSQL(
+                "INSERT INTO items (id, text, kind, category, firstSound, source, pinned, createdAt, updatedAt, deleted) " +
+                    "VALUES ('a', 'καφές', 'PHRASE', 'FOOD', 'κ', 'CAREGIVER', 1, 1, 1, 0)"
+            )
+            db.execSQL(
+                "INSERT INTO recordings (id, itemId, path, who, style, durationMs, recordedAt, createdAt, updatedAt, deleted) " +
+                    "VALUES ('r', 'a', 'recordings/x.m4a', 'CAREGIVER', 'SPOKEN', 500, 1, 1, 1, 0)"
+            )
+        }
+        helper.runMigrationsAndValidate(name, 5, true).use { db ->
+            db.query("SELECT name FROM sqlite_master WHERE type='table' AND name IN ('scripts','script_lines')").use { c ->
+                assertEquals("scripts and script_lines should both exist after 4 to 5", 2, c.count)
+            }
+            db.query("SELECT text, pinned FROM items WHERE id = 'a'").use { c ->
+                c.moveToFirst()
+                assertEquals("καφές", c.getString(0))
+                assertEquals("a pinned item should stay pinned", 1, c.getInt(1))
+            }
+            db.query("SELECT path FROM recordings WHERE id = 'r'").use { c ->
+                c.moveToFirst()
+                assertEquals("recordings/x.m4a", c.getString(0))
+            }
+        }
+    }
 }

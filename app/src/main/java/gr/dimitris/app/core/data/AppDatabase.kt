@@ -7,10 +7,12 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 
 @Database(
-    entities = [Item::class, Recording::class, Attempt::class, Schedule::class, Session::class, ErrorLog::class],
-    version = 4,
+    entities = [Item::class, Recording::class, Attempt::class, Schedule::class, Session::class, ErrorLog::class,
+        Script::class, ScriptLine::class],
+    version = 5,
     exportSchema = true,
-    autoMigrations = [AutoMigration(from = 1, to = 2), AutoMigration(from = 2, to = 3), AutoMigration(from = 3, to = 4)],
+    autoMigrations = [AutoMigration(from = 1, to = 2), AutoMigration(from = 2, to = 3), AutoMigration(from = 3, to = 4),
+        AutoMigration(from = 4, to = 5)],
 )
 abstract class AppDatabase : RoomDatabase() {
     abstract fun items(): ItemDao
@@ -19,6 +21,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun schedules(): ScheduleDao
     abstract fun sessions(): SessionDao
     abstract fun errorLogs(): ErrorLogDao
+    abstract fun scripts(): ScriptDao
 
     companion object {
         const val NAME = "dimitris.db"
