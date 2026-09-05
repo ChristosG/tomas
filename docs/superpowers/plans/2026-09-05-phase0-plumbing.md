@@ -3660,6 +3660,8 @@ Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
 - [ ] **Step 1: The curated word list**
 
 `tools/seed/words.json`. `search` is only given where the ARASAAC keyword differs from the display text. Everything is `kind: WORD` unless stated.
+
+**Controller ruling during execution (2026-09-05):** ARASAAC's Greek keyword index covered only 40 of 175 words, so every entry also carries an `"en"` search term and the script falls back to the English endpoints (`en/bestsearch`, then `en/search`) when the Greek search is empty; `seed.json` records `"via": "el" | "en" | null` per item. The list below shows the original shape; the committed file has the extra field.
 ```json
 [
  {"text":"Ναι","category":"QUICK","kind":"PHRASE","search":"ναι"},
