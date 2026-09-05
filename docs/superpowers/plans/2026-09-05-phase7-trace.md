@@ -19,6 +19,8 @@
 - Hand: `Settings.traceHand` (LEFT default, RIGHT) shown as a hint "Με το δεξί χέρι" / "Με το αριστερό χέρι".
 - Commits `feat(phase7): ...` with the Co-Authored-By trailer; conventions as previous phases.
 
+- **Module contract (after the phase-2 fix wave):** `Module.Screen(items, sessionId, onDone, onLeave)` — `onDone` = all exercises finished, `onLeave` = the user pressed back (the screen's `onBack` calls the module's own cleanup then `onLeave`). Attempt/schedule writes go on `graph.scope` (they must survive the screen); the last write is joined before `done` is published. Every module screen has `DisposableEffect(Unit) { onDispose { graph.voice.quiet() } }` semantics through the session/practice hosts. Sessions cap at 15 items across modules (`SessionBudget.allowance(n)`), so `planFor` lists may be truncated.
+
 ---
 
 ### Task 1: Trace scorer (pure)
@@ -46,7 +48,7 @@
 
 - [ ] `Glyphs.template(text: String, boxWidth: Float, boxHeight: Float): Pair<List<Pt>, Float>`: `Paint` (sans-serif, bold), text size chosen so the text fits 80 % of the box, `getTextPath` → `PathMeasure` sampling every 6 px on every contour → points translated to centre the glyph; returns points + glyph height.
 - [ ] `TraceCanvas(template: List<Pt>, showTemplate: Boolean, strokes: List<List<Pt>>, onStroke: (List<Pt>) -> Unit, modifier)`: draws the template as light grey dots (when `showTemplate`), the strokes as 14 dp navy lines with round caps; `pointerInput` `detectDragGestures` collects a stroke and emits it on drag end. Canvas is `fillMaxWidth().aspectRatio(1.2f)` for single letters and `aspectRatio(0.9f)` for words.
-- [ ] `TraceModule`: id TRACE, title "Γράψε", icon `Icons.Rounded.Draw`; `planFor` = up to 6 short WORD items (sizing only); `Screen` → `TraceScreen(sessionId, onDone)`.
+- [ ] `TraceModule`: id TRACE, title "Γράψε", icon `Icons.Rounded.Draw`; `planFor` = up to 6 short WORD items (sizing only); `Screen(items, sessionId, onDone, onLeave)` → `TraceScreen(sessionId, onDone, onLeave)`.
 - [ ] `TraceViewModel(graph, sessionId)`: loads level + hand; builds 6 targets per session: L1 random capitals, L2 random lowercase, L3 "Δημήτρης" ×2 + "ΔΗΜΗΤΡΗΣ", L4 six shortest WORD items, L5 same words for recall; state `{level, hand, index, total, text, itemId?, templateVisible, strokes, score?, tries, done, levelChanged}`; `setCanvasSize(w, h)` builds the template through `Glyphs`; `addStroke`, `clear`, `hide()` (level 5: hides the template after "Το είδα"), `check()` → `TraceScorer.score(...)` with level-5 thresholds when applicable → passed: success feedback + speak the text + record CORRECT/ASSISTED; failed: nudge, `tries++`, keep strokes visible and reveal the template; `retry()` clears; `skip()`; `next()`; end → `LevelProgression.next(level, results, 1, 5)` → `Settings.traceLevel`.
 - [ ] `TraceScreen`: title "Γράψε i/n" + hand hint; the text in `displayLarge` above the canvas (hidden in level 5 after "Το είδα"); the canvas; bottom: after pass `BigButton("Επόμενο")`; otherwise `Row { QuietButton("Καθάρισε"), BigButton("Έτοιμο", Success) }` (+ `BigButton("Το είδα")` first in level 5) and `QuietButton("Παράλειψη")`.
 - [ ] Settings: `traceHand` toggle row "Χέρι για γράψιμο: Αριστερό / Δεξί" (two `FilterChip`s at 72dp).

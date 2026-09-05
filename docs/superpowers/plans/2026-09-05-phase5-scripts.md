@@ -18,6 +18,8 @@
 - Every Room change: sync-ready columns, auto-migration, schema committed.
 - Build from `/mnt/nvme2TB/tomas/.claude/worktrees/phase0`; instrumented with `ANDROID_SERIAL=emulator-5554` and `-Pandroid.testInstrumentationRunnerArguments.package=…` filters. Commits `feat(phase5): ...` ending with `Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>`.
 
+- **Module contract (after the phase-2 fix wave):** `Module.Screen(items, sessionId, onDone, onLeave)` — `onDone` = all exercises finished, `onLeave` = the user pressed back (the screen's `onBack` calls the module's own cleanup then `onLeave`). Attempt/schedule writes go on `graph.scope` (they must survive the screen); the last write is joined before `done` is published. Every module screen has `DisposableEffect(Unit) { onDispose { graph.voice.quiet() } }` semantics through the session/practice hosts. Sessions cap at 15 items across modules (`SessionBudget.allowance(n)`), so `planFor` lists may be truncated.
+
 ---
 
 ## File structure
@@ -405,7 +407,7 @@ Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
 - Modify: `AppGraph.kt` (`modules += ScriptsModule`)
 
 **Interfaces:**
-- Produces: `ScriptsModule` (id SCRIPTS, title "Διάλογοι", icon `Icons.Rounded.Chat`); `planFor`: due scripts via `Scheduler.due(SCRIPTS)` mapped to their first line's item (the module needs items only for counting), else the least-recently-practised script; returns the lines' items of ONE script; `practiceFor` same with a random script; `Screen` reads the script id from `items.first()` via a companion map — simpler: `ScriptsModule.planFor` stores the chosen script id in `ScriptsModule.nextScriptId` (a `@Volatile var`) and `Screen` reads it. `ScriptsScreen(scriptId, sessionId, onDone)`, `ScriptsViewModel(graph, scriptId, sessionId)`.
+- Produces: `ScriptsModule` (id SCRIPTS, title "Διάλογοι", icon `Icons.Rounded.Chat`); `planFor`: due scripts via `Scheduler.due(SCRIPTS)` mapped to their first line's item (the module needs items only for counting), else the least-recently-practised script; returns the lines' items of ONE script; `practiceFor` same with a random script; `Screen` reads the script id from `items.first()` via a companion map — simpler: `ScriptsModule.planFor` stores the chosen script id in `ScriptsModule.nextScriptId` (a `@Volatile var`) and `Screen` reads it. `ScriptsScreen(scriptId, sessionId, onDone, onLeave)`, `ScriptsViewModel(graph, scriptId, sessionId)`.
 
 - [ ] **Step 1: ViewModel state and flow**
 `ScriptsState(title, lines: List<Pair<ScriptLine, Item>>, index, phase: Phase, ladderLevel, cueText, showsWord, canHint, confirmed, done, worstCue, skipped)`, `Phase { OTHER_SPEAKING, WAITING_FOR_DIMITRIS, FINISHED }`.

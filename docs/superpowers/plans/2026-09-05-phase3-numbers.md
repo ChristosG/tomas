@@ -19,6 +19,8 @@
 - Every Room change keeps sync-ready columns and a committed schema; auto-migration only.
 - Build from `/mnt/nvme2TB/tomas/.claude/worktrees/phase0`; instrumented tests with `ANDROID_SERIAL=emulator-5554`. Commits `feat(phase3): ...` ending with `Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>`.
 
+- **Module contract (after the phase-2 fix wave):** `Module.Screen(items, sessionId, onDone, onLeave)` — `onDone` = all exercises finished, `onLeave` = the user pressed back (the screen's `onBack` calls the module's own cleanup then `onLeave`). Attempt/schedule writes go on `graph.scope` (they must survive the screen); the last write is joined before `done` is published. Every module screen has `DisposableEffect(Unit) { onDispose { graph.voice.quiet() } }` semantics through the session/practice hosts. Sessions cap at 15 items across modules (`SessionBudget.allowance(n)`), so `planFor` lists may be truncated.
+
 ---
 
 ## File structure
@@ -559,7 +561,7 @@ object NumbersModule : Module {
             .ifEmpty { List(EXERCISES_PER_SESSION) { Item(text = "Αριθμοί", kind = ItemKind.NUMBER, category = Category.NUMBERS) } }
 
     @Composable
-    override fun Screen(items: List<Item>, sessionId: String?, onDone: () -> Unit) = NumbersScreen(sessionId, onDone)
+    override fun Screen(items: List<Item>, sessionId: String?, onDone: () -> Unit, onLeave: () -> Unit) = NumbersScreen(sessionId, onDone, onLeave)
 }
 ```
 In `AppGraph.kt`: `val modules: List<Module> = listOf(WordCoachModule, NumbersModule)` (import).
@@ -892,7 +894,7 @@ import gr.dimitris.app.ui.components.SuccessMark
 import gr.dimitris.app.ui.theme.Sizes
 
 @Composable
-fun NumbersScreen(sessionId: String?, onDone: () -> Unit) {
+fun NumbersScreen(sessionId: String?, onDone: () -> Unit, onLeave: () -> Unit) {
     val graph = LocalAppGraph.current
     val vm: NumbersViewModel = viewModel(key = "numbers-${sessionId ?: "practice"}") { NumbersViewModel(graph, sessionId) }
     val s by vm.state.collectAsStateWithLifecycle()
@@ -913,7 +915,7 @@ fun NumbersScreen(sessionId: String?, onDone: () -> Unit) {
     val e = s.exercise
     DimitrisScreen(
         title = "Αριθμοί ${s.index + 1}/${s.total}",
-        onBack = onDone,
+        onBack = { vm.leave(); onLeave() },
         bottom = {
             if (s.correct == true) BigButton("Επόμενο", onClick = vm::next, tone = ButtonTone.Success)
             else QuietButton("Παράλειψη", onClick = vm::skip)

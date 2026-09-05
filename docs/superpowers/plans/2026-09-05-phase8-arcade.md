@@ -19,6 +19,8 @@
 - ARCADE is excluded from the default `enabledModules` (caregiver switches it on after the physio's word) — a controller ruling; the settings row says "Ενεργοποίησέ το αφού μιλήσεις με τον φυσιοθεραπευτή."
 - Commits `feat(phase8): ...` with the Co-Authored-By trailer; conventions as previous phases.
 
+- **Module contract (after the phase-2 fix wave):** `Module.Screen(items, sessionId, onDone, onLeave)` — `onDone` = all exercises finished, `onLeave` = the user pressed back (the screen's `onBack` calls the module's own cleanup then `onLeave`). Attempt/schedule writes go on `graph.scope` (they must survive the screen); the last write is joined before `done` is published. Every module screen has `DisposableEffect(Unit) { onDispose { graph.voice.quiet() } }` semantics through the session/practice hosts. Sessions cap at 15 items across modules (`SessionBudget.allowance(n)`), so `planFor` lists may be truncated.
+
 ---
 
 ### Task 1: Adaptive size and target placement (pure)
@@ -40,7 +42,7 @@
   - **TracePathGame**: 4 generated polylines (horizontal line, diagonal, zigzag, arc sampled) drawn with a dotted stroke; a drag is scored with `TraceScorer.score(..., maxMeanFraction = 0.12f, minCoverage = 0.5f)`; pass = hit.
   - **DragGame**: a puck (circle, `sizeDp`) and a home zone (ring, `1.6 × sizeDp`) placed apart; `detectDragGestures` moves the puck; release inside the ring = hit; 5 rounds.
   - **PinchGame**: one of his item photos (random `imagePath != null`, resolved through `graph.files.resolve`, else the app's ARASAAC pictogram of "μπάλα") with `detectTransformGestures` scaling 1×–3×; reaching ≥ 2× then returning ≤ 1.2× = hit; 3 rounds; instruction "Άνοιξε με δύο δάχτυλα, μετά κλείσε."
-- [ ] `ArcadeModule`: id ARCADE, title "Δεξί χέρι", icon `Icons.Rounded.BackHand`; `planFor` returns 4 placeholder items (sizing) only when ARCADE is enabled (it is filtered by `enabledModules` anyway); `Screen` → `ArcadeScreen(sessionId, onDone)`.
+- [ ] `ArcadeModule`: id ARCADE, title "Δεξί χέρι", icon `Icons.Rounded.BackHand`; `planFor` returns 4 placeholder items (sizing) only when ARCADE is enabled (it is filtered by `enabledModules` anyway); `Screen(items, sessionId, onDone, onLeave)` → `ArcadeScreen(sessionId, onDone, onLeave)`.
 - [ ] `ArcadeViewModel(graph, sessionId)`: loads `arcadeTargetDp`; `games = listOf("tap","trace","drag","pinch")`; on each result: persist the new size, insert the attempt per Global Constraints, success/nudge feedback, advance; end screen "Τέλος για σήμερα. Μπράβο το δεξί!".
 - [ ] `ArcadeScreen`: title "Δεξί χέρι", subtitle per game ("Πάτα τον κύκλο", "Ακολούθησε τη γραμμή", "Σύρε τη μπάλα στο σπίτι της", "Άνοιξε με δύο δάχτυλα"), the game fills the middle, bottom `QuietButton("Παράλειψη")`.
 - [ ] Settings: under the ARCADE switch add the physio note text.

@@ -18,6 +18,8 @@
 - Attempts: `itemId = "sentences:level:N"`, `module = SENTENCES`, `cueLevel = null`, `detail` JSON `{tiles, chosen, firstTry}`.
 - Commits `feat(phase6): ...` with the Co-Authored-By trailer; build/test conventions as previous phases.
 
+- **Module contract (after the phase-2 fix wave):** `Module.Screen(items, sessionId, onDone, onLeave)` — `onDone` = all exercises finished, `onLeave` = the user pressed back (the screen's `onBack` calls the module's own cleanup then `onLeave`). Attempt/schedule writes go on `graph.scope` (they must survive the screen); the last write is joined before `done` is published. Every module screen has `DisposableEffect(Unit) { onDispose { graph.voice.quiet() } }` semantics through the session/practice hosts. Sessions cap at 15 items across modules (`SessionBudget.allowance(n)`), so `planFor` lists may be truncated.
+
 ---
 
 ### Task 1: Accusative rule, templates, generic level progression (pure)
@@ -43,7 +45,7 @@
 - Modify: `core/settings/Settings.kt` (+ `sentencesLevel` 1..4, default 1), `AppGraph.kt` (`modules += SentencesModule`)
 - Test: `SettingsTest.kt` (+ case)
 
-- [ ] `SentencesModule`: id SENTENCES, title "Προτάσεις", icon `Icons.Rounded.ShortText`; `planFor` returns up to 8 WORD items (only to size the session; sentences are generated); `Screen` → `SentencesScreen(sessionId, onDone)`.
+- [ ] `SentencesModule`: id SENTENCES, title "Προτάσεις", icon `Icons.Rounded.ShortText`; `planFor` returns up to 8 WORD items (only to size the session; sentences are generated); `Screen(items, sessionId, onDone, onLeave)` → `SentencesScreen(sessionId, onDone, onLeave)`.
 - [ ] `SentencesViewModel(graph, sessionId)`: loads level and the pool (`activeOfKinds(WORD)`), generates 8 sentences (falling back to level−1 when `generate` returns null), state `{level, index, total, sentence, shuffledTiles, chosen: List<Tile>, correct: Boolean?, wrongTries, done, levelChanged}`; `tap(tile)`: appends and speaks the tile label via `graph.speaker.speakText`; when `chosen.size == tiles.size` compare labels in order: correct → success feedback, speak `sentence.text`, record CORRECT (first try) / ASSISTED; wrong → nudge, speak "Όχι έτσι. " + sentence.text, show the correct order for him to copy, clear `chosen`, `wrongTries++`; `undo()`, `skip()`, `next()`; end → `LevelProgression.next(level, results, 1, 4)` saved to `Settings.sentencesLevel`; attempts as in Global Constraints.
 - [ ] `SentencesScreen`: title "Προτάσεις i/n"; strip (same look as the talk board strip) showing chosen labels; when wrong, a second line "Σωστά: <sentence>"; grid of `PictureCard`s (`imageFile = graph.files.resolve(imagePath)`, `label`) for `shuffledTiles` (+ distractor), tapped tiles disabled/dimmed; bottom: `BigButton("Επόμενο")` after success else `Row { QuietButton(backspace icon, undo), QuietButton("Παράλειψη") }`; end screen like the numbers module with the level message.
 - [ ] Build, install, play; commit `feat(phase6): sentence builder module`.
