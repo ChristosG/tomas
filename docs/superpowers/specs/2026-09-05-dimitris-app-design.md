@@ -56,7 +56,7 @@ App name on the launcher: **Δημήτρης**. Package: `gr.dimitris.app`.
 ## 4. Stack and project layout
 
 - Kotlin, Jetpack Compose (Material 3), single Gradle module `app`.
-- minSdk 26, targetSdk and compileSdk 36. AGP 8.x, Kotlin 2.x, Java 21 toolchain (matches the machine).
+- minSdk 26, targetSdk and compileSdk 37. AGP 9.4 with built-in Kotlin (no `kotlin-android` plugin), Kotlin 2.4, KSP 2.3, Gradle 9.7. JDK 21 runs the build, bytecode targets Java 17. Verified to build on Chris's machine on 2026-09-05; the current androidx line (Compose 1.12, core 1.19) requires exactly this floor.
 - Room for the database. Files (photos, recordings) in app-private storage.
 - Manual dependency wiring through one `AppGraph` object. No Hilt, no Koin. Readability for Dimitris' father beats framework elegance.
 - Coroutines and Flow for async and reactive data.
