@@ -31,7 +31,9 @@ fun SessionScreen(onDone: () -> Unit) {
         SessionStep.Empty -> DimitrisScreen(bottom = { BigButton("Εντάξει", onClick = onDone) }) {
             Text("Τίποτα για σήμερα. Τα λέμε αύριο!", style = MaterialTheme.typography.headlineMedium)
         }
-        is SessionStep.Run -> key(s.index) { s.module.Screen(items = s.items, sessionId = s.sessionId, onDone = vm::moduleDone) }
+        is SessionStep.Run -> key(s.index) {
+            s.module.Screen(items = s.items, sessionId = s.sessionId, onDone = vm::moduleDone, onLeave = vm::leaveSession)
+        }
         is SessionStep.Summary -> DimitrisScreen(bottom = { BigButton("Εντάξει", onClick = onDone) }) {
             if (s.completed > 0) {
                 SuccessMark(visible = true)

@@ -173,6 +173,12 @@ class WordCoachViewModel(private val graph: AppGraph, private val items: List<It
         _state.value = WordCoachState(index = i, total = items.size, item = items[i], sttOn = _state.value.sttOn)
     }
 
+    /** The user pressed back. Whatever the microphone or the speaker was doing stops here. */
+    fun leave() {
+        if (graph.voice.isRecording) graph.voice.cancelRecording()
+        graph.voice.quiet()
+    }
+
     override fun onCleared() {
         if (graph.voice.isRecording) graph.voice.cancelRecording()
     }

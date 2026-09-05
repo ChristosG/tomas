@@ -30,6 +30,9 @@ class SessionViewModel(private val graph: AppGraph) : ViewModel() {
     private var session: Session? = null
     private var finalized = false
 
+    /** Set the moment the session starts winding down, so "done" and "back" cannot both end it. */
+    private var ending = false
+
     init {
         viewModelScope.launch {
             val enabled = graph.settings.enabledModules.first()
@@ -47,6 +50,7 @@ class SessionViewModel(private val graph: AppGraph) : ViewModel() {
         }
     }
 
+    /** A module ran out of exercises: on to the next one, or the summary if it was the last. */
     fun moduleDone() {
         val step = _state.value as? SessionStep.Run ?: return
         val next = step.index + 1
@@ -54,6 +58,21 @@ class SessionViewModel(private val graph: AppGraph) : ViewModel() {
             _state.value = SessionStep.Run(next, plans[next].first, plans[next].second, step.sessionId)
             return
         }
+        endSession()
+    }
+
+    /**
+     * He pressed back inside a module. That ends the whole session, not just this module: being
+     * handed the next exercise after asking to leave is the opposite of what the button said.
+     */
+    fun leaveSession() {
+        if (_state.value !is SessionStep.Run) return
+        endSession()
+    }
+
+    private fun endSession() {
+        if (ending) return
+        ending = true
         val s = session
         val planned = plans.sumOf { it.second.size }
         viewModelScope.launch {

@@ -24,5 +24,6 @@ object WordCoachModule : Module {
         planFor(graph).ifEmpty { graph.db.items().activeOfKinds(kinds).shuffled().take(8) }
 
     @Composable
-    override fun Screen(items: List<Item>, sessionId: String?, onDone: () -> Unit) = WordCoachScreen(items, sessionId, onDone)
+    override fun Screen(items: List<Item>, sessionId: String?, onDone: () -> Unit, onLeave: () -> Unit) =
+        WordCoachScreen(items, sessionId, onDone, onLeave)
 }
