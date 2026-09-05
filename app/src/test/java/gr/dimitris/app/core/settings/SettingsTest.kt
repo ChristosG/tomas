@@ -42,4 +42,20 @@ class SettingsTest {
         assertEquals(true, s.caregiverLock.first())
         assertEquals(3, s.seedVersion.first())
     }
+
+    @Test fun `speech recognition is off by default`() = runBlocking {
+        val s = newSettings()
+        assertEquals(false, s.sttEnabled.first())
+        s.setSttEnabled(true)
+        assertEquals(true, s.sttEnabled.first())
+    }
+
+    @Test fun `all modules enabled by default and can be switched off one at a time`() = runBlocking {
+        val s = newSettings()
+        assertEquals(gr.dimitris.app.core.data.ModuleId.entries.toSet(), s.enabledModules.first())
+        s.setModuleEnabled(gr.dimitris.app.core.data.ModuleId.WORDCOACH, false)
+        assertEquals(gr.dimitris.app.core.data.ModuleId.entries.toSet() - gr.dimitris.app.core.data.ModuleId.WORDCOACH, s.enabledModules.first())
+        s.setModuleEnabled(gr.dimitris.app.core.data.ModuleId.WORDCOACH, true)
+        assertEquals(gr.dimitris.app.core.data.ModuleId.entries.toSet(), s.enabledModules.first())
+    }
 }

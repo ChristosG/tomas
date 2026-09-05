@@ -10,9 +10,12 @@ import gr.dimitris.app.core.audio.Voice
 import gr.dimitris.app.core.data.AppDatabase
 import gr.dimitris.app.core.data.ItemRepository
 import gr.dimitris.app.core.log.ErrorReporter
+import gr.dimitris.app.core.scheduler.Scheduler
 import gr.dimitris.app.core.settings.Settings
+import gr.dimitris.app.core.speech.AndroidSpeechToText
 import gr.dimitris.app.core.speech.AndroidTextToSpeech
 import gr.dimitris.app.core.speech.ItemSpeaker
+import gr.dimitris.app.core.speech.SpeechToText
 import gr.dimitris.app.core.speech.TextToSpeech
 import gr.dimitris.app.modules.Module
 import gr.dimitris.app.ui.theme.Feedback
@@ -38,6 +41,7 @@ class AppGraph(context: Context) {
     val images = ImageStore(files)
     val settings = Settings(app)
     val tts: TextToSpeech = AndroidTextToSpeech(app)
+    val stt: SpeechToText = AndroidSpeechToText(app)
     val recorder = Recorder(app, files)
     val player = Player()
 
@@ -49,6 +53,9 @@ class AppGraph(context: Context) {
 
     /** Always built from the current db, so it survives a backup import. */
     val items: ItemRepository get() = ItemRepository(db.items(), db.recordings(), files::relativize)
+
+    /** Always built from the current db, so it survives a backup import. */
+    val scheduler: Scheduler get() = Scheduler(db.schedules())
 
     /**
      * Recording-or-TTS voice for items. Built per use so it always sees the current db and settings,
