@@ -15,6 +15,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
@@ -36,6 +37,7 @@ class TalkBoardViewModel(private val graph: AppGraph) : ViewModel() {
 
     /** Room re-emits this on every attempt insert, so a tap re-ranks favourites with no nudging. */
     private val usage: Flow<List<ItemCount>> = graph.db.attempts().mostUsed(ModuleId.TALKBOARD, USAGE_LIMIT)
+        .catch { graph.errors.record("talkboard usage", it); emit(emptyList()) }
 
     private val pinnedIds: StateFlow<Set<String>> = graph.db.items().observePinned().map { l -> l.map { it.id }.toSet() }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptySet())
@@ -92,10 +94,13 @@ class TalkBoardViewModel(private val graph: AppGraph) : ViewModel() {
     }
 
     fun speakStrip() {
-        val items = strip.items.value
-        if (items.isEmpty()) return
+        val snapshot = strip.items.value
+        if (snapshot.isEmpty()) return
         viewModelScope.launch {
-            if (heard(graph.speaker.speakText(strip.text))) {
+            val said = heard(graph.speaker.speakText(strip.text))
+            // An interrupted utterance still resolves as success at the TTS layer, so the check mark
+            // is only earned if the sentence it belongs to is still the one on the strip.
+            if (said && strip.items.value == snapshot) {
                 graph.feedback.success()
                 _spoken.value = true
             }

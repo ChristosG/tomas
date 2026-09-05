@@ -63,6 +63,19 @@ class VoiceTest {
         assertTrue("a missing file should not play", result.isFailure)
     }
 
+    /** The microphone is open: anything the app said now would be inside the take. */
+    @Test fun speakingWhileRecordingIsRefusedInGreek() = runBlocking {
+        voice.startRecording()
+        try {
+            val result = withTimeout(20_000) { voice.speak("Γεια", 0.9f) }
+            assertTrue("output must not talk over the microphone", result.isFailure)
+            assertEquals("Ηχογραφεί τώρα", result.exceptionOrNull()?.message)
+            assertTrue("the recording must survive the refusal", voice.isRecording)
+        } finally {
+            voice.cancelRecording()
+        }
+    }
+
     @Test fun recordingTwiceIsRefusedInGreek() {
         voice.startRecording()
         try {

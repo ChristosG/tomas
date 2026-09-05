@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
@@ -30,6 +31,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -139,6 +141,9 @@ fun TalkBoardScreen(onBack: () -> Unit) {
  */
 @Composable
 private fun StripRow(items: List<Item>, full: Boolean, spoken: Boolean, picture: (Item) -> File?) {
+    // The newest word is the one being chosen, so it is the one that has to be on screen.
+    val stripState = rememberLazyListState()
+    LaunchedEffect(items.size) { stripState.animateScrollToItem(items.lastIndex.coerceAtLeast(0)) }
     Surface(shape = RoundedCornerShape(Sizes.corner), color = MaterialTheme.colorScheme.surfaceVariant, modifier = Modifier.fillMaxWidth().heightIn(min = Sizes.touchMin)) {
         Row(Modifier.padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
@@ -146,11 +151,11 @@ private fun StripRow(items: List<Item>, full: Boolean, spoken: Boolean, picture:
                     Text("Πάτα εικόνες για να φτιάξεις πρόταση.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 } else {
                     // No key: the same word may be chosen twice, and position is what identifies it here.
-                    LazyRow(horizontalArrangement = Arrangement.spacedBy(Sizes.gapSmall)) {
+                    LazyRow(state = stripState, horizontalArrangement = Arrangement.spacedBy(Sizes.gapSmall)) {
                         items(items) { item ->
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                 Pictogram(picture(item), Sizes.stripPicture)
-                                Text(item.text, style = MaterialTheme.typography.titleMedium, textAlign = TextAlign.Center, maxLines = 1)
+                                Text(item.text, style = MaterialTheme.typography.titleLarge, textAlign = TextAlign.Center, maxLines = 1)
                             }
                         }
                     }
@@ -175,7 +180,7 @@ private fun QuickCard(item: Item, image: File?, onClick: () -> Unit) {
         Row(Modifier.padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
             Pictogram(image, Sizes.quickPicture)
             Spacer(Modifier.width(Sizes.gapSmall))
-            Text(item.text, style = MaterialTheme.typography.titleMedium)
+            Text(item.text, style = MaterialTheme.typography.bodyLarge)
         }
     }
 }
