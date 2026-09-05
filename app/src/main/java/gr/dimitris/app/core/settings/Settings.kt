@@ -30,6 +30,10 @@ class Settings(private val store: DataStore<Preferences>) {
     val sttEnabled: Flow<Boolean> = store.data.map { it[STT_ENABLED] ?: false }
     suspend fun setSttEnabled(on: Boolean) { store.edit { it[STT_ENABLED] = on } }
 
+    /** Where he is in the seven number-sense levels. The numbers module moves it; nothing else does. */
+    val numbersLevel: Flow<Int> = store.data.map { it[NUMBERS_LEVEL] ?: 1 }
+    suspend fun setNumbersLevel(level: Int) { store.edit { it[NUMBERS_LEVEL] = level.coerceIn(1, 7) } }
+
     /**
      * Which modules Dimitris gets. Everything is on unless a caregiver switched it off, except the
      * few in [DEFAULT_OFF], which are on only once someone deliberately asks for them.
@@ -67,6 +71,7 @@ class Settings(private val store: DataStore<Preferences>) {
         private val CAREGIVER_LOCK = booleanPreferencesKey("caregiver_lock")
         private val SEED_VERSION = intPreferencesKey("seed_version")
         private val STT_ENABLED = booleanPreferencesKey("stt_enabled")
+        private val NUMBERS_LEVEL = intPreferencesKey("numbers_level")
         private val DISABLED_MODULES = stringSetPreferencesKey("disabled_modules")
 
         /** The [DEFAULT_OFF] ones someone has switched on. Meaningless for every other module. */

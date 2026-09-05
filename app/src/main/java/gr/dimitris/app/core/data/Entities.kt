@@ -52,6 +52,8 @@ data class Item(
     val source: Source = Source.CAREGIVER,
     /** Caregiver-pinned to the talk board favourites. */
     @ColumnInfo(defaultValue = "0") val pinned: Boolean = false,
+    /** Real price in cents, for the euro exercises (caregivers copy it from Wolt). */
+    val priceCents: Int? = null,
     val createdAt: Long = now(),
     val updatedAt: Long = now(),
     val deleted: Boolean = false,

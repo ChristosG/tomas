@@ -22,6 +22,7 @@ interface ItemDao {
     @Query("UPDATE items SET deleted = 1, updatedAt = :now WHERE id = :id") suspend fun softDelete(id: String, now: Long)
     @Query("SELECT * FROM items WHERE deleted = 0 AND pinned = 1 ORDER BY text") fun observePinned(): Flow<List<Item>>
     @Query("SELECT * FROM items WHERE deleted = 0 AND id IN (:ids)") suspend fun byIds(ids: List<String>): List<Item>
+    @Query("SELECT * FROM items WHERE deleted = 0 AND priceCents IS NOT NULL") suspend fun withPrices(): List<Item>
 }
 
 @Dao

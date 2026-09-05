@@ -19,4 +19,5 @@ class FakeItemDao : ItemDao {
     override suspend fun softDelete(id: String, now: Long) { rows.value[id]?.let { upsert(it.copy(deleted = true, updatedAt = now)) } }
     override fun observePinned(): Flow<List<Item>> = observeActive().map { l -> l.filter { it.pinned }.sortedBy { it.text } }
     override suspend fun byIds(ids: List<String>): List<Item> = active().filter { it.id in ids }
+    override suspend fun withPrices(): List<Item> = active().filter { it.priceCents != null }
 }

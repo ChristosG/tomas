@@ -73,4 +73,11 @@ class SettingsTest {
         s.setModuleEnabled(ModuleId.WORDCOACH, true)
         assertEquals(defaults, s.enabledModules.first())
     }
+
+    @Test fun `numbers level starts at 1 and is clamped to 1__7`() = runBlocking {
+        val s = newSettings()
+        assertEquals(1, s.numbersLevel.first())
+        s.setNumbersLevel(9); assertEquals(7, s.numbersLevel.first())
+        s.setNumbersLevel(0); assertEquals(1, s.numbersLevel.first())
+    }
 }

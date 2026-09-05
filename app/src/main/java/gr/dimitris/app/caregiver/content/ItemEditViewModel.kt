@@ -9,6 +9,7 @@ import gr.dimitris.app.core.data.Category
 import gr.dimitris.app.core.data.Item
 import gr.dimitris.app.core.data.ItemKind
 import gr.dimitris.app.core.data.Who
+import gr.dimitris.app.core.greek.Euro
 import gr.dimitris.app.core.greek.Syllabifier
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -27,6 +28,8 @@ data class ItemEditState(
     val category: Category = Category.CUSTOM,
     /** Caregiver-pinned to the talk board favourites. */
     val pinned: Boolean = false,
+    /** Real price as the caregiver types it, "3,50". Empty means the item has no price. */
+    val priceText: String = "",
     val imagePath: String? = null,
     val firstSyllableOverride: String = "",
     val autoSyllable: String? = null,
@@ -51,7 +54,8 @@ class ItemEditViewModel(private val graph: AppGraph, private val itemId: String?
             val item = graph.items.get(itemId) ?: return@launch
             val model = graph.items.modelRecording(item)
             _state.value = ItemEditState(
-                id = item.id, text = item.text, kind = item.kind, category = item.category, pinned = item.pinned, imagePath = item.imagePath,
+                id = item.id, text = item.text, kind = item.kind, category = item.category, pinned = item.pinned,
+                priceText = item.priceCents?.let { Euro.format(it).removeSuffix(" €") } ?: "", imagePath = item.imagePath,
                 firstSyllableOverride = item.firstSyllableOverride ?: "", autoSyllable = Syllabifier.firstSyllable(item.text),
                 savedRecordingPath = model?.path,
             )
@@ -62,6 +66,7 @@ class ItemEditViewModel(private val graph: AppGraph, private val itemId: String?
     fun setKind(kind: ItemKind) = _state.update { it.copy(kind = kind) }
     fun setCategory(category: Category) = _state.update { it.copy(category = category) }
     fun setPinned(on: Boolean) = _state.update { it.copy(pinned = on) }
+    fun setPriceText(t: String) = _state.update { it.copy(priceText = t) }
     fun setOverride(value: String) = _state.update { it.copy(firstSyllableOverride = value) }
     fun clearError() = _state.update { it.copy(error = null) }
 
@@ -119,6 +124,11 @@ class ItemEditViewModel(private val graph: AppGraph, private val itemId: String?
     fun save(onSaved: () -> Unit) {
         val s = _state.value
         if (s.text.isBlank()) { _state.update { it.copy(error = "Γράψε τη λέξη πρώτα") }; return }
+        // A half-typed price would silently become no price at all, so it stops the save instead.
+        if (s.priceText.isNotBlank() && Euro.parse(s.priceText) == null) {
+            _state.update { it.copy(error = "Η τιμή θέλει μορφή 3,50") }
+            return
+        }
         if (s.isRecording) stopRecording()
         _state.update { it.copy(saving = true) }
         viewModelScope.launch {
@@ -126,7 +136,7 @@ class ItemEditViewModel(private val graph: AppGraph, private val itemId: String?
                 val existing = s.id?.let { graph.items.get(it) }
                 val draft = (existing ?: Item(text = s.text)).copy(
                     text = s.text, kind = s.kind, category = s.category, pinned = s.pinned, imagePath = s.imagePath,
-                    firstSyllableOverride = s.firstSyllableOverride,
+                    priceCents = Euro.parse(s.priceText), firstSyllableOverride = s.firstSyllableOverride,
                 )
                 val saved = graph.items.save(draft)
                 _state.value.newRecording?.let { graph.items.addRecording(saved.id, it.file, it.durationMs, Who.CAREGIVER) }

@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.CameraAlt
@@ -46,6 +47,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -132,6 +134,14 @@ fun ItemEditScreen(itemId: String?, onClose: () -> Unit) {
                 Text("Στα αγαπημένα του πίνακα", style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
                 Switch(checked = s.pinned, onCheckedChange = vm::setPinned)
             }
+            Spacer(Modifier.height(Sizes.gap))
+
+            OutlinedTextField(
+                value = s.priceText, onValueChange = vm::setPriceText, singleLine = true,
+                label = { Text("Τιμή (€), π.χ. 3,50") }, supportingText = { Text("Για τις ασκήσεις με ευρώ. Άφησέ το κενό αν δεν έχει.") },
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                modifier = Modifier.fillMaxWidth(),
+            )
             Spacer(Modifier.height(Sizes.gap))
 
             Text("Φωτογραφία", style = MaterialTheme.typography.titleLarge)

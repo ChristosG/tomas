@@ -25,4 +25,14 @@ class MigrationTest {
             }
         }
     }
+
+    @Test fun migrate2To3AddsNullablePrice() {
+        val name = "migration-test-3.db"
+        helper.createDatabase(name, 2).use { db ->
+            db.execSQL("INSERT INTO items (id, text, kind, category, firstSound, source, pinned, createdAt, updatedAt, deleted) VALUES ('a', 'καφές', 'WORD', 'FOOD', 'κ', 'SEED', 0, 1, 1, 0)")
+        }
+        helper.runMigrationsAndValidate(name, 3, true).use { db ->
+            db.query("SELECT priceCents FROM items WHERE id = 'a'").use { c -> c.moveToFirst(); assert(c.isNull(0)) }
+        }
+    }
 }
