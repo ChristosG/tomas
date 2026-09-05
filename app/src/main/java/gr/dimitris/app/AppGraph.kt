@@ -12,6 +12,7 @@ import gr.dimitris.app.core.data.ItemRepository
 import gr.dimitris.app.core.log.ErrorReporter
 import gr.dimitris.app.core.settings.Settings
 import gr.dimitris.app.core.speech.AndroidTextToSpeech
+import gr.dimitris.app.core.speech.ItemSpeaker
 import gr.dimitris.app.core.speech.TextToSpeech
 import gr.dimitris.app.modules.Module
 import gr.dimitris.app.ui.theme.Feedback
@@ -19,6 +20,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 
 /**
@@ -47,6 +49,10 @@ class AppGraph(context: Context) {
 
     /** Always built from the current db, so it survives a backup import. */
     val items: ItemRepository get() = ItemRepository(db.items(), db.recordings(), files::relativize)
+
+    /** Recording-or-TTS voice for items. Built per use so it always sees the current db and settings. */
+    val speaker: ItemSpeaker
+        get() = ItemSpeaker(tts, recordingFor = { items.modelRecording(it) }, play = { voice.play(it) }, rate = { settings.speechRate.first() }, resolve = { files.resolve(it) })
 
     /** Therapy modules in Today-screen order. Empty in phase 0; each later phase adds one. */
     val modules: List<Module> = emptyList()
