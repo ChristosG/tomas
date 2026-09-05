@@ -48,10 +48,11 @@ class AppGraph(context: Context) {
     val stt: SpeechToText = AndroidSpeechToText(app)
     val recorder = Recorder(app, files)
     val player = Player()
+    /** Owned by [voice], which is the only production caller; kept here so tests can drive it alone. */
     val synth = ToneSynth()
 
     /** The only way in: everything that makes sound goes through here, one at a time. */
-    val voice = Voice(app, tts, player, recorder)
+    val voice = Voice(app, tts, player, recorder, synth)
 
     val feedback = Feedback(app)
     val errors = ErrorReporter(scope) { db.errorLogs() }

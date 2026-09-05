@@ -5,6 +5,8 @@ import android.media.AudioAttributes
 import android.media.AudioFocusRequest
 import android.media.AudioManager
 import gr.dimitris.app.core.speech.TextToSpeech
+import gr.dimitris.app.modules.singsay.Melody
+import gr.dimitris.app.modules.singsay.Pitch
 import java.io.File
 
 /**
@@ -25,6 +27,7 @@ class Voice(
     private val tts: TextToSpeech,
     private val player: Player,
     private val recorder: Recorder,
+    private val synth: ToneSynth,
 ) {
     private val audio: AudioManager = context.applicationContext.getSystemService(AudioManager::class.java)
 
@@ -46,10 +49,18 @@ class Voice(
 
     val isRecording: Boolean get() = recorder.isRecording
 
-    /** Stops anything being said or played. Safe when nothing is running; never touches a recording. */
+    /**
+     * Stops anything being said or played — the melody included. Safe when nothing is running;
+     * never touches a recording.
+     *
+     * The melody is here and not left to its caller because every `onDispose { voice.quiet() }` in
+     * the app is a promise that leaving a screen leaves it silent: a tone still sounding under the
+     * talk board is the same bug as an utterance still speaking under it.
+     */
     fun quiet() {
         tts.stop()
         player.stop()
+        synth.stop()
     }
 
     suspend fun speak(text: String, rate: Float): Result<Unit> {
@@ -69,6 +80,28 @@ class Voice(
         return try {
             holdOutputFocus()
             player.play(file)
+        } finally {
+            releaseOutputFocus()
+        }
+    }
+
+    /**
+     * The two-note melody of "Τραγούδα και πες το", played through the same door as everything else
+     * that makes sound: it takes the transient focus so another app's music ducks under it, it is
+     * refused while the microphone is open, and [quiet] stops it.
+     */
+    suspend fun playMelody(
+        notes: List<Pitch>,
+        noteMs: Int = Melody.NOTE_MS,
+        gapMs: Int = Melody.GAP_MS,
+        gain: Float = 1f,
+        onNote: (Int) -> Unit = {},
+    ): Result<Unit> {
+        if (isRecording) return Result.failure(IllegalStateException(RECORDING_NOW))
+        quiet()
+        return try {
+            holdOutputFocus()
+            synth.play(notes, noteMs, gapMs, gain, onNote)
         } finally {
             releaseOutputFocus()
         }

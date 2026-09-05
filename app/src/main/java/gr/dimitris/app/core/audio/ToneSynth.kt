@@ -76,9 +76,21 @@ class ToneSynth {
         var t: AudioTrack? = null
         var written = -1
         var published = false
+        var pcmSize = 0
         try {
-            val pcm = Pcm.concat(notes.flatMap { listOf(Pcm.tone(it.hz, noteMs, gain), Pcm.silence(gapMs)) })
             withContext(Dispatchers.IO) {
+                // Synthesised here, not on the caller's dispatcher: an eight-syllable phrase is a
+                // few hundred thousand sin() evaluations and half a megabyte of ShortArray, and the
+                // caller is viewModelScope — i.e. the thread drawing the syllables.
+                //
+                // TAIL_MS of silence is appended to whatever was asked for: the wait below counts
+                // from play(), so the device's own output latency (tens of ms on a speaker, more on
+                // Bluetooth) is still unplayed when the track is released, and it would take the
+                // last note's decay with it.
+                val pcm = Pcm.concat(
+                    notes.flatMap { listOf(Pcm.tone(it.hz, noteMs, gain), Pcm.silence(gapMs)) } + listOf(Pcm.silence(TAIL_MS)),
+                )
+                pcmSize = pcm.size
                 // build() throws (it does not return an uninitialised track) when the platform
                 // cannot allocate one — an incoming call, another app holding an exclusive route.
                 val built = runCatching {
@@ -99,7 +111,7 @@ class ToneSynth {
             }
 
             val built = t
-            if (built == null || stateOf(built) != AudioTrack.STATE_INITIALIZED || written != pcm.size) {
+            if (built == null || stateOf(built) != AudioTrack.STATE_INITIALIZED || written != pcmSize) {
                 return Result.failure(IllegalStateException(PLAYBACK_FAILED))
             }
             if (current !== self) return Result.success(Unit) // stopped while we were building/writing
@@ -116,6 +128,9 @@ class ToneSynth {
                 onNote(i)
                 delay((noteMs + gapMs).toLong())
             }
+            // The silent tail written above, waited out here: without it the release below throws
+            // away whatever the device had not yet pushed out, clipping the last note's decay.
+            if (current === self) delay(TAIL_MS.toLong())
             return Result.success(Unit)
         } catch (ce: CancellationException) {
             // A cancelled caller is not a failed one: structured concurrency has to see this.
@@ -123,7 +138,9 @@ class ToneSynth {
         } catch (e: Throwable) {
             return Result.failure(IllegalStateException(PLAYBACK_FAILED, e))
         } finally {
-            withContext(NonCancellable) {
+            // IO as well as NonCancellable: pause/flush/release are native calls, and this `finally`
+            // otherwise runs them on whatever the caller's dispatcher was — the main thread.
+            withContext(NonCancellable + Dispatchers.IO) {
                 val built = t
                 // Exactly one release: if the track was never published, nobody else can see it; if
                 // it was, only the caller that takes it out of [track] releases it.
@@ -160,6 +177,9 @@ class ToneSynth {
     companion object {
         /** The one place the output sample rate is defined; [Pcm] generates the PCM at this rate too. */
         const val SAMPLE_RATE = Pcm.SAMPLE_RATE
+
+        /** Silence written after the last note and waited out, so output latency cannot eat its decay. */
+        const val TAIL_MS = 150
 
         /** Said when a note couldn't be played — no usable audio output, or the platform refused the track. */
         const val PLAYBACK_FAILED = "Δεν παίζει ο ήχος"

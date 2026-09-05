@@ -20,7 +20,15 @@ import gr.dimitris.app.ui.components.DimitrisScreen
 fun PracticeScreen(moduleId: ModuleId, onDone: () -> Unit) {
     val graph = LocalAppGraph.current
     // Leaving practice stops whatever it was saying or playing, the same as leaving a session does.
-    DisposableEffect(Unit) { onDispose { graph.voice.quiet() } }
+    // The microphone too: the module screens hand the take back on *back*, but the «Μίλα» button in
+    // the corner is a navigation, not a back press, and a take left running there mutes the talk
+    // board he has just gone to (every tap on it is refused while the microphone is open).
+    DisposableEffect(Unit) {
+        onDispose {
+            if (graph.voice.isRecording) graph.voice.cancelRecording()
+            graph.voice.quiet()
+        }
+    }
 
     // Null only if the route outlived the module registry; the empty screen is the answer either way.
     val module = remember(moduleId) { graph.modules.firstOrNull { it.id == moduleId } }

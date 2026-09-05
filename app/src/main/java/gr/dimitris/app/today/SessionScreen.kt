@@ -20,8 +20,15 @@ import gr.dimitris.app.ui.theme.Sizes
 @Composable
 fun SessionScreen(onDone: () -> Unit) {
     val graph = LocalAppGraph.current
-    // Leaving the session stops whatever it was saying or playing.
-    DisposableEffect(Unit) { onDispose { graph.voice.quiet() } }
+    // Leaving the session stops whatever it was saying or playing — and closes the microphone, which
+    // a module screen only does on a back press: navigating away with «Μίλα» would otherwise leave
+    // the take running and the talk board refusing every tap while it does.
+    DisposableEffect(Unit) {
+        onDispose {
+            if (graph.voice.isRecording) graph.voice.cancelRecording()
+            graph.voice.quiet()
+        }
+    }
 
     val vm: SessionViewModel = viewModel { SessionViewModel(graph) }
     val step by vm.state.collectAsStateWithLifecycle()
