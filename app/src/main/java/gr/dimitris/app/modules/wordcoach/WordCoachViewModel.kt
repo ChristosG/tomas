@@ -40,10 +40,21 @@ data class WordCoachState(
 class WordCoachViewModel(private val graph: AppGraph, private val items: List<Item>, private val sessionId: String?) : ViewModel() {
     private var ladder = CueLadder(items.first())
     private var startedAt = now()
-    private var selfRecordingId: String? = null
+
+    /** Written and read from the app scope, off the main thread; the attempt reads it after joining the save. */
+    @Volatile private var selfRecordingId: String? = null
 
     /** The write of the last take. The attempt waits for it, so it can point at the recording. */
     private var recordingSave: Job? = null
+
+    /**
+     * The attempt + schedule write of the word just finished. It runs on the app scope, so [next]
+     * joins it before saying "done": the session counts rows, and a row still in flight is not one.
+     */
+    private var lastWrite: Job? = null
+
+    /** True from "Το είπα!"/"Παράλειψη" until the next word starts: one attempt per word, not two. */
+    private var finishing = false
 
     private val _state = MutableStateFlow(WordCoachState(total = items.size, item = items.first()))
     val state: StateFlow<WordCoachState> = _state.asStateFlow()
@@ -91,7 +102,8 @@ class WordCoachViewModel(private val graph: AppGraph, private val items: List<It
             runCatching { graph.voice.stopRecording() }
                 .onSuccess { rec ->
                     _state.update { it.copy(isRecording = false, selfRecordingPath = graph.files.relativize(rec.file)) }
-                    recordingSave = viewModelScope.launch {
+                    // The app scope, not this screen's: the take is on disk, its row must land too.
+                    recordingSave = graph.scope.launch {
                         runCatching { graph.items.addRecording(_state.value.item.id, rec.file, rec.durationMs, Who.DIMITRIS).id }
                             .fold({ selfRecordingId = it }, { graph.errors.record("wordcoach save recording", it) })
                     }
@@ -129,10 +141,18 @@ class WordCoachViewModel(private val graph: AppGraph, private val items: List<It
         }
     }
 
-    fun confirm() = finish(confirmed = true)
-    fun skip() = finish(confirmed = false)
+    fun confirm() {
+        if (_state.value.confirmed || finishing) return
+        finish(confirmed = true)
+    }
+
+    fun skip() {
+        if (_state.value.confirmed || finishing) return
+        finish(confirmed = false)
+    }
 
     private fun finish(confirmed: Boolean) {
+        finishing = true
         if (_state.value.isRecording) toggleRecording()
         val s = _state.value
         val outcome = ladder.outcomeFor(confirmed)
@@ -140,7 +160,8 @@ class WordCoachViewModel(private val graph: AppGraph, private val items: List<It
         val level = ladder.level
         val save = recordingSave
         val detail = s.heard?.let { """{"heard":${jsonString(it)},"matched":${s.heardMatched}}""" } ?: "{}"
-        viewModelScope.launch {
+        // The app scope, not this screen's: pressing back must not lose the word he just said.
+        lastWrite = graph.scope.launch {
             // The recording row carries the id the attempt points at, so let its write land first.
             save?.join()
             val recordingId = selfRecordingId
@@ -165,7 +186,14 @@ class WordCoachViewModel(private val graph: AppGraph, private val items: List<It
         // A take still running belongs to the word being left behind.
         if (graph.voice.isRecording) graph.voice.cancelRecording()
         val i = _state.value.index + 1
-        if (i >= items.size) { _state.update { it.copy(done = true) }; return }
+        if (i >= items.size) {
+            // The session counts attempt rows as soon as it is told the module is done, so the last
+            // word's write has to be in the database before "done" ever reaches the screen.
+            val write = lastWrite
+            viewModelScope.launch { write?.join(); _state.update { it.copy(done = true) } }
+            return
+        }
+        finishing = false
         ladder = CueLadder(items[i])
         startedAt = now()
         selfRecordingId = null
