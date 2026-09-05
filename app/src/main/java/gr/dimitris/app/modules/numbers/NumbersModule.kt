@@ -17,10 +17,15 @@ object NumbersModule : Module {
     override val icon: ImageVector = Icons.Rounded.Calculate
     const val EXERCISES_PER_SESSION = 10
 
-    /** Number exercises are generated, not item-based; the returned list only sizes the session. */
+    /**
+     * Number exercises are generated, not item-based: the returned list only sizes the session, so it
+     * is always the full ten transient placeholders. It deliberately asks the database nothing — the
+     * ten NUMBER pictograms the seed ships are ordinary talk-board cards a caregiver may delete, and
+     * counting them would silently shorten every session to however many survived.
+     * [gr.dimitris.app.today.SessionBudget] truncates this list; [exercisesFor] clamps what is left.
+     */
     override suspend fun planFor(graph: AppGraph): List<Item> =
-        graph.db.items().activeOfKinds(listOf(ItemKind.NUMBER)).take(EXERCISES_PER_SESSION)
-            .ifEmpty { List(EXERCISES_PER_SESSION) { Item(text = "Αριθμοί", kind = ItemKind.NUMBER, category = Category.NUMBERS) } }
+        List(EXERCISES_PER_SESSION) { Item(text = "Αριθμοί", kind = ItemKind.NUMBER, category = Category.NUMBERS) }
 
     /**
      * [items] are placeholders, but their number is the session's budget for this module: it runs one

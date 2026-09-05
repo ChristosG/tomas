@@ -4,23 +4,26 @@ package gr.dimitris.app.modules.numbers
  * CHRIS: rewrite me. When does Dimitris move up a level, and when back down?
  * Claude wrote a first version so nothing blocks; NumberProgressionTest describes the contract.
  *
- * Looks at the last WINDOW first-try results at the current level.
+ * Looks at one sitting only — the results he just produced, nothing from before. History would carry
+ * the very answers that moved him last time, and a level he has just failed would promote him
+ * straight back into it.
  */
 object NumberProgression {
     const val MIN_LEVEL = 1
     const val MAX_LEVEL = 7
-    const val WINDOW = 10
-    const val UP_RATE = 0.8
-    const val DOWN_RATE = 0.5
 
-    /** [results]: oldest first, true = correct on the first try. */
+    /** Under this many answers a sitting is too short to mean anything, so the level stands. */
+    const val MIN_RESULTS = 5
+    const val UP_RATE = 0.8
+    const val DOWN_RATE = 0.4
+
+    /** [results]: this session's answers, oldest first, true = correct on the first try. */
     fun next(level: Int, results: List<Boolean>): Int {
-        if (results.size < WINDOW) return level
-        val recent = results.takeLast(WINDOW)
-        val rate = recent.count { it }.toDouble() / WINDOW
+        if (results.size < MIN_RESULTS) return level
+        val rate = results.count { it }.toDouble() / results.size
         return when {
             rate >= UP_RATE -> (level + 1).coerceAtMost(MAX_LEVEL)
-            rate < DOWN_RATE -> (level - 1).coerceAtLeast(MIN_LEVEL)
+            rate <= DOWN_RATE -> (level - 1).coerceAtLeast(MIN_LEVEL)
             else -> level
         }
     }
