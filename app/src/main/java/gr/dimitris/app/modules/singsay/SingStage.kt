@@ -1,11 +1,14 @@
 package gr.dimitris.app.modules.singsay
 
+import gr.dimitris.app.core.data.Outcome
+
 /**
  * The five steps of melodic intonation therapy, in order: he listens, sings along with the phone,
  * sings while the music fades under him, keeps only the tapped beat, and finally says it alone.
  *
  * Each step takes one prop away, so where he stopped is how much help he still needed — that is
- * what [cueLevelFor] hands the Leitner scheduler, on the same 0–4 scale as the word coach's ladder.
+ * what [cueLevelFor] hands the Leitner scheduler, on the same 0–4 scale as the word coach's ladder,
+ * and what [outcomeFor] turns into the row the caregiver reads.
  */
 object SingStage {
     const val LISTEN = 1
@@ -26,11 +29,35 @@ object SingStage {
     /** Stage 5 = said it alone = cue 0; stage 1 = only listened = cue 4. */
     fun cueLevelFor(stage: Int): Int = (SPEAK - stage).coerceIn(0, 4)
 
+    /**
+     * What the attempt says. Only the last stage — the phrase spoken with nothing left to lean on —
+     * is his own; claiming it earlier is real work done with help, and is written as such instead of
+     * being lost. A phrase passed over is neither: [Outcome.SKIPPED], whatever stage it reached.
+     */
+    fun outcomeFor(stage: Int, skipped: Boolean): Outcome = when {
+        skipped -> Outcome.SKIPPED
+        stage >= SPEAK -> Outcome.CORRECT
+        else -> Outcome.ASSISTED
+    }
+
     fun label(stage: Int): String = when (stage) {
         LISTEN -> "Άκου"
         TOGETHER -> "Τραγούδα μαζί"
         FADING -> "Τραγούδα, η μουσική σβήνει"
         TAPS_ONLY -> "Πες το με χτύπους"
         else -> "Πες το"
+    }
+
+    /**
+     * Said out loud on entering the stage. Written text is a hint layer and never the only channel:
+     * a man with expressive aphasia understands speech, and the label above is there for whoever is
+     * sitting with him. One short adult sentence each — no baby talk, no "let's".
+     */
+    fun prompt(stage: Int): String = when (stage) {
+        LISTEN -> "Άκου."
+        TOGETHER -> "Τραγούδα μαζί μου."
+        FADING -> "Τραγούδα το μόνος σου."
+        TAPS_ONLY -> "Πες το τραγουδιστά."
+        else -> "Πες το κανονικά."
     }
 }

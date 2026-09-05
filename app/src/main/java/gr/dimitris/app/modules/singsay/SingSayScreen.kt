@@ -82,13 +82,15 @@ fun SingSayScreen(items: List<Item>, sessionId: String?, onDone: () -> Unit, onL
             // The tap pad: the biggest thing on the screen, at the bottom where his left thumb lives.
             BigButton(
                 if (s.stage == SingStage.SPEAK) "Το είπα!" else "Χτύπα",
-                onClick = { if (s.stage == SingStage.SPEAK) vm.completeRepetition() else vm.tap() },
+                onClick = { if (s.stage == SingStage.SPEAK) vm.didIt() else vm.tap() },
                 tone = if (s.stage == SingStage.SPEAK) ButtonTone.Success else ButtonTone.Secondary,
                 modifier = Modifier.height(110.dp), enabled = !s.playing && !s.isRecording,
             )
             Spacer(Modifier.height(Sizes.gapSmall))
             if (s.stage != SingStage.SPEAK) {
-                BigButton("Το έκανα", onClick = vm::completeRepetition, tone = ButtonTone.Success, enabled = !s.playing)
+                // Not while the microphone is open: a phrase finished mid-take ends with a recording
+                // that spans stages, and the «Στοπ» that would have closed it is a screen away.
+                BigButton("Το έκανα", onClick = vm::didIt, tone = ButtonTone.Success, enabled = !s.playing && !s.isRecording)
                 Spacer(Modifier.height(Sizes.gapSmall))
             }
             // Not while the phrase is still loading: a skip landing then would finish a phrase whose
@@ -149,7 +151,9 @@ fun SingSayScreen(items: List<Item>, sessionId: String?, onDone: () -> Unit, onL
                 Spacer(Modifier.height(Sizes.gapSmall))
                 QuietButton("Σύγκριση", onClick = vm::playComparison, icon = Icons.Rounded.Compare)
             }
-            if (!s.hasSungModel) {
+            // Only once the lookup has landed: `hasSungModel` starts false, so without the guard the
+            // line saying there is no sung voice flashes on every phrase, the ones that have one too.
+            if (!s.loading && !s.hasSungModel) {
                 Spacer(Modifier.height(Sizes.gapSmall))
                 Text(
                     "Δεν υπάρχει τραγουδισμένη φωνή για αυτή τη φράση, ακούς τη μελωδία.",

@@ -6,7 +6,6 @@ import gr.dimitris.app.AppGraph
 import gr.dimitris.app.core.data.Attempt
 import gr.dimitris.app.core.data.Item
 import gr.dimitris.app.core.data.ModuleId
-import gr.dimitris.app.core.data.Outcome
 import gr.dimitris.app.core.data.Who
 import gr.dimitris.app.core.data.now
 import kotlinx.coroutines.CancellationException
@@ -94,25 +93,64 @@ class SingSayViewModel(private val graph: AppGraph, private val items: List<Item
         // the gap would belong to the phrase he has just left.
         _state.value = SingSayState(index = i, total = items.size, item = item, notes = Melody.forPhrase(item.text), playing = true)
         loadJob = viewModelScope.launch {
-            val sung = runCatching { graph.items.sungRecording(item) }
-                .onFailure { graph.errors.record("singsay sung model", it) }.getOrNull()
+            val sung = try {
+                graph.items.sungRecording(item)
+            } catch (ce: CancellationException) {
+                // A cancelled lookup is not a failed one — logging it would fill the caregiver's
+                // Σφάλματα with rows for nothing — and the phrase it belonged to is already gone,
+                // so nothing below it may run: no state, no clock, no model played over the next one.
+                throw ce
+            } catch (e: Exception) {
+                graph.errors.record("singsay sung model", e)
+                null
+            }
             sungModelPath = sung?.path
             _state.update { it.copy(hasSungModel = sung != null, loading = false) }
             // Not before the query: its wait is not his time on the phrase.
             startedAt = now()
             finishing = false
-            playModel()
+            enterStage(SingStage.LISTEN)
         }
     }
 
-    /** Stage 1 and «Άκου»: the caregiver's sung model if there is one, else TTS, then the melody. */
+    /**
+     * Entering a stage: what to do is *said*, not only written — text is a hint layer here, and he
+     * understands speech far better than he produces it. Stage 1 plays the model behind the prompt
+     * and stage 2 the backing he is being asked to sing along with; the later stages are silent on
+     * purpose, because taking the music away is the whole point of them.
+     */
+    private fun enterStage(stage: Int) {
+        val token = claimPlayback()
+        playJob = viewModelScope.launch {
+            _state.update { it.copy(playing = true, lit = -1) }
+            try {
+                announce(stage)
+            } finally {
+                releasePlayback(token)
+            }
+        }
+    }
+
+    private suspend fun announce(stage: Int) {
+        report(graph.speaker.speakText(SingStage.prompt(stage)), SPEECH_FAILED, "singsay prompt")
+        when (stage) {
+            SingStage.LISTEN -> { sayModel(); playMelody(gain = SingStage.gainFor(stage, 0)) }
+            SingStage.TOGETHER -> playMelody(gain = SingStage.gainFor(stage, 0))
+            else -> Unit
+        }
+    }
+
+    /** «Άκου»: the caregiver's sung model if there is one, else TTS, then the melody. */
     fun playModel() {
+        val s = _state.value
         val token = claimPlayback()
         playJob = viewModelScope.launch {
             _state.update { it.copy(playing = true, lit = -1) }
             try {
                 sayModel()
-                playMelody(gain = 1f)
+                // Not always at full volume: «Άκου» is there all through the fading stage, and a
+                // model at gain 1 would hand back the backing that stage is taking away.
+                playMelody(gain = maxOf(SingStage.gainFor(s.stage, s.repetition), MODEL_MIN_GAIN))
             } finally {
                 releasePlayback(token)
             }
@@ -121,13 +159,13 @@ class SingSayViewModel(private val graph: AppGraph, private val items: List<Item
 
     /**
      * Silences whatever is sounding and claims the play job for the caller. Cancelling the job is
-     * not enough on its own: the melody deliberately sits outside [gr.dimitris.app.core.audio.Voice],
-     * so `Voice.quiet()` does not touch it, and [Job.cancel] only lands at the next suspension
-     * point — a voice started meanwhile would be heard over a tone that is still sounding.
+     * not enough on its own: [Job.cancel] only lands at the next suspension point, so a voice
+     * started meanwhile would be heard over a tone that is still sounding. `quiet()` stops the
+     * melody as well as the speech — the module never reaches the synth itself.
      */
     private fun claimPlayback(): Int {
         playJob?.cancel()
-        graph.synth.stop()
+        graph.voice.quiet()
         return ++playToken
     }
 
@@ -148,7 +186,7 @@ class SingSayViewModel(private val graph: AppGraph, private val items: List<Item
     }
 
     private suspend fun playMelody(gain: Float) = report(
-        graph.synth.play(_state.value.notes.map { it.pitch }, gain = gain) { i -> _state.update { it.copy(lit = i) } },
+        graph.voice.playMelody(_state.value.notes.map { it.pitch }, gain = gain) { i -> _state.update { it.copy(lit = i) } },
         SYNTH_FAILED, "singsay melody",
     )
 
@@ -161,33 +199,69 @@ class SingSayViewModel(private val graph: AppGraph, private val items: List<Item
         onFailure = { e -> graph.errors.record(where, e); _state.update { it.copy(error = message) } },
     )
 
-    /** The tap pad: one tap lights the next syllable and, while the stage still has backing, sounds it. */
+    /**
+     * The tap pad: one tap lights the next syllable and, while the stage still has backing, sounds
+     * it. Tapping the *last* syllable is a whole pass through the phrase — one repetition of the
+     * stage's work — so the module moves on by itself. Nothing counts the seconds: the phrase's own
+     * length paces the stage, and he can take as long over it as he likes.
+     */
     fun tap() {
         val s = _state.value
-        if (s.playing || s.notes.isEmpty()) return
+        if (s.playing || s.isRecording || finishing || s.done || s.notes.isEmpty()) return
         val next = (s.lit + 1) % s.notes.size
         _state.update { it.copy(lit = next) }
         val gain = SingStage.gainFor(s.stage, s.repetition)
-        if (gain <= 0f) return
+        val passDone = next == s.notes.lastIndex
+        // A silent stage in mid-phrase has nothing to play and nothing to move on to: the lit
+        // syllable above is the whole of it, and clearing it here would undo that.
+        if (gain <= 0f && !passDone) return
         // The tapped note belongs to the same job as every other playback: a second tap replaces the
         // first note instead of racing it for the one track, and finish/leave silence it too.
-        claimPlayback()
+        val token = claimPlayback()
         playJob = viewModelScope.launch {
-            report(graph.synth.play(listOf(s.notes[next].pitch), noteMs = TAP_NOTE_MS, gapMs = 0, gain = gain), SYNTH_FAILED, "singsay tap")
+            if (gain > 0f) {
+                report(
+                    graph.voice.playMelody(listOf(s.notes[next].pitch), noteMs = TAP_NOTE_MS, gapMs = 0, gain = gain),
+                    SYNTH_FAILED, "singsay tap",
+                )
+            }
+            if (passDone) advance(token)
         }
     }
 
-    /** «Το έκανα»: this repetition is done. The fading stage needs three; the others move on at once. */
-    fun completeRepetition() {
+    /**
+     * A pass through the phrase is finished. The fading stage wants three of them, one quieter than
+     * the last; every other stage moves on, and the new one says what it wants out loud.
+     */
+    private suspend fun advance(token: Int) {
         val s = _state.value
-        if (finishing || s.done) return
-        graph.feedback.success()
         when {
             s.stage == SingStage.FADING && s.repetition + 1 < SingStage.FADING_REPS ->
                 _state.update { it.copy(repetition = it.repetition + 1, lit = -1) }
-            s.stage < SingStage.SPEAK -> _state.update { it.copy(stage = it.stage + 1, repetition = 0, lit = -1) }
-            else -> finish(skipped = false)
+            s.stage < SingStage.SPEAK -> {
+                val next = s.stage + 1
+                graph.feedback.success()
+                _state.update { it.copy(stage = next, repetition = 0, lit = -1, playing = true) }
+                try {
+                    announce(next)
+                } finally {
+                    releasePlayback(token)
+                }
+            }
+            // Stage 5 has no tap pad — «Το είπα!» stands where it was — so there is nowhere to go.
+            else -> Unit
         }
+    }
+
+    /**
+     * «Το έκανα» (and «Το είπα!» at the last stage): he has produced the phrase, and the stage he
+     * did it at is the score. Saying it alone at stage 5 is his own; claiming it earlier is real
+     * work done with help still under him, and is written as that rather than thrown away.
+     */
+    fun didIt() {
+        if (finishing || _state.value.done) return
+        graph.feedback.success()
+        finish(skipped = false)
     }
 
     fun toggleRecording() {
@@ -257,7 +331,7 @@ class SingSayViewModel(private val graph: AppGraph, private val items: List<Item
         val s = _state.value
         val stageReached = s.stage
         val cue = SingStage.cueLevelFor(stageReached)
-        val outcome = when { skipped -> Outcome.SKIPPED; cue <= 2 -> Outcome.CORRECT; else -> Outcome.ASSISTED }
+        val outcome = SingStage.outcomeFor(stageReached, skipped)
         // Read eagerly: the clock and the take belong to the phrase being left behind.
         val began = startedAt
         val save = recordingSave
@@ -324,5 +398,8 @@ class SingSayViewModel(private val graph: AppGraph, private val items: List<Item
 
         /** A tapped note marks the beat, it does not hold it: shorter than a sung one. */
         const val TAP_NOTE_MS = 350
+
+        /** «Άκου» never goes fully silent, even where the stage's own backing has faded to nothing. */
+        const val MODEL_MIN_GAIN = 0.3f
     }
 }
