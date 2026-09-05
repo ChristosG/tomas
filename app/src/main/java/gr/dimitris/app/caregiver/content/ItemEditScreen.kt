@@ -20,6 +20,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.CameraAlt
 import androidx.compose.material.icons.rounded.Delete
+import androidx.compose.material.icons.rounded.Image
 import androidx.compose.material.icons.rounded.Mic
 import androidx.compose.material.icons.rounded.PhotoLibrary
 import androidx.compose.material.icons.rounded.PlayArrow
@@ -37,6 +38,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
@@ -111,7 +113,8 @@ fun ItemEditScreen(itemId: String?, onClose: () -> Unit) {
 
             Text("Φωτογραφία", style = MaterialTheme.typography.titleLarge)
             if (s.imagePath != null) {
-                AsyncImage(model = File(s.imagePath!!), contentDescription = null, contentScale = ContentScale.Fit,
+                AsyncImage(model = graph.files.resolve(s.imagePath!!), contentDescription = null, contentScale = ContentScale.Fit,
+                    error = rememberVectorPainter(Icons.Rounded.Image),
                     modifier = Modifier.fillMaxWidth().height(220.dp))
                 Spacer(Modifier.height(8.dp))
             }

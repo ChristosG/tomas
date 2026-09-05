@@ -23,7 +23,8 @@ class SeedImporter(private val graph: AppGraph) {
                 if (entry.text.trim() in existing) continue
                 val image = entry.image?.let { copyAsset("seed/$it") }
                 graph.items.save(Item(text = entry.text, kind = runCatching { ItemKind.valueOf(entry.kind) }.getOrDefault(ItemKind.WORD),
-                    category = runCatching { Category.valueOf(entry.category) }.getOrDefault(Category.CUSTOM), imagePath = image?.absolutePath, source = Source.SEED))
+                    category = runCatching { Category.valueOf(entry.category) }.getOrDefault(Category.CUSTOM),
+                    imagePath = image?.let { graph.files.relativize(it) }, source = Source.SEED))
             }
             graph.settings.setSeedVersion(manifest.version)
         } catch (ce: CancellationException) {

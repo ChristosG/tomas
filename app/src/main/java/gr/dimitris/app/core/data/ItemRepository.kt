@@ -9,6 +9,8 @@ import java.io.File
 class ItemRepository(
     private val items: ItemDao,
     private val recordings: RecordingDao,
+    /** How a media file becomes a stored path. The app passes MediaFiles::relativize; JVM tests keep it absolute. */
+    private val relativize: (File) -> String = { it.absolutePath },
     private val clock: () -> Long = ::now,
 ) {
     fun observeAll(): Flow<List<Item>> = items.observeActive()
@@ -32,7 +34,7 @@ class ItemRepository(
     suspend fun delete(id: String) = items.softDelete(id, clock())
 
     suspend fun addRecording(itemId: String, file: File, durationMs: Long, who: Who): Recording {
-        val recording = Recording(itemId = itemId, path = file.absolutePath, who = who, durationMs = durationMs, recordedAt = clock())
+        val recording = Recording(itemId = itemId, path = relativize(file), who = who, durationMs = durationMs, recordedAt = clock())
         recordings.upsert(recording)
         if (who == Who.CAREGIVER) {
             items.get(itemId)?.let { items.upsert(it.copy(modelRecordingId = recording.id, updatedAt = clock())) }

@@ -27,6 +27,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -37,7 +38,6 @@ import gr.dimitris.app.core.data.ItemKind
 import gr.dimitris.app.ui.components.BigButton
 import gr.dimitris.app.ui.components.DimitrisScreen
 import gr.dimitris.app.ui.theme.Sizes
-import java.io.File
 
 @Composable
 fun ItemListScreen(onBack: () -> Unit, onEdit: (String?) -> Unit) {
@@ -77,13 +77,20 @@ fun ItemListScreen(onBack: () -> Unit, onEdit: (String?) -> Unit) {
 
 @Composable
 private fun ItemRow(item: Item, onClick: () -> Unit) {
+    val files = LocalAppGraph.current.files
+    // A picture that was deleted or moved falls back to the placeholder; the item itself still works.
+    val image = remember(item.imagePath) { item.imagePath?.let(files::resolve)?.takeIf { it.exists() } }
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier.fillMaxWidth().heightIn(min = Sizes.touchMin).clickable(onClick = onClick).padding(vertical = 4.dp),
     ) {
         Box(Modifier.size(56.dp), contentAlignment = Alignment.Center) {
-            if (item.imagePath != null) AsyncImage(model = File(item.imagePath), contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.size(56.dp))
-            else Icon(Icons.Rounded.Image, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (image != null) {
+                AsyncImage(model = image, contentDescription = null, contentScale = ContentScale.Crop,
+                    error = rememberVectorPainter(Icons.Rounded.Image), modifier = Modifier.size(56.dp))
+            } else {
+                Icon(Icons.Rounded.Image, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
         }
         Spacer(Modifier.width(Sizes.gap))
         Column(Modifier.weight(1f)) {

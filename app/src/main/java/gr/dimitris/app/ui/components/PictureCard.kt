@@ -19,6 +19,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -27,9 +28,13 @@ import gr.dimitris.app.ui.theme.LocalFeedback
 import gr.dimitris.app.ui.theme.Sizes
 import java.io.File
 
+/**
+ * [imageFile] is already resolved (see MediaFiles.resolve). A picture that was deleted or moved
+ * falls back to the placeholder icon, so the item still works with its word and its voice.
+ */
 @Composable
 fun PictureCard(
-    imagePath: String?,
+    imageFile: File?,
     label: String?,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
@@ -45,11 +50,12 @@ fun PictureCard(
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(12.dp)) {
             Box(Modifier.fillMaxWidth().aspectRatio(1f), contentAlignment = Alignment.Center) {
-                if (imagePath != null) {
+                if (imageFile != null && imageFile.exists()) {
                     AsyncImage(
-                        model = File(imagePath),
+                        model = imageFile,
                         contentDescription = label,
                         contentScale = ContentScale.Fit,
+                        error = rememberVectorPainter(Icons.Rounded.Image),
                         modifier = Modifier.fillMaxWidth(),
                     )
                 } else {

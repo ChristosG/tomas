@@ -64,7 +64,7 @@ class ItemEditViewModel(private val graph: AppGraph, private val itemId: String?
     fun photoPicked(uri: Uri) {
         viewModelScope.launch(Dispatchers.IO) {
             runCatching { graph.images.import(graph.app.contentResolver, uri) }
-                .onSuccess { file -> _state.update { it.copy(imagePath = file.absolutePath) } }
+                .onSuccess { file -> _state.update { it.copy(imagePath = graph.files.relativize(file)) } }
                 .onFailure { e -> graph.errors.record("photo import", e); _state.update { it.copy(error = "Δεν άνοιξε η φωτογραφία") } }
         }
     }
@@ -76,7 +76,7 @@ class ItemEditViewModel(private val graph: AppGraph, private val itemId: String?
                 graph.errors.record("photo shrink", e)
                 _state.update { it.copy(error = "Η φωτογραφία δεν επεξεργάστηκε, αλλά κρατήθηκε.") }
             }
-            _state.update { it.copy(imagePath = file.absolutePath) }
+            _state.update { it.copy(imagePath = graph.files.relativize(file)) }
         }
     }
 
@@ -98,7 +98,7 @@ class ItemEditViewModel(private val graph: AppGraph, private val itemId: String?
 
     fun playRecording() {
         val path = _state.value.recordingPath ?: return
-        viewModelScope.launch { graph.player.play(File(path)).onFailure { graph.errors.record("play recording", it) } }
+        viewModelScope.launch { graph.player.play(graph.files.resolve(path)).onFailure { graph.errors.record("play recording", it) } }
     }
 
     fun speakWithTts() {

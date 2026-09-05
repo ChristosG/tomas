@@ -39,7 +39,7 @@ class AppGraph(context: Context) {
     val errors = ErrorReporter(scope) { db.errorLogs() }
 
     /** Always built from the current db, so it survives a backup import. */
-    val items: ItemRepository get() = ItemRepository(db.items(), db.recordings())
+    val items: ItemRepository get() = ItemRepository(db.items(), db.recordings(), files::relativize)
 
     /** Therapy modules in Today-screen order. Empty in phase 0; each later phase adds one. */
     val modules: List<Module> = emptyList()
