@@ -11,11 +11,12 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
 @Composable
-fun SuccessMark(visible: Boolean, modifier: Modifier = Modifier) {
+fun SuccessMark(visible: Boolean, modifier: Modifier = Modifier, size: Dp = 96.dp) {
     AnimatedVisibility(visible = visible, enter = fadeIn() + scaleIn(initialScale = 0.5f), exit = fadeOut(), modifier = modifier) {
-        Icon(Icons.Rounded.CheckCircle, contentDescription = "Σωστά", tint = MaterialTheme.colorScheme.tertiary, modifier = Modifier.size(96.dp))
+        Icon(Icons.Rounded.CheckCircle, contentDescription = "Σωστά", tint = MaterialTheme.colorScheme.tertiary, modifier = Modifier.size(size))
     }
 }

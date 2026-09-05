@@ -68,6 +68,13 @@ class TalkBoardViewModel(private val graph: AppGraph) : ViewModel() {
     private val _speechError = MutableStateFlow<String?>(null)
     val speechError: StateFlow<String?> = _speechError.asStateFlow()
 
+    /**
+     * True from a said sentence until the strip next changes. No timer: the check mark is the answer
+     * to "did it come out?", and Dimitris decides when he is done looking at it.
+     */
+    private val _spoken = MutableStateFlow(false)
+    val spoken: StateFlow<Boolean> = _spoken.asStateFlow()
+
     fun selectTab(t: Tab) { _tab.value = t }
 
     /** Grid tap: say it and add it to the sentence. */
@@ -75,6 +82,7 @@ class TalkBoardViewModel(private val graph: AppGraph) : ViewModel() {
         // A full strip still says the word; the attempt is logged for what it was, not what was asked.
         val added = strip.add(item)
         _stripFull.value = !added
+        if (added) _spoken.value = false
         viewModelScope.launch { heard(graph.speaker.speak(item)); log(item, inStrip = added) }
     }
 
@@ -87,12 +95,15 @@ class TalkBoardViewModel(private val graph: AppGraph) : ViewModel() {
         val items = strip.items.value
         if (items.isEmpty()) return
         viewModelScope.launch {
-            if (heard(graph.speaker.speakText(strip.text))) graph.feedback.success()
+            if (heard(graph.speaker.speakText(strip.text))) {
+                graph.feedback.success()
+                _spoken.value = true
+            }
         }
     }
 
-    fun undo() { strip.removeLast(); _stripFull.value = false }
-    fun clear() { strip.clear(); _stripFull.value = false }
+    fun undo() { strip.removeLast(); _stripFull.value = false; _spoken.value = false }
+    fun clear() { strip.clear(); _stripFull.value = false; _spoken.value = false }
 
     /** Records the outcome of one speak attempt and reports whether anything was actually heard. */
     private fun heard(result: Result<*>): Boolean {

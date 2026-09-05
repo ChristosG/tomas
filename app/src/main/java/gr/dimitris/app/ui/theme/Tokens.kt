@@ -10,6 +10,10 @@ object Sizes {
     val screenPadding = 20.dp
     val corner = 20.dp
     val pictureCard = 140.dp
+    /** The pictogram on a quick-phrase card: big enough to recognise, small enough to keep the row one line. */
+    val quickPicture = 48.dp
+    /** The pictogram over each word in the sentence strip. */
+    val stripPicture = 40.dp
     val icon = 32.dp
 }
 

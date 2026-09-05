@@ -2,6 +2,7 @@ package gr.dimitris.app
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -36,7 +37,10 @@ val LocalOpenTalkBoard = staticCompositionLocalOf<(() -> Unit)?> { null }
 @Composable
 fun AppNav() {
     val nav = rememberNavController()
-    CompositionLocalProvider(LocalOpenTalkBoard provides { nav.navigate(Routes.TALKBOARD) { launchSingleTop = true } }) {
+    // Remembered: a fresh lambda on every recomposition changes a staticCompositionLocalOf value,
+    // which throws away and rebuilds the whole NavHost subtree underneath it.
+    val openTalkBoard = remember(nav) { { nav.navigate(Routes.TALKBOARD) { launchSingleTop = true } } }
+    CompositionLocalProvider(LocalOpenTalkBoard provides openTalkBoard) {
         NavHost(nav, startDestination = Routes.TODAY) {
             composable(Routes.TODAY) {
                 TodayScreen(onStart = { nav.navigate(Routes.SESSION) }, onCaregiver = { nav.navigate(Routes.CAREGIVER) })

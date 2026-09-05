@@ -1,6 +1,7 @@
 package gr.dimitris.app.ui.components
 
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
@@ -22,6 +23,11 @@ import gr.dimitris.app.ui.theme.Sizes
 
 enum class ButtonTone { Primary, Secondary, Success }
 
+/**
+ * [contentDescription] is what a screen reader says for the icon; give it whenever the button has no
+ * visible word of its own. [iconOnly] tightens the padding so such a button still fits where it is
+ * squeezed next to a wider one.
+ */
 @Composable
 fun BigButton(
     text: String,
@@ -30,6 +36,8 @@ fun BigButton(
     icon: ImageVector? = null,
     tone: ButtonTone = ButtonTone.Primary,
     enabled: Boolean = true,
+    contentDescription: String? = null,
+    iconOnly: Boolean = false,
 ) {
     val feedback = LocalFeedback.current
     val container = when (tone) {
@@ -43,29 +51,42 @@ fun BigButton(
         modifier = modifier.fillMaxWidth().heightIn(min = Sizes.touchMin),
         shape = RoundedCornerShape(Sizes.corner),
         colors = ButtonDefaults.buttonColors(containerColor = container),
-        contentPadding = PaddingValues(horizontal = 24.dp, vertical = 16.dp),
+        contentPadding = contentPadding(iconOnly),
     ) {
-        if (icon != null) {
-            Icon(icon, contentDescription = null, modifier = Modifier.size(Sizes.icon))
-            Spacer(Modifier.width(12.dp))
-        }
-        Text(text, style = MaterialTheme.typography.labelLarge)
+        Content(text, icon, contentDescription)
     }
 }
 
+/** See [BigButton] for [contentDescription] and [iconOnly]. */
 @Composable
-fun QuietButton(text: String, onClick: () -> Unit, modifier: Modifier = Modifier, icon: ImageVector? = null) {
+fun QuietButton(
+    text: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    icon: ImageVector? = null,
+    contentDescription: String? = null,
+    iconOnly: Boolean = false,
+) {
     val feedback = LocalFeedback.current
     OutlinedButton(
         onClick = { feedback.tap(); onClick() },
         modifier = modifier.fillMaxWidth().heightIn(min = Sizes.touchMin),
         shape = RoundedCornerShape(Sizes.corner),
-        contentPadding = PaddingValues(horizontal = 24.dp, vertical = 16.dp),
+        contentPadding = contentPadding(iconOnly),
     ) {
-        if (icon != null) {
-            Icon(icon, contentDescription = null, modifier = Modifier.size(Sizes.icon))
-            Spacer(Modifier.width(12.dp))
-        }
-        Text(text, style = MaterialTheme.typography.labelLarge)
+        Content(text, icon, contentDescription)
     }
+}
+
+/** A button with no word of its own keeps only enough padding to stay a 72dp target. */
+private fun contentPadding(iconOnly: Boolean) =
+    if (iconOnly) PaddingValues(12.dp) else PaddingValues(horizontal = 24.dp, vertical = 16.dp)
+
+@Composable
+private fun RowScope.Content(text: String, icon: ImageVector?, contentDescription: String?) {
+    if (icon != null) {
+        Icon(icon, contentDescription = contentDescription, modifier = Modifier.size(Sizes.icon))
+        if (text.isNotEmpty()) Spacer(Modifier.width(12.dp))
+    }
+    if (text.isNotEmpty()) Text(text, style = MaterialTheme.typography.labelLarge)
 }
