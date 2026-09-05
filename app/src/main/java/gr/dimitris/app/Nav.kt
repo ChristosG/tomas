@@ -13,13 +13,17 @@ import gr.dimitris.app.caregiver.ErrorListScreen
 import gr.dimitris.app.caregiver.SettingsScreen
 import gr.dimitris.app.caregiver.content.ItemEditScreen
 import gr.dimitris.app.caregiver.content.ItemListScreen
+import gr.dimitris.app.core.data.ModuleId
 import gr.dimitris.app.modules.talkboard.TalkBoardScreen
+import gr.dimitris.app.today.PracticeScreen
 import gr.dimitris.app.today.SessionScreen
 import gr.dimitris.app.today.TodayScreen
 
 object Routes {
     const val TODAY = "today"
     const val SESSION = "session"
+    const val PRACTICE = "practice/{moduleId}"
+    fun practice(id: ModuleId) = "practice/${id.name}"
     const val TALKBOARD = "talk"
     const val CAREGIVER = "caregiver"
     const val ITEMS = "caregiver/items"
@@ -43,10 +47,18 @@ fun AppNav() {
     CompositionLocalProvider(LocalOpenTalkBoard provides openTalkBoard) {
         NavHost(nav, startDestination = Routes.TODAY) {
             composable(Routes.TODAY) {
-                TodayScreen(onStart = { nav.navigate(Routes.SESSION) }, onCaregiver = { nav.navigate(Routes.CAREGIVER) })
+                TodayScreen(
+                    onStart = { nav.navigate(Routes.SESSION) },
+                    onCaregiver = { nav.navigate(Routes.CAREGIVER) },
+                    onPractice = { nav.navigate(Routes.practice(it)) },
+                )
             }
             composable(Routes.SESSION) {
                 SessionScreen(onDone = { nav.popBackStack(Routes.TODAY, inclusive = false) })
+            }
+            composable(Routes.PRACTICE) { entry ->
+                val id = ModuleId.valueOf(entry.arguments?.getString("moduleId") ?: ModuleId.WORDCOACH.name)
+                PracticeScreen(moduleId = id, onDone = { nav.popBackStack(Routes.TODAY, inclusive = false) })
             }
             composable(Routes.TALKBOARD) { TalkBoardScreen(onBack = { nav.popBackStack() }) }
             composable(Routes.CAREGIVER) {

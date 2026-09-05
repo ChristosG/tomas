@@ -35,6 +35,7 @@ import gr.dimitris.app.LocalAppGraph
 import gr.dimitris.app.LocalOpenTalkBoard
 import gr.dimitris.app.caregiver.authenticateCaregiver
 import gr.dimitris.app.caregiver.canAuthenticate
+import gr.dimitris.app.core.data.ModuleId
 import gr.dimitris.app.core.speech.openTtsInstaller
 import gr.dimitris.app.ui.components.BigButton
 import gr.dimitris.app.ui.components.ButtonTone
@@ -47,7 +48,7 @@ import kotlinx.coroutines.launch
 const val CAREGIVER_HOLD_MS = 2000L
 
 @Composable
-fun TodayScreen(onStart: () -> Unit, onCaregiver: () -> Unit) {
+fun TodayScreen(onStart: () -> Unit, onCaregiver: () -> Unit, onPractice: (ModuleId) -> Unit) {
     val graph = LocalAppGraph.current
     val context = LocalContext.current
     // Null in a preview or a bare-Activity host: the caregiver area then opens without the lock.
@@ -56,6 +57,7 @@ fun TodayScreen(onStart: () -> Unit, onCaregiver: () -> Unit) {
     var greekVoice by remember { mutableStateOf(true) }
     var askCaregiver by remember { mutableStateOf(false) }
     val lock by graph.settings.caregiverLock.collectAsStateWithLifecycle(initialValue = false)
+    val enabled by graph.settings.enabledModules.collectAsStateWithLifecycle(initialValue = emptySet())
 
     // Re-checked on every resume, so coming back from the voice installer clears the card.
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
@@ -85,6 +87,14 @@ fun TodayScreen(onStart: () -> Unit, onCaregiver: () -> Unit) {
         Spacer(Modifier.height(Sizes.gap))
         if (!greekVoice) {
             TtsMissingCard(onInstall = { openTtsInstaller(activity ?: context) })
+        }
+
+        val modules = graph.modules.filter { it.id in enabled }
+        if (modules.isNotEmpty()) {
+            Spacer(Modifier.height(Sizes.gap))
+            Text("Εξάσκηση", style = MaterialTheme.typography.titleLarge)
+            Spacer(Modifier.height(Sizes.gapSmall))
+            ModuleGrid(modules, onOpen = { onPractice(it.id) })
         }
     }
 
