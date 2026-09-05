@@ -16,11 +16,10 @@ class Recorder(private val context: Context, private val files: MediaFiles) {
 
     val isRecording: Boolean get() = recorder != null
 
-    @Suppress("DEPRECATION")
     fun start(): File {
         check(recorder == null) { "Ήδη ηχογραφεί" }
         val file = files.newRecordingFile()
-        val r = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) MediaRecorder(context) else MediaRecorder()
+        val r = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) MediaRecorder(context) else @Suppress("DEPRECATION") MediaRecorder()
         r.setAudioSource(MediaRecorder.AudioSource.MIC)
         r.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
         r.setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
