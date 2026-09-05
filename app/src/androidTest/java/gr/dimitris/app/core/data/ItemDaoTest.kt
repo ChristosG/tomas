@@ -36,4 +36,13 @@ class ItemDaoTest {
         assertEquals("boom", db.errorLogs().all().single().message)
         assertNull(db.recordings().get("missing"))
     }
+
+    @Test fun observePinnedReturnsOnlyPinnedActiveItems() = runTest {
+        val pinned = Item(text = "νερό", category = Category.FOOD, pinned = true)
+        val plain = Item(text = "ψωμί", category = Category.FOOD)
+        val gone = Item(text = "τυρί", category = Category.FOOD, pinned = true, deleted = true)
+        db.items().upsertAll(listOf(pinned, plain, gone))
+        assertEquals(listOf(pinned), db.items().observePinned().first())
+        assertEquals(setOf(pinned.id, plain.id), db.items().byIds(listOf(pinned.id, plain.id, gone.id)).map { it.id }.toSet())
+    }
 }

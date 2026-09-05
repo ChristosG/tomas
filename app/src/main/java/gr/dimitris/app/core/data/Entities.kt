@@ -1,5 +1,6 @@
 package gr.dimitris.app.core.data
 
+import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.PrimaryKey
@@ -49,6 +50,8 @@ data class Item(
     val firstSyllable: String? = null,
     val firstSyllableOverride: String? = null,
     val source: Source = Source.CAREGIVER,
+    /** Caregiver-pinned to the talk board favourites. */
+    @ColumnInfo(defaultValue = "0") val pinned: Boolean = false,
     val createdAt: Long = now(),
     val updatedAt: Long = now(),
     val deleted: Boolean = false,

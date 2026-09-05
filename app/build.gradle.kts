@@ -26,6 +26,10 @@ android {
 
     buildFeatures { compose = true }
 
+    sourceSets {
+        getByName("androidTest").assets.srcDir("$projectDir/schemas")
+    }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
@@ -38,6 +42,25 @@ android {
 
 ksp {
     arg("room.schemaLocation", "$projectDir/schemas")
+}
+
+/**
+ * Room 2.8.4's migration-bundle classes (used by auto-migrations and MigrationTestHelper) are
+ * compiled against a kotlinx-serialization-core that made `typeParametersSerializers()` a default
+ * method (1.8.0+). androidx.savedstate 1.5.0 pulls in a strict kotlinx-serialization-bom(1.7.3),
+ * where that method is still abstract, so without this pin the app and test classpaths silently
+ * resolve to 1.7.3 and MigrationTestHelper crashes with AbstractMethodError. Force the newer,
+ * Room-compatible version everywhere.
+ */
+configurations.all {
+    resolutionStrategy {
+        force(
+            "org.jetbrains.kotlinx:kotlinx-serialization-core:1.8.1",
+            "org.jetbrains.kotlinx:kotlinx-serialization-core-jvm:1.8.1",
+            "org.jetbrains.kotlinx:kotlinx-serialization-json:1.8.1",
+            "org.jetbrains.kotlinx:kotlinx-serialization-json-jvm:1.8.1",
+        )
+    }
 }
 
 dependencies {
