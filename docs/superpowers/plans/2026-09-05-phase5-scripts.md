@@ -426,3 +426,62 @@ Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
 ### Task 5: Phase 5 verification
 
 - [ ] Full suites green; on `R5CWC2C1KSJ`: run "Στην καφετέρια" end to end; record Chris's voice for its OTHER lines in the editor and run it again; Σφάλματα empty. Append notes; commit `docs(phase5): verification notes`.
+
+---
+
+## Verification notes
+
+Phase 5 finished at `7d6c870` on `worktree-phase0`, after a fix wave over the whole-phase review
+(`.superpowers/sdd/2026-09-05-phase5-scripts/final-review.md`), the task 3–4 review and the two
+concerns the task 3–4 report left open. Finding-by-finding, with file and line:
+`.superpowers/sdd/2026-09-05-phase5-scripts/fix-wave-report.md`.
+
+### Suites
+
+- `./gradlew -q testDebugUnitTest` — **212 tests, 0 failures** (189 before the wave). New: 13 cases in
+  `ScriptsModuleTest` for the two therapy rules, 3 in `ScriptRepositoryTest` for line reuse, 3 in
+  `CueLadderTest` for punctuation, 2 in `SeedImporterTest` and 1 in `ScriptSeedTest` for deletions,
+  2 in `SessionBudgetTest` for the atomic module.
+- `adb shell pm clear gr.dimitris.app` then `./gradlew connectedDebugAndroidTest` with
+  `ANDROID_SERIAL=emulator-5554` — **47 tests, 0 failures, 0 errors** (42 before). New: four
+  `ScriptsFlowTest` cases (two lines from the other side in a row and a closing one; a dialogue
+  deleted between the plan and the tap, in free practice and inside a session; the double tap) and
+  one `ItemDaoTest` case for the two "deleted rows included" queries.
+- The physical phone was never touched: every command carried `ANDROID_SERIAL=emulator-5554`, and the
+  device list showed the emulator alone throughout.
+
+### On the emulator (`installDebug`, fresh `pm clear`)
+
+- A free-practice dialogue: «Βοήθεια» twice gives level 2 as «Γει» — no comma, no trailing space;
+  «Ηχογράφηση»/«Στοπ» takes his voice and «Άκου» plays the model then his take; the turn's Attempt
+  carries `selfRecordingId`, `cueLevel = 2` and `detail {scriptId, position}`.
+- «Συνέχεια» is up and enabled while the other side speaks, and cuts the line short: 0.4 s into
+  «Μπράβο, τελειώσαμε.» the tap handed the turn over (shots 19, 20).
+- Two taps of «Το είπα!» a tenth of a second apart wrote exactly one attempt (7 → 8). The harder
+  shape — two of his turns back to back, where the old guard reopened inside one call stack — is
+  pinned by `ScriptsFlowTest.aDoubleTapCannotConfirmTheTurnHeNeverSaw`.
+- A session of Διάλογοι alone: `plannedItemCount = 4`, `completedItemCount = 4`, and the summary said
+  «Έκανες 4 ασκήσεις σήμερα: Διάλογοι.» A session with all four modules wrote
+  `plannedModules = WORDCOACH,NUMBERS,SINGSAY,SCRIPTS` and `plannedItemCount = 13` — 3+3+3+**4**, the
+  dialogue counted whole, where the truncated plan used to promise 12 and run 13.
+- Editing «Στην καφετέρια»: a take recorded and saved survived the save and the reload; a reorder kept
+  every `ScriptLine` id and every item id, left `recordings` at 2 rows and `items WHERE kind =
+  SCRIPT_LINE` at 48 across three saves — no orphans, no duplicate takes.
+- The editor refuses a thirteenth turn with «Έως 12 γραμμές».
+- «Στο ταξί» deleted by hand, then the scripts manifest bumped to version 3 in a scratch build and
+  installed: `scripts_seed_version` moved to 3 and the dialogue did not come back. The bump was
+  reverted; the committed manifest is version 2.
+- A «Μίλα» detour and back resumes the same free-practice sitting, for Διάλογοι (same dialogue, same
+  turn, the finished one still ticked) and for Λέξεις (same 8-word plan, same word, still confirmed).
+- `error_logs` was **empty** at every step, and after all of it.
+
+Screenshots: `.superpowers/sdd/2026-09-05-phase5-scripts/shots/` (14–27 are this wave's).
+
+### Left for the controller
+
+- The dead cue rung — a vowel-initial line whose level 1 and level 2 are the same sound — is untouched;
+  the review split it off as needing its own ruling, and 8 of his 24 seed turns hit it.
+- A deleted dialogue's Leitner row and an orphan recording row after a failed save are both left, with
+  reasons in the fix-wave report. Neither is reachable by Dimitris; both are phase-10 tidiness.
+- A dialogue arriving by restore or sync does not pass through the editor's twelve-line cap, which is
+  now the only place a dialogue's length is held.
