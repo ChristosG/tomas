@@ -1,5 +1,8 @@
 package gr.dimitris.app.modules.scripts
 
+import android.Manifest
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -17,6 +20,9 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.CheckCircle
+import androidx.compose.material.icons.rounded.Compare
+import androidx.compose.material.icons.rounded.Mic
+import androidx.compose.material.icons.rounded.Stop
 import androidx.compose.material.icons.rounded.VolumeUp
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -83,6 +89,13 @@ fun ScriptsScreen(items: List<Item>, sessionId: String?, onDone: () -> Unit, onL
     LaunchedEffect(s.index, s.phase) {
         if (s.lines.isNotEmpty()) listState.animateScrollToItem(s.index.coerceAtMost(s.lines.lastIndex))
     }
+    // A turn may only be answered once it has been drawn. Two of his turns in a row would otherwise
+    // let one slip of the thumb confirm the second one before he ever saw it.
+    LaunchedEffect(s.index) { vm.turnReady() }
+
+    val askMic = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) vm.toggleRecording() else vm.micDenied()
+    }
 
     DimitrisScreen(
         // The module's own name until the dialogue's is known: a header that is blank for a beat
@@ -101,9 +114,11 @@ fun ScriptsScreen(items: List<Item>, sessionId: String?, onDone: () -> Unit, onL
                     Spacer(Modifier.height(Sizes.gapSmall))
                     QuietButton("Παράλειψη", onClick = vm::skip)
                 }
-                // Nothing to press while somebody else is talking, and the button says which it is
-                // rather than going blank: a screen with no button on it looks broken.
-                ScriptPhase.OTHER_SPEAKING -> QuietButton("Ακούω...", onClick = {}, enabled = false)
+                // While somebody else is talking there is still something he can press: «Συνέχεια»
+                // cuts the line short and moves the conversation on. Not a timer — his own choice —
+                // and it is what keeps a wedged speech engine from stranding him on someone else's
+                // turn with nothing on screen to do.
+                ScriptPhase.OTHER_SPEAKING -> QuietButton("Συνέχεια", onClick = vm::continueNow)
                 ScriptPhase.LOADING -> QuietButton("Ετοιμάζω...", onClick = {}, enabled = false)
                 ScriptPhase.FINISHED -> QuietButton("Τέλος διαλόγου", onClick = {}, enabled = false)
             }
@@ -123,7 +138,12 @@ fun ScriptsScreen(items: List<Item>, sessionId: String?, onDone: () -> Unit, onL
                         level = s.level,
                         cueText = s.cueText,
                         word = if (s.showsWord) item.text else null,
+                        recording = s.isRecording,
+                        hasTake = s.selfRecordingPath != null,
                         onListen = vm::repeatCue,
+                        // Stopping is not a permission question: only starting asks.
+                        onRecord = { if (s.isRecording) vm.toggleRecording() else askMic.launch(Manifest.permission.RECORD_AUDIO) },
+                        onCompare = vm::playComparison,
                     )
                 } else {
                     Bubble(
@@ -180,9 +200,21 @@ private fun Bubble(text: String, mine: Boolean, skipped: Boolean, onClick: (() -
 /**
  * His turn. Nothing of the line is given away until he asks: level 0 is the bare invitation, 1 and 2
  * show the sound and the syllable, 3 says it aloud without writing it, and only 4 puts it on screen.
+ *
+ * At any level he may record himself and hear the model and his own take back to back — the half of
+ * the cue ladder that gives him feedback on how it came out, and the same pair the word coach has.
  */
 @Composable
-private fun TurnCard(level: Int, cueText: String?, word: String?, onListen: () -> Unit) {
+private fun TurnCard(
+    level: Int,
+    cueText: String?,
+    word: String?,
+    recording: Boolean,
+    hasTake: Boolean,
+    onListen: () -> Unit,
+    onRecord: () -> Unit,
+    onCompare: () -> Unit,
+) {
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
         Surface(
             color = MaterialTheme.colorScheme.secondaryContainer,
@@ -209,8 +241,24 @@ private fun TurnCard(level: Int, cueText: String?, word: String?, onListen: () -
                     )
                 }
                 Spacer(Modifier.height(Sizes.gapSmall))
-                // Nothing to say at level 0: the invitation is the whole of the cue.
-                QuietButton("Άκου ξανά", onClick = onListen, icon = Icons.Rounded.VolumeUp, enabled = level > 0)
+                Row {
+                    // Nothing to say at level 0: the invitation is the whole of the cue.
+                    QuietButton(
+                        "Άκου ξανά", onClick = onListen, icon = Icons.Rounded.VolumeUp,
+                        enabled = level > 0, modifier = Modifier.weight(1f),
+                    )
+                    Spacer(Modifier.width(Sizes.gapSmall))
+                    QuietButton(
+                        if (recording) "Στοπ" else "Ηχογράφηση", onClick = onRecord,
+                        icon = if (recording) Icons.Rounded.Stop else Icons.Rounded.Mic,
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+                // Only once there is something of his to compare the model against.
+                if (hasTake && !recording) {
+                    Spacer(Modifier.height(Sizes.gapSmall))
+                    QuietButton("Άκου", onClick = onCompare, icon = Icons.Rounded.Compare)
+                }
             }
         }
     }

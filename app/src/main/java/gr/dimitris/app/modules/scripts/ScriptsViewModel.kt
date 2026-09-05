@@ -9,10 +9,14 @@ import gr.dimitris.app.core.data.ModuleId
 import gr.dimitris.app.core.data.Outcome
 import gr.dimitris.app.core.data.ScriptLine
 import gr.dimitris.app.core.data.Speaker
+import gr.dimitris.app.core.data.Who
 import gr.dimitris.app.core.data.now
 import gr.dimitris.app.modules.wordcoach.CueLadder
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -32,6 +36,10 @@ data class ScriptsState(
     val canHint: Boolean = false,
     /** His turns that were passed over, so the conversation still shows what happened in them. */
     val skippedLines: Set<Int> = emptySet(),
+    /** The microphone is open on this turn: «Ηχογράφηση» has become «Στοπ». */
+    val isRecording: Boolean = false,
+    /** His own take of this turn, once he has made one: what «Άκου» plays after the model. */
+    val selfRecordingPath: String? = null,
     val done: Boolean = false,
     /** The dialogue was gone by the time the screen opened: there is nothing to run. */
     val missing: Boolean = false,
@@ -66,7 +74,15 @@ class ScriptsViewModel(
     private var worstCue = 0
     private var skipped = false
 
-    /** True from a finished turn until the next one has started: one attempt, one advance. */
+    /**
+     * True from a finished turn until the screen has actually *shown* the next one — cleared by
+     * [turnReady], not by [startAt].
+     *
+     * Two of his turns in a row (a caregiver may write them) used to put both halves of the guard
+     * back to their open state inside one call stack, so a second tap of «Το είπα!» — an easy slip
+     * one-handed — wrote a phantom attempt for a turn he never saw and skipped it in the
+     * conversation. Nothing may be confirmed until it has been on screen.
+     */
     private var finishing = false
 
     /** The schedule row is the dialogue's, and is written exactly once. */
@@ -82,6 +98,13 @@ class ScriptsViewModel(
 
     /** The closing line and the "done" that follows it. */
     private var endJob: Job? = null
+
+    /**
+     * The write of his take for the turn he is on, as a value: the attempt awaits the id instead of
+     * reading a field the next turn has already cleared. Exactly the word coach's arrangement, for
+     * exactly its reason.
+     */
+    private var recordingSave: Deferred<String?>? = null
 
     /**
      * The attempt and schedule writes, chained. They run on the app scope so pressing back cannot
@@ -123,12 +146,17 @@ class ScriptsViewModel(
     }
 
     private fun startAt(i: Int) {
-        finishing = false
+        // A take belongs to the turn it was made for, and so does its write.
+        if (graph.voice.isRecording) graph.voice.cancelRecording()
+        recordingSave = null
         val (line, item) = lines[i]
         if (line.speaker == Speaker.OTHER) {
             ladder = null
             _state.update {
-                it.copy(index = i, phase = ScriptPhase.OTHER_SPEAKING, level = 0, cueText = null, showsWord = false, canHint = false)
+                it.copy(
+                    index = i, phase = ScriptPhase.OTHER_SPEAKING, level = 0, cueText = null, showsWord = false,
+                    canHint = false, isRecording = false, selfRecordingPath = null,
+                )
             }
             if (onScreen) speakOther(i)
         } else {
@@ -139,10 +167,17 @@ class ScriptsViewModel(
                 it.copy(
                     index = i, phase = ScriptPhase.WAITING_FOR_DIMITRIS,
                     level = next.level, cueText = next.cueText(), showsWord = next.showsWord, canHint = next.canHint,
+                    isRecording = false, selfRecordingPath = null,
                 )
             }
         }
     }
+
+    /**
+     * The screen has drawn the turn at the current index, so it may now be answered. This is what
+     * clears [finishing]: a turn that was never on screen cannot be confirmed by a stray second tap.
+     */
+    fun turnReady() { finishing = false }
 
     /**
      * The other person's turn. The wait *is* the utterance — no timer decides when they have
@@ -150,10 +185,28 @@ class ScriptsViewModel(
      * voice must not be able to strand him on somebody else's line.
      */
     private fun speakOther(i: Int) {
-        speakJob = viewModelScope.launch {
+        // Started only once the field holds it. viewModelScope is Main.immediate, so a body that
+        // finished without suspending would otherwise leave `speakJob` pointing at a dead job while
+        // the live one — the one [stopEverything] has to be able to cancel — went unreferenced.
+        val job = viewModelScope.launch(start = CoroutineStart.LAZY) {
             report(graph.speaker.speak(lines[i].second))
             advanceFrom(i)
         }
+        speakJob = job
+        job.start()
+    }
+
+    /**
+     * «Συνέχεια»: he has heard enough of the other person's line. The utterance is cut and the
+     * conversation moves on — his own choice, not a timer, and the one enabled control on a screen
+     * that would otherwise have none while the phone talks.
+     */
+    fun continueNow() {
+        if (finishing || _state.value.phase != ScriptPhase.OTHER_SPEAKING) return
+        finishing = true
+        speakJob?.cancel()
+        graph.voice.quiet()
+        advanceFrom(_state.value.index)
     }
 
     private fun publishLadder(l: CueLadder) = _state.update {
@@ -203,7 +256,65 @@ class ScriptsViewModel(
     private fun cue(block: suspend () -> Unit) {
         cueJob?.cancel()
         graph.voice.quiet()
-        cueJob = viewModelScope.launch { block() }
+        val job = viewModelScope.launch(start = CoroutineStart.LAZY) { block() }
+        cueJob = job
+        job.start()
+    }
+
+    /**
+     * His own voice on his own turn, exactly as the word coach offers it: record, then hear the
+     * model and himself back to back. On a rehearsed dialogue the model is his caregiver's own
+     * recording of the line, which is the closest thing to the conversation he is practising for.
+     */
+    fun toggleRecording() {
+        if (_state.value.phase != ScriptPhase.WAITING_FOR_DIMITRIS) return
+        if (_state.value.isRecording) {
+            runCatching { graph.voice.stopRecording() }
+                .onSuccess { rec ->
+                    val itemId = lines[_state.value.index].second.id
+                    _state.update { it.copy(isRecording = false, selfRecordingPath = graph.files.relativize(rec.file)) }
+                    // The app scope, not this screen's: the take is on disk, its row must land too.
+                    recordingSave = graph.scope.async {
+                        try {
+                            graph.items.addRecording(itemId, rec.file, rec.durationMs, Who.DIMITRIS).id
+                        } catch (ce: CancellationException) {
+                            // A cancelled write is not a failed one, and must not be logged as one.
+                            throw ce
+                        } catch (e: Exception) {
+                            graph.errors.record("scripts save recording", e)
+                            null
+                        }
+                    }
+                }
+                .onFailure { e ->
+                    graph.errors.record("scripts record stop", e)
+                    _state.update { it.copy(isRecording = false, error = TOO_SHORT) }
+                }
+        } else {
+            runCatching { graph.voice.startRecording() }
+                .onSuccess { _state.update { it.copy(isRecording = true, error = null) } }
+                .onFailure { e ->
+                    graph.errors.record("scripts record start", e)
+                    _state.update { it.copy(error = NO_RECORDING) }
+                }
+        }
+    }
+
+    /** The microphone was refused: say so instead of a button that does nothing. */
+    fun micDenied() {
+        if (graph.voice.isRecording) graph.voice.cancelRecording()
+        _state.update { it.copy(isRecording = false, error = MIC_DENIED) }
+    }
+
+    /** The model line, then his own take, back to back. */
+    fun playComparison() {
+        if (_state.value.phase != ScriptPhase.WAITING_FOR_DIMITRIS) return
+        val path = _state.value.selfRecordingPath ?: return
+        val item = lines.getOrNull(_state.value.index)?.second ?: return
+        cue {
+            report(graph.speaker.speak(item))
+            report(graph.voice.play(graph.files.resolve(path)))
+        }
     }
 
     fun confirm() {
@@ -219,6 +330,8 @@ class ScriptsViewModel(
     private fun finishLine(confirmed: Boolean) {
         val l = ladder ?: return
         finishing = true
+        // A take still running belongs to this turn: it is closed and kept, not thrown away.
+        if (_state.value.isRecording) toggleRecording()
         cueJob?.cancel()
         graph.voice.quiet()
         val i = _state.value.index
@@ -228,16 +341,21 @@ class ScriptsViewModel(
         val outcome = l.outcomeFor(confirmed)
         val began = startedAt
         val position = line.position
+        val save = recordingSave
         worstCue = maxOf(worstCue, level)
         if (!confirmed) skipped = true
         val prev = lastWrite
         lastWrite = graph.scope.launch {
             prev?.join()
             runCatching {
+                // The recording row carries the id the attempt points at, so let its write land
+                // first — and inside the guard, because the app scope has no exception handler and
+                // a throw from the await would be an uncaught crash rather than a logged failure.
+                val recordingId = save?.await()
                 graph.db.attempts().insert(
                     Attempt(
                         itemId = item.id, module = ModuleId.SCRIPTS, sessionId = sessionId, startedAt = began,
-                        durationMs = now() - began, outcome = outcome, cueLevel = level,
+                        durationMs = now() - began, outcome = outcome, cueLevel = level, selfRecordingId = recordingId,
                         detail = """{"scriptId":${jsonString(scriptId)},"position":$position}""",
                     )
                 )
@@ -264,14 +382,10 @@ class ScriptsViewModel(
      */
     private fun finishScript() {
         finishing = true
-        _state.update { it.copy(phase = ScriptPhase.FINISHED) }
+        _state.update { it.copy(phase = ScriptPhase.FINISHED, isRecording = false, selfRecordingPath = null) }
         if (!recorded) {
             recorded = true
-            val outcome = when {
-                skipped -> Outcome.SKIPPED
-                worstCue >= ASSISTED_FROM -> Outcome.ASSISTED
-                else -> Outcome.CORRECT
-            }
+            val outcome = outcomeOf(skipped, worstCue)
             val cue = worstCue
             val prev = lastWrite
             lastWrite = graph.scope.launch {
@@ -292,12 +406,14 @@ class ScriptsViewModel(
         if (!onScreen) return
         val write = lastWrite
         endJob?.cancel()
-        endJob = viewModelScope.launch {
+        val job = viewModelScope.launch(start = CoroutineStart.LAZY) {
             graph.feedback.success()
             report(graph.speaker.speakText(THE_END))
             write?.join()
             _state.update { it.copy(done = true) }
         }
+        endJob = job
+        job.start()
     }
 
     /**
@@ -314,8 +430,12 @@ class ScriptsViewModel(
      * rows the moment it is told, so leaving before the row lands would lose the turn he just took.
      */
     fun leave(then: () -> Unit) {
+        // The load too: a dialogue that arrived after he asked to leave would start speaking over
+        // the screen he is on his way to.
+        loadJob?.cancel()
         stopEverything()
         if (graph.voice.isRecording) graph.voice.cancelRecording()
+        _state.update { it.copy(isRecording = false) }
         val write = lastWrite
         viewModelScope.launch { write?.join(); then() }
     }
@@ -327,6 +447,11 @@ class ScriptsViewModel(
     fun screenGone() {
         onScreen = false
         stopEverything()
+        // The take belongs to the turn he was on, so it is dropped rather than left open over his
+        // talk board; and the state has to stop claiming it is recording, or the button he finds on
+        // the way back is a «Στοπ» for a microphone that is no longer running.
+        if (graph.voice.isRecording) graph.voice.cancelRecording()
+        _state.update { it.copy(isRecording = false) }
     }
 
     /** He is back. The turn he left is said again from its start: half a question is not a question. */
@@ -359,10 +484,25 @@ class ScriptsViewModel(
         /** Said on the screen when a tap made no sound at all. */
         const val SPEECH_FAILED = "Δεν ακούγεται η φωνή. Δες τις ρυθμίσεις."
 
+        const val MIC_DENIED = "Χωρίς άδεια μικροφώνου"
+        const val TOO_SHORT = "Πολύ σύντομη ηχογράφηση"
+        const val NO_RECORDING = "Δεν ξεκίνησε η ηχογράφηση"
+
         /** Spoken at the end of the dialogue, before the module hands back. */
         const val THE_END = "Μπράβο! Τέλος διαλόγου."
 
         /** From cue level 3 the line was said to him: real work, done with help still under it. */
         const val ASSISTED_FROM = 3
+
+        /**
+         * The whole dialogue's Leitner outcome, from how the run went: a turn passed over makes it
+         * SKIPPED whatever the rest was, otherwise the highest cue any turn needed decides. Lifted
+         * out of the run so a plain test can drive the rule the box depends on.
+         */
+        fun outcomeOf(skipped: Boolean, worstCue: Int): Outcome = when {
+            skipped -> Outcome.SKIPPED
+            worstCue >= ASSISTED_FROM -> Outcome.ASSISTED
+            else -> Outcome.CORRECT
+        }
     }
 }

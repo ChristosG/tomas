@@ -1,5 +1,7 @@
 package gr.dimitris.app.modules.scripts
 
+import androidx.activity.compose.setContent
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.test.hasScrollAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isEnabled
@@ -10,15 +12,25 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollToNode
 import androidx.test.core.app.ApplicationProvider
 import gr.dimitris.app.DimitrisApp
+import gr.dimitris.app.LocalAppGraph
 import gr.dimitris.app.MainActivity
 import gr.dimitris.app.core.data.Attempt
+import gr.dimitris.app.core.data.Item
+import gr.dimitris.app.core.data.LineDraft
 import gr.dimitris.app.core.data.ModuleId
 import gr.dimitris.app.core.data.Outcome
+import gr.dimitris.app.core.data.ScriptWithLines
+import gr.dimitris.app.core.data.Speaker
+import gr.dimitris.app.ui.theme.DimitrisTheme
+import gr.dimitris.app.ui.theme.LocalFeedback
 import kotlinx.coroutines.runBlocking
+import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
+import java.util.concurrent.atomic.AtomicInteger
 
 /**
  * What only a device can answer about the dialogues: that a seeded one really opens from the Today
@@ -26,13 +38,23 @@ import org.junit.Test
  * on it when the phone has no Greek voice — and that his turn lands as exactly one Attempt row
  * carrying the dialogue it came from.
  *
+ * The shapes none of the six shipped dialogues has — two of the other person's lines in a row, a
+ * dialogue that ends on the other person, two of his turns back to back, a dialogue deleted between
+ * the plan and the tap — are built here and driven directly, because every one of them is a
+ * dialogue a caregiver can write and none of them can be reached through the seeds.
+ *
  * Everything waits for the button it is about to press to be *enabled*: the module deliberately
- * leaves a disabled «Ακούω...» in the bottom slot while the other side is talking.
+ * leaves the bottom slot on «Ετοιμάζω...» until the dialogue is in hand.
  */
 class ScriptsFlowTest {
     @get:Rule val compose = createAndroidComposeRule<MainActivity>()
 
     private val graph get() = ApplicationProvider.getApplicationContext<DimitrisApp>().graph
+
+    /** Everything this class wrote, taken back out so the next class sees the seeds it expects. */
+    private val written = mutableListOf<String>()
+
+    @After fun removeWhatWasWritten() = runBlocking { written.forEach { graph.scripts.delete(it) } }
 
     @Test fun aTurnHeSaysIsOneAttemptCarryingItsDialogue() {
         val before = attempts()
@@ -59,7 +81,97 @@ class ScriptsFlowTest {
         val written = (attempts() - before.toSet()).single()
         assertEquals("a turn passed on is not a turn taken", Outcome.SKIPPED, written.outcome)
         // Either the other person's next line or, at the end, the closing screen — never stuck.
-        compose.waitUntil(TIMEOUT_MS) { onScreen(LISTENING) || onScreen(SAID_IT) || onScreen(THE_END) }
+        compose.waitUntil(TIMEOUT_MS) { onScreen(CONTINUE) || onScreen(SAID_IT) || onScreen(THE_END) }
+    }
+
+    /**
+     * A dialogue that opens with two of the other person's lines and closes on a third. The first
+     * pair proves the other side chains through itself — one utterance ending starts the next — and
+     * the closing line proves the run finishes from the other person's turn, writing the dialogue's
+     * schedule row on the way. Neither shape exists in the seeds; both are one edit away.
+     */
+    @Test fun twoLinesFromTheOtherSideRunOnAndAClosingOneStillEndsTheDialogue() {
+        val script = dialogue(
+            Speaker.OTHER to "Καλημέρα.",
+            Speaker.OTHER to "Τι θα πάρετε;",
+            Speaker.DIMITRIS to "Έναν καφέ, παρακαλώ.",
+            Speaker.OTHER to "Αμέσως.",
+        )
+        val before = attempts()
+        show(hisTurns(script))
+
+        // Both of the other person's opening lines have been said by the time it is his turn.
+        compose.waitUntil(OPEN_TIMEOUT_MS) { enabled(SAID_IT) }
+        compose.onNodeWithText(SAID_IT).performClick()
+        compose.waitUntil(TIMEOUT_MS) { attempts().size == before.size + 1 }
+
+        // The closing line is the other person's: it is said, and then the dialogue is over.
+        compose.waitUntil(OPEN_TIMEOUT_MS) { onScreen(THE_END) }
+        assertNotNull(
+            "a finished dialogue owes its Leitner row",
+            runBlocking { graph.db.schedules().get(script.script.id, ModuleId.SCRIPTS) },
+        )
+    }
+
+    /**
+     * The dialogue was deleted between the session being planned and him tapping it — a caregiver
+     * tidying up while he is on the Today screen. There is nothing to run and nothing to write: it
+     * says so in Greek and lets him out, rather than holding him on a screen that will never do
+     * anything.
+     */
+    @Test fun aDialogueDeletedBetweenThePlanAndTheScreenSaysSoAndLetsHimOut() {
+        val script = dialogue(Speaker.OTHER to "Γεια σου.", Speaker.DIMITRIS to "Γεια.")
+        val items = hisTurns(script)
+        runBlocking { graph.scripts.delete(script.script.id) }
+        val done = AtomicInteger()
+
+        show(items, onDone = { done.incrementAndGet() })
+
+        compose.waitUntil(TIMEOUT_MS) { onScreen(GONE) }
+        compose.onNodeWithText(OK).performClick()
+        compose.waitUntil(TIMEOUT_MS) { done.get() == 1 }
+        assertTrue("nothing was practised, so nothing was scheduled", scheduleOf(script) == null)
+    }
+
+    /** The same inside a session, where there is no «Εντάξει»: the module has to hand back by itself. */
+    @Test fun aVanishedDialogueInASessionHandsStraightBack() {
+        val script = dialogue(Speaker.OTHER to "Γεια σου.", Speaker.DIMITRIS to "Γεια.")
+        val items = hisTurns(script)
+        runBlocking { graph.scripts.delete(script.script.id) }
+        val done = AtomicInteger()
+
+        show(items, sessionId = "δοκιμή", onDone = { done.incrementAndGet() })
+
+        compose.waitUntil(TIMEOUT_MS) { done.get() == 1 }
+    }
+
+    /**
+     * The double tap. «Το είπα!» is a big green button and he presses it one-handed; two of his
+     * turns in a row are a dialogue a caregiver can write in a minute. Before the guard, the second
+     * tap wrote a phantom attempt for a turn that had never been on screen and skipped it in the
+     * conversation. Driving the ViewModel is the point: the two taps land inside one call stack,
+     * which is exactly what a slip of the thumb does and what no click through the test framework
+     * can reproduce.
+     */
+    @Test fun aDoubleTapCannotConfirmTheTurnHeNeverSaw() {
+        val script = dialogue(Speaker.DIMITRIS to "Γεια σου.", Speaker.DIMITRIS to "Τι κάνεις;")
+        val items = hisTurns(script)
+        val before = attempts()
+        lateinit var vm: ScriptsViewModel
+        compose.runOnUiThread { vm = ScriptsViewModel(graph, items.first().id, null) }
+        compose.waitUntil(TIMEOUT_MS) { vm.state.value.phase == ScriptPhase.WAITING_FOR_DIMITRIS }
+
+        compose.runOnUiThread { vm.confirm(); vm.confirm() }
+
+        compose.waitUntil(TIMEOUT_MS) { attempts().size == before.size + 1 }
+        assertEquals("one tap, one attempt", 1, (attempts() - before.toSet()).size)
+        assertEquals("the conversation waits on his second turn", 1, vm.state.value.index)
+        assertEquals(ScriptPhase.WAITING_FOR_DIMITRIS, vm.state.value.phase)
+
+        // Once the screen has shown that turn, the very same tap does its work.
+        compose.runOnUiThread { vm.turnReady(); vm.confirm() }
+        compose.waitUntil(TIMEOUT_MS) { attempts().size == before.size + 2 }
+        compose.runOnUiThread { vm.leave {} }
     }
 
     /**
@@ -76,6 +188,33 @@ class ScriptsFlowTest {
         compose.waitUntil(OPEN_TIMEOUT_MS) { enabled(SAID_IT) }
     }
 
+    /** A dialogue of exactly the shape a case needs, written the way the caregiver's editor writes one. */
+    private fun dialogue(vararg lines: Pair<Speaker, String>): ScriptWithLines = runBlocking {
+        val saved = graph.scripts.save(null, "Δοκιμή ${System.nanoTime()}", lines.map { LineDraft(it.first, it.second) })
+        written += saved.id
+        graph.scripts.load(saved.id)!!
+    }
+
+    /** What the module hands its screen: the items of his own turns, and nothing else. */
+    private fun hisTurns(script: ScriptWithLines): List<Item> =
+        script.lines.filter { it.first.speaker == Speaker.DIMITRIS }.map { it.second }
+
+    private fun scheduleOf(script: ScriptWithLines) =
+        runBlocking { graph.db.schedules().get(script.script.id, ModuleId.SCRIPTS) }
+
+    /** The module's screen on its own, so a dialogue shape can be driven without a session around it. */
+    private fun show(items: List<Item>, sessionId: String? = null, onDone: () -> Unit = {}, onLeave: () -> Unit = {}) {
+        compose.runOnUiThread {
+            compose.activity.setContent {
+                DimitrisTheme {
+                    CompositionLocalProvider(LocalAppGraph provides graph, LocalFeedback provides graph.feedback) {
+                        ScriptsScreen(items, sessionId, onDone, onLeave)
+                    }
+                }
+            }
+        }
+    }
+
     private fun onScreen(text: String) = compose.onAllNodesWithText(text).fetchSemanticsNodes().isNotEmpty()
 
     private fun enabled(text: String) = compose.onAllNodes(hasText(text) and isEnabled()).fetchSemanticsNodes().isNotEmpty()
@@ -87,8 +226,10 @@ class ScriptsFlowTest {
         const val MODULE = "Διάλογοι"
         const val SAID_IT = "Το είπα!"
         const val SKIP = "Παράλειψη"
-        const val LISTENING = "Ακούω..."
+        const val CONTINUE = "Συνέχεια"
         const val THE_END = "Τέλος διαλόγου!"
+        const val GONE = "Ο διάλογος δεν είναι πια εδώ."
+        const val OK = "Εντάξει"
         const val TIMEOUT_MS = 20_000L
 
         /** Longer: the first utterance of a run also waits for the speech engine to come up. */
