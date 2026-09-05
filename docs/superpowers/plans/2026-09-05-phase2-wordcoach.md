@@ -830,16 +830,16 @@ class WordCoachViewModel(private val graph: AppGraph, private val items: List<It
 
     fun toggleRecording() {
         if (_state.value.isRecording) {
-            runCatching { graph.recorder.stop() }
+            runCatching { graph.voice.stopRecording() }
                 .onSuccess { rec ->
-                    _state.update { it.copy(isRecording = false, selfRecordingPath = rec.file.absolutePath) }
+                    _state.update { it.copy(isRecording = false, selfRecordingPath = graph.files.relativize(rec.file)) }
                     viewModelScope.launch {
                         selfRecordingId = graph.items.addRecording(_state.value.item.id, rec.file, rec.durationMs, Who.DIMITRIS).id
                     }
                 }
                 .onFailure { e -> graph.errors.record("wordcoach record stop", e); _state.update { it.copy(isRecording = false, error = "Πολύ σύντομη ηχογράφηση") } }
         } else {
-            runCatching { graph.recorder.start() }
+            runCatching { graph.voice.startRecording() }
                 .onSuccess { _state.update { it.copy(isRecording = true, error = null) } }
                 .onFailure { e -> graph.errors.record("wordcoach record start", e); _state.update { it.copy(error = "Δεν ξεκίνησε η ηχογράφηση") } }
         }
@@ -850,7 +850,7 @@ class WordCoachViewModel(private val graph: AppGraph, private val items: List<It
         val path = _state.value.selfRecordingPath ?: return
         viewModelScope.launch {
             graph.speaker.speak(_state.value.item)
-            graph.player.play(File(path)).onFailure { graph.errors.record("wordcoach compare", it) }
+            graph.voice.play(graph.files.resolve(path)).onFailure { graph.errors.record("wordcoach compare", it) }
         }
     }
 
@@ -903,7 +903,7 @@ class WordCoachViewModel(private val graph: AppGraph, private val items: List<It
     }
 
     override fun onCleared() {
-        if (graph.recorder.isRecording) graph.recorder.cancel()
+        if (graph.voice.isRecording) graph.voice.cancelRecording()
     }
 
     private fun jsonString(s: String) = "\"" + s.replace("\\", "\\\\").replace("\"", "\\\"") + "\""
@@ -979,7 +979,7 @@ fun WordCoachScreen(items: List<Item>, sessionId: String?, onDone: () -> Unit) {
         },
     ) {
         Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-            PictureCard(imagePath = s.item.imagePath, label = if (s.showsWord) s.item.text else null, onClick = vm::repeatCue,
+            PictureCard(imageFile = s.item.imagePath?.let { graph.files.resolve(it) }, label = if (s.showsWord) s.item.text else null, onClick = vm::repeatCue,
                 modifier = Modifier.fillMaxWidth(0.7f))
             SuccessMark(visible = s.confirmed)
         }
@@ -1090,7 +1090,7 @@ class SessionViewModel(private val graph: AppGraph) : ViewModel() {
                 .mapNotNull { m -> runCatching { m.planFor(graph) }.getOrElse { graph.errors.record("plan ${m.id}", it); emptyList() }.takeIf { it.isNotEmpty() }?.let { m to it } }
             if (plans.isEmpty()) {
                 _state.value = SessionStep.Empty
-                graph.tts.speak("Τίποτα για σήμερα. Τα λέμε αύριο!", graph.settings.speechRate.first())
+                graph.voice.speak("Τίποτα για σήμερα. Τα λέμε αύριο!", graph.settings.speechRate.first())
                 return@launch
             }
             val s = Session(startedAt = now(), plannedModules = plans.joinToString(",") { it.first.id.name }, plannedItemCount = plans.sumOf { it.second.size })
@@ -1115,7 +1115,7 @@ class SessionViewModel(private val graph: AppGraph) : ViewModel() {
                 .onFailure { graph.errors.record("session end", it) }
             _state.value = SessionStep.Summary(completed, planned)
             graph.feedback.success()
-            graph.tts.speak("Μπράβο Δημήτρη! Έκανες $completed ασκήσεις σήμερα.", graph.settings.speechRate.first())
+            graph.voice.speak("Μπράβο Δημήτρη! Έκανες $completed ασκήσεις σήμερα.", graph.settings.speechRate.first())
         }
     }
 }

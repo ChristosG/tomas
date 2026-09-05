@@ -48,6 +48,22 @@ app/src/androidTest/.../modules/talkboard/TalkBoardScreenTest.kt
 
 ---
 
+### Task 0: `Voice` — one owner for everything that makes sound
+
+**Files:**
+- Create: `core/audio/Voice.kt`
+- Modify: `AppGraph.kt` (+ `voice`), `caregiver/content/ItemEditViewModel.kt` (route TTS/playback/recording through `graph.voice`), `today/SessionScreen.kt` (speak through `graph.voice`)
+- Test: `androidTest/.../core/audio/VoiceTest.kt`
+
+**Interfaces:**
+- Produces: `class Voice(context, tts: TextToSpeech, player: Player, recorder: Recorder)` with `suspend fun speak(text: String, rate: Float): Result<Unit>`, `suspend fun play(file: File): Result<Unit>`, `fun startRecording(): File`, `fun stopRecording(): Recorded`, `fun cancelRecording()`, `val isRecording`, `fun quiet()`. Every operation first calls `quiet()` (stops TTS and playback; a running recording is left alone unless the new operation is a recording), requests transient audio focus (`AudioFocusRequest` with `AUDIOFOCUS_GAIN_TRANSIENT`, `USAGE_ASSISTANCE_ACCESSIBILITY`) for speak/play and abandons it afterwards; recording requests `AUDIOFOCUS_GAIN_TRANSIENT_EXCLUSIVE`. `AppGraph.voice` is the only thing screens and modules use from now on; `tts`, `player`, `recorder` stay on the graph for `Voice` itself and for tests.
+
+- [ ] Implement; instrumented test: `speak` then `play` on a tiny generated m4a does not throw and `quiet()` is safe when idle; `startRecording` twice throws the Greek `check` message.
+- [ ] Replace the phase-0 cross-stop calls in `ItemEditViewModel` and `SessionScreen` with `graph.voice.*`.
+- [ ] `./gradlew -q testDebugUnitTest` and connected suite; commit `feat(phase1): Voice facade with audio focus`.
+
+---
+
 ### Task 1: `Item.pinned` with database version 2
 
 **Files:**
@@ -162,7 +178,7 @@ Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
 - Test: `app/src/test/java/gr/dimitris/app/core/speech/ItemSpeakerTest.kt`, `modules/talkboard/SentenceStripTest.kt`, `modules/talkboard/FavouritesTest.kt`
 
 **Interfaces:**
-- Produces: `ItemSpeaker(tts, recordingFor, play, rate)` with `suspend fun speak(item): Voice`, `suspend fun speakText(text)`; `enum Voice { RECORDING, TTS }`; `SentenceStrip(max = 6)` with `items: StateFlow<List<Item>>`, `add(item): Boolean`, `removeLast()`, `clear()`, `text`; `Favourites.rank(all, pinnedIds, usage: List<ItemCount>, limit = 12): List<Item>`; `AppGraph.speaker`.
+- Produces: `ItemSpeaker(tts, recordingFor, play, rate, resolve)` with `suspend fun speak(item): VoiceUsed`, `suspend fun speakText(text)`; `enum VoiceUsed { RECORDING, TTS }`; `SentenceStrip(max = 6)` with `items: StateFlow<List<Item>>`, `add(item): Boolean`, `removeLast()`, `clear()`, `text`; `Favourites.rank(all, pinnedIds, usage: List<ItemCount>, limit = 12): List<Item>`; `AppGraph.speaker`.
 
 - [ ] **Step 1: Failing tests**
 
@@ -190,26 +206,26 @@ class ItemSpeakerTest {
     @Test fun `plays the caregiver recording when the file exists`() = runTest {
         val file = createTempFile("rec", ".m4a").toFile()
         val voice = speaker(Recording(itemId = item.id, path = file.absolutePath, who = Who.CAREGIVER, durationMs = 500)).speak(item)
-        assertEquals(Voice.RECORDING, voice)
+        assertEquals(VoiceUsed.RECORDING, voice)
         assertEquals(listOf(file), played)
         assertEquals(emptyList<String>(), tts.spoken)
     }
 
     @Test fun `falls back to TTS when there is no recording`() = runTest {
-        assertEquals(Voice.TTS, speaker(null).speak(item))
+        assertEquals(VoiceUsed.TTS, speaker(null).speak(item))
         assertEquals(listOf("καφές"), tts.spoken)
     }
 
     @Test fun `falls back to TTS when the recording file is missing`() = runTest {
         val voice = speaker(Recording(itemId = item.id, path = "/nowhere/x.m4a", who = Who.CAREGIVER, durationMs = 500)).speak(item)
-        assertEquals(Voice.TTS, voice)
+        assertEquals(VoiceUsed.TTS, voice)
         assertEquals(listOf("καφές"), tts.spoken)
     }
 
     @Test fun `falls back to TTS when playback fails`() = runTest {
         val file = createTempFile("rec", ".m4a").toFile()
         val voice = speaker(Recording(itemId = item.id, path = file.absolutePath, who = Who.CAREGIVER, durationMs = 500), Result.failure(RuntimeException("x"))).speak(item)
-        assertEquals(Voice.TTS, voice)
+        assertEquals(VoiceUsed.TTS, voice)
     }
 }
 ```
@@ -293,7 +309,7 @@ import gr.dimitris.app.core.data.Item
 import gr.dimitris.app.core.data.Recording
 import java.io.File
 
-enum class Voice { RECORDING, TTS }
+enum class VoiceUsed { RECORDING, TTS }
 
 /** Says an item the best way available: the caregiver's recording if it exists and plays, else Greek TTS. */
 class ItemSpeaker(
@@ -301,15 +317,17 @@ class ItemSpeaker(
     private val recordingFor: suspend (Item) -> Recording?,
     private val play: suspend (File) -> Result<Unit>,
     private val rate: suspend () -> Float,
+    /** Paths are stored relative to filesDir since the phase-0 hardening; absolute paths pass through. */
+    private val resolve: (String) -> File = { File(it) },
 ) {
-    suspend fun speak(item: Item): Voice {
+    suspend fun speak(item: Item): VoiceUsed {
         val recording = recordingFor(item)
         if (recording != null) {
-            val file = File(recording.path)
-            if (file.exists() && play(file).isSuccess) return Voice.RECORDING
+            val file = resolve(recording.path)
+            if (file.exists() && play(file).isSuccess) return VoiceUsed.RECORDING
         }
         tts.speak(item.text, rate())
-        return Voice.TTS
+        return VoiceUsed.TTS
     }
 
     suspend fun speakText(text: String) {
@@ -367,7 +385,7 @@ In `AppGraph.kt` add (with imports `gr.dimitris.app.core.speech.ItemSpeaker` and
 ```kotlin
     /** Recording-or-TTS voice for items. Built per use so it always sees the current db and settings. */
     val speaker: ItemSpeaker
-        get() = ItemSpeaker(tts, recordingFor = { items.modelRecording(it) }, play = { player.play(it) }, rate = { settings.speechRate.first() })
+        get() = ItemSpeaker(tts, recordingFor = { items.modelRecording(it) }, play = { voice.play(it) }, rate = { settings.speechRate.first() }, resolve = { files.resolve(it) })
 ```
 
 - [ ] **Step 3: Run tests**
@@ -604,7 +622,7 @@ fun TalkBoardScreen(onBack: () -> Unit) {
             modifier = Modifier.fillMaxWidth(),
         ) {
             items(shown, key = { it.id }) { item ->
-                PictureCard(imagePath = item.imagePath, label = item.text, onClick = { vm.tap(item) })
+                PictureCard(imageFile = item.imagePath?.let { graph.files.resolve(it) }, label = item.text, onClick = { vm.tap(item) })
             }
         }
     }

@@ -522,8 +522,9 @@ class SingSayViewModel(private val graph: AppGraph, private val items: List<Item
             _state.update { it.copy(playing = true, lit = -1) }
             val s = _state.value
             val sung = graph.items.sungRecording(s.item)
-            if (sung != null && File(sung.path).exists()) {
-                graph.player.play(File(sung.path))
+            val sungFile = sung?.let { graph.files.resolve(it.path) }
+            if (sungFile != null && sungFile.exists()) {
+                graph.voice.play(sungFile)
             } else {
                 graph.speaker.speak(s.item)
             }
@@ -558,14 +559,14 @@ class SingSayViewModel(private val graph: AppGraph, private val items: List<Item
 
     fun toggleRecording() {
         if (_state.value.isRecording) {
-            runCatching { graph.recorder.stop() }
+            runCatching { graph.voice.stopRecording() }
                 .onSuccess { rec ->
-                    _state.update { it.copy(isRecording = false, selfRecordingPath = rec.file.absolutePath) }
+                    _state.update { it.copy(isRecording = false, selfRecordingPath = graph.files.relativize(rec.file)) }
                     viewModelScope.launch { selfRecordingId = graph.items.addRecording(_state.value.item.id, rec.file, rec.durationMs, Who.DIMITRIS).id }
                 }
                 .onFailure { e -> graph.errors.record("singsay record stop", e); _state.update { it.copy(isRecording = false, error = "Πολύ σύντομη ηχογράφηση") } }
         } else {
-            runCatching { graph.recorder.start() }
+            runCatching { graph.voice.startRecording() }
                 .onSuccess { _state.update { it.copy(isRecording = true, error = null) } }
                 .onFailure { e -> graph.errors.record("singsay record start", e); _state.update { it.copy(error = "Δεν ξεκίνησε η ηχογράφηση") } }
         }
@@ -577,7 +578,7 @@ class SingSayViewModel(private val graph: AppGraph, private val items: List<Item
         playJob = viewModelScope.launch {
             _state.update { it.copy(playing = true) }
             playModel().also { playJob?.join() }
-            graph.player.play(File(path))
+            graph.voice.play(graph.files.resolve(path))
             _state.update { it.copy(playing = false) }
         }
     }
@@ -601,7 +602,7 @@ class SingSayViewModel(private val graph: AppGraph, private val items: List<Item
         if (i >= items.size) _state.update { it.copy(done = true) } else load(i)
     }
 
-    override fun onCleared() { playJob?.cancel(); graph.synth.stop(); if (graph.recorder.isRecording) graph.recorder.cancel() }
+    override fun onCleared() { playJob?.cancel(); graph.synth.stop(); if (graph.voice.isRecording) graph.voice.cancelRecording() }
 }
 ```
 (`playComparison` must not call `playModel()` recursively in a way that cancels itself: implement it by inlining the model playback — sung file or TTS + melody — then the self recording, inside one job.)
