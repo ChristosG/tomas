@@ -39,8 +39,9 @@ interface AttemptDao {
     @Query("SELECT * FROM attempts WHERE deleted = 0 AND startedAt >= :since ORDER BY startedAt") suspend fun since(since: Long): List<Attempt>
     @Query("SELECT COUNT(*) FROM attempts WHERE deleted = 0 AND itemId = :itemId AND module = :module")
     suspend fun countFor(itemId: String, module: ModuleId): Int
+    /** A Flow, so favourites re-rank themselves the moment an attempt is inserted. */
     @Query("SELECT itemId, COUNT(*) AS n FROM attempts WHERE deleted = 0 AND module = :module GROUP BY itemId ORDER BY n DESC LIMIT :limit")
-    suspend fun mostUsed(module: ModuleId, limit: Int): List<ItemCount>
+    fun mostUsed(module: ModuleId, limit: Int): Flow<List<ItemCount>>
 }
 
 @Dao

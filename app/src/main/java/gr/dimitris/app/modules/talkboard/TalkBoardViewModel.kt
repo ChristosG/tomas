@@ -10,6 +10,7 @@ import gr.dimitris.app.core.data.ItemCount
 import gr.dimitris.app.core.data.ModuleId
 import gr.dimitris.app.core.data.Outcome
 import gr.dimitris.app.core.data.now
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -33,7 +34,9 @@ class TalkBoardViewModel(private val graph: AppGraph) : ViewModel() {
     private val all: StateFlow<List<Item>> = graph.items.observeAll()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
-    private val usage = MutableStateFlow<List<ItemCount>>(emptyList())
+    /** Room re-emits this on every attempt insert, so a tap re-ranks favourites with no nudging. */
+    private val usage: Flow<List<ItemCount>> = graph.db.attempts().mostUsed(ModuleId.TALKBOARD, USAGE_LIMIT)
+
     private val pinnedIds: StateFlow<Set<String>> = graph.db.items().observePinned().map { l -> l.map { it.id }.toSet() }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptySet())
 
@@ -65,14 +68,14 @@ class TalkBoardViewModel(private val graph: AppGraph) : ViewModel() {
     private val _speechError = MutableStateFlow<String?>(null)
     val speechError: StateFlow<String?> = _speechError.asStateFlow()
 
-    init { refreshUsage() }
-
     fun selectTab(t: Tab) { _tab.value = t }
 
     /** Grid tap: say it and add it to the sentence. */
     fun tap(item: Item) {
-        _stripFull.value = !strip.add(item)
-        viewModelScope.launch { heard(graph.speaker.speak(item)); log(item, inStrip = true) }
+        // A full strip still says the word; the attempt is logged for what it was, not what was asked.
+        val added = strip.add(item)
+        _stripFull.value = !added
+        viewModelScope.launch { heard(graph.speaker.speak(item)); log(item, inStrip = added) }
     }
 
     /** Quick row tap: say it immediately, never added to the sentence. */
@@ -108,10 +111,10 @@ class TalkBoardViewModel(private val graph: AppGraph) : ViewModel() {
                     cueLevel = null, detail = if (inStrip) """{"strip":true}""" else "{}")
             )
         }.onFailure { graph.errors.record("talkboard log", it) }
-        refreshUsage()
     }
 
-    private fun refreshUsage() {
-        viewModelScope.launch { runCatching { usage.value = graph.db.attempts().mostUsed(ModuleId.TALKBOARD, 24) } }
+    private companion object {
+        /** Enough most-used items to fill the favourites tab several times over. */
+        const val USAGE_LIMIT = 24
     }
 }

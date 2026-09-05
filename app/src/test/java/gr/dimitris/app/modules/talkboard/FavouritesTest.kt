@@ -1,5 +1,6 @@
 package gr.dimitris.app.modules.talkboard
 
+import gr.dimitris.app.core.data.Category
 import gr.dimitris.app.core.data.Item
 import gr.dimitris.app.core.data.ItemCount
 import org.junit.Assert.assertEquals
@@ -21,5 +22,18 @@ class FavouritesTest {
 
     @Test fun `usage of unknown or deleted ids is ignored`() {
         assertEquals(listOf(a), Favourites.rank(all, emptySet(), listOf(ItemCount("ghost", 99), ItemCount(a.id, 1))))
+    }
+
+    /** Day one: nothing pinned, nothing tapped. The tab must not open empty. */
+    @Test fun `with no pins and no usage it falls back to the start of the vocabulary`() {
+        val quick = Item(text = "Ναι", category = Category.QUICK)
+        val food = Item(text = "νερό", category = Category.FOOD)
+        val alsoQuick = Item(text = "Βοήθεια", category = Category.QUICK)
+        val ranked = Favourites.rank(listOf(food, quick, alsoQuick), pinnedIds = emptySet(), usage = emptyList(), limit = 2)
+        assertEquals(listOf(alsoQuick, quick), ranked)
+    }
+
+    @Test fun `usage that names only unknown ids still falls back`() {
+        assertEquals(all, Favourites.rank(all, emptySet(), listOf(ItemCount("ghost", 99))))
     }
 }
