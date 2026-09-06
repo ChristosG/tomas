@@ -75,7 +75,12 @@ data class AdviceState(
     /** The live focus, filtered to words that still exist. Null when there is none to act on. */
     val focus: Focus? = null,
     val noteError: String? = null,
-    val levelsApplied: Boolean = false,
+    /**
+     * The advice whose levels have been applied, not a boolean. A second question brings a second
+     * focus with its own levels, and a flag that never resets told the caregiver they had already
+     * gone in when they had not — on the one control that decides what Dimitris is handed tomorrow.
+     */
+    val levelsAppliedFor: String? = null,
 )
 
 /**
@@ -149,14 +154,14 @@ class AdviceViewModel(private val graph: AppGraph) : ViewModel() {
      * The word and sound focus needs no button. It is stored with the advice and the session
      * builder reads it, which is the difference between advice and advice that happens.
      */
-    fun applyLevels(levels: Map<String, Int>) {
+    fun applyLevels(adviceId: String, levels: Map<String, Int>) {
         if (levels.isEmpty()) return
         viewModelScope.launch {
             try {
                 levels[Focus.NUMBERS]?.let { graph.settings.setNumbersLevel(it) }
                 levels[Focus.SENTENCES]?.let { graph.settings.setSentencesLevel(it) }
                 levels[Focus.TRACE]?.let { graph.settings.setTraceLevel(it) }
-                _state.update { it.copy(levelsApplied = true) }
+                _state.update { it.copy(levelsAppliedFor = adviceId) }
             } catch (ce: CancellationException) {
                 throw ce
             } catch (e: Throwable) {
@@ -231,7 +236,7 @@ fun AdviceScreen(onBack: () -> Unit) {
     var noteDraft by remember { mutableStateOf("") }
     var showReport by remember { mutableStateOf(false) }
     var speechError by remember { mutableStateOf<String?>(null) }
-    var pendingLevels by remember { mutableStateOf<Map<String, Int>?>(null) }
+    var pendingLevels by remember { mutableStateOf<Pair<String, Map<String, Int>>?>(null) }
     var openAdvice by remember { mutableStateOf<String?>(null) }
 
     DimitrisScreen(
@@ -342,13 +347,16 @@ fun AdviceScreen(onBack: () -> Unit) {
 
             // ---- What is going to be sent ------------------------------------------------------
             Spacer(Modifier.height(Sizes.gap))
-            // What is on screen decides what the label can honestly say. With an answer showing,
-            // the text below it is the one that produced it — not the report this screen rebuilt
-            // from newer numbers when it was reopened.
-            val answered = session.advice != null
-            val shown = if (!answered) state.report else session.sent.orEmpty()
+            // Always the report that would go out *now*, never the one that went out before.
+            //
+            // This section's whole contract is "the caregiver sees exactly what is sent", and it
+            // used to switch to the sent copy as soon as an answer arrived — so a note typed after
+            // reading the answer («έκλαψε στον οδοντίατρο») went to Anthropic on the next «Ρώτα
+            // ξανά» without ever having appeared here. The report that *was* sent is not lost: it
+            // is stored whole on its own advice row and quoted back in the next report.
+            val shown = state.report
             QuietButton(
-                if (!answered) "Τι θα σταλεί" else "Τι στάλθηκε",
+                "Τι θα σταλεί",
                 onClick = { showReport = !showReport },
                 icon = if (showReport) Icons.Rounded.ExpandLess else Icons.Rounded.ExpandMore,
                 modifier = Modifier.semantics { testTag = "toggle-report" },
@@ -437,19 +445,23 @@ fun AdviceScreen(onBack: () -> Unit) {
                 }
                 Spacer(Modifier.height(Sizes.gapSmall))
                 Text(
-                    "Αυτές οι λέξεις μπαίνουν πρώτες στην επόμενη άσκησή του.",
+                    "Η εφαρμογή κρατάει θέσεις για αυτές τις λέξεις στις Λέξεις και στο «Τραγούδα " +
+                        "και πες το», και δίνει σειρά στις ασκήσεις που ζητήθηκαν.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 if (focus.levels.isNotEmpty()) {
+                    // Per advice, not per screen: the newest advice is the one the chips came from.
+                    val adviceId = state.history.firstOrNull()?.id
+                    val applied = adviceId != null && adviceId == state.levelsAppliedFor
                     Spacer(Modifier.height(Sizes.gapSmall))
                     Text(levelsLine(focus.levels), style = MaterialTheme.typography.bodyLarge)
                     Spacer(Modifier.height(Sizes.gapSmall))
                     QuietButton(
-                        if (state.levelsApplied) "Τα επίπεδα μπήκαν" else "Εφάρμοσε τα επίπεδα",
-                        enabled = !state.levelsApplied,
+                        if (applied) "Τα επίπεδα μπήκαν" else "Εφάρμοσε τα επίπεδα",
+                        enabled = !applied && adviceId != null,
                         icon = Icons.Rounded.Tune,
-                        onClick = { pendingLevels = focus.levels },
+                        onClick = { pendingLevels = adviceId?.let { it to focus.levels } },
                         modifier = Modifier.semantics { testTag = "apply-levels" },
                     )
                 }
@@ -475,6 +487,15 @@ fun AdviceScreen(onBack: () -> Unit) {
                             Spacer(Modifier.height(Sizes.gapSmall))
                             Text(row.dimitris, style = MaterialTheme.typography.bodyMedium)
                         }
+                        Spacer(Modifier.height(Sizes.gapSmall))
+                        // The report that produced this answer is kept whole on the row; saying how
+                        // big it was is what makes "we still have it" visible without putting tens
+                        // of thousands of characters on a phone screen.
+                        Text(
+                            "Στάλθηκαν ${row.report.length} χαρακτήρες. Μοντέλο: ${row.model.ifBlank { "—" }}.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
                     }
                     Spacer(Modifier.height(Sizes.gapSmall))
                 }
@@ -483,7 +504,7 @@ fun AdviceScreen(onBack: () -> Unit) {
         }
     }
 
-    pendingLevels?.let { levels ->
+    pendingLevels?.let { (adviceId, levels) ->
         AlertDialog(
             onDismissRequest = { pendingLevels = null },
             title = { Text("Αλλαγή επιπέδων;") },
@@ -491,7 +512,7 @@ fun AdviceScreen(onBack: () -> Unit) {
             confirmButton = {
                 TextButton(modifier = Modifier.heightIn(min = Sizes.touchMin), onClick = {
                     feedback.tap()
-                    vm.applyLevels(levels)
+                    vm.applyLevels(adviceId, levels)
                     pendingLevels = null
                 }) { Text("Ναι, άλλαξέ τα", style = MaterialTheme.typography.labelLarge) }
             },

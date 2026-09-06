@@ -87,6 +87,38 @@ class AdviceScreenTest {
     }
 
     /**
+     * The preview's whole contract is "the caregiver sees exactly what is sent". It used to switch
+     * to the *sent* copy as soon as an answer arrived, so a note typed after reading the answer
+     * («έκλαψε στον οδοντίατρο») would have gone to Anthropic on the next «Ρώτα ξανά» without ever
+     * appearing under «Τι θα σταλεί». The count has to move when a note is saved.
+     */
+    @Test fun theCountFollowsTheReportThatWillActuallyBeSent() {
+        openAdvice()
+        compose.waitUntil(TIMEOUT_MS) {
+            compose.onAllNodes(hasTextStartingWith("Υπολογίζω")).fetchSemanticsNodes().isEmpty()
+        }
+        val before = reportSize()
+
+        compose.onNodeWithTag("note-field").performScrollTo().performTextInput(NOTE)
+        compose.onNodeWithTag("save-note").performScrollTo().performClick()
+        compose.waitUntil(TIMEOUT_MS) {
+            runBlocking { graph.db.notes().recent(50) }.any { it.text == NOTE }
+        }
+        noteId = runBlocking { graph.db.notes().recent(50) }.first { it.text == NOTE }.id
+
+        compose.waitUntil(TIMEOUT_MS) { reportSize() > before }
+        assertTrue("the note has to be in what would be sent now", reportSize() >= before + NOTE.length)
+        // And the label never claims to be showing something already sent.
+        compose.onNodeWithText("Τι θα σταλεί").performScrollTo().assertIsDisplayed()
+    }
+
+    private fun reportSize(): Int {
+        val text = compose.onNodeWithTag("report-size").fetchSemanticsNode()
+            .config[SemanticsProperties.Text].first().text
+        return text.removeSuffix(" χαρακτήρες").toIntOrNull() ?: -1
+    }
+
+    /**
      * The one screen that can send anything anywhere says how much, before it sends it — and the
      * report really is built from this phone's database rather than being a placeholder.
      */

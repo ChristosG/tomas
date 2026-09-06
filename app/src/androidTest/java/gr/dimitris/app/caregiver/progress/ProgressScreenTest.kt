@@ -163,6 +163,28 @@ class ProgressScreenTest {
         compose.onNodeWithTag("level-numbers").assertTextEquals("4")
     }
 
+    /**
+     * «Εξαγωγή αναφοράς» shares the same text the advice screen sends — which means it also carries
+     * the other caregiver's notes about the dentist, the sleep and the supermarket, and this screen
+     * has no «Τι θα σταλεί» section to read them in first. So it says so, and waits to be told yes.
+     */
+    @Test fun sharingTheReportSaysWhatItIsAboutToHandOver() {
+        openProgress()
+        compose.onNodeWithTag("share-report").performClick()
+
+        compose.waitUntil(TIMEOUT_MS) {
+            compose.onAllNodes(hasText(SHARE_WARNING)).fetchSemanticsNodes().isNotEmpty()
+        }
+        compose.onNodeWithText(SHARE_WARNING).assertIsDisplayed()
+        compose.onNodeWithText("Μοιράσου").assertIsDisplayed()
+
+        // «Άκυρο» hands nothing over: the chooser never opens and the dialog goes away.
+        compose.onNodeWithText("Άκυρο").performClick()
+        compose.waitUntil(TIMEOUT_MS) {
+            compose.onAllNodes(hasText(SHARE_WARNING)).fetchSemanticsNodes().isEmpty()
+        }
+    }
+
     /** Hold the name, say yes, tap the first entry — the way a caregiver gets here. */
     private fun openProgress() {
         compose.onNodeWithTag("title").performTouchInput {

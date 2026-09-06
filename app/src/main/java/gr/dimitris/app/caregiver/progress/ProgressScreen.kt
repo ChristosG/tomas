@@ -13,12 +13,15 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.Share
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -37,6 +40,7 @@ import gr.dimitris.app.modules.trace.TraceViewModel
 import gr.dimitris.app.ui.components.BigButton
 import gr.dimitris.app.ui.components.DimitrisScreen
 import gr.dimitris.app.ui.components.QuietButton
+import gr.dimitris.app.ui.theme.LocalFeedback
 import gr.dimitris.app.ui.theme.Sizes
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
@@ -65,8 +69,10 @@ fun ProgressScreen(onBack: () -> Unit, onAdvice: () -> Unit = {}) {
     val context = LocalContext.current
     val vm: ProgressViewModel = viewModel { ProgressViewModel(graph) }
     val state by vm.state.collectAsStateWithLifecycle()
-    val scope = rememberCoroutineScope()
     val zone = remember { ZoneId.systemDefault() }
+    val feedback = LocalFeedback.current
+    var confirmShare by remember { mutableStateOf(false) }
+    var sharing by remember { mutableStateOf(false) }
     // The module titles as the modules themselves say them, plus the talk board, which is not one.
     val names = remember(graph) {
         graph.modules.associate { it.id to it.titleGreek } + (ModuleId.TALKBOARD to "Μίλα")
@@ -87,29 +93,17 @@ fun ProgressScreen(onBack: () -> Unit, onAdvice: () -> Unit = {}) {
             )
             Spacer(Modifier.height(Sizes.gapSmall))
             // The same text «Ρώτα τον Claude» sends, so a caregiver forwarding it to a speech
-            // therapist and a caregiver asking Claude are talking about the same thing. Built when
-            // the button is tapped, not on the way to drawing: it reads every attempt ever
-            // recorded, and nobody has asked to share a dashboard they are only looking at.
-            QuietButton("Εξαγωγή αναφοράς", enabled = state.progress != null, icon = Icons.Rounded.Share, onClick = {
-                scope.launch {
-                    val text = try {
-                        journeyReport(graph, zone = zone)
-                    } catch (ce: CancellationException) {
-                        throw ce
-                    } catch (e: Throwable) {
-                        graph.errors.record("progress share", e)
-                        return@launch
-                    }
-                    val send = Intent(Intent.ACTION_SEND).apply {
-                        type = "text/plain"
-                        putExtra(Intent.EXTRA_SUBJECT, "Πορεία — Δημήτρης")
-                        putExtra(Intent.EXTRA_TEXT, text)
-                    }
-                    val chooser = Intent.createChooser(send, "Εξαγωγή αναφοράς").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                    runCatching { context.startActivity(chooser) }
-                        .onFailure { graph.errors.record("progress share", it) }
-                }
-            })
+            // therapist and a caregiver asking Claude are talking about the same thing — which
+            // means it also carries the caregivers' own notes, and this screen has no «Τι θα
+            // σταλεί» section to read them in. Hence the confirmation: nobody should hand the
+            // other caregiver's notes about the dentist to a physiotherapist by tapping «Εξαγωγή».
+            QuietButton(
+                if (sharing) "Ετοιμάζω την αναφορά…" else "Εξαγωγή αναφοράς",
+                enabled = state.progress != null && !sharing,
+                icon = Icons.Rounded.Share,
+                onClick = { confirmShare = true },
+                modifier = Modifier.semantics { testTag = "share-report" },
+            )
         },
     ) {
         val p = state.progress
@@ -200,7 +194,56 @@ fun ProgressScreen(onBack: () -> Unit, onAdvice: () -> Unit = {}) {
             Spacer(Modifier.height(Sizes.gap))
         }
     }
+
+    if (confirmShare) {
+        AlertDialog(
+            onDismissRequest = { confirmShare = false },
+            title = { Text("Εξαγωγή αναφοράς;") },
+            text = { Text(SHARE_WARNING) },
+            confirmButton = {
+                TextButton(modifier = Modifier.heightIn(min = Sizes.touchMin), onClick = {
+                    feedback.tap()
+                    confirmShare = false
+                    sharing = true
+                    // The application scope, not the composition's: the report reads every attempt
+                    // ever recorded, and a caregiver who backs out while it builds should not be
+                    // left with a chooser that never opens and nothing said about why. The chooser
+                    // carries FLAG_ACTIVITY_NEW_TASK, so the application context can start it.
+                    val app = context.applicationContext
+                    graph.scope.launch {
+                        try {
+                            val text = journeyReport(graph, zone = zone)
+                            val send = Intent(Intent.ACTION_SEND).apply {
+                                type = "text/plain"
+                                putExtra(Intent.EXTRA_SUBJECT, "Πορεία — Δημήτρης")
+                                putExtra(Intent.EXTRA_TEXT, text)
+                            }
+                            val chooser = Intent.createChooser(send, "Εξαγωγή αναφοράς")
+                                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                            runCatching { app.startActivity(chooser) }
+                                .onFailure { graph.errors.record("progress share", it) }
+                        } catch (ce: CancellationException) {
+                            throw ce
+                        } catch (e: Throwable) {
+                            graph.errors.record("progress share", e)
+                        } finally {
+                            sharing = false
+                        }
+                    }
+                }) { Text("Μοιράσου", style = MaterialTheme.typography.labelLarge) }
+            },
+            dismissButton = {
+                TextButton(modifier = Modifier.heightIn(min = Sizes.touchMin), onClick = {
+                    feedback.tap(); confirmShare = false
+                }) { Text("Άκυρο", style = MaterialTheme.typography.labelLarge) }
+            },
+        )
+    }
 }
+
+/** What «Εξαγωγή αναφοράς» hands over. Said before it happens, because it cannot be taken back. */
+internal const val SHARE_WARNING = "Θα μοιραστείς την πλήρη αναφορά, μαζί με τις σημειώσεις σας."
+
 
 /** The one line that says which period the numbers under it cover. */
 @Composable
