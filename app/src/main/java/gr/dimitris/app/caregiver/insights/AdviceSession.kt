@@ -52,15 +52,6 @@ class AdviceSession(
         val error: String? = null,
         /** Shown once when a second question is refused because one is already running. */
         val notice: String? = null,
-        /**
-         * Exactly the text that went out with the question being answered, kept beside the answer.
-         *
-         * The answer outlives the screen on purpose, and the screen rebuilds its summary from newer
-         * data every time it is opened — so «Τι στάλθηκε» used to show a summary that was *not*
-         * what produced the advice underneath it. On the one screen in the app that sends anything
-         * anywhere, that label has to be true.
-         */
-        val sent: String? = null,
     )
 
     private val _state = MutableStateFlow(State())
@@ -75,9 +66,10 @@ class AdviceSession(
             return
         }
         // A fresh State: the previous answer, its error and its notice all belong to the question
-        // that produced them, and this is a new one. [State.sent] is what the screen shows as
-        // «Τι στάλθηκε», so the label can never drift from the answer under it.
-        _state.update { State(asking = true, sent = summary) }
+        // that produced them, and this is a new one. What went out is not kept here — the screen's
+        // preview is always what *would* be sent now, and the report that produced an answer is on
+        // the stored `advice` row beside it, which outlives the screen.
+        _state.update { State(asking = true) }
         scope.launch {
             try {
                 send(summary).fold(
