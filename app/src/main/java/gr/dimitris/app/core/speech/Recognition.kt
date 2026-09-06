@@ -63,16 +63,20 @@ object Recognition {
      * where he is sitting the phone is still listening. That continues until [RESTART_WITHIN_MS]
      * have passed since he tapped «Μίλα».
      *
+     * The rule, in one sentence: **another session is opened while less than [RESTART_WITHIN_MS]
+     * have passed since the first one and the last one was not instant.** The clock is the bound —
+     * how many sessions that takes is the service's business, not his.
+     *
      * [stopped] is his «Στοπ», and it always wins: nothing is ever restarted after he has said he
      * is finished.
      *
-     * Two floors keep this from becoming a treadmill on a device that behaves differently from
-     * Chris'. A session that came back in under [INSTANT_SESSION_MS] never really listened — the
-     * service refused rather than waited — and restarting it would bind and unbind the recognition
-     * service hundreds of times over the twenty seconds without ever giving him a window. And
-     * [MAX_RESTARTS] caps the ordinary case, so the wait is a handful of long sessions rather than
-     * an unbounded stream of short ones. When either floor stops the loop the wait simply ends as
-     * having heard nothing, which costs him nothing at all.
+     * A session that came back in under [INSTANT_SESSION_MS] never really listened — the service
+     * refused rather than waited — and restarting it would bind and unbind the recognition service
+     * hundreds of times over the twenty seconds without ever giving him a window. That floor, and
+     * not a count, is what catches a misbehaving device; [MAX_RESTARTS] sits well above anything
+     * the clock allows and is only there so that a service which answers just over the floor cannot
+     * spin for ever. When any of them stops the loop the wait simply ends as having heard nothing,
+     * which costs him nothing at all.
      */
     fun restartsAfterSilence(elapsedMs: Long, stopped: Boolean, restarts: Int, sessionMs: Long): Boolean =
         !stopped &&
@@ -96,16 +100,20 @@ object Recognition {
     const val INSTANT_SESSION_MS = 1_000L
 
     /**
-     * At most this many further sessions in one wait — a backstop, not the bound.
+     * A safety cap on the number of sessions in one wait. It is not the rule, and on any device
+     * that behaves it never binds.
      *
-     * [RESTART_WITHIN_MS] is what ends the wait; this only stops a service that answers in about a
-     * second from being rebound without end. Chris described a recogniser that gives up after one
-     * to two seconds, and at three restarts that made the whole wait some eight seconds rather than
-     * the twenty he was promised — the safety net cutting him off instead of the rule. Six sessions
-     * of a second and a half still reach the twenty, and the [INSTANT_SESSION_MS] floor below is
-     * what actually catches a service that refuses rather than listens.
+     * [RESTART_WITHIN_MS] is what ends the wait. This is here only so that a service answering just
+     * over the [INSTANT_SESSION_MS] floor cannot be rebound twenty times inside the twenty seconds.
+     *
+     * The arithmetic, said plainly rather than promised: at sessions of two seconds or more the cap
+     * never binds — ten of them *is* the whole twenty — and at the two-to-three seconds Chris saw
+     * the clock ends the wait with restarts to spare. Only a service answering at the one-second
+     * floor still meets the cap, at about half the wait, which is the case the cap exists for. The
+     * counts that used to be here, three and then six, cut him off after eight and eleven seconds
+     * of a twenty-second promise: the safety net doing the rule's job.
      */
-    const val MAX_RESTARTS = 6
+    const val MAX_RESTARTS = 10
 
     /**
      * Said when the phone could not listen at all. It points at the settings because that is where

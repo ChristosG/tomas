@@ -111,25 +111,35 @@ class RecognitionTest {
         assertTrue(Recognition.restartsAfterSilence(elapsedMs = 1_000, stopped = false, restarts = 0, sessionMs = Recognition.INSTANT_SESSION_MS))
 
     /**
-     * And the ordinary case is capped, so the wait is a few sessions and not a stream — but the cap
-     * is a backstop and the twenty seconds is the bound. Six sessions of the second and a half
-     * Chris' phone gives still fill the wait; three would have ended it at about eight seconds.
+     * The whole wait, walked as it really runs: sessions of three seconds, one after another, until
+     * the twenty seconds is up. Six of them are restarted and the seventh is not — the *clock* ends
+     * the wait, not a count of sessions. At `MAX_RESTARTS = 3` it ended after eight seconds and at
+     * six after eleven, both of them the safety net doing the rule's job.
      */
-    @Test fun `the restarts are capped well past the twenty seconds`() {
+    @Test fun `the twenty seconds is what ends the wait, not the count of sessions`() {
+        val session = 3_000L
+        var elapsed = 0L
+        var restarts = 0
+        while (Recognition.restartsAfterSilence(elapsed + session, stopped = false, restarts = restarts, sessionMs = session)) {
+            elapsed += session
+            restarts++
+            assertTrue("the wait ran away with him: $restarts sessions", restarts < 100)
+        }
+        assertEquals("three-second sessions are restarted six times", 6, restarts)
+        assertEquals("and the seventh falls outside the twenty seconds", 18_000L, elapsed)
+        assertTrue("the count, not the clock, is what stopped it", restarts < Recognition.MAX_RESTARTS)
+    }
+
+    /** And the cap is still a cap: a service answering at the floor cannot be rebound for ever. */
+    @Test fun `the safety cap holds whatever the clock says`() {
         assertTrue(Recognition.restartsAfterSilence(elapsedMs = 8_000, stopped = false, restarts = 2, sessionMs = 3_000))
-        assertTrue(Recognition.restartsAfterSilence(elapsedMs = 15_000, stopped = false, restarts = 5, sessionMs = 1_500))
-        assertFalse(Recognition.restartsAfterSilence(elapsedMs = 8_000, stopped = false, restarts = Recognition.MAX_RESTARTS, sessionMs = 3_000))
-        // The bound that matters is the clock: the cap is reached only if he is answered fast.
-        assertTrue(
-            "the cap has to outlast the wait at the session length Chris described",
-            Recognition.MAX_RESTARTS * 1_500L + 1_500L >= Recognition.RESTART_WITHIN_MS / 2,
-        )
+        assertFalse(Recognition.restartsAfterSilence(elapsedMs = 11_000, stopped = false, restarts = Recognition.MAX_RESTARTS, sessionMs = 1_000))
     }
 
     @Test fun `the wait, its floors, and the words for a phone that cannot listen`() {
         assertEquals(20_000L, Recognition.RESTART_WITHIN_MS)
         assertEquals(1_000L, Recognition.INSTANT_SESSION_MS)
-        assertEquals(6, Recognition.MAX_RESTARTS)
+        assertEquals(10, Recognition.MAX_RESTARTS)
         assertEquals("Η αναγνώριση δεν λειτούργησε. Δες τις ρυθμίσεις.", Recognition.NOT_WORKING)
     }
 
