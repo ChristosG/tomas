@@ -19,10 +19,10 @@ object HandTrace {
      */
     fun centreLine(glyph: GlyphTemplate): List<List<Pt>> {
         if (glyph.points.isEmpty() || glyph.height <= 0f) return emptyList()
-        val left = glyph.points.minOf { it.x }
-        val right = glyph.points.maxOf { it.x }
-        val top = glyph.points.minOf { it.y }
-        val bottom = glyph.points.maxOf { it.y }
+        val left = glyph.points.minOf { it.pt.x }
+        val right = glyph.points.maxOf { it.pt.x }
+        val top = glyph.points.minOf { it.pt.y }
+        val bottom = glyph.points.maxOf { it.pt.y }
         val step = (glyph.height * GRID).coerceAtLeast(2f)
         // Longer than this and the run is along a stroke rather than across it: the middle of the
         // whole width of a crossbar is not a point anyone's finger passes through.

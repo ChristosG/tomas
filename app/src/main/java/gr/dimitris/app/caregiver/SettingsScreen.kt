@@ -34,12 +34,14 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.style.TextAlign
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import gr.dimitris.app.LocalAppGraph
 import gr.dimitris.app.core.data.ModuleId
 import gr.dimitris.app.core.secrets.SecretStore
 import gr.dimitris.app.core.settings.DeviceRole
 import gr.dimitris.app.core.settings.Settings
+import gr.dimitris.app.modules.trace.TraceStrictness
 import gr.dimitris.app.ui.components.DimitrisScreen
 import gr.dimitris.app.ui.components.QuietButton
 import gr.dimitris.app.ui.theme.Sizes
@@ -66,6 +68,29 @@ private fun RoleChip(label: String, value: DeviceRole, chosen: DeviceRole, modif
         selected = chosen == value,
         onClick = { onPick(value) },
         label = { Text(label, style = MaterialTheme.typography.bodyLarge) },
+        shape = RoundedCornerShape(Sizes.corner),
+        modifier = modifier.heightIn(min = Sizes.touchMin),
+    )
+}
+
+/**
+ * The same 72dp chip again, for how hard «Γράψε» marks him — three of them across one row, so the
+ * label is a size down and stays on one line: «Κανονικό» broken over two lines reads as two words.
+ */
+@Composable
+private fun StrictnessChip(label: String, value: TraceStrictness, chosen: TraceStrictness, modifier: Modifier = Modifier, onPick: (TraceStrictness) -> Unit) {
+    FilterChip(
+        selected = chosen == value,
+        onClick = { onPick(value) },
+        label = {
+            Text(
+                label,
+                style = MaterialTheme.typography.bodyMedium,
+                maxLines = 1,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth(),
+            )
+        },
         shape = RoundedCornerShape(Sizes.corner),
         modifier = modifier.heightIn(min = Sizes.touchMin),
     )
@@ -153,6 +178,28 @@ fun SettingsScreen(onBack: () -> Unit) {
                 Spacer(Modifier.width(Sizes.gapSmall))
                 HandChip("Δεξί", Settings.HAND_RIGHT, hand, Modifier.weight(1f)) { scope.launch { graph.settings.setTraceHand(it) } }
             }
+            Spacer(Modifier.height(Sizes.gapSmall))
+
+            // How near the letter his writing has to be. «Κανονικό» is the line the app is built
+            // around: the letter he was asked for passes, another letter does not — a wrong shape
+            // marked right is a wrong movement practised.
+            Text("Αυστηρότητα γραψίματος", style = MaterialTheme.typography.bodyLarge)
+            val strictness by graph.settings.traceStrictness.collectAsStateWithLifecycle(initialValue = TraceStrictness.DEFAULT)
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth().heightIn(min = Sizes.touchMin),
+            ) {
+                StrictnessChip("Χαλαρό", TraceStrictness.LOOSE, strictness, Modifier.weight(1f)) { scope.launch { graph.settings.setTraceStrictness(it) } }
+                Spacer(Modifier.width(Sizes.gapSmall))
+                StrictnessChip("Κανονικό", TraceStrictness.NORMAL, strictness, Modifier.weight(1f)) { scope.launch { graph.settings.setTraceStrictness(it) } }
+                Spacer(Modifier.width(Sizes.gapSmall))
+                StrictnessChip("Αυστηρό", TraceStrictness.STRICT, strictness, Modifier.weight(1f)) { scope.launch { graph.settings.setTraceStrictness(it) } }
+            }
+            Text(
+                "Πόσο κοντά στο γράμμα πρέπει να γράψει. Στο «Κανονικό» άλλο γράμμα δεν περνά.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
             Spacer(Modifier.height(Sizes.gap))
 
             Text("Αναγνώριση ομιλίας (δοκιμαστικό)", style = MaterialTheme.typography.titleLarge)

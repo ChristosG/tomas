@@ -38,7 +38,7 @@ import gr.dimitris.app.ui.theme.Sizes
  */
 @Composable
 fun TraceCanvas(
-    template: List<Pt>,
+    template: List<TemplatePoint>,
     showTemplate: Boolean,
     strokes: List<List<Pt>>,
     onStroke: (List<Pt>) -> Unit,
@@ -86,7 +86,7 @@ fun TraceCanvas(
         // and the whole exercise is following a line he can still see.
         if (showTemplate) {
             val radius = DOT.toPx()
-            for (p in template) drawCircle(Palette.mist, radius = radius, center = Offset(p.x, p.y))
+            for (p in template) drawCircle(Palette.mist, radius = radius, center = Offset(p.pt.x, p.pt.y))
         }
     }
 }

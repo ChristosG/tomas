@@ -3,9 +3,11 @@ package gr.dimitris.app.core.settings
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.floatPreferencesKey
+import androidx.datastore.preferences.core.stringPreferencesKey
 import gr.dimitris.app.core.data.ModuleId
 import gr.dimitris.app.modules.arcade.Adaptive
 import gr.dimitris.app.modules.arcade.ArcadeGame
+import gr.dimitris.app.modules.trace.TraceStrictness
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -177,6 +179,33 @@ class SettingsTest {
         assertEquals(Settings.HAND_RIGHT, s.traceHand.first())
         s.setTraceHand("BOTH")
         assertEquals(Settings.HAND_LEFT, s.traceHand.first())
+    }
+
+    /**
+     * How hard the writing is marked. Κανονικό until a caregiver says otherwise, and a name that is
+     * no longer one of the three — an old backup — reads as Κανονικό rather than throwing him out of
+     * the module.
+     */
+    @Test fun `writing is marked at Κανονικό until a caregiver says otherwise`() = runBlocking {
+        val s = newSettings()
+        assertEquals(TraceStrictness.NORMAL, s.traceStrictness.first())
+        s.setTraceStrictness(TraceStrictness.STRICT)
+        assertEquals(TraceStrictness.STRICT, s.traceStrictness.first())
+        s.setTraceStrictness(TraceStrictness.LOOSE)
+        assertEquals(TraceStrictness.LOOSE, s.traceStrictness.first())
+        // Its own key: how hard he is marked is not which level he is on.
+        assertEquals(1, s.traceLevel.first())
+    }
+
+    /** A value from a version that named them differently is not a crash. */
+    @Test fun `a strictness nobody recognises reads as Κανονικό`() = runBlocking {
+        val dir = createTempDirectory("settings").toFile()
+        val store = PreferenceDataStoreFactory.create(
+            scope = CoroutineScope(Dispatchers.IO + SupervisorJob()),
+            produceFile = { File(dir, "settings.preferences_pb") },
+        )
+        store.edit { it[stringPreferencesKey("trace_strictness")] = "VERY_STRICT" }
+        assertEquals(TraceStrictness.NORMAL, Settings(store).traceStrictness.first())
     }
 
     /** Empty means the app never touches the network by itself; a trailing slash is not a difference. */

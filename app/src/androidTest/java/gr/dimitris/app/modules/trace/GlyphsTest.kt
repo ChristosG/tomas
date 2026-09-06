@@ -1,9 +1,12 @@
 package gr.dimitris.app.modules.trace
 
+import android.util.Log
+import androidx.test.platform.app.InstrumentationRegistry
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import kotlin.math.hypot
 
 /**
  * The half of the letter that only a device can answer: the font is the system's, so what a glyph
@@ -13,6 +16,9 @@ import org.junit.Test
 class GlyphsTest {
     private val boxWidth = 900f
     private val boxHeight = 750f
+
+    /** The phone's own pixels to the dp: what marks him is the size of his fingertip. */
+    private val density = InstrumentationRegistry.getInstrumentation().targetContext.resources.displayMetrics.density
 
     @Test fun aCapitalAlphaComesBackAsALineToFollow() {
         val glyph = Glyphs.template("Α", boxWidth, boxHeight)
@@ -28,10 +34,10 @@ class GlyphsTest {
     /** It fills the box it was given without touching the edges, wherever his finger overshoots. */
     @Test fun theLetterIsCentredAndFitsInsideTheBox() {
         val glyph = Glyphs.template("Α", boxWidth, boxHeight)
-        val left = glyph.points.minOf { it.x }
-        val right = glyph.points.maxOf { it.x }
-        val top = glyph.points.minOf { it.y }
-        val bottom = glyph.points.maxOf { it.y }
+        val left = glyph.points.minOf { it.pt.x }
+        val right = glyph.points.maxOf { it.pt.x }
+        val top = glyph.points.minOf { it.pt.y }
+        val bottom = glyph.points.maxOf { it.pt.y }
 
         assertTrue("the letter runs off the box: $left..$right, $top..$bottom", left >= 0f && right <= boxWidth && top >= 0f && bottom <= boxHeight)
         assertEquals("the letter is not centred sideways", boxWidth / 2f, (left + right) / 2f, 1f)
@@ -54,7 +60,7 @@ class GlyphsTest {
         val ring = Glyphs.template("Ο", boxWidth, boxHeight)
         assertFalse("the hole in «Ο» is ink", ring.inside(Pt(boxWidth / 2f, boxHeight / 2f)))
         // The wall of the «Ο» is: half way from the middle to the left edge of the letter.
-        val left = ring.points.minOf { it.x }
+        val left = ring.points.minOf { it.pt.x }
         assertTrue("the wall of «Ο» is not ink", ring.inside(Pt(left + STEM_PROBE, boxHeight / 2f)))
     }
 
@@ -78,12 +84,87 @@ class GlyphsTest {
 
     /** Nothing to write, or nowhere to write it: not a letter he got wrong. */
     @Test fun anEmptyTextOrAnEmptyBoxHasNothingToTrace() {
-        assertEquals(emptyList<Pt>(), Glyphs.template("", boxWidth, boxHeight).points)
-        assertEquals(emptyList<Pt>(), Glyphs.template("Α", 0f, boxHeight).points)
+        assertEquals(emptyList<TemplatePoint>(), Glyphs.template("", boxWidth, boxHeight).points)
+        assertEquals(emptyList<TemplatePoint>(), Glyphs.template("Α", 0f, boxHeight).points)
         assertEquals(0f, Glyphs.template("Α", boxWidth, 0f).height, 0f)
         assertFalse("an empty letter has ink", Glyphs.template("", boxWidth, boxHeight).inside(Pt(1f, 1f)))
     }
 
+    /**
+     * The letter is cut into pieces of its own to be gone over, contour by contour. The «Ο» is the
+     * case that says it works: its hole is pieces of its own, so going round the outside of an «Ο»
+     * is not the whole of the letter.
+     */
+    @Test fun theLetterComesBackInPiecesToBeGoneOver() {
+        val ring = Glyphs.template("Ο", boxWidth, boxHeight)
+        val pieces = ring.points.map { it.segment }.distinct()
+        assertTrue("an «Ο» in ${pieces.size} pieces is not a letter to go over", pieces.size >= 2 * TraceScorer.MIN_SEGMENTS)
+        assertEquals("the pieces are not numbered from the start", 0, ring.points.first().segment)
+
+        // A piece is about a twelfth of the letter's height long, so a stroke is a few of them.
+        val longest = ring.points.groupBy { it.segment }.values.maxOf { piece ->
+            piece.zipWithNext().sumOf { (a, b) -> hypot(a.pt.x - b.pt.x, a.pt.y - b.pt.y).toDouble() }
+        }
+        assertTrue("a piece of the letter is longer than a stroke of it", longest <= ring.height * TraceScorer.SEGMENT_FRACTION + Glyphs.SAMPLE_STEP)
+    }
+
+    /**
+     * The field test, with the device's own font: Chris drew a «Κ» over an «Η» and the app said well
+     * done. A «Κ» is the wrong letter that comes nearest to being right — it shares the whole left
+     * stem of the «Η» — so if anything wrong is going to pass, it is this.
+     *
+     * Both traces here are hand-like: a line down the middle of every stroke, which is what a person
+     * draws when told to write a letter. The right one has to pass and the wrong one must not.
+     */
+    @Test fun aKWrittenOverAnHIsNotAnH() {
+        val h = Glyphs.template("Η", boxWidth, boxHeight)
+        val k = Glyphs.template("Κ", boxWidth, boxHeight)
+        val handH = HandTrace.centreLine(h)
+        val handK = HandTrace.centreLine(k)
+        assertTrue("nothing to write", handH.isNotEmpty() && handK.isNotEmpty())
+
+        for (level in listOf(TraceStrictness.NORMAL, TraceStrictness.STRICT)) {
+            val s = Strictness.of(level, density, recall = false)
+            val right = TraceScorer.score(handH, h.points, h.inside, s)
+            val wrong = TraceScorer.score(handK, h.points, h.inside, s)
+            val backwards = TraceScorer.score(handH, k.points, k.inside, s)
+            Log.i(TAG, "H by hand at $level: $right")
+            Log.i(TAG, "K over the H at $level: $wrong")
+            Log.i(TAG, "H over the K at $level: $backwards")
+            assertTrue("writing «Η» by hand was refused at $level: $right", right.passed)
+            assertFalse("a «Κ» passed as an «Η» at $level: $wrong", wrong.passed)
+            // And the other way about, so this is about the shape and not about «Η» being easy.
+            assertTrue("writing «Κ» by hand was refused at $level", TraceScorer.score(handK, k.points, k.inside, s).passed)
+            assertFalse("an «Η» passed as a «Κ» at $level: $backwards", backwards.passed)
+        }
+        // Χαλαρό is measured and not demanded: it is a caregiver deliberately asking for less, and
+        // what the app promises — the wrong letter never passes — it promises at Κανονικό.
+        val loose = Strictness.of(TraceStrictness.LOOSE, density, recall = false)
+        Log.i(TAG, "K over the H at LOOSE: ${TraceScorer.score(handK, h.points, h.inside, loose)}")
+    }
+
+    /**
+     * The letter he was asked for passes, however hard a caregiver set the marking: a capital with
+     * stems, one with diagonals, a ring, and his own name in eight small letters.
+     *
+     * This is the promise the whole module rests on. A man who writes the letter and is told «Ξανά»
+     * learns that he cannot write, which is the one thing this app must never teach him.
+     */
+    @Test fun aHandLikeTraceOfTheLetterPassesAtEveryStrictness() {
+        for (text in listOf("Η", "Α", "Ο", "Δημήτρης")) {
+            val glyph = Glyphs.template(text, boxWidth, boxHeight)
+            val hand = HandTrace.centreLine(glyph)
+            for (level in TraceStrictness.entries) {
+                val s = TraceScorer.score(hand, glyph.points, glyph.inside, Strictness.of(level, density, recall = false))
+                Log.i(TAG, "$text by hand at $level: $s")
+                assertTrue("writing «$text» by hand was refused at $level: $s", s.passed)
+            }
+        }
+    }
+
     /** Far enough into the letter to be past the antialiased edge, near enough to be in the wall. */
-    private companion object { const val STEM_PROBE = 12f }
+    private companion object {
+        const val STEM_PROBE = 12f
+        const val TAG = "TraceNumbers"
+    }
 }

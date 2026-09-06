@@ -12,13 +12,15 @@ import kotlin.math.roundToInt
 /**
  * The letter he is asked to write: the line to follow, its height, and the ink itself.
  *
- * [points] is the outline — what the canvas draws as grey dots. [inside] is the filled letter, and
- * it is the half that makes the exercise possible: a man told «γράψε Κ» draws a line down the middle
- * of the stem, not around both of its edges, and a line down the middle is nowhere near the outline
- * while being exactly right. Anything [inside] answers true for is on the letter, distance nothing.
+ * [points] is the outline — what the canvas draws as grey dots — with each point carrying the piece
+ * of the letter it belongs to, so the scorer can ask whether every piece was gone over rather than
+ * whether enough points were. [inside] is the filled letter, and it is the half that makes the
+ * exercise possible: a man told «γράψε Κ» draws a line down the middle of the stem, not around both
+ * of its edges, and a line down the middle is nowhere near the outline while being exactly right.
+ * Anything [inside] answers true for is on the letter, distance nothing.
  */
 data class GlyphTemplate(
-    val points: List<Pt>,
+    val points: List<TemplatePoint>,
     val height: Float,
     /** True where the ink is, in the same canvas pixels as [points]. Counters are not ink. */
     val inside: (Pt) -> Boolean,
@@ -69,7 +71,10 @@ object Glyphs {
 
         val path = Path()
         paint.getTextPath(text, 0, text.length, 0f, 0f, path)
-        val points = sample(path)
+        // Contour by contour, because that is what a segment is cut out of: the outside of an «Ο»
+        // and the hole in it are two lines to be gone over, not one long one.
+        val contours = sample(path)
+        val points = contours.flatten()
         if (points.isEmpty()) return EMPTY
 
         // Centred on what was really drawn, not on the font's line box: a word with no descender
@@ -87,7 +92,9 @@ object Glyphs {
 
         // The same move applied to the filled path, so the mask and the dots describe one letter.
         path.offset(dx, dy)
-        return GlyphTemplate(points.map { Pt(it.x + dx, it.y + dy) }, maxY - minY, mask(path))
+        val height = maxY - minY
+        val moved = contours.map { contour -> contour.map { Pt(it.x + dx, it.y + dy) } }
+        return GlyphTemplate(TraceScorer.segments(moved, height), height, mask(path))
     }
 
     /**
@@ -109,20 +116,27 @@ object Glyphs {
         return { p -> region.contains(p.x.roundToInt(), p.y.roundToInt()) }
     }
 
-    /** Every contour of [path], walked in order, a point every [SAMPLE_STEP] pixels. */
-    private fun sample(path: Path): List<Pt> {
-        val out = mutableListOf<Pt>()
+    /**
+     * Every contour of [path] on its own, walked in order, a point every [SAMPLE_STEP] pixels.
+     *
+     * Kept apart rather than poured into one list: a segment is a piece of one contour, and the
+     * jump from the end of the outside of an «Ο» to the start of its hole is not a piece of letter.
+     */
+    private fun sample(path: Path): List<List<Pt>> {
+        val out = mutableListOf<List<Pt>>()
         val measure = PathMeasure(path, false)
         val pos = FloatArray(2)
         do {
+            val contour = mutableListOf<Pt>()
             val length = measure.length
             var walked = 0f
             // Strictly less than the length: a glyph contour is closed, so its end is its start and
             // sampling it again would put two dots on the same pixel.
             while (walked < length) {
-                if (measure.getPosTan(walked, pos, null)) out += Pt(pos[0], pos[1])
+                if (measure.getPosTan(walked, pos, null)) contour += Pt(pos[0], pos[1])
                 walked += SAMPLE_STEP
             }
+            if (contour.isNotEmpty()) out += contour
         } while (measure.nextContour())
         return out
     }

@@ -33,8 +33,13 @@ data class TraceState(
     val itemId: String? = null,
     /** False only at level 5, after «Το είδα»: from there he is writing it from memory. */
     val templateVisible: Boolean = true,
-    val template: List<Pt> = emptyList(),
+    val template: List<TemplatePoint> = emptyList(),
+    /** How tall the letter came out, in canvas pixels. Nothing is marked by it any more; it is what
+     * says how big the thing he was asked to write actually was, which is the first question of
+     * anyone reading these sittings back. */
     val templateHeight: Float = 0f,
+    /** How hard he is marked, as a caregiver set it. Read once, when the sitting is loaded. */
+    val strictness: TraceStrictness = TraceStrictness.DEFAULT,
     /** The ink of the letter: true where a point is on it. See [Glyphs] and [TraceScorer]. */
     val inside: (Pt) -> Boolean = { false },
     val strokes: List<List<Pt>> = emptyList(),
@@ -78,10 +83,8 @@ class TraceViewModel(
     private var boxWidth = 0f
     private var boxHeight = 0f
 
-    /** Screen pixels per dp: the floors below are about the size of his fingertip, not of the glyph. */
+    /** Screen pixels per dp: what marks him is the size of his fingertip, not of the glyph. */
     private val density = graph.app.resources.displayMetrics.density
-
-    private fun dp(value: Float): Float = value * density
 
     /** The settings and vocabulary read. Cancelled on the way out, so nothing lands on the next screen. */
     private var loadJob: Job? = null
@@ -110,6 +113,8 @@ class TraceViewModel(
                 .getOrElse { graph.errors.record("trace level read", it); MIN_LEVEL }
             val hand = runCatching { graph.settings.traceHand.first() }
                 .getOrElse { graph.errors.record("trace hand read", it); Settings.HAND_LEFT }
+            val strictness = runCatching { graph.settings.traceStrictness.first() }
+                .getOrElse { graph.errors.record("trace strictness read", it); TraceStrictness.DEFAULT }
             val words = if (level >= WORDS_FROM_LEVEL) {
                 runCatching { graph.db.items().activeOfKinds(listOf(ItemKind.WORD)) }
                     .getOrElse { graph.errors.record("trace words", it); emptyList() }
@@ -118,7 +123,10 @@ class TraceViewModel(
             // Not before the settings read: their wait is not his writing time.
             startedAt = now()
             val first = targets.first()
-            _state.value = TraceState(level = level, hand = hand, total = targets.size, text = first.text, itemId = first.itemId)
+            _state.value = TraceState(
+                level = level, hand = hand, strictness = strictness,
+                total = targets.size, text = first.text, itemId = first.itemId,
+            )
             // The canvas is usually laid out before this read comes back, so the template it asked
             // for has to be built now that there is finally something to build it from.
             rebuildTemplate()
@@ -242,18 +250,15 @@ class TraceViewModel(
         if (s.level >= RECALL_LEVEL && s.templateVisible) return
 
         val fromMemory = writingFromMemory(s)
-        val h = s.templateHeight
-        // In pixels, and never smaller than a fingertip: 10 % of the height is half a stem on a
-        // capital and a hair's breadth on a word of eight letters, and his hand is the same size for
-        // both. Every stroke is judged on its own, so lifting his finger is never counted as a line.
-        val score = TraceScorer.scoreStrokes(
+        // In fingertips, not in fractions of the letter: a tolerance of a tenth of the height is a
+        // hair's breadth on a word of eight letters and half the paper on a capital, and that is
+        // exactly how a «Κ» drawn over an «Η» came to pass. Every stroke is judged on its own, so
+        // lifting his finger is never counted as a line.
+        val score = TraceScorer.score(
             strokes = s.strokes,
             template = s.template,
-            templateHeight = h,
             inside = s.inside,
-            tolerancePx = maxOf((if (fromMemory) RECALL_TOLERANCE else TOLERANCE) * h, dp(MIN_TOLERANCE_DP)),
-            coverageRadiusPx = maxOf(COVERAGE_RADIUS * h, dp(MIN_COVERAGE_RADIUS_DP)),
-            minCoverage = if (fromMemory) RECALL_MIN_COVERAGE else MIN_COVERAGE,
+            s = Strictness.of(s.strictness, density, recall = fromMemory),
         )
         if (score.passed) {
             graph.feedback.success()
@@ -364,7 +369,11 @@ class TraceViewModel(
                 // and "was this his good hand?" is the first question anyone will ask of them.
                 "hand" to s.hand,
                 "meanDistance" to score?.meanDistance?.takeIf { it != Float.MAX_VALUE },
+                // The two numbers the marking is actually made of, and the line they were held to:
+                // "he passed" a year from now is unreadable without them.
                 "coverage" to score?.coverage,
+                "precision" to score?.precision,
+                "strictness" to s.strictness.name,
             )
         )
         // Read eagerly: the clock is restarted the moment the next letter arrives.
@@ -398,22 +407,6 @@ class TraceViewModel(
 
         /** Writing from memory: the template is shown once, then taken away. */
         const val RECALL_LEVEL = 5
-
-        /**
-         * How far off the letter he may be on average, as a fraction of its height, and how near a
-         * point of the outline counts as gone over. Under [MIN_TOLERANCE_DP] and
-         * [MIN_COVERAGE_RADIUS_DP] they stop being fractions: a word of eight letters is a tenth as
-         * tall as a capital, and his hand does not shrink with it.
-         */
-        const val TOLERANCE = 0.10f
-        const val COVERAGE_RADIUS = 0.15f
-        const val MIN_TOLERANCE_DP = 10f
-        const val MIN_COVERAGE_RADIUS_DP = 14f
-        const val MIN_COVERAGE = 0.6f
-
-        /** Level 5 once the letter is hidden: looser, because there is nothing left to follow. */
-        const val RECALL_TOLERANCE = 0.14f
-        const val RECALL_MIN_COVERAGE = 0.4f
 
         /** How deep into the short words levels 4 and 5 draw before shuffling: six of twelve. */
         const val SHORT_POOL = 2

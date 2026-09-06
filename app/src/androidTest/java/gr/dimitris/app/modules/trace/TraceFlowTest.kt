@@ -159,6 +159,31 @@ class TraceFlowTest {
         assertTrue("the wrong letter was recorded as an attempt", attempts().isEmpty())
     }
 
+    /**
+     * The field test, on the glass: Chris drew a «Κ» over an «Η» and the app said well done.
+     *
+     * A «Κ» is the wrong letter that comes nearest to being right — over an «Η» it shares the whole
+     * left stem, so half of what he draws is on the ink — and it has to be refused for its *shape*:
+     * the crossbar of the «Η» is never gone over, and the diagonals of the «Κ» are out in the white.
+     * A man told "well done" for the wrong letter is a man practising the wrong movement.
+     *
+     * Level 1 asks for a random capital, so the «Κ» goes over whichever one came up — and over a
+     * «Κ» itself an «Ο» goes instead, since a «Κ» over a «Κ» is the letter. The «Κ»-over-«Η» pair
+     * exactly, with the device's own font, is measured in [GlyphsTest].
+     */
+    @Test fun aKDrawnOverTheLetterIsNudgedAndWritesNoRow() {
+        val letter = openPractice(level = 1)
+        val drawn = if (letter == WRONG_LETTER) "Ο" else WRONG_LETTER
+        write(drawn)
+        finish()
+
+        compose.waitUntil(TIMEOUT_MS) { compose.onAllNodes(hasText(TraceViewModel.TRY_AGAIN)).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithText(TraceViewModel.TRY_AGAIN).assertIsDisplayed()
+        assertTrue("a «$drawn» passed as a «$letter»", attempts().isEmpty())
+        // Never a fail state: the letter is still there, and «Έτοιμο» is still the way on.
+        compose.onNodeWithText("Έτοιμο").assertIsDisplayed()
+    }
+
     /** Sets the level, opens free practice and returns what it is asking him to write. */
     private fun openPractice(level: Int): String {
         runBlocking { graph.settings.setTraceLevel(level) }
@@ -210,6 +235,9 @@ class TraceFlowTest {
 
         /** A bare stem: whatever else came up, this is not it. */
         const val OTHER_LETTER = "Ι"
+
+        /** The letter that comes nearest to being another one, which is why it is the test. */
+        const val WRONG_LETTER = "Κ"
         const val TIMEOUT_MS = 20_000L
     }
 }
