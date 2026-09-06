@@ -107,8 +107,17 @@ class SyncRoundTripTest {
         phones.clear()
     }
 
-    @Test fun healthAnswersWithASequenceNumber() = runTest {
-        assertTrue(HttpSyncClient({ base }, { token }).health() >= 0)
+    /** `seq` is the count of rows the server has accepted, so a push has to move it by exactly one. */
+    @Test fun healthCountsTheRowsTheServerHasTaken() = runTest {
+        val client = HttpSyncClient({ base }, { token })
+        val before = client.health()
+
+        val id = UUID.randomUUID().toString()
+        val accepted = client.push(listOf(SyncRow(Tables.ITEMS, Rows.of(Item(id = id, text = "υγεία-$id")))))
+
+        assertEquals(1, accepted.accepted)
+        assertEquals(before + 1, client.health())
+        assertEquals(before + 1, accepted.seq)
     }
 
     /**

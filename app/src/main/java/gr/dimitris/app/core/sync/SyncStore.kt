@@ -28,8 +28,17 @@ interface SyncStore {
     /** How new the rows already here are, by sync id. Absent means "this phone has never seen it". */
     suspend fun stamps(table: String, ids: List<String>): Map<String, Long>
 
-    /** Writes rows another phone sent, exactly as they arrived. Never touches `updatedAt`. */
-    suspend fun apply(table: String, rows: List<Map<String, Any?>>)
+    /**
+     * Writes rows another phone sent, exactly as they arrived. Never touches `updatedAt`.
+     *
+     * Returns the ids of rows this version of the app could not turn into a row of this table at
+     * all — a column a later APK added without a default, a value of the wrong shape, something
+     * hand-pushed with `curl`. Those are *not* written and never will be, so they are reported
+     * rather than thrown: a permanent failure that came back as an exception would hold the pull
+     * cursor in front of the page for ever and no sync would ever advance again. A failure of the
+     * database itself still throws — that one is worth waiting for.
+     */
+    suspend fun apply(table: String, rows: List<Map<String, Any?>>): List<String>
 
     /**
      * Rows still holding a `media://` in a media column: a file that did not download when the row
@@ -115,18 +124,45 @@ class DaoSyncStore(private val daos: () -> SyncDaos) : SyncStore {
         return entities.map { spec.withId(Rows.of(it)) }
     }
 
-    override suspend fun apply(table: String, rows: List<Map<String, Any?>>) {
-        if (rows.isEmpty()) return
+    override suspend fun apply(table: String, rows: List<Map<String, Any?>>): List<String> {
+        if (rows.isEmpty()) return emptyList()
+        val spec = Tables.of(table) ?: return rows.mapNotNull { it["id"] as? String }
+        // Converted first, one at a time, so a row this version cannot read is set aside instead of
+        // taking the whole page — and the page's write below is then all database, no parsing.
+        val unmappable = mutableListOf<String>()
+        val entities = mutableListOf<Any>()
+        for (row in rows) {
+            val entity = runCatching { entityOf(table, row) }.getOrNull()
+            if (entity == null) unmappable += spec.idOf(row) ?: "?" else entities += entity
+        }
+        if (entities.isNotEmpty()) write(table, entities)
+        return unmappable
+    }
+
+    private fun entityOf(table: String, row: Map<String, Any?>): Any = when (table) {
+        Tables.ITEMS -> Rows.to(row, Item::class.java)
+        Tables.RECORDINGS -> Rows.to(row, Recording::class.java)
+        Tables.ATTEMPTS -> Rows.to(row, Attempt::class.java)
+        Tables.SCHEDULES -> Rows.to(row, Schedule::class.java)
+        Tables.SESSIONS -> Rows.to(row, Session::class.java)
+        Tables.ERROR_LOGS -> Rows.to(row, ErrorLog::class.java)
+        Tables.SCRIPTS -> Rows.to(row, Script::class.java)
+        Tables.SCRIPT_LINES -> Rows.to(row, ScriptLine::class.java)
+        else -> error("unknown table $table")
+    }
+
+    @Suppress("UNCHECKED_CAST")
+    private suspend fun write(table: String, entities: List<Any>) {
         val d = daos()
         when (table) {
-            Tables.ITEMS -> d.items.upsertFromSync(rows.map { Rows.to(it, Item::class.java) })
-            Tables.RECORDINGS -> d.recordings.upsertFromSync(rows.map { Rows.to(it, Recording::class.java) })
-            Tables.ATTEMPTS -> d.attempts.upsertFromSync(rows.map { Rows.to(it, Attempt::class.java) })
-            Tables.SCHEDULES -> d.schedules.upsertFromSync(rows.map { Rows.to(it, Schedule::class.java) })
-            Tables.SESSIONS -> d.sessions.upsertFromSync(rows.map { Rows.to(it, Session::class.java) })
-            Tables.ERROR_LOGS -> d.errorLogs.upsertFromSync(rows.map { Rows.to(it, ErrorLog::class.java) })
-            Tables.SCRIPTS -> d.scripts.upsertScriptsFromSync(rows.map { Rows.to(it, Script::class.java) })
-            Tables.SCRIPT_LINES -> d.scripts.upsertLinesFromSync(rows.map { Rows.to(it, ScriptLine::class.java) })
+            Tables.ITEMS -> d.items.upsertFromSync(entities as List<Item>)
+            Tables.RECORDINGS -> d.recordings.upsertFromSync(entities as List<Recording>)
+            Tables.ATTEMPTS -> d.attempts.upsertFromSync(entities as List<Attempt>)
+            Tables.SCHEDULES -> d.schedules.upsertFromSync(entities as List<Schedule>)
+            Tables.SESSIONS -> d.sessions.upsertFromSync(entities as List<Session>)
+            Tables.ERROR_LOGS -> d.errorLogs.upsertFromSync(entities as List<ErrorLog>)
+            Tables.SCRIPTS -> d.scripts.upsertScriptsFromSync(entities as List<Script>)
+            Tables.SCRIPT_LINES -> d.scripts.upsertLinesFromSync(entities as List<ScriptLine>)
         }
     }
 }

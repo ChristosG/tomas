@@ -210,7 +210,13 @@ interface ErrorLogDao {
     @Insert suspend fun insert(log: ErrorLog)
     @Query("SELECT * FROM error_logs WHERE deleted = 0 ORDER BY at DESC LIMIT :limit") fun observeRecent(limit: Int): Flow<List<ErrorLog>>
     @Query("SELECT * FROM error_logs WHERE deleted = 0 ORDER BY at DESC") suspend fun all(): List<ErrorLog>
-    @Query("UPDATE error_logs SET deleted = 1, updatedAt = :now WHERE deleted = 0") suspend fun clearAll(now: Long)
+    /**
+     * Hides the list on **this** phone. `updatedAt` is deliberately left alone: `error_logs` is
+     * append-only on both sides, so a bumped stamp would re-offer every row to the server, which
+     * would drop them all by id and change nothing anywhere — noise for no effect. Clearing is
+     * per-phone, and the README says so.
+     */
+    @Query("UPDATE error_logs SET deleted = 1 WHERE deleted = 0") suspend fun clearAll()
 
     @Query("SELECT * FROM error_logs WHERE updatedAt > :since ORDER BY updatedAt") suspend fun changedSince(since: Long): List<ErrorLog>
     @Query("SELECT id, updatedAt FROM error_logs WHERE id IN (:ids)") suspend fun stamps(ids: List<String>): List<RowStamp>

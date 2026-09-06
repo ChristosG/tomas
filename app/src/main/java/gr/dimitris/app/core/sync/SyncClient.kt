@@ -130,6 +130,10 @@ class HttpSyncClient(
             val code = status(connection)
             if (code !in 200..299) throw SyncException(message(code), code)
             connection.inputStream.use { input -> staged.outputStream().use { input.copyTo(it) } }
+            // The file is about to be named after this hash, and everything downstream — the row's
+            // path, the repair pass, «Άκου» — trusts the name for ever after. A truncated download
+            // or a proxy's error page would otherwise become a permanent silent photo.
+            if (MediaRefs.sha256(staged) != sha) throw SyncException(BAD_BYTES)
             if (!staged.renameTo(dest)) throw SyncException(NOT_SAVED)
         } finally {
             staged.delete()
@@ -219,6 +223,7 @@ class HttpSyncClient(
         const val OFFLINE = "Δεν βρήκα τον διακομιστή. Έλεγξε τη σύνδεση και τη διεύθυνση."
         const val NOT_A_SERVER = "Ο διακομιστής απάντησε κάτι που δεν κατάλαβα."
         const val NOT_SAVED = "Δεν μπόρεσα να αποθηκεύσω το αρχείο."
+        const val BAD_BYTES = "Το αρχείο ήρθε χαλασμένο. Θα ξαναδοκιμάσω."
         const val BAD_TOKEN = "Το κλειδί δεν έγινε δεκτό. Έλεγξε το κλειδί στις ρυθμίσεις."
         const val NOT_FOUND = "Ο διακομιστής δεν έχει αυτή τη διεύθυνση. Έλεγξε τη διεύθυνση."
         const val TOO_BIG = "Το πακέτο ήταν πολύ μεγάλο για τον διακομιστή."

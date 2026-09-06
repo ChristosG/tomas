@@ -1,5 +1,6 @@
 package gr.dimitris.app.core.sync
 
+import gr.dimitris.app.core.settings.DeviceRole
 import gr.dimitris.app.core.settings.Settings
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -86,8 +87,10 @@ class SyncEngine(
      * address, and Dimitris' phone until his father does it for him.
      */
     suspend fun syncAtStart() {
-        if (!configured()) return
-        syncNow()
+        // runCatching, because this runs on the graph's scope during `Application.onCreate` and a
+        // throw there — a preferences file the DataStore cannot read — reaches the crash handler
+        // and restarts the app. Everything inside syncNow is already guarded; this was not.
+        if (runCatching { configured() }.getOrDefault(false)) syncNow()
     }
 
     suspend fun syncNow(): Result<SyncReport> {
@@ -141,7 +144,14 @@ class SyncEngine(
         var blocked = Long.MAX_VALUE
         val pending = mutableListOf<Pending>()
 
+        // A caregiver trying an exercise on their own phone is not Dimitris practising. Their
+        // attempts, sittings and Leitner boxes stay here: sent, they would land in his four-week
+        // counts, in «Μαθημένες λέξεις», in the summary the advisor is given — and the boxes would
+        // move words out of the rotation he is handed next. They still *receive* his.
+        val mine = if (settings.deviceRole.first() == DeviceRole.CAREGIVER) PRACTICE_TABLES else emptySet()
+
         for (spec in Tables.all) {
+            if (spec.name in mine) continue
             val rows = try {
                 store.changedSince(spec.name, from)
             } catch (ce: CancellationException) {
@@ -320,18 +330,69 @@ class SyncEngine(
                 MediaRefs.incoming(table, row, files) { sha, _ -> fetched[sha] }
             }
             if (keep.isEmpty()) continue
+            val written = write(table, keep, tally)
+            if (written.applied > 0) changed = true
+            if (!written.ok) ok = false
+        }
+        return Landed(changed, ok)
+    }
+
+    private class Written(val applied: Int, val ok: Boolean)
+
+    /**
+     * One table's share of a page, written.
+     *
+     * A batch that will not go is retried **row by row**, the same way a batch the server refuses is
+     * halved on the way up. One row the database will not take must not hold the page — and the
+     * page holds the cursor, so "will not take" would otherwise mean "this phone never pulls
+     * anything again", with one Greek line on every sync and no way out of it on the phone.
+     *
+     * A row that could not be read at all comes back from [SyncStore.apply] rather than as a throw:
+     * it is permanently unreadable by this version, so it is named and passed over and the cursor
+     * goes on. A row that fails on its own is named the same way — unless *nothing* in the table
+     * could be written, which is a database that is not working rather than a bad row, and then the
+     * cursor waits where it is.
+     */
+    private suspend fun write(table: String, keep: List<Map<String, Any?>>, tally: Tally): Written {
+        try {
+            val unreadable = store.apply(table, keep)
+            unreadable.forEach { skipped(table, it, tally) }
+            val applied = keep.size - unreadable.size
+            tally.pulled += applied
+            return Written(applied, true)
+        } catch (ce: CancellationException) {
+            throw ce
+        } catch (e: Throwable) {
+            if (keep.size == 1) {
+                tally.fail(WRITE_FAILED, "sync write $table", e)
+                return Written(0, false)
+            }
+            tally.fail(WRITE_FAILED, "sync write $table", e)
+        }
+
+        var applied = 0
+        val refused = mutableListOf<Map<String, Any?>>()
+        for (row in keep) {
             try {
-                store.apply(table, keep)
-                tally.pulled += keep.size
-                changed = true
+                val unreadable = store.apply(table, listOf(row))
+                unreadable.forEach { skipped(table, it, tally) }
+                applied += 1 - unreadable.size
             } catch (ce: CancellationException) {
                 throw ce
             } catch (e: Throwable) {
-                tally.fail(WRITE_FAILED, "sync write $table", e)
-                ok = false
+                refused += row
             }
         }
-        return Landed(changed, ok)
+        tally.pulled += applied
+        // Nothing at all went in: the database, not the rows. Leave the page in front of the cursor.
+        if (applied == 0) return Written(0, false)
+        for (row in refused) skipped(table, Tables.of(table)?.idOf(row) ?: "?", tally)
+        return Written(applied, true)
+    }
+
+    private fun skipped(table: String, id: String, tally: Tally) {
+        val line = rowSkipped("$table/$id")
+        tally.fail(line, "sync write $table", SyncException(line))
     }
 
     // ---------------------------------------------------------------- repair
@@ -374,6 +435,7 @@ class SyncEngine(
             if (fixed.isEmpty()) continue
             try {
                 // Not counted as pulled: nothing arrived, a row this phone already had was mended.
+                // A row it cannot read is one it just read, so the returned list is always empty.
                 store.apply(spec.name, fixed)
                 changed = true
             } catch (ce: CancellationException) {
@@ -440,6 +502,14 @@ class SyncEngine(
         /** The server clamps a pull to 500; asking for exactly that is one round trip per page. */
         const val PAGE = 500
 
+        /**
+         * What Dimitris' practice writes, and what a caregiver phone therefore never pushes. Note
+         * that the watermark is one number: rows skipped here fall permanently below it, so
+         * switching a phone's role later does not backfill the practice it did as a caregiver.
+         * That is the intent — it was never his.
+         */
+        val PRACTICE_TABLES = setOf(Tables.ATTEMPTS, Tables.SESSIONS, Tables.SCHEDULES)
+
         private const val BAD_REQUEST = 400
         private const val TOO_LARGE = 413
 
@@ -453,6 +523,9 @@ class SyncEngine(
 
         /** [name] is `table/id` — enough to find the row, never a word of what is in it. */
         fun rowRefused(name: String) = "Ο διακομιστής δεν δέχτηκε μία εγγραφή ($name). Την προσπέρασα."
+
+        /** The other direction: a row that arrived and that this phone could not store. */
+        fun rowSkipped(name: String) = "Δεν μπόρεσα να αποθηκεύσω μία εγγραφή ($name). Την προσπέρασα."
 
         /** The one line a caregiver reads. Greek counts one and many differently. */
         fun line(report: SyncReport, at: Long): String {

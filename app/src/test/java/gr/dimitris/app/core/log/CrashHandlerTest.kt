@@ -15,7 +15,7 @@ open class FakeErrorLogDao : ErrorLogDao {
     override suspend fun insert(log: ErrorLog) { rows += log }
     override fun observeRecent(limit: Int): Flow<List<ErrorLog>> = flowOf(rows.take(limit))
     override suspend fun all(): List<ErrorLog> = rows
-    override suspend fun clearAll(now: Long) { rows.clear() }
+    override suspend fun clearAll() { rows.clear() }
 
     override suspend fun changedSince(since: Long): List<ErrorLog> =
         rows.filter { it.updatedAt > since }.sortedBy { it.updatedAt }

@@ -21,7 +21,6 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import gr.dimitris.app.LocalAppGraph
-import gr.dimitris.app.core.data.now
 import gr.dimitris.app.ui.components.DimitrisScreen
 import gr.dimitris.app.ui.components.QuietButton
 import kotlinx.coroutines.launch
@@ -44,7 +43,7 @@ fun ErrorListScreen(onBack: () -> Unit) {
         title = "Σφάλματα",
         onBack = onBack,
         bottom = {
-            QuietButton("Καθαρισμός", onClick = { scope.launch { graph.db.errorLogs().clearAll(now()) } }, icon = Icons.Rounded.DeleteSweep)
+            QuietButton("Καθαρισμός", onClick = { scope.launch { graph.db.errorLogs().clearAll() } }, icon = Icons.Rounded.DeleteSweep)
         },
     ) {
         if (logs.isEmpty()) Text("Κανένα σφάλμα. Ωραία.", style = MaterialTheme.typography.bodyLarge)

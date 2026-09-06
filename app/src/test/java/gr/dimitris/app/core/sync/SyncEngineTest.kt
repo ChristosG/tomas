@@ -13,9 +13,11 @@ import gr.dimitris.app.core.data.ModuleId
 import gr.dimitris.app.core.data.Outcome
 import gr.dimitris.app.core.data.Recording
 import gr.dimitris.app.core.data.Schedule
+import gr.dimitris.app.core.data.Session
 import gr.dimitris.app.core.data.Who
 import gr.dimitris.app.core.log.FakeErrorLogDao
 import gr.dimitris.app.core.settings.Settings
+import gr.dimitris.app.core.settings.DeviceRole
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -121,6 +123,60 @@ class SyncEngineTest {
         assertEquals("i1:SINGSAY", client.rowsOf(Tables.SCHEDULES).single()["id"])
         assertEquals("a1", client.rowsOf(Tables.ATTEMPTS).single()["id"])
         assertEquals("ψωμί", client.rowsOf(Tables.ITEMS).single()["text"])
+    }
+
+    /**
+     * A caregiver trying «Λέξεις» on their own phone is not Dimitris practising. Their attempts,
+     * sittings and Leitner boxes must not become his four-week counts — and the boxes especially,
+     * because those decide which words he is handed next.
+     */
+    @Test fun `a caregiver phone keeps its own practice to itself`() = runBlocking {
+        phone.settings.setDeviceRole(DeviceRole.CAREGIVER)
+        phone.items.upsert(item("i1", "ψωμί", 10))
+        phone.attempts.insert(
+            Attempt(id = "a1", itemId = "i1", module = ModuleId.WORDCOACH, startedAt = 1, durationMs = 5, outcome = Outcome.CORRECT, updatedAt = 11)
+        )
+        phone.sessions.upsert(Session(id = "s1", startedAt = 1, plannedModules = "WORDCOACH", plannedItemCount = 3, updatedAt = 12))
+        phone.schedules.upsert(Schedule(itemId = "i1", module = ModuleId.WORDCOACH, nextDueAt = 5, updatedAt = 13))
+
+        val report = phone.sync()
+
+        assertEquals(1, report.pushed)
+        assertEquals("ψωμί", client.rowsOf(Tables.ITEMS).single()["text"])
+        assertTrue(client.rowsOf(Tables.ATTEMPTS).isEmpty())
+        assertTrue(client.rowsOf(Tables.SESSIONS).isEmpty())
+        assertTrue(client.rowsOf(Tables.SCHEDULES).isEmpty())
+        // Unchanged wording: nothing about this belongs on a caregiver's screen.
+        assertTrue(report.errors.toString(), report.ok)
+    }
+
+    /** …and it still receives his. */
+    @Test fun `a caregiver phone still takes in Dimitris' practice`() = runBlocking {
+        phone.settings.setDeviceRole(DeviceRole.CAREGIVER)
+        val his = Attempt(id = "a1", itemId = "i1", module = ModuleId.WORDCOACH, startedAt = 1, durationMs = 5, outcome = Outcome.CORRECT, updatedAt = 11)
+        client.seed(Tables.ATTEMPTS, Rows.of(his))
+        client.seed(Tables.SCHEDULES, Tables.of(Tables.SCHEDULES)!!.withId(
+            Rows.of(Schedule(itemId = "i1", module = ModuleId.WORDCOACH, nextDueAt = 5, updatedAt = 13))
+        ))
+
+        val report = phone.sync()
+
+        assertEquals(2, report.pulled)
+        assertEquals(Outcome.CORRECT, phone.attempts.rows.value.single().outcome)
+        assertEquals(5L, phone.schedules.get("i1", ModuleId.WORDCOACH)?.nextDueAt)
+    }
+
+    @Test fun `his own phone pushes everything, as it always did`() = runBlocking {
+        phone.settings.setDeviceRole(DeviceRole.DIMITRIS)
+        phone.attempts.insert(
+            Attempt(id = "a1", itemId = "i1", module = ModuleId.WORDCOACH, startedAt = 1, durationMs = 5, outcome = Outcome.CORRECT, updatedAt = 11)
+        )
+        phone.schedules.upsert(Schedule(itemId = "i1", module = ModuleId.WORDCOACH, nextDueAt = 5, updatedAt = 13))
+
+        phone.sync()
+
+        assertEquals("a1", client.rowsOf(Tables.ATTEMPTS).single()["id"])
+        assertEquals("i1:WORDCOACH", client.rowsOf(Tables.SCHEDULES).single()["id"])
     }
 
     /** A soft delete is an ordinary row change, or a word removed here would live for ever there. */
@@ -339,9 +395,9 @@ class SyncEngineTest {
         var full = true
         val other = Phone(wrap = { inner ->
             object : SyncStore by inner {
-                override suspend fun apply(table: String, rows: List<Map<String, Any?>>) {
+                override suspend fun apply(table: String, rows: List<Map<String, Any?>>): List<String> {
                     if (full) throw IllegalStateException("database or disk is full")
-                    inner.apply(table, rows)
+                    return inner.apply(table, rows)
                 }
             }
         }).apply { configure() }
@@ -358,6 +414,52 @@ class SyncEngineTest {
         assertEquals(1, again.pulled)
         assertEquals("ψωμί", other.items.get("i1")?.text)
         assertEquals(1L, other.settings.syncCursor.first())
+    }
+
+    /**
+     * One row the database will not take must not hold the page — and the page holds the cursor, so
+     * "will not take" would otherwise mean this phone never pulls anything again.
+     */
+    @Test fun `one row that will not write is skipped by name and the page still lands`() = runBlocking {
+        for (n in 1..3) client.seed(Tables.ITEMS, Rows.of(item("i$n", "λέξη $n", n.toLong())))
+        val other = Phone(wrap = { inner ->
+            object : SyncStore by inner {
+                override suspend fun apply(table: String, rows: List<Map<String, Any?>>): List<String> {
+                    if (rows.any { it["id"] == "i2" }) throw IllegalStateException("constraint failed")
+                    return inner.apply(table, rows)
+                }
+            }
+        }).apply { configure() }
+
+        val report = other.sync()
+
+        assertEquals(2, report.pulled)
+        assertEquals("λέξη 1", other.items.get("i1")?.text)
+        assertEquals("λέξη 3", other.items.get("i3")?.text)
+        assertNull(other.items.get("i2"))
+        assertTrue(report.errors.toString(), report.errors.contains(SyncEngine.rowSkipped("items/i2")))
+        // The cursor moved past the page, so the two good words are not asked for again.
+        assertEquals(3L, other.settings.syncCursor.first())
+    }
+
+    /** A row this version cannot read at all is not a database failure and must not hold the page. */
+    @Test fun `a row this app cannot map is skipped and the cursor moves on`() = runBlocking {
+        client.seed(Tables.ITEMS, Rows.of(item("i1", "ψωμί", 10)))
+        // A row hand-pushed with curl from the README's example: a word where a number belongs.
+        client.seed(Tables.ITEMS, Rows.of(item("i2", "νερό", 11)) + ("createdAt" to "χθες"))
+
+        val report = phone.sync()
+
+        assertEquals(1, report.pulled)
+        assertEquals("ψωμί", phone.items.get("i1")?.text)
+        assertNull(phone.items.get("i2"))
+        assertTrue(report.errors.toString(), report.errors.contains(SyncEngine.rowSkipped("items/i2")))
+        assertEquals(2L, phone.settings.syncCursor.first())
+
+        // And it stays moved on: the next sync is quiet rather than stuck on the same row.
+        val again = phone.sync()
+        assertEquals(0, again.pulled)
+        assertTrue(again.errors.toString(), again.ok)
     }
 
     @Test fun `a cursor the server refuses goes back to zero and pulls again`() = runBlocking {
