@@ -59,3 +59,54 @@
 ### Task 3: Phase 7 verification
 
 - [ ] Full suites green; on the phone trace with a finger, pass a capital, fail one on purpose and see "Ξανά", reach level 5 by setting `traceLevel` via a temporary caregiver control if needed (the phase 9 dashboard adds level controls); Σφάλματα empty. Append notes; commit `docs(phase7): verification notes`.
+
+---
+
+## Verification notes
+
+Phase 7 ran as tasks 1–2 (`27e948c`, `c1aa3f8`), a review, and a fix wave
+(`c14f669`, `186eac9`). Emulator `Medium_Phone_API_36`, 1080×2400 @ 420 dpi.
+
+**Suites.** 259 unit tests green (`./gradlew -q testDebugUnitTest`); 64 instrumented tests green
+after `pm clear` (`connectedDebugAndroidTest`), of which 7 are `GlyphsTest` and 6 `TraceFlowTest`.
+`error_logs` empty after every run.
+
+**What the review found, and what it cost.** The first build drew the pass line against the outline
+of a filled bold glyph. A line down the middle of a stroke — what a person draws — is half a stem
+away from that outline everywhere, so writing the letter correctly scored ~25 % over the threshold,
+and at level 3 the whole of «Δημήτρης» was judged to 0.85 mm of mean error. Both device traces that
+passed had been replayed from the template's own points: they measured the scorer against itself.
+
+The fix is in three parts, and the third is the one worth remembering:
+
+1. `Glyphs` samples an ordinary-weight face and returns the *ink* as well as the outline — a
+   `Region` filled from the glyph path, so the hole in an «Ο» is not the letter. A user point on the
+   ink costs nothing; the outline is left measuring coverage.
+2. Thresholds are pixels worked out by the screen from the letter's height, with a floor of 10 dp of
+   mean error and 14 dp of reach. A fraction alone cannot work: a tenth of the height is half a stem
+   on a capital and a hair's breadth on a word of eight letters, and his hand does not shrink.
+3. Verification traces the *centre line*, derived from the mask, delivered as `adb` swipes. A test
+   that replays the answer proves nothing.
+
+**Measured, level by level** (hand-like centre-line traces, `adb shell input swipe`):
+
+| Level | Target | Glyph height | Pass line | Mean | Coverage | Result |
+|---|---|---|---|---|---|---|
+| 1 | «Τ» | 1015 px | 101.5 px | 0.0 | 1.00 | CORRECT |
+| 2 | «χ» | ~1015 px | ~101 px | 0.0 | 1.00 | CORRECT |
+| 3 | «Δημήτρης» | 182 px | 26.2 px (the dp floor) | 0.0 | 0.97 | CORRECT |
+| 3 | «Δημήτρης» with a ±40 px wobble | 182 px | 26.2 px | 7.2 | 0.98 | CORRECT |
+| 4 | «μάτι» | ~430 px | ~43 px | 0.0 | 1.00 | CORRECT, row on the item |
+| 5 | «εγώ» after «Το είδα» | 427 px | 59.8 px | 0.0 | 1.00 | CORRECT |
+
+A scribble in the middle of the letter and a beautifully drawn *wrong* letter both answer «Ξανά»,
+leave his strokes on the paper with the template over them, and write no attempt row.
+
+**Also checked by hand:** the hand hint follows `traceHand` («Με το δεξί χέρι» after switching the
+chip); back after a pass lands the row; a session of «Γράψε» alone reported the honest count
+(«Έκανες 1 άσκηση σήμερα: Γράψε.» after five skips and one traced word, session row
+`planned 6, completed 1`); the level dropped to 4 on that sitting and said so.
+
+**Left for Chris.** `TraceScorer` is still marked *rewrite me*: it is order- and direction-blind — the
+letter drawn bottom-up or mirrored-where-symmetric scores the same — and the thresholds above are a
+programmer's guess, not a therapist's.
