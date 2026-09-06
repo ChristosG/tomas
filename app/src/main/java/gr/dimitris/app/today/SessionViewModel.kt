@@ -7,6 +7,7 @@ import gr.dimitris.app.core.data.Item
 import gr.dimitris.app.core.data.Outcome
 import gr.dimitris.app.core.data.Session
 import gr.dimitris.app.core.data.now
+import gr.dimitris.app.core.scheduler.ModuleRotation
 import gr.dimitris.app.modules.Module
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -54,11 +55,20 @@ class SessionViewModel(private val graph: AppGraph) : ViewModel() {
                 say(if (allOff) ALL_MODULES_OFF else NOTHING_TODAY)
                 return@launch
             }
-            // One sitting, shared out evenly. What is cut was never done, so it is due again
-            // tomorrow — except in a module that runs as one unit, which keeps its whole list so
-            // the planned count below is the number of exercises it will really run.
-            val allowance = SessionBudget.allowance(wanted.size)
-            plans = wanted.map { (m, items) -> m to SessionBudget.share(items, allowance, m.atomic) }
+            // Four modules at most, taken in turn: everything he has enabled turning up every day
+            // is three exercises apiece and a day of nothing much. See ModuleRotation — a module
+            // left out was never marked done, so it is still due tomorrow, when it will be the one
+            // that has waited longest.
+            val lastUsed = runCatching { ModuleRotation.lastUsedAt(graph.db.attempts()) }
+                .getOrElse { graph.errors.record("session rotation", it); emptyMap() }
+            val chosen = ModuleRotation.choose(wanted.map { it.first.id }, lastUsed).toSet()
+            val today = wanted.filter { it.first.id in chosen }
+            // One sitting, shared out evenly between the modules that are really in it. What is cut
+            // was never done, so it is due again tomorrow — except in a module that runs as one
+            // unit, which keeps its whole list so the planned count below is the number of
+            // exercises it will really run.
+            val allowance = SessionBudget.allowance(today.size)
+            plans = today.map { (m, items) -> m to SessionBudget.share(items, allowance, m.atomic) }
             val s = Session(startedAt = now(), plannedModules = plans.joinToString(",") { it.first.id.name }, plannedItemCount = plans.sumOf { it.second.size })
             runCatching { graph.db.sessions().upsert(s) }.onFailure { graph.errors.record("session start", it) }
             session = s

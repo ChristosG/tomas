@@ -8,6 +8,13 @@ import kotlinx.coroutines.flow.Flow
 
 data class ItemCount(val itemId: String, val n: Int)
 
+/**
+ * When a module was last practised: the newest attempt row it wrote. It is what the daily session
+ * rotates on (see [gr.dimitris.app.core.scheduler.ModuleRotation]), so it is read from the rows
+ * themselves rather than from a counter that could disagree with them.
+ */
+data class ModuleUse(val module: ModuleId, val lastAt: Long)
+
 @Dao
 interface ItemDao {
     @Upsert suspend fun upsert(item: Item)
@@ -51,6 +58,13 @@ interface AttemptDao {
     /** A Flow, so favourites re-rank themselves the moment an attempt is inserted. */
     @Query("SELECT itemId, COUNT(*) AS n FROM attempts WHERE deleted = 0 AND module = :module GROUP BY itemId ORDER BY n DESC LIMIT :limit")
     fun mostUsed(module: ModuleId, limit: Int): Flow<List<ItemCount>>
+
+    /**
+     * The last time each module was practised. A module with no rows at all is simply absent, which
+     * is what the rotation reads as "never done" — and never done is what goes first.
+     */
+    @Query("SELECT module, MAX(startedAt) AS lastAt FROM attempts WHERE deleted = 0 GROUP BY module")
+    suspend fun lastUsePerModule(): List<ModuleUse>
 }
 
 @Dao
