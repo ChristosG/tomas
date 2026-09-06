@@ -23,9 +23,13 @@ fun startOfDay(epochMs: Long, zone: ZoneId = ZoneId.systemDefault()): Long =
  *
  * When Claude has been asked for advice and named a [focus], the words it named are guaranteed a
  * couple of places in the sitting ([FOCUS_SLOTS]) even when nothing else would have brought them
- * round today. That is the whole of what a focus does to his morning: it decides what is *in* the
- * sitting, never what order he meets it in — the sandwich still does that, so an advice cannot hand
- * him the hardest word in the list first thing.
+ * round today — including a word that is due but so far down a saturated due list that the cap
+ * would have cut it. That is the whole of what a focus does to his morning: it decides what is *in*
+ * the sitting, never what order he meets it in — the sandwich still does that, so an advice cannot
+ * hand him the hardest word in the list first thing.
+ *
+ * Both reservations together stop at half of [maxItems], so what he is actually due always keeps
+ * at least half the sitting.
  */
 class SessionBuilder(
     private val items: ItemDao,
@@ -50,10 +54,12 @@ class SessionBuilder(
             .sortedWith(NEWEST_OF_HERS_FIRST)
             .take((newPerDay - introducedToday).coerceAtLeast(0))
 
-        // A focused word that is neither due nor new is still worth today: "work on «καφές»" that
-        // waits until καφές comes round again in nine days is not advice anybody acted on.
-        val settled = (due + fresh).mapTo(mutableSetOf()) { it.id }
-        val wanted = focus?.let { f -> pool.filter { it.id !in settled && f.matches(it) } }.orEmpty()
+        // A focused word is worth today whatever else it is. "Work on «καφές»" that waits until
+        // καφές comes round again in nine days is not advice anybody acted on — and neither is one
+        // for a word that *is* due but sits past the cap on a saturated due list, which is the very
+        // state the reservation was written for. So the candidates are the whole pool: due, new and
+        // settled alike, and a word that was already coming simply spends no reservation.
+        val wanted = focus?.let { f -> pool.filter { f.matches(it) } }.orEmpty()
 
         // Due first, but never *all* the way. Two kinds of word have places held for them off the
         // due end, which costs the most-overdue nothing it would not have lost to the cap anyway:
@@ -61,12 +67,27 @@ class SessionBuilder(
         // are *guaranteed* rather than "whatever room is left" — a reservation that a full due list
         // can eat is not a reservation, and this is the one mechanism by which an advice reaches
         // his morning at all.
-        val newSlots = minOf(NEW_SLOTS, fresh.size)
-        val focusSlots = minOf(FOCUS_SLOTS, wanted.size)
+        //
+        // Between them they never take more than half the sitting. «Τραγούδα και πες το» plans
+        // three items, and there two new phrases and a focused one would have left no due place at
+        // all: what he is due is the exercise, and the intake is the thing that gives way, not the
+        // Leitner schedule that has been right for eleven phases. Half, rounded down — with three
+        // items that is one held place and two due.
+        val reservable = maxItems / 2
+        // The front of the due list, which no reservation can reach. A focused word standing there
+        // is already coming today and needs nothing held for it.
+        val safe = due.take((maxItems - reservable).coerceAtLeast(0)).mapTo(mutableSetOf()) { it.id }
+        val focusSlots = minOf(FOCUS_SLOTS, wanted.count { it.id !in safe }, reservable)
+        val newSlots = minOf(NEW_SLOTS, fresh.size, reservable - focusSlots)
         val core = due.take((maxItems - newSlots - focusSlots).coerceAtLeast(0))
+        val inCore = core.mapTo(mutableSetOf()) { it.id }
         val room = (maxItems - core.size - newSlots).coerceAtLeast(0)
 
-        val chosen = (core + wanted.take(room) + fresh).take(maxItems)
+        // The focus into what the due end left, then the new words. `distinctBy` because a focused
+        // word may be one of the new ones, and he is not asked for the same word twice.
+        val chosen = (core + wanted.filter { it.id !in inCore }.take(room) + fresh)
+            .distinctBy { it.id }
+            .take(maxItems)
         // And then the sandwich orders the whole sitting, focus and new words included.
         //
         // They are *not* pushed to the front. Easy–hard–easy is how he is handed a session — start
@@ -116,17 +137,23 @@ class SessionBuilder(
          * the reservation costs the most-overdue nothing it would not have lost to the cap anyway.
          * When there are fewer than [maxItems] due, this changes nothing: the rest of `fresh` still
          * follows them in, exactly as before.
+         *
+         * With [FOCUS_SLOTS] it is bounded by half the sitting — see `plan` — so a module that
+         * plans three items always keeps two of them for what he is due.
          */
         const val NEW_SLOTS = 2
 
         /**
-         * Places kept for the words a live focus named, on the same terms as [NEW_SLOTS] and for
+         * Places *held* for the words a live focus named, on the same terms as [NEW_SLOTS] and for
          * the same reason: an advice that only takes effect on a quiet day is an advice the
          * caregivers would have to carry out by hand, which is the thing phase 11 exists to stop.
          *
-         * Two, not more. A focus of eight words that emptied the due list would be Claude planning
-         * his morning instead of advising on it, and the Leitner schedule is the part of this app
-         * that has been right for eleven phases.
+         * Two held, which is not the same as two admitted. What this number promises is that a full
+         * due list can never squeeze the focus out altogether; on a quiet day, where the due words
+         * and the new intake leave places over, the focus fills them before the rest of the new
+         * words do, and more than two of its words can get in. What it can never do is empty the
+         * due list: the two reservations together stop at half the sitting, and everything past
+         * them is room nobody else wanted.
          */
         const val FOCUS_SLOTS = 2
     }

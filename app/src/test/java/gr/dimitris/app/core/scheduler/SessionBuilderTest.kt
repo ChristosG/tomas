@@ -238,6 +238,61 @@ class SessionBuilderTest {
         assertEquals("plus the two reserved focus places", 5, plan.size)
     }
 
+    /**
+     * A short sitting keeps at least half of itself for what he is due.
+     *
+     * «Τραγούδα και πες το» plans three items. Two held places for new phrases and one for a
+     * focused word took all three, and a module whose whole job is the Leitner schedule planned
+     * nothing that was actually due — the reservation eating the thing it was carved out of. Both
+     * reservations together now stop at half the sitting, rounded down.
+     */
+    @Test fun `a three item sitting still plans what is due`() = runTest {
+        val due = (0 until 3).map { i ->
+            word("due$i", createdAt = i.toLong()).also { w ->
+                schedules.upsert(Schedule(w.id, m, box = 1, nextDueAt = noon - 10 + i, createdAt = noon - 10 * LeitnerPolicy.DAY_MS))
+            }
+        }
+        // Two phrases he has never seen, and one the focus named that is nine days away.
+        word("καινούργια0", createdAt = 100)
+        word("καινούργια1", createdAt = 101)
+        val wanted = word("εστίαση", createdAt = 102)
+        schedules.upsert(Schedule(wanted.id, m, box = 3, nextDueAt = noon + 9 * LeitnerPolicy.DAY_MS, createdAt = noon - 10 * LeitnerPolicy.DAY_MS))
+
+        val plan = SessionBuilder(items, schedules, { noon }, newPerDay = 8, maxItems = 3, focus = focus(listOf("εστίαση")))
+            .plan(m, listOf(ItemKind.WORD))
+
+        assertEquals("a three-item sitting is still three items", 3, plan.size)
+        assertEquals(
+            "the two reservations took the whole sitting and nothing due was planned: ${plan.map { it.text }}",
+            2, plan.count { it.id in due.map { d -> d.id } },
+        )
+    }
+
+    /**
+     * The case the guarantee was written for, and the one it used to miss: a focused word that *is*
+     * due, but so far down a saturated due list that the cap would have cut it. It was excluded
+     * from the candidates for being "already coming" when it was not coming at all.
+     */
+    @Test fun `a focused word buried in a long due list still gets its place`() = runTest {
+        val due = (0 until 20).map { i ->
+            word("due$i", createdAt = i.toLong()).also { w ->
+                schedules.upsert(Schedule(w.id, m, box = 1, nextDueAt = noon - 100 + i, createdAt = noon - 10 * LeitnerPolicy.DAY_MS))
+            }
+        }
+        // The eighteenth of twenty: due, and a dozen words past the cap.
+        val buried = due[17]
+
+        val plain = SessionBuilder(items, schedules, { noon }, newPerDay = 0, maxItems = 12)
+            .plan(m, listOf(ItemKind.WORD))
+        val focused = SessionBuilder(items, schedules, { noon }, newPerDay = 0, maxItems = 12, focus = focus(listOf(buried.text)))
+            .plan(m, listOf(ItemKind.WORD))
+
+        assertFalse("without a focus the cap cuts it: ${plain.map { it.text }}", plain.any { it.id == buried.id })
+        assertTrue("«δούλεψε τα «π»» did nothing at all: ${focused.map { it.text }}", focused.any { it.id == buried.id })
+        assertEquals("the sitting is still full", 12, focused.size)
+        assertEquals("and he is asked for it once", 1, focused.count { it.id == buried.id })
+    }
+
     /** No focus: the sitting is chosen and ordered exactly as it was before phase 11. */
     @Test fun `without a focus nothing about the sitting changes`() = runTest {
         val words = (0 until 5).map { i ->
