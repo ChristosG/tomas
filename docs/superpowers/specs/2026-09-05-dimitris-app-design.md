@@ -264,3 +264,19 @@ Where a design choice really matters, Chris writes the code, with signature, tes
 - Accounts, login, Play Store, analytics, ads.
 - Anything that scores him against time.
 - Medical claims. The app is practice and a communication aid, complementary to his therapists, never a replacement.
+
+## 12. Amendments after the first field test (2026-09-06)
+
+Chris tested the first release on his phone. These amendments follow from his notes and from one principle he set: every choice is made for what helps Dimitris learn, nothing else.
+
+**Errorless learning is the rule for speech.** Hearing the model is never withheld: every screen that has a model (word coach, dialogues, sing-then-say, sentences) shows an always-enabled «Άκου». Listening raises the recorded cue level (never below 3) so the data stay honest, and nothing he sees ever frames an assisted answer as a failure.
+
+**Writing is different.** A wrong letter form must not be rewarded, or the wrong movement gets learned. The trace scorer judges shape, not just proximity: the template is split into segments that must each be touched (coverage), and most of his ink must lie on the letter (precision), with tolerances in absolute finger units rather than fractions of the letter. A caregiver setting «Αυστηρότητα γραψίματος» (Χαλαρό / Κανονικό / Αυστηρό) scales those tolerances. After a miss the letter is shown and he copies it; that remains errorless.
+
+**Speech recognition waits for him.** Aphasia delays initiation, so the recogniser waits several seconds before giving up, shows that it is listening, and has a «Στοπ». Silence in a recording is caught («Δεν σε άκουσα»). When recognition is on, every screen where he records compares what it heard with the target and offers one gentle «Δοκίμασε ξανά» before he may still confirm; a match confirms for him.
+
+**The melody is tunable.** Caregiver settings for tempo (Κανονικό / Αργό) and key (Κανονικό / Χαμηλό, for a low male voice).
+
+**Caregivers can verify what they add.** «Δοκίμασέ το» in the word editor runs that word at once; new caregiver words go first in the next session.
+
+**The Claude advisor gets a memory and a journey.** Instead of a one-page summary it receives: Dimitris' profile, the caregivers' notes (what the therapist said, current goals), the lifetime table of every word practised (attempts, outcomes, mean help, first/last seen, box), the last 28 days in per-word-per-day detail, daily minutes, the previous advices it gave, and the app's own insight lines. It answers in three sections: for the caregivers, for Dimitris (read aloud), and «Εστίαση», a small JSON block naming the words, sounds, modules and level suggestions to boost. Advices and notes are stored (and synced) so the next consultation builds on the last; the app schedules the focus words first for the following week. Still text-only, still only when a caregiver taps the button, and the caregiver sees exactly what is sent.
