@@ -21,6 +21,8 @@ jobs:
   apk:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    env:
+      KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
     steps:
       - uses: actions/checkout@v4
 
@@ -38,9 +40,7 @@ jobs:
           echo "code=${{ github.run_number }}" >> "$GITHUB_OUTPUT"
 
       - name: Restore the signing keystore
-        if: ${{ secrets.KEYSTORE_BASE64 != '' }}
-        env:
-          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+        if: env.KEYSTORE_BASE64 != ''
         run: echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
 
       - name: Build the signed release APK
