@@ -21,6 +21,7 @@ import gr.dimitris.app.core.speech.ItemSpeaker
 import gr.dimitris.app.core.speech.SpeechToText
 import gr.dimitris.app.core.speech.TextToSpeech
 import gr.dimitris.app.modules.Module
+import gr.dimitris.app.modules.arcade.ArcadeModule
 import gr.dimitris.app.modules.numbers.NumbersModule
 import gr.dimitris.app.modules.scripts.ScriptsModule
 import gr.dimitris.app.modules.sentences.SentencesModule
@@ -85,8 +86,13 @@ class AppGraph(context: Context) {
     val speaker: ItemSpeaker
         get() = ItemSpeaker(voice::speak, recordingFor = { items.modelRecording(it) }, play = { voice.play(it) }, rate = { settings.speechRate.first() }, resolve = { files.resolve(it) })
 
-    /** Therapy modules in Today-screen order. Empty in phase 0; each later phase adds one. */
-    val modules: List<Module> = listOf(WordCoachModule, NumbersModule, SingSayModule, ScriptsModule, SentencesModule, TraceModule)
+    /**
+     * Therapy modules in Today-screen order. Empty in phase 0; each later phase adds one. The
+     * arcade is last and, unlike the rest, is off until a caregiver switches it on — see
+     * [gr.dimitris.app.core.settings.Settings.DEFAULT_OFF].
+     */
+    val modules: List<Module> =
+        listOf(WordCoachModule, NumbersModule, SingSayModule, ScriptsModule, SentencesModule, TraceModule, ArcadeModule)
 
     /**
      * Bumped every time [db] is replaced. Screens key their flows on it, because a Flow from the

@@ -29,6 +29,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import gr.dimitris.app.LocalAppGraph
+import gr.dimitris.app.core.data.ModuleId
 import gr.dimitris.app.core.settings.Settings
 import gr.dimitris.app.ui.components.DimitrisScreen
 import gr.dimitris.app.ui.components.QuietButton
@@ -104,6 +105,15 @@ fun SettingsScreen(onBack: () -> Unit) {
                 ) {
                     Text(m.titleGreek, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
                     Switch(checked = moduleOn, onCheckedChange = { on -> scope.launch { graph.settings.setModuleEnabled(m.id, on) } })
+                }
+                // The one module that is off until someone says so. The hand it exercises is the one
+                // the stroke took, and how hard to push it is not an app's decision.
+                if (m.id == ModuleId.ARCADE) {
+                    Text(
+                        "Ενεργοποίησέ το αφού μιλήσεις με τον φυσιοθεραπευτή.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                 }
             }
             Spacer(Modifier.height(Sizes.gapSmall))
