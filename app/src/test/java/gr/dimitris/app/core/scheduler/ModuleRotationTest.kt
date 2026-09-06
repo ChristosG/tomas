@@ -96,6 +96,22 @@ class ModuleRotationTest {
     }
 
     /**
+     * A module he opened and passed straight through is one he has not done. Counting the skip would
+     * send it to the back of the queue for as long as a module he had worked at, and the fastest way
+     * to never see an exercise again would be to skip it.
+     */
+    @Test fun `a module he skipped his way through is not a module he practised`() = runBlocking {
+        val attempts = FakeAttemptDao()
+        attempts.insert(row(ModuleId.NUMBERS, daysAgo(6)))
+        attempts.insert(row(ModuleId.NUMBERS, daysAgo(0), Outcome.SKIPPED))
+        attempts.insert(row(ModuleId.SINGSAY, daysAgo(0), Outcome.SKIPPED))
+        val lastUsed = ModuleRotation.lastUsedAt(attempts)
+        assertEquals("the skip counted as practice", mapOf(ModuleId.NUMBERS to daysAgo(6)), lastUsed)
+        // And a module with nothing but skips is still one he has never done: it goes first.
+        assertTrue(ModuleId.SINGSAY in ModuleRotation.choose(all, lastUsed))
+    }
+
+    /**
      * The cap and the budget together: four modules of three exercises is twelve, which is a sitting
      * a tired man finishes. Fifteen was the ceiling before the cap and six modules made it the floor.
      */
@@ -105,7 +121,7 @@ class ModuleRotationTest {
         assertTrue(allowance * ModuleRotation.MAX_MODULES <= SessionBudget.MAX_SESSION_ITEMS)
     }
 
-    private fun row(module: ModuleId, at: Long) = Attempt(
-        itemId = "x", module = module, startedAt = at, durationMs = 1, outcome = Outcome.CORRECT,
+    private fun row(module: ModuleId, at: Long, outcome: Outcome = Outcome.CORRECT) = Attempt(
+        itemId = "x", module = module, startedAt = at, durationMs = 1, outcome = outcome,
     )
 }

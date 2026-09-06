@@ -60,11 +60,15 @@ interface AttemptDao {
     fun mostUsed(module: ModuleId, limit: Int): Flow<List<ItemCount>>
 
     /**
-     * The last time each module was practised. A module with no rows at all is simply absent, which
-     * is what the rotation reads as "never done" — and never done is what goes first.
+     * The last time each module was really practised. A module with no rows at all is simply absent,
+     * which is what the rotation reads as "never done" — and never done is what goes first.
+     *
+     * [skipped] rows are left out, and the caller passes [Outcome.SKIPPED]: a module he opened and
+     * passed straight through is a module he did not do, and counting it would send it to the back
+     * of the queue for as long as one he had worked at.
      */
-    @Query("SELECT module, MAX(startedAt) AS lastAt FROM attempts WHERE deleted = 0 GROUP BY module")
-    suspend fun lastUsePerModule(): List<ModuleUse>
+    @Query("SELECT module, MAX(startedAt) AS lastAt FROM attempts WHERE deleted = 0 AND outcome != :skipped GROUP BY module")
+    suspend fun lastUsePerModule(skipped: Outcome): List<ModuleUse>
 }
 
 @Dao

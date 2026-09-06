@@ -30,8 +30,8 @@ import gr.dimitris.app.ui.theme.Sizes
 const val MODULE_GRID_TAG = "module-grid"
 
 /**
- * The practice tiles on Today: two columns, and small enough that the modules there are now — six,
- * eight before long — fit on a phone screen under the greeting.
+ * The practice tiles on Today: two columns, and small enough that the modules there are now — seven,
+ * once the arcade is switched on — fit on a phone screen under the greeting.
  *
  * Where they still do not fit (a short screen, a large font scale, the "missing Greek voice" card
  * above them) the grid scrolls, and [TILE_HEIGHT] is chosen so the row that does not fit is cut

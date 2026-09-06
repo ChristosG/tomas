@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import gr.dimitris.app.AppGraph
 import gr.dimitris.app.core.data.Item
+import gr.dimitris.app.core.data.ModuleId
 import gr.dimitris.app.core.data.Outcome
 import gr.dimitris.app.core.data.Session
 import gr.dimitris.app.core.data.now
@@ -15,6 +16,33 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import java.util.concurrent.atomic.AtomicBoolean
+
+/**
+ * Today's sitting out of everything that has something to do: at most four modules, taken in turn,
+ * each contributing its share of one sitting.
+ *
+ * [wanted] is every enabled module with a non-empty plan, in Today order; [lastUsedAt] is when each
+ * was last really practised (see [ModuleRotation]). Everything he has enabled turning up every day
+ * is three exercises apiece and a day of nothing much, so the rotation picks four — and the budget
+ * is then shared between the four that are really in the session, not between all of them. A module
+ * left out was never marked done, so it is still due tomorrow, when it will be the one that has
+ * waited longest.
+ *
+ * Free of the ViewModel so it can be tested for what it is: the join between the rotation and the
+ * budget, which is where a session gets its length.
+ */
+internal fun planToday(
+    wanted: List<Pair<Module, List<Item>>>,
+    lastUsedAt: Map<ModuleId, Long>,
+): List<Pair<Module, List<Item>>> {
+    val chosen = ModuleRotation.choose(wanted.map { it.first.id }, lastUsedAt).toSet()
+    val today = wanted.filter { it.first.id in chosen }
+    // One sitting, shared out evenly between the modules that are really in it — except in a module
+    // that runs as one unit, which keeps its whole list so the session's planned count is the number
+    // of exercises it will really run.
+    val allowance = SessionBudget.allowance(today.size)
+    return today.map { (m, items) -> m to SessionBudget.share(items, allowance, m.atomic) }
+}
 
 sealed class SessionStep {
     object Loading : SessionStep()
@@ -55,20 +83,9 @@ class SessionViewModel(private val graph: AppGraph) : ViewModel() {
                 say(if (allOff) ALL_MODULES_OFF else NOTHING_TODAY)
                 return@launch
             }
-            // Four modules at most, taken in turn: everything he has enabled turning up every day
-            // is three exercises apiece and a day of nothing much. See ModuleRotation — a module
-            // left out was never marked done, so it is still due tomorrow, when it will be the one
-            // that has waited longest.
             val lastUsed = runCatching { ModuleRotation.lastUsedAt(graph.db.attempts()) }
                 .getOrElse { graph.errors.record("session rotation", it); emptyMap() }
-            val chosen = ModuleRotation.choose(wanted.map { it.first.id }, lastUsed).toSet()
-            val today = wanted.filter { it.first.id in chosen }
-            // One sitting, shared out evenly between the modules that are really in it. What is cut
-            // was never done, so it is due again tomorrow — except in a module that runs as one
-            // unit, which keeps its whole list so the planned count below is the number of
-            // exercises it will really run.
-            val allowance = SessionBudget.allowance(today.size)
-            plans = today.map { (m, items) -> m to SessionBudget.share(items, allowance, m.atomic) }
+            plans = planToday(wanted, lastUsed)
             val s = Session(startedAt = now(), plannedModules = plans.joinToString(",") { it.first.id.name }, plannedItemCount = plans.sumOf { it.second.size })
             runCatching { graph.db.sessions().upsert(s) }.onFailure { graph.errors.record("session start", it) }
             session = s

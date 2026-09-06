@@ -2,6 +2,7 @@ package gr.dimitris.app.core.scheduler
 
 import gr.dimitris.app.core.data.AttemptDao
 import gr.dimitris.app.core.data.ModuleId
+import gr.dimitris.app.core.data.Outcome
 
 /**
  * Which modules one day's session is made of.
@@ -19,6 +20,10 @@ import gr.dimitris.app.core.data.ModuleId
  *
  * What is left out was never marked done, so it is still due tomorrow, and tomorrow it is the module
  * that has waited longest.
+ *
+ * The cap is per session rather than per calendar day, and the Today screen offers one session: a
+ * second «Ξεκίνα» the same afternoon is a man who wants to do more, and he gets the modules he has
+ * not done yet rather than a locked door.
  */
 object ModuleRotation {
     /** One sitting: the word coach and three others. */
@@ -59,7 +64,11 @@ object ModuleRotation {
         return ordered.filter { it in kept }
     }
 
-    /** When each module was last practised, from the attempt rows it wrote. */
+    /**
+     * When each module was last practised, from the attempt rows it wrote. Rows he skipped his way
+     * through are not practice and do not count: a module he opened and passed on is one he still
+     * has not done, and it stays near the front of the queue until he does it.
+     */
     suspend fun lastUsedAt(attempts: AttemptDao): Map<ModuleId, Long> =
-        attempts.lastUsePerModule().associate { it.module to it.lastAt }
+        attempts.lastUsePerModule(Outcome.SKIPPED).associate { it.module to it.lastAt }
 }
