@@ -74,6 +74,43 @@ class WordCoachFlowTest {
         assertTrue("the row has to carry the listen: ${written.detail}", written.detail.contains("\"listened\":1"))
     }
 
+    /**
+     * The microphone never opens under the model, and the next word never opens greyed.
+     *
+     * This is what «Πες το» and «Άκου» hang off: `modelPlaying` is raised *before* the utterance is
+     * launched, so «Πες το» (`isRecording || (!modelPlaying && !listening)`) and «Άκου» itself are
+     * both off for exactly as long as the model sounds. He hears the first syllable and reaches
+     * straight for the microphone — the behaviour this screen now invites — and the take would
+     * otherwise be the phone's own voice, played back to him by «Σύγκριση» as his.
+     *
+     * Driven through the ViewModel because the assertions have to land in the same call stack as
+     * the taps: on a device with a working Greek voice the flag lives for as long as the word takes
+     * to say, and on this emulator it is gone by the next frame — a click-and-look test would be
+     * measuring the speech engine, not the rule.
+     */
+    @Test fun theMicrophoneNeverOpensUnderTheModelAndTheNextWordIsLive() {
+        lateinit var vm: WordCoachViewModel
+        compose.runOnUiThread { vm = WordCoachViewModel(graph, listOf(word, word.copy(id = "second", text = "ψωμί")), null) }
+        assertEquals("nothing is sounding yet", false, vm.state.value.modelPlaying)
+
+        // Two taps in one breath: the second lands while the model still holds the screen, and is
+        // not a second listen — the same guard that keeps the microphone shut.
+        compose.runOnUiThread { vm.listenModel(); vm.listenModel() }
+        assertEquals("the model has the screen, so «Πες το» and «Άκου» are off", true, vm.state.value.modelPlaying)
+
+        compose.runOnUiThread { vm.confirm() }
+        compose.waitUntil(TIMEOUT_MS) { attempts().any { it.itemId == word.id } }
+        assertTrue(
+            "one listen, not two: ${attempts().last { it.itemId == word.id }.detail}",
+            attempts().last { it.itemId == word.id }.detail.contains("\"listened\":1"),
+        )
+
+        // On to the next word: whatever was still being said goes with the word it belonged to.
+        compose.runOnUiThread { vm.next() }
+        assertEquals("the next word's «Άκου» is live from its first frame", false, vm.state.value.modelPlaying)
+        compose.runOnUiThread { vm.leave {} }
+    }
+
     /** The module's screen on its own: a session around it would plan words that are not ours. */
     private fun show(items: List<Item>) {
         compose.runOnUiThread {

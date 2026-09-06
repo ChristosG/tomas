@@ -114,7 +114,13 @@ class WordCoachViewModel(private val graph: AppGraph, private val items: List<It
      */
     fun listenModel() {
         val s = _state.value
-        if (s.isRecording || s.modelPlaying) return
+        // [s.listening] is the recogniser holding the microphone open. Speaking into it would have
+        // the phone hear its own model, match it, and congratulate him for a word he never said —
+        // the same dishonesty this button exists to remove, pointing the other way.
+        if (s.isRecording || s.listening || s.modelPlaying) return
+        // Reachable after «Το είπα!» too, and through the picture at any time: the model is never
+        // taken away. Those listens land after [finish] has read the ladder and the count, so they
+        // change nothing — the listen that decides the row is always one he made before answering.
         listens++
         ladder.listened()
         speaking { report(graph.speaker.speak(s.item)) }
@@ -180,10 +186,27 @@ class WordCoachViewModel(private val graph: AppGraph, private val items: List<It
                 }
                 .onFailure { e -> graph.errors.record("wordcoach record stop", e); _state.update { it.copy(isRecording = false, error = "Πολύ σύντομη ηχογράφηση") } }
         } else {
+            // Silence first, and not only through Voice.startRecording's own quiet(): the utterance
+            // is a coroutine of ours, and one still running would leave «Άκου» greyed over an open
+            // microphone. He now presses «Άκου» and reaches straight for the mic — that is the
+            // behaviour this screen invites — so his take must never contain the phone's own model.
+            silence()
             runCatching { graph.voice.startRecording() }
                 .onSuccess { _state.update { it.copy(isRecording = true, error = null) } }
                 .onFailure { e -> graph.errors.record("wordcoach record start", e); _state.update { it.copy(error = "Δεν ξεκίνησε η ηχογράφηση") } }
         }
+    }
+
+    /**
+     * Stops whatever this screen was saying and takes «Άκου» out of its playing state. The token is
+     * bumped so the cancelled job's `finally` cannot re-open a button for a model that has already
+     * been replaced by something else.
+     */
+    private fun silence() {
+        speakJob?.cancel()
+        speakToken++
+        graph.voice.quiet()
+        _state.update { it.copy(modelPlaying = false) }
     }
 
     /** The microphone was refused: say so instead of a button that does nothing. */
@@ -203,7 +226,10 @@ class WordCoachViewModel(private val graph: AppGraph, private val items: List<It
      * phone's problem, not his, and it is said plainly instead of leaving "Ακούω..." hanging.
      */
     fun listen() {
-        if (!_state.value.sttOn || _state.value.listening) return
+        if (!_state.value.sttOn || _state.value.listening || _state.value.isRecording) return
+        // The microphone is about to open: whatever the speaker was saying stops here, or the
+        // recogniser hears the model and answers «Μπράβο!» to the phone's own voice.
+        silence()
         _state.update { it.copy(listening = true, heard = null, heardMatched = false, error = null) }
         viewModelScope.launch {
             graph.stt.listen().fold(
@@ -271,8 +297,10 @@ class WordCoachViewModel(private val graph: AppGraph, private val items: List<It
         // there for a frame after the first — would otherwise skip the word that just arrived.
         if (!finishing) return
         finishing = false
-        // A take still running belongs to the word being left behind.
+        // A take still running belongs to the word being left behind, and so does whatever this
+        // screen was saying: a model still speaking over the next picture is the previous word's.
         if (graph.voice.isRecording) graph.voice.cancelRecording()
+        silence()
         val i = _state.value.index + 1
         if (i >= items.size) {
             // The session counts attempt rows as soon as it is told the module is done, so the last
@@ -295,8 +323,7 @@ class WordCoachViewModel(private val graph: AppGraph, private val items: List<It
      */
     fun leave(then: () -> Unit) {
         if (graph.voice.isRecording) graph.voice.cancelRecording()
-        speakJob?.cancel()
-        graph.voice.quiet()
+        silence()
         val write = lastWrite
         viewModelScope.launch { write?.join(); then() }
     }
@@ -308,10 +335,9 @@ class WordCoachViewModel(private val graph: AppGraph, private val items: List<It
      * he finds on the way back is a «Στοπ» for a microphone that is no longer running.
      */
     fun screenGone() {
-        speakJob?.cancel()
-        graph.voice.quiet()
+        silence()
         if (graph.voice.isRecording) graph.voice.cancelRecording()
-        _state.update { it.copy(isRecording = false, listening = false, modelPlaying = false) }
+        _state.update { it.copy(isRecording = false, listening = false) }
     }
 
     override fun onCleared() {

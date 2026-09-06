@@ -161,18 +161,22 @@ class SingSayViewModel(private val graph: AppGraph, private val items: List<Item
      */
     fun listenModel() {
         val s = _state.value
-        if (s.isRecording) return
+        if (s.isRecording || s.playing) return
         listens++
+        // Where his pass had got to. The melody lights the syllables as it plays, but this is a
+        // listen in the middle of a stage, not a stage boundary: a man three syllables into a
+        // phrase who asks to hear it must not be handed back to the start for asking.
+        val keptLit = s.lit
         val token = claimPlayback()
         playJob = viewModelScope.launch {
-            _state.update { it.copy(playing = true, lit = -1) }
+            _state.update { it.copy(playing = true) }
             try {
                 sayModel()
                 // Not always at full volume: «Άκου» is there all through the fading stage, and a
                 // model at gain 1 would hand back the backing that stage is taking away.
                 playMelody(gain = maxOf(SingStage.gainFor(s.stage, s.repetition), MODEL_MIN_GAIN))
             } finally {
-                releasePlayback(token)
+                releasePlayback(token, lit = keptLit)
             }
         }
     }
@@ -189,9 +193,14 @@ class SingSayViewModel(private val graph: AppGraph, private val items: List<Item
         return ++playToken
     }
 
-    /** Only the newest playback owns the flags; an older job's `finally` can land after it started. */
-    private fun releasePlayback(token: Int) {
-        if (playToken == token) _state.update { it.copy(playing = false, lit = -1) }
+    /**
+     * Only the newest playback owns the flags; an older job's `finally` can land after it started.
+     *
+     * [lit] is where the syllables are left. Everything that ends a pass leaves them dark; «Άκου»
+     * is the one playback that happens *inside* a pass, and it hands his place back.
+     */
+    private fun releasePlayback(token: Int, lit: Int = -1) {
+        if (playToken == token) _state.update { it.copy(playing = false, lit = lit) }
     }
 
     /**

@@ -232,6 +232,17 @@ class SentencesViewModel(
         }
     }
 
+    /**
+     * Stops whatever this screen was saying and takes «Άκου» out of its playing state. The token is
+     * bumped so the cancelled job's `finally` cannot re-open the button for a sentence that is gone.
+     */
+    private fun silence() {
+        speakJob?.cancel()
+        speakToken++
+        graph.voice.quiet()
+        _state.update { it.copy(modelPlaying = false) }
+    }
+
     fun skip() {
         val s = _state.value
         val sentence = s.sentence ?: return
@@ -261,8 +272,13 @@ class SentencesViewModel(
         if (i >= sentences.size) { finishSitting(); return }
         val sentence = sentences[i]
         startedAt = now()
-        // The listens belonged to the sentence being left: the new one starts its own count.
+        // The listens belonged to the sentence being left, and so does whatever was being said: he
+        // taps the green «Επόμενο» the instant the mark appears, while the sentence he just built
+        // is still being read out. Without this the next board opens with its «Άκου» greyed for a
+        // second or two — Chris's field bug in miniature, on the one screen where «Άκου» is the
+        // answer. The new sentence starts with its own count, in silence, and with the button live.
         listens = 0
+        silence()
         _state.update {
             it.copy(index = i, sentence = sentence, shuffledTiles = board(sentence), chosen = emptyList(), correct = null, wrongTries = 0)
         }
@@ -296,8 +312,7 @@ class SentencesViewModel(
      */
     fun leave(then: () -> Unit) {
         loadJob?.cancel()
-        speakJob?.cancel()
-        graph.voice.quiet()
+        silence()
         val write = lastWrite
         viewModelScope.launch { write?.join(); then() }
     }

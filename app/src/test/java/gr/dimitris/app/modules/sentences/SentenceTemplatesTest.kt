@@ -181,6 +181,17 @@ class SentenceTemplatesTest {
         .filter { it.kind == ItemKind.WORD.name }
         .map { Item(text = it.text, kind = ItemKind.WORD, category = Category.valueOf(it.category)) }
 
+    /**
+     * The one string on this screen that answers an order he got wrong, pinned by value.
+     *
+     * Spec §12: nothing may call an assisted, listened or retried turn wrong, and since «Άκου» he
+     * can reach this line straight after doing the thing the app tells him to do. The flow test
+     * reads the constant, so only this assertion makes changing the wording a deliberate act.
+     */
+    @Test fun `a rebuilt sentence is answered with encouragement, never a no`() {
+        assertEquals("Σχεδόν.", SentencesViewModel.WRONG_ORDER)
+    }
+
     /** Assets are not on the unit-test classpath, so the file is found by walking up from wherever Gradle started us. */
     private fun asset(name: String): java.io.File {
         var dir: java.io.File? = java.io.File(".").absoluteFile

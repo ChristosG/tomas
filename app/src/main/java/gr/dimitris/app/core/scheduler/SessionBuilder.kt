@@ -16,6 +16,8 @@ fun startOfDay(epochMs: Long, zone: ZoneId = ZoneId.systemDefault()): Long =
 /**
  * Picks today's items for one module: everything due, then new items (personal before seed)
  * up to [newPerDay] introduced per day, capped at [maxItems], ordered easy–hard–easy.
+ *
+ * A couple of the places are held for words he has never seen — see [NEW_SLOTS].
  */
 class SessionBuilder(
     private val items: ItemDao,
@@ -38,8 +40,30 @@ class SessionBuilder(
             .sortedWith(compareBy<Item> { it.source != Source.CAREGIVER }.thenBy { it.createdAt })
             .take((newPerDay - introducedToday).coerceAtLeast(0))
 
-        val chosen = (due + fresh).take(maxItems)
+        // Due first, but never *all* the way: a couple of places are held back for a word he has
+        // never seen, whenever there is one to hold them for.
+        val reserved = minOf(NEW_SLOTS, fresh.size)
+        val chosen = (due.take((maxItems - reserved).coerceAtLeast(0)) + fresh).take(maxItems)
         return sandwich(chosen) { boxOf[it.id] ?: 0 }
+    }
+
+    companion object {
+        /**
+         * Places kept for a word he has never met, however long the due list is.
+         *
+         * Since «Άκου» is on every screen from the first second (spec §12), a word he asks to hear
+         * is written ASSISTED, and [LeitnerPolicy] holds an ASSISTED item's box rather than
+         * promoting it — which is right: a word he needs the model for is not a word he has
+         * retrieved. But a man who listens before every word then keeps every item at a one-day
+         * interval, the due list saturates at [maxItems], and new vocabulary silently stops arriving
+         * for ever. Nothing fails; he just never meets a new word again.
+         *
+         * The box rule is not the thing to bend — the intake is. Two places, off the *due* end, so
+         * the reservation costs the most-overdue nothing it would not have lost to the cap anyway.
+         * When there are fewer than [maxItems] due, this changes nothing: the rest of `fresh` still
+         * follows them in, exactly as before.
+         */
+        const val NEW_SLOTS = 2
     }
 
     /** Highest box first and last, lowest in the middle. */

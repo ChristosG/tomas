@@ -65,15 +65,18 @@ fun WordCoachScreen(items: List<Item>, sessionId: String?, onDone: () -> Unit, o
         onBack = { vm.leave(onLeave) },
         bottom = {
             // «Άκου» is the first button of the top row at every level, «Βοήθεια» beside it, and the
-            // confirm gets the whole width below them: three big buttons in one row would each be
-            // narrower than his thumb, and the rule is that nothing shrinks to make room for this.
-            val canListen = !s.modelPlaying && !s.isRecording
+            // green button gets the whole width below them: three big buttons in one row would each
+            // be narrower than his thumb, and the rule is that nothing shrinks to make room for this.
+            // Whatever the state, the green one is full width and bottom-left, where his thumb is.
+            //
+            // Off only for the two things that cannot share the moment with it: the model already
+            // sounding, and the microphone open — which the recogniser («Ακούω...») holds just as
+            // much as a take does. A model spoken into a live recogniser is the phone hearing itself.
+            val canListen = !s.modelPlaying && !s.isRecording && !s.listening
             if (s.confirmed) {
-                Row {
-                    ListenButton(onClick = vm::listenModel, enabled = canListen, modifier = Modifier.weight(1f))
-                    Spacer(Modifier.width(Sizes.gapSmall))
-                    BigButton("Επόμενο", onClick = vm::next, tone = ButtonTone.Success, modifier = Modifier.weight(1f))
-                }
+                ListenButton(onClick = vm::listenModel, enabled = canListen)
+                Spacer(Modifier.height(Sizes.gapSmall))
+                BigButton("Επόμενο", onClick = vm::next, tone = ButtonTone.Success)
             } else {
                 Row {
                     ListenButton(onClick = vm::listenModel, enabled = canListen, modifier = Modifier.weight(1f))
@@ -110,6 +113,11 @@ fun WordCoachScreen(items: List<Item>, sessionId: String?, onDone: () -> Unit, o
                     if (s.isRecording) "Στοπ" else "Πες το",
                     onClick = { askMic.launch(Manifest.permission.RECORD_AUDIO) },
                     icon = if (s.isRecording) Icons.Rounded.Stop else Icons.Rounded.Mic,
+                    // Not while the model is speaking: he hears «Άκου», reaches straight for the
+                    // mic, and the take would be the phone's own voice — which is then what
+                    // «Σύγκριση» plays back to him as his. Not while the recogniser has the
+                    // microphone either. «Στοπ» always stays live, or a take could not be closed.
+                    enabled = s.isRecording || (!s.modelPlaying && !s.listening),
                 )
             }
             if (!s.confirmed && s.selfRecordingPath != null && !s.isRecording) {
@@ -122,6 +130,9 @@ fun WordCoachScreen(items: List<Item>, sessionId: String?, onDone: () -> Unit, o
                     if (s.listening) "Ακούω..." else "Άκουσέ με",
                     onClick = { askListen.launch(Manifest.permission.RECORD_AUDIO) },
                     icon = Icons.Rounded.Hearing,
+                    // The recogniser opens the microphone, so it waits for silence exactly as a
+                    // take does: started under «Άκου» it would hear the model and match on it.
+                    enabled = !s.modelPlaying && !s.listening,
                 )
                 if (s.heard != null) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {

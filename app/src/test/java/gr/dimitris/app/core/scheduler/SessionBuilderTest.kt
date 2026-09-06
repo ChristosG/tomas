@@ -47,6 +47,45 @@ class SessionBuilderTest {
         assertEquals(listOf(mine.id), plan.map { it.id })
     }
 
+    /**
+     * The one thing «Άκου» being on every screen could have broken, and the only place it shows.
+     *
+     * A word he asks to hear is ASSISTED, and ASSISTED holds its Leitner box instead of promoting
+     * it — right, but it means a man who listens before every word keeps every item at a one-day
+     * interval. The due list then saturates, and without reserved places new vocabulary would stop
+     * arriving for ever, silently. Twenty overdue words must still leave room for two new ones.
+     */
+    @Test fun `a saturated due list still lets new words in`() = runTest {
+        val big = SessionBuilder(items, schedules, { noon }, newPerDay = 8, maxItems = 12)
+        repeat(20) { i ->
+            val w = word("due$i", createdAt = i.toLong())
+            schedules.upsert(Schedule(w.id, m, box = 1, nextDueAt = noon - 1, createdAt = noon - 10 * LeitnerPolicy.DAY_MS))
+        }
+        val newWords = (0 until 5).map { word("new$it", createdAt = 100L + it) }
+
+        val plan = big.plan(m, listOf(ItemKind.WORD))
+
+        assertEquals("the sitting is still full", 12, plan.size)
+        val fresh = plan.filter { it.id in newWords.map { n -> n.id } }
+        assertEquals("two places are held for words he has never seen: ${fresh.map { it.text }}", 2, fresh.size)
+        assertEquals("and they are the oldest new ones, in order", listOf("new0", "new1"), fresh.map { it.text }.sorted())
+    }
+
+    /** With room to spare the reservation changes nothing: every new word still comes in. */
+    @Test fun `a short due list still fills up with new words`() = runTest {
+        val big = SessionBuilder(items, schedules, { noon }, newPerDay = 8, maxItems = 12)
+        repeat(3) { i ->
+            val w = word("due$i", createdAt = i.toLong())
+            schedules.upsert(Schedule(w.id, m, box = 1, nextDueAt = noon - 1, createdAt = noon - 10 * LeitnerPolicy.DAY_MS))
+        }
+        repeat(5) { word("new$it", createdAt = 100L + it) }
+
+        val plan = big.plan(m, listOf(ItemKind.WORD))
+
+        assertEquals("three due and all five new, exactly as before", 8, plan.size)
+        assertEquals(5, plan.count { it.text.startsWith("new") })
+    }
+
     @Test fun `sandwich puts easy at both ends and hard in the middle`() {
         val a = Item(text = "a"); val b = Item(text = "b"); val c = Item(text = "c"); val d = Item(text = "d"); val e = Item(text = "e")
         val box = mapOf(a.id to 5, b.id to 4, c.id to 3, d.id to 2, e.id to 0)

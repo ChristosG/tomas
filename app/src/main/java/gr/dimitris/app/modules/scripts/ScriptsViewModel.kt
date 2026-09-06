@@ -102,10 +102,11 @@ class ScriptsViewModel(
     private var listens = 0
 
     /**
-     * Bumped by every «Άκου» and by every turn change. A cancelled job's `finally` can land after
-     * the next one has started, and it must not put «Άκου» back for a model that is still playing.
+     * Bumped by every sound [cue] starts and by every turn change. A cancelled job's `finally` can
+     * land after the next one has started, and it must not put «Άκου» back — or the record button —
+     * for a model that is still playing.
      */
-    private var listenToken = 0
+    private var cueToken = 0
 
     /** The closing line and the "done" that follows it. */
     private var endJob: Job? = null
@@ -160,10 +161,10 @@ class ScriptsViewModel(
         // A take belongs to the turn it was made for, and so does its write.
         if (graph.voice.isRecording) graph.voice.cancelRecording()
         recordingSave = null
-        // The listens belong to the turn being left, and so does any «Άκου» still in flight: the
-        // new turn starts with its own count and with the button live.
+        // The listens belong to the turn being left, and so does any sound still in flight: the new
+        // turn starts with its own count, in silence, and with «Άκου» live from its first frame.
         listens = 0
-        listenToken++
+        stopCue()
         val (line, item) = lines[i]
         if (line.speaker == Speaker.OTHER) {
             ladder = null
@@ -254,15 +255,7 @@ class ScriptsViewModel(
         val item = lines.getOrNull(s.index)?.second ?: return
         listens++
         l.listened()
-        val token = ++listenToken
-        _state.update { it.copy(modelPlaying = true) }
-        cue {
-            try {
-                report(graph.speaker.speak(item))
-            } finally {
-                if (listenToken == token) _state.update { it.copy(modelPlaying = false) }
-            }
-        }
+        cue { report(graph.speaker.speak(item)) }
     }
 
     /** A line already said, tapped again: what did they ask me? A dialogue he cannot re-hear is a trap. */
@@ -287,16 +280,42 @@ class ScriptsViewModel(
     }
 
     /**
-     * Runs one sound that is not the dialogue itself. It replaces whatever the last such tap
-     * started — `quiet()` as well as cancelling, because a cancel only lands at the next suspension
-     * point and the old voice would be heard under the new one.
+     * Runs one sound that is not the dialogue itself — a hint, «Άκου», a bubble tapped again, a
+     * comparison. It replaces whatever the last such tap started: `quiet()` as well as cancelling,
+     * because a cancel only lands at the next suspension point and the old voice would be heard
+     * under the new one.
+     *
+     * The flag is raised here rather than at the «Άκου» call site, so *every* model this screen
+     * plays holds it. A level-3 «Βοήθεια» says the whole line; leaving «Άκου» and «Ηχογράφηση» live
+     * under it was the same open microphone, and the cancelled listen's `finally` used to clear the
+     * flag out from under the hint that had just replaced it.
      */
     private fun cue(block: suspend () -> Unit) {
         cueJob?.cancel()
         graph.voice.quiet()
-        val job = viewModelScope.launch(start = CoroutineStart.LAZY) { block() }
+        val token = ++cueToken
+        _state.update { it.copy(modelPlaying = true) }
+        val job = viewModelScope.launch(start = CoroutineStart.LAZY) {
+            try {
+                block()
+            } finally {
+                if (cueToken == token) _state.update { it.copy(modelPlaying = false) }
+            }
+        }
         cueJob = job
         job.start()
+    }
+
+    /**
+     * Stops whatever extra sound this screen was making and takes «Άκου» and the record button out
+     * of their playing state. The token is bumped so a cancelled job's `finally` cannot re-open
+     * them for a model that has already been replaced.
+     */
+    private fun stopCue() {
+        cueJob?.cancel()
+        cueToken++
+        graph.voice.quiet()
+        _state.update { it.copy(modelPlaying = false) }
     }
 
     /**
@@ -329,6 +348,11 @@ class ScriptsViewModel(
                     _state.update { it.copy(isRecording = false, error = TOO_SHORT) }
                 }
         } else {
+            // Silence first, and not only through Voice.startRecording's own quiet(): the utterance
+            // is a coroutine of ours, and one still running would leave «Άκου» greyed over an open
+            // microphone. He now presses «Άκου» and reaches straight for the mic — that is the
+            // behaviour this turn invites — so his take must never contain the phone's own model.
+            stopCue()
             runCatching { graph.voice.startRecording() }
                 .onSuccess { _state.update { it.copy(isRecording = true, error = null) } }
                 .onFailure { e ->
@@ -370,8 +394,7 @@ class ScriptsViewModel(
         finishing = true
         // A take still running belongs to this turn: it is closed and kept, not thrown away.
         if (_state.value.isRecording) toggleRecording()
-        cueJob?.cancel()
-        graph.voice.quiet()
+        stopCue()
         val i = _state.value.index
         val (line, item) = lines[i]
         // Read eagerly: the ladder and the clock belong to the turn being left behind. The recorded
@@ -507,11 +530,8 @@ class ScriptsViewModel(
 
     private fun stopEverything() {
         speakJob?.cancel()
-        cueJob?.cancel()
         endJob?.cancel()
-        listenToken++
-        _state.update { it.copy(modelPlaying = false) }
-        graph.voice.quiet()
+        stopCue()
     }
 
     override fun onCleared() {

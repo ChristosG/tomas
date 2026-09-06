@@ -147,6 +147,7 @@ fun ScriptsScreen(items: List<Item>, sessionId: String?, onDone: () -> Unit, onL
                         cueText = s.cueText,
                         word = if (s.showsWord) item.text else null,
                         recording = s.isRecording,
+                        modelPlaying = s.modelPlaying,
                         hasTake = s.selfRecordingPath != null,
                         // Stopping is not a permission question: only starting asks.
                         onRecord = { if (s.isRecording) vm.toggleRecording() else askMic.launch(Manifest.permission.RECORD_AUDIO) },
@@ -218,6 +219,7 @@ private fun TurnCard(
     cueText: String?,
     word: String?,
     recording: Boolean,
+    modelPlaying: Boolean,
     hasTake: Boolean,
     onRecord: () -> Unit,
     onCompare: () -> Unit,
@@ -256,6 +258,11 @@ private fun TurnCard(
                 QuietButton(
                     if (recording) "Στοπ" else "Ηχογράφηση", onClick = onRecord,
                     icon = if (recording) Icons.Rounded.Stop else Icons.Rounded.Mic,
+                    // Not while the line is being said to him: he hears «Άκου», reaches straight
+                    // for the mic, and the take would be the phone's own voice — which is then what
+                    // «Σύγκριση» plays back to him as his, and what his caregiver hears in the
+                    // word's recordings. «Στοπ» stays live, or a take could not be closed.
+                    enabled = recording || !modelPlaying,
                 )
                 // Only once there is something of his to compare the model against.
                 if (hasTake && !recording) {
