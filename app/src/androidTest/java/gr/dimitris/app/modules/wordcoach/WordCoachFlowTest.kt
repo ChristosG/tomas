@@ -1,5 +1,6 @@
 package gr.dimitris.app.modules.wordcoach
 
+import android.Manifest
 import androidx.activity.compose.setContent
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.test.assertIsEnabled
@@ -10,14 +11,18 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.test.core.app.ApplicationProvider
+import androidx.test.rule.GrantPermissionRule
 import gr.dimitris.app.DimitrisApp
 import gr.dimitris.app.LocalAppGraph
 import gr.dimitris.app.MainActivity
+import gr.dimitris.app.core.audio.Recorded
 import gr.dimitris.app.core.data.Attempt
 import gr.dimitris.app.core.data.Category
 import gr.dimitris.app.core.data.Item
 import gr.dimitris.app.core.data.ModuleId
 import gr.dimitris.app.core.data.Outcome
+import gr.dimitris.app.core.speech.FakeSpeechToText
+import gr.dimitris.app.core.speech.SpeechToText
 import gr.dimitris.app.ui.components.LISTEN_TAG
 import gr.dimitris.app.ui.theme.DimitrisTheme
 import gr.dimitris.app.ui.theme.LocalFeedback
@@ -35,19 +40,36 @@ import org.junit.Test
  * using it reaches the row rather than being quietly free.
  */
 class WordCoachFlowTest {
-    @get:Rule val compose = createAndroidComposeRule<MainActivity>()
+    @get:Rule(order = 0) val mic: GrantPermissionRule = GrantPermissionRule.grant(Manifest.permission.RECORD_AUDIO)
+    @get:Rule(order = 1) val compose = createAndroidComposeRule<MainActivity>()
 
     private val graph get() = ApplicationProvider.getApplicationContext<DimitrisApp>().graph
 
     private lateinit var word: Item
 
+    /** The recogniser the gentle-check cases run against; the real one does not exist on an emulator. */
+    private val fake = FakeSpeechToText()
+    private lateinit var realStt: SpeechToText
+
     // runBlocking<Unit>: JUnit needs a void @Before, and ItemRepository.save returns the saved Item.
     @Before fun seedOneWord() = runBlocking<Unit> {
         word = graph.items.save(Item(text = "νερό", category = Category.FOOD))
+        realStt = graph.stt
     }
 
-    /** The word was ours, not his: take it back out. */
-    @After fun removeSeed() = runBlocking<Unit> { graph.items.delete(word.id) }
+    /** The word and the fake recogniser were ours, not his: take them both back out. */
+    @After fun removeSeed() = runBlocking<Unit> {
+        graph.items.delete(word.id)
+        graph.stt = realStt
+        graph.settings.setSttEnabled(false)
+    }
+
+    /** Recognition on, with a recogniser that hears whatever the case says it hears. */
+    private fun withRecognition(): FakeSpeechToText {
+        runBlocking { graph.settings.setSttEnabled(true) }
+        graph.stt = fake
+        return fake
+    }
 
     /**
      * The whole of the rule in one run: the button is there and enabled at cue level 0, with nothing
@@ -111,6 +133,116 @@ class WordCoachFlowTest {
         compose.runOnUiThread { vm.leave {} }
     }
 
+    /**
+     * The gentle check, all the way through, when the phone agrees with him: one window, a match,
+     * and the word is confirmed *for* him at the cue level he was on. Being made to press a button
+     * to agree with the phone is one step too many for a man who has just done the hard part.
+     */
+    @Test fun aMatchConfirmsTheWordForHim() {
+        withRecognition().willHear("νερό")
+        val before = attempts()
+        val vm = viewModel()
+
+        compose.runOnUiThread { vm.listen() }
+
+        compose.waitUntil(TIMEOUT_MS) { attempts().size == before.size + 1 }
+        assertEquals("the phone agreed with him: the word is done", true, vm.state.value.confirmed)
+        assertEquals("and it is his own, with nothing given away", Outcome.CORRECT, written(before).outcome)
+        val detail = written(before).detail
+        assertTrue("what it heard belongs in the row: $detail", detail.contains("\"sttHeard\":\"νερό\""))
+        assertTrue("and that it agreed: $detail", detail.contains("\"sttMatched\":true"))
+        assertTrue("and how many goes it took: $detail", detail.contains("\"sttTries\":1"))
+        compose.runOnUiThread { vm.leave {} }
+    }
+
+    /**
+     * The other half of the rule: a miss is a nudge and never a wall. One «Δοκίμασε ξανά» with the
+     * cue exactly where it was, and then «Το είπα!» comes back and confirms as it always did — here
+     * after he had asked to hear the word, so the row is assisted work at the listening level.
+     */
+    @Test fun twoMissesLeaveHimTheConfirmAndTheLadderStillDecidesTheRow() {
+        withRecognition().willHear("ψωμί").willHear("γάλα")
+        val before = attempts()
+        val vm = viewModel()
+        compose.runOnUiThread { vm.listenModel() }
+
+        compose.runOnUiThread { vm.listen() }
+        compose.waitUntil(TIMEOUT_MS) { vm.state.value.sttTries == 1 }
+        assertEquals("one miss is one nudge", true, vm.state.value.nudge)
+        assertEquals("«Το είπα!» is not his yet", false, vm.state.value.canConfirm)
+        assertEquals("the cue has not moved", 0, vm.state.value.level)
+        assertEquals("«Βοήθεια» is still on offer", true, vm.state.value.canHint)
+        assertEquals("and nothing has been written", before.size, attempts().size)
+
+        compose.runOnUiThread { vm.listen() }
+        compose.waitUntil(TIMEOUT_MS) { vm.state.value.sttTries == 2 }
+        assertEquals("the phone stops asking", false, vm.state.value.nudge)
+        assertEquals("and the button is his", true, vm.state.value.canConfirm)
+
+        compose.runOnUiThread { vm.confirm() }
+        compose.waitUntil(TIMEOUT_MS) { attempts().size == before.size + 1 }
+        val row = written(before)
+        assertEquals("a word he had said to him is work done with help", Outcome.ASSISTED, row.outcome)
+        assertTrue("at the listening level: ${row.cueLevel}", (row.cueLevel ?: 0) >= 3)
+        assertTrue("the two goes belong in the row: ${row.detail}", row.detail.contains("\"sttTries\":2"))
+        assertTrue("and that the phone never agreed: ${row.detail}", row.detail.contains("\"sttMatched\":false"))
+        compose.runOnUiThread { vm.leave {} }
+    }
+
+    /**
+     * A take with nothing in it. The emulator's microphone is silent, which is exactly the case
+     * Chris found: the app used to keep it, write a recording row for it, and play it back to him as
+     * his own voice. Now it is deleted, he is told in Greek, and the word stays open.
+     */
+    @Test fun aSilentTakeIsCaughtAndTheWordStaysOpen() {
+        val before = attempts()
+        val vm = viewModel()
+
+        compose.runOnUiThread { vm.toggleRecording() }
+        compose.waitUntil(TIMEOUT_MS) { vm.state.value.isRecording }
+        Thread.sleep(TAKE_MS)
+        compose.runOnUiThread { vm.toggleRecording() }
+
+        compose.waitUntil(TIMEOUT_MS) { !vm.state.value.isRecording }
+        assertEquals("he is told, in his own language", Recorded.SILENT_TAKE, vm.state.value.error)
+        assertEquals("nothing of his was kept", null, vm.state.value.selfRecordingPath)
+        assertEquals("and the word is still his to say", false, vm.state.value.confirmed)
+        assertEquals("nothing was written for it", before.size, attempts().size)
+        compose.runOnUiThread { vm.leave {} }
+    }
+
+    /** «Στοπ» closes the window his way, and what the phone had already heard still counts. */
+    @Test fun stopClosesTheWindowAndTheAnswerStillArrives() {
+        val stt = withRecognition()
+        stt.holdsOpen = true
+        stt.willHear("νερό")
+        val before = attempts()
+        val vm = viewModel()
+
+        compose.runOnUiThread { vm.listen() }
+        compose.waitUntil(TIMEOUT_MS) { vm.state.value.listening }
+        // The bar is the only thing on the screen that answers "is it hearing me?".
+        stt.loudness(0.8f)
+        compose.waitUntil(TIMEOUT_MS) { vm.state.value.listenLevel > 0.5f }
+
+        compose.runOnUiThread { vm.stopListening() }
+        compose.waitUntil(TIMEOUT_MS) { attempts().size == before.size + 1 }
+        assertEquals("«Στοπ» closed the window he had open, and only that one", 1, stt.stops)
+        assertEquals("and the word he got out still counted", true, vm.state.value.confirmed)
+        compose.runOnUiThread { vm.leave {} }
+    }
+
+    private fun viewModel(): WordCoachViewModel {
+        lateinit var vm: WordCoachViewModel
+        compose.runOnUiThread { vm = WordCoachViewModel(graph, listOf(word), null) }
+        // The settings and the package manager are asked off the drawing thread: the screen is only
+        // in its recognition state once that has landed.
+        compose.waitUntil(TIMEOUT_MS) { vm.state.value.sttOn == (graph.stt === fake) }
+        return vm
+    }
+
+    private fun written(before: List<Attempt>): Attempt = (attempts() - before.toSet()).single()
+
     /** The module's screen on its own: a session around it would plan words that are not ours. */
     private fun show(items: List<Item>) {
         compose.runOnUiThread {
@@ -133,5 +265,8 @@ class WordCoachFlowTest {
         const val HELP = "Βοήθεια"
         const val SAID_IT = "Το είπα!"
         const val TIMEOUT_MS = 20_000L
+
+        /** Long enough for a dozen loudness samples and for MediaRecorder to close cleanly. */
+        const val TAKE_MS = 1_200L
     }
 }

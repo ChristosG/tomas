@@ -14,7 +14,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Compare
-import androidx.compose.material.icons.rounded.Hearing
 import androidx.compose.material.icons.rounded.Mic
 import androidx.compose.material.icons.rounded.Stop
 import androidx.compose.material3.MaterialTheme
@@ -30,10 +29,13 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import gr.dimitris.app.LocalAppGraph
 import gr.dimitris.app.core.data.Item
+import gr.dimitris.app.core.speech.GentleCheck
+import gr.dimitris.app.core.speech.GentleCheck.Companion.SPEAK
 import gr.dimitris.app.ui.components.BigButton
 import gr.dimitris.app.ui.components.ButtonTone
 import gr.dimitris.app.ui.components.DimitrisScreen
 import gr.dimitris.app.ui.components.ListenButton
+import gr.dimitris.app.ui.components.ListeningIndicator
 import gr.dimitris.app.ui.components.PictureCard
 import gr.dimitris.app.ui.components.QuietButton
 import gr.dimitris.app.ui.components.SuccessMark
@@ -73,7 +75,11 @@ fun WordCoachScreen(items: List<Item>, sessionId: String?, onDone: () -> Unit, o
             // sounding, and the microphone open — which the recogniser («Ακούω...») holds just as
             // much as a take does. A model spoken into a live recogniser is the phone hearing itself.
             val canListen = !s.modelPlaying && !s.isRecording && !s.listening
-            if (s.confirmed) {
+            if (s.listening) {
+                // The window is open. Everything else goes away: there is one thing to do, which is
+                // to speak, and one button, which stops it when he decides he is finished.
+                ListeningIndicator(level = s.listenLevel, onStop = vm::stopListening)
+            } else if (s.confirmed) {
                 ListenButton(onClick = vm::listenModel, enabled = canListen)
                 Spacer(Modifier.height(Sizes.gapSmall))
                 BigButton("Επόμενο", onClick = vm::next, tone = ButtonTone.Success)
@@ -84,7 +90,19 @@ fun WordCoachScreen(items: List<Item>, sessionId: String?, onDone: () -> Unit, o
                     BigButton("Βοήθεια", onClick = vm::hint, tone = ButtonTone.Secondary, enabled = s.canHint, modifier = Modifier.weight(1f))
                 }
                 Spacer(Modifier.height(Sizes.gapSmall))
-                BigButton("Το είπα!", onClick = vm::confirm, tone = ButtonTone.Success)
+                // With recognition on, the green button is «Μίλα» until the phone has agreed with
+                // him or has asked him twice — a take that checked nothing is what Chris found in
+                // the field. After that «Το είπα!» is back and confirms exactly as it always did,
+                // with «Μίλα» still beside it for a man who wants another go.
+                if (s.sttOn && !s.canConfirm) {
+                    BigButton(SPEAK, onClick = { askListen.launch(Manifest.permission.RECORD_AUDIO) }, icon = Icons.Rounded.Mic, tone = ButtonTone.Success)
+                } else {
+                    BigButton("Το είπα!", onClick = vm::confirm, tone = ButtonTone.Success)
+                    if (s.sttOn) {
+                        Spacer(Modifier.height(Sizes.gapSmall))
+                        QuietButton(SPEAK, onClick = { askListen.launch(Manifest.permission.RECORD_AUDIO) }, icon = Icons.Rounded.Mic)
+                    }
+                }
                 Spacer(Modifier.height(Sizes.gapSmall))
                 QuietButton("Παράλειψη", onClick = vm::skip)
             }
@@ -108,9 +126,11 @@ fun WordCoachScreen(items: List<Item>, sessionId: String?, onDone: () -> Unit, o
             // Listening lives in the bottom row now, where his thumb is and where it cannot be
             // missed; there is exactly one «Άκου» on this screen. Once he has said the word there
             // is nothing left to record either: only «Άκου» and «Επόμενο» remain.
-            if (!s.confirmed) {
+            if (!s.confirmed && !s.listening) {
                 QuietButton(
-                    if (s.isRecording) "Στοπ" else "Πες το",
+                    // «Ηχογράφηση» once «Μίλα» is on the screen: two buttons that both mean "speak
+                    // now" would be one too many, and this is the one that only keeps a take.
+                    if (s.isRecording) "Στοπ" else if (s.sttOn) "Ηχογράφηση" else "Πες το",
                     onClick = { askMic.launch(Manifest.permission.RECORD_AUDIO) },
                     icon = if (s.isRecording) Icons.Rounded.Stop else Icons.Rounded.Mic,
                     // Not while the model is speaking: he hears «Άκου», reaches straight for the
@@ -120,21 +140,23 @@ fun WordCoachScreen(items: List<Item>, sessionId: String?, onDone: () -> Unit, o
                     enabled = s.isRecording || (!s.modelPlaying && !s.listening),
                 )
             }
-            if (!s.confirmed && s.selfRecordingPath != null && !s.isRecording) {
+            if (!s.confirmed && !s.listening && s.selfRecordingPath != null && !s.isRecording) {
                 Spacer(Modifier.height(Sizes.gapSmall))
                 QuietButton("Σύγκριση", onClick = vm::playComparison, icon = Icons.Rounded.Compare)
             }
-            if (!s.confirmed && s.sttOn) {
-                Spacer(Modifier.height(Sizes.gapSmall))
-                QuietButton(
-                    if (s.listening) "Ακούω..." else "Άκουσέ με",
-                    onClick = { askListen.launch(Manifest.permission.RECORD_AUDIO) },
-                    icon = Icons.Rounded.Hearing,
-                    // The recogniser opens the microphone, so it waits for silence exactly as a
-                    // take does: started under «Άκου» it would hear the model and match on it.
-                    enabled = !s.modelPlaying && !s.listening,
-                )
+            if (s.sttOn && !s.listening) {
+                // One nudge and no more. The cue has not moved, «Άκου» is where it was, and the
+                // microphone is one tap away again: nothing has been taken away from him.
+                if (s.nudge) {
+                    Spacer(Modifier.height(Sizes.gapSmall))
+                    Text(
+                        GentleCheck.TRY_AGAIN, style = MaterialTheme.typography.headlineMedium,
+                        color = MaterialTheme.colorScheme.secondary, textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
                 if (s.heard != null) {
+                    Spacer(Modifier.height(Sizes.gapSmall))
                     Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
                         Text(
                             // A miss is the phone's uncertainty, never a verdict on how he said it.

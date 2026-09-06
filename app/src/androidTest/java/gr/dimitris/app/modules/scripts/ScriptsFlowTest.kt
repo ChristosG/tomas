@@ -1,5 +1,6 @@
 package gr.dimitris.app.modules.scripts
 
+import android.Manifest
 import androidx.activity.compose.setContent
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.test.assertIsEnabled
@@ -13,9 +14,11 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollToNode
 import androidx.test.core.app.ApplicationProvider
+import androidx.test.rule.GrantPermissionRule
 import gr.dimitris.app.DimitrisApp
 import gr.dimitris.app.LocalAppGraph
 import gr.dimitris.app.MainActivity
+import gr.dimitris.app.core.audio.Recorded
 import gr.dimitris.app.core.data.Attempt
 import gr.dimitris.app.core.data.Item
 import gr.dimitris.app.core.data.LineDraft
@@ -23,6 +26,8 @@ import gr.dimitris.app.core.data.ModuleId
 import gr.dimitris.app.core.data.Outcome
 import gr.dimitris.app.core.data.ScriptWithLines
 import gr.dimitris.app.core.data.Speaker
+import gr.dimitris.app.core.speech.FakeSpeechToText
+import gr.dimitris.app.core.speech.SpeechToText
 import gr.dimitris.app.ui.components.LISTEN_TAG
 import gr.dimitris.app.ui.theme.DimitrisTheme
 import gr.dimitris.app.ui.theme.LocalFeedback
@@ -50,14 +55,31 @@ import java.util.concurrent.atomic.AtomicInteger
  * leaves the bottom slot on «Ετοιμάζω...» until the dialogue is in hand.
  */
 class ScriptsFlowTest {
-    @get:Rule val compose = createAndroidComposeRule<MainActivity>()
+    @get:Rule(order = 0) val mic: GrantPermissionRule = GrantPermissionRule.grant(Manifest.permission.RECORD_AUDIO)
+    @get:Rule(order = 1) val compose = createAndroidComposeRule<MainActivity>()
 
     private val graph get() = ApplicationProvider.getApplicationContext<DimitrisApp>().graph
 
     /** Everything this class wrote, taken back out so the next class sees the seeds it expects. */
     private val written = mutableListOf<String>()
 
-    @After fun removeWhatWasWritten() = runBlocking { written.forEach { graph.scripts.delete(it) } }
+    /** The recogniser the gentle-check cases run against; the real one does not exist on an emulator. */
+    private val fake = FakeSpeechToText()
+    private var realStt: SpeechToText? = null
+
+    @After fun removeWhatWasWritten() = runBlocking {
+        written.forEach { graph.scripts.delete(it) }
+        realStt?.let { graph.stt = it }
+        graph.settings.setSttEnabled(false)
+    }
+
+    /** Recognition on, with a recogniser that hears whatever the case says it hears. */
+    private fun withRecognition(): FakeSpeechToText {
+        realStt = graph.stt
+        runBlocking { graph.settings.setSttEnabled(true) }
+        graph.stt = fake
+        return fake
+    }
 
     @Test fun aTurnHeSaysIsOneAttemptCarryingItsDialogue() {
         val before = attempts()
@@ -201,6 +223,85 @@ class ScriptsFlowTest {
     }
 
     /**
+     * The gentle check on a whole turn, which is where it earns its keep: he dropped «έναν», which
+     * is the man having the conversation and not failing it. The phone agrees, the turn is confirmed
+     * for him, and what it heard is in the row.
+     */
+    @Test fun mostOfHisLineIsHisLineAndTheTurnIsConfirmedForHim() {
+        val stt = withRecognition().willHear("θέλω καφέ")
+        val script = dialogue(Speaker.DIMITRIS to "Θέλω έναν καφέ.")
+        val before = attempts()
+        val vm = viewModel(script)
+
+        compose.runOnUiThread { vm.listen() }
+
+        compose.waitUntil(TIMEOUT_MS) { attempts().size == before.size + 1 }
+        val row = (attempts() - before.toSet()).single()
+        assertEquals("said with no help is his own", Outcome.CORRECT, row.outcome)
+        assertTrue("what it heard belongs in the row: ${row.detail}", row.detail.contains("\"sttHeard\":\"θέλω καφέ\""))
+        assertTrue("and that it agreed: ${row.detail}", row.detail.contains("\"sttMatched\":true"))
+        assertEquals("one window was enough", 1, stt.windows)
+        compose.runOnUiThread { vm.leave {} }
+    }
+
+    /** A miss is a nudge and never a wall: one «Δοκίμασε ξανά», then «Το είπα!» confirms as always. */
+    @Test fun twoMissesOnATurnLeaveHimTheConfirm() {
+        withRecognition().willHear("καλημέρα").willHearNothing()
+        val script = dialogue(Speaker.DIMITRIS to "Θέλω έναν καφέ.")
+        val before = attempts()
+        val vm = viewModel(script)
+
+        compose.runOnUiThread { vm.listen() }
+        compose.waitUntil(TIMEOUT_MS) { vm.state.value.sttTries == 1 }
+        assertEquals("one miss is one nudge", true, vm.state.value.nudge)
+        assertEquals("«Το είπα!» is not his yet", false, vm.state.value.canConfirm)
+        assertEquals("the cue has not moved", 0, vm.state.value.level)
+        assertEquals("nothing has been written", before.size, attempts().size)
+
+        // The second window hears nothing at all — a bad moment for the recogniser, not for him.
+        compose.runOnUiThread { vm.listen() }
+        compose.waitUntil(TIMEOUT_MS) { vm.state.value.sttTries == 2 }
+        assertEquals("the phone stops asking", true, vm.state.value.canConfirm)
+
+        compose.runOnUiThread { vm.confirm() }
+        compose.waitUntil(TIMEOUT_MS) { attempts().size == before.size + 1 }
+        val row = (attempts() - before.toSet()).single()
+        assertEquals("the turn was still his to take", Outcome.CORRECT, row.outcome)
+        assertTrue("the two goes belong in the row: ${row.detail}", row.detail.contains("\"sttTries\":2"))
+        compose.runOnUiThread { vm.leave {} }
+    }
+
+    /** A take with nothing in it is deleted and said aloud; the turn stays open and unwritten. */
+    @Test fun aSilentTakeIsCaughtAndTheTurnStaysOpen() {
+        val script = dialogue(Speaker.DIMITRIS to "Γεια σου.")
+        val before = attempts()
+        val vm = viewModel(script)
+
+        compose.runOnUiThread { vm.toggleRecording() }
+        compose.waitUntil(TIMEOUT_MS) { vm.state.value.isRecording }
+        Thread.sleep(TAKE_MS)
+        compose.runOnUiThread { vm.toggleRecording() }
+
+        compose.waitUntil(TIMEOUT_MS) { !vm.state.value.isRecording }
+        assertEquals("he is told, in his own language", Recorded.SILENT_TAKE, vm.state.value.error)
+        assertEquals("nothing of his was kept", null, vm.state.value.selfRecordingPath)
+        assertEquals("the turn is still his to take", ScriptPhase.WAITING_FOR_DIMITRIS, vm.state.value.phase)
+        assertEquals("and nothing was written for it", before.size, attempts().size)
+        compose.runOnUiThread { vm.leave {} }
+    }
+
+    /** Waits for the dialogue to be loaded, his turn to be on screen, and recognition to be settled. */
+    private fun viewModel(script: ScriptWithLines): ScriptsViewModel {
+        val seed = hisTurns(script).first().id
+        lateinit var vm: ScriptsViewModel
+        compose.runOnUiThread { vm = ScriptsViewModel(graph, seed, null) }
+        compose.waitUntil(TIMEOUT_MS) { vm.state.value.phase == ScriptPhase.WAITING_FOR_DIMITRIS }
+        compose.waitUntil(TIMEOUT_MS) { vm.state.value.sttOn == (graph.stt === fake) }
+        compose.runOnUiThread { vm.turnReady() }
+        return vm
+    }
+
+    /**
      * Four modules make the Today grid two rows, and the second one is off-screen on a short screen
      * or whenever the "missing Greek voice" card is showing: the card has to be scrolled to before
      * it can be clicked, or the class fails on a node that was simply never composed.
@@ -260,5 +361,8 @@ class ScriptsFlowTest {
 
         /** Longer: the first utterance of a run also waits for the speech engine to come up. */
         const val OPEN_TIMEOUT_MS = 40_000L
+
+        /** Long enough for a dozen loudness samples and for MediaRecorder to close cleanly. */
+        const val TAKE_MS = 1_200L
     }
 }

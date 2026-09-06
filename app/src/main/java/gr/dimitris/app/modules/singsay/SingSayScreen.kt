@@ -38,10 +38,13 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import gr.dimitris.app.LocalAppGraph
 import gr.dimitris.app.core.data.Item
+import gr.dimitris.app.core.speech.GentleCheck
+import gr.dimitris.app.core.speech.GentleCheck.Companion.SPEAK
 import gr.dimitris.app.ui.components.BigButton
 import gr.dimitris.app.ui.components.ButtonTone
 import gr.dimitris.app.ui.components.DimitrisScreen
 import gr.dimitris.app.ui.components.ListenButton
+import gr.dimitris.app.ui.components.ListeningIndicator
 import gr.dimitris.app.ui.components.QuietButton
 import gr.dimitris.app.ui.components.SuccessMark
 import gr.dimitris.app.ui.theme.Sizes
@@ -59,6 +62,10 @@ fun SingSayScreen(items: List<Item>, sessionId: String?, onDone: () -> Unit, onL
     DisposableEffect(vm) { onDispose { vm.screenGone() } }
     val askMic = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) vm.toggleRecording() else vm.micDenied()
+    }
+    // Recognition opens the microphone too, so it asks for the same permission before it starts.
+    val askListen = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) vm.listen() else vm.micDenied()
     }
 
     /**
@@ -83,36 +90,57 @@ fun SingSayScreen(items: List<Item>, sessionId: String?, onDone: () -> Unit, onL
         // Back is "I want out", not "I finished": the module drops what it was doing and says so.
         onBack = { vm.leave(onLeave) },
         bottom = {
-            // The tap pad: the biggest thing on the screen, at the bottom where his left thumb lives.
-            BigButton(
-                if (s.stage == SingStage.SPEAK) "Το είπα!" else "Χτύπα",
-                onClick = { if (s.stage == SingStage.SPEAK) vm.didIt() else vm.tap() },
-                tone = if (s.stage == SingStage.SPEAK) ButtonTone.Success else ButtonTone.Secondary,
-                modifier = Modifier.height(110.dp), enabled = !s.playing && !s.isRecording,
-            )
-            Spacer(Modifier.height(Sizes.gapSmall))
-            // «Άκου» is here rather than up with the syllables: it is the one control that must not
-            // be hunted for, and it belongs where his thumb already is. It shares the row with «Το
-            // έκανα» so the pad above keeps its full height — nothing shrinks to make room for it.
-            val canListen = !s.playing && !s.isRecording
-            if (s.stage != SingStage.SPEAK) {
-                Row {
-                    ListenButton(onClick = vm::listenModel, enabled = canListen, modifier = Modifier.weight(1f))
-                    Spacer(Modifier.width(Sizes.gapSmall))
-                    // Not while the microphone is open: a phrase finished mid-take ends with a
-                    // recording that spans stages, and the «Στοπ» that would have closed it is a
-                    // screen away.
-                    BigButton("Το έκανα", onClick = vm::didIt, tone = ButtonTone.Success, enabled = canListen, modifier = Modifier.weight(1f))
-                }
+            if (s.listening) {
+                // The window is open. Everything else goes away: there is one thing to do, which is
+                // to say the phrase, and one button, which stops it when he decides he is finished.
+                ListeningIndicator(level = s.listenLevel, onStop = vm::stopListening)
             } else {
-                // The last stage says it with nothing left under it, and «Άκου» is still there:
-                // that is the whole of spec §12 in one button.
-                ListenButton(onClick = vm::listenModel, enabled = canListen)
+                // The tap pad: the biggest thing on the screen, at the bottom where his left thumb
+                // lives. At the last stage it is the confirm — or, with recognition on, «Μίλα»
+                // until the phone has agreed with him or has asked him twice.
+                val speakNow = s.stage == SingStage.SPEAK && s.sttOn && !s.canConfirm
+                BigButton(
+                    if (speakNow) SPEAK else if (s.stage == SingStage.SPEAK) "Το είπα!" else "Χτύπα",
+                    onClick = {
+                        when {
+                            speakNow -> askListen.launch(Manifest.permission.RECORD_AUDIO)
+                            s.stage == SingStage.SPEAK -> vm.didIt()
+                            else -> vm.tap()
+                        }
+                    },
+                    icon = if (speakNow) Icons.Rounded.Mic else null,
+                    tone = if (s.stage == SingStage.SPEAK) ButtonTone.Success else ButtonTone.Secondary,
+                    modifier = Modifier.height(110.dp), enabled = !s.playing && !s.isRecording,
+                )
+                // Still on offer once «Το είπα!» is back: another go is his to take, never asked of him.
+                if (s.stage == SingStage.SPEAK && s.sttOn && s.canConfirm) {
+                    Spacer(Modifier.height(Sizes.gapSmall))
+                    QuietButton(SPEAK, onClick = { askListen.launch(Manifest.permission.RECORD_AUDIO) }, icon = Icons.Rounded.Mic, enabled = !s.playing && !s.isRecording)
+                }
+                Spacer(Modifier.height(Sizes.gapSmall))
+                // «Άκου» is here rather than up with the syllables: it is the one control that must
+                // not be hunted for, and it belongs where his thumb already is. It shares the row
+                // with «Το έκανα» so the pad above keeps its full height — nothing shrinks for it.
+                val canListen = !s.playing && !s.isRecording
+                if (s.stage != SingStage.SPEAK) {
+                    Row {
+                        ListenButton(onClick = vm::listenModel, enabled = canListen, modifier = Modifier.weight(1f))
+                        Spacer(Modifier.width(Sizes.gapSmall))
+                        // Not while the microphone is open: a phrase finished mid-take ends with a
+                        // recording that spans stages, and the «Στοπ» that would have closed it is
+                        // a screen away.
+                        BigButton("Το έκανα", onClick = vm::didIt, tone = ButtonTone.Success, enabled = canListen, modifier = Modifier.weight(1f))
+                    }
+                } else {
+                    // The last stage says it with nothing left under it, and «Άκου» is still there:
+                    // that is the whole of spec §12 in one button.
+                    ListenButton(onClick = vm::listenModel, enabled = canListen)
+                }
+                Spacer(Modifier.height(Sizes.gapSmall))
+                // Not while the phrase is still loading: a skip landing then would finish a phrase
+                // whose own sung model has not even been looked up yet.
+                QuietButton("Παράλειψη", onClick = vm::skip, enabled = !s.loading)
             }
-            Spacer(Modifier.height(Sizes.gapSmall))
-            // Not while the phrase is still loading: a skip landing then would finish a phrase whose
-            // own sung model has not even been looked up yet.
-            QuietButton("Παράλειψη", onClick = vm::skip, enabled = !s.loading)
         },
     ) {
         // Five stages, a row of syllables and up to three buttons do not always fit a small screen
@@ -158,13 +186,31 @@ fun SingSayScreen(items: List<Item>, sessionId: String?, onDone: () -> Unit, onL
                 if (s.isRecording) "Στοπ" else "Ηχογράφηση",
                 onClick = { askMic.launch(Manifest.permission.RECORD_AUDIO) },
                 icon = if (s.isRecording) Icons.Rounded.Stop else Icons.Rounded.Mic,
-                // Refused while the model is playing, rather than silently killing it. A running
-                // take leaves `playing` false, so «Στοπ» is always reachable.
-                enabled = !s.playing,
+                // Refused while the model is playing, rather than silently killing it, and while
+                // the recogniser has the microphone. A running take leaves `playing` false, so
+                // «Στοπ» is always reachable.
+                enabled = !s.playing && !s.listening,
             )
             if (s.selfRecordingPath != null && !s.isRecording) {
                 Spacer(Modifier.height(Sizes.gapSmall))
                 QuietButton("Σύγκριση", onClick = vm::playComparison, icon = Icons.Rounded.Compare)
+            }
+            // One nudge and no more. «Άκου» is where it was and the microphone is one tap away
+            // again: nothing has been taken away from him.
+            if (s.sttOn && s.nudge) {
+                Spacer(Modifier.height(Sizes.gapSmall))
+                Text(
+                    GentleCheck.TRY_AGAIN, style = MaterialTheme.typography.headlineMedium,
+                    color = MaterialTheme.colorScheme.secondary,
+                )
+            }
+            if (s.sttOn && s.heard != null) {
+                Spacer(Modifier.height(Sizes.gapSmall))
+                Text(
+                    // A miss is the phone's uncertainty, never a verdict on how he said it.
+                    if (s.heardMatched) "Άκουσα «${s.heard}». Μπράβο!" else "Άκουσα «${s.heard}». Το τηλέφωνο δεν είναι σίγουρο.",
+                    style = MaterialTheme.typography.bodyLarge,
+                )
             }
             // Only once the lookup has landed: `hasSungModel` starts false, so without the guard the
             // line saying there is no sung voice flashes on every phrase, the ones that have one too.

@@ -58,7 +58,12 @@ class AppGraph(context: Context) {
     val images = ImageStore(files)
     val settings = Settings(app)
     val tts: TextToSpeech = AndroidTextToSpeech(app)
-    val stt: SpeechToText = AndroidSpeechToText(app)
+    /**
+     * A `var` for one reason: the emulator has no recognition service at all, so the only way to
+     * drive the gentle check of spec §12 in a test is to put a fake in front of the three modules.
+     * Nothing in the app ever assigns it.
+     */
+    var stt: SpeechToText = AndroidSpeechToText(app)
     val recorder = Recorder(app, files)
     val player = Player()
     /** Owned by [voice], which is the only production caller; kept here so tests can drive it alone. */

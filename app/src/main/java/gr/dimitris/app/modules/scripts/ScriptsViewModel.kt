@@ -11,17 +11,23 @@ import gr.dimitris.app.core.data.ScriptLine
 import gr.dimitris.app.core.data.Speaker
 import gr.dimitris.app.core.data.Who
 import gr.dimitris.app.core.data.now
+import gr.dimitris.app.core.audio.Recorded
+import gr.dimitris.app.core.speech.GentleCheck
+import gr.dimitris.app.core.speech.SpeechMatch
 import gr.dimitris.app.modules.wordcoach.CueLadder
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Deferred
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 enum class ScriptPhase { LOADING, OTHER_SPEAKING, WAITING_FOR_DIMITRIS, FINISHED }
 
@@ -42,6 +48,22 @@ data class ScriptsState(
     val modelPlaying: Boolean = false,
     /** His own take of this turn, once he has made one: what «Άκου» plays after the model. */
     val selfRecordingPath: String? = null,
+    /** Recognition is on and this device has it: his turns are checked, gently. */
+    val sttOn: Boolean = false,
+    val listening: Boolean = false,
+    /** How loud he is, 0..1, while the window is open. Drawn by the listening indicator. */
+    val listenLevel: Float = 0f,
+    val heard: String? = null,
+    val heardMatched: Boolean = false,
+    /** How many windows he has used on this turn. */
+    val sttTries: Int = 0,
+    /** «Δοκίμασε ξανά» is on the screen: one miss, and nothing else has changed. */
+    val nudge: Boolean = false,
+    /**
+     * Whether «Το είπα!» is his to press. Always true with recognition off; with it on, once the
+     * phone has agreed with him or has asked him twice.
+     */
+    val canConfirm: Boolean = true,
     val done: Boolean = false,
     /** The dialogue was gone by the time the screen opened: there is nothing to run. */
     val missing: Boolean = false,
@@ -132,7 +154,34 @@ class ScriptsViewModel(
      */
     private var onScreen = true
 
-    init { load() }
+    /**
+     * The gentle check for the turn he is on: what the phone heard, how many times it has asked, and
+     * whether «Το είπα!» is his to press yet. One per turn of his.
+     */
+    private var check = GentleCheck()
+
+    /**
+     * The loudest sample of his last take. It rides along in the attempt's detail so that
+     * [gr.dimitris.app.core.audio.Recorded.SILENCE_PEAK] can be moved on evidence from his own phone.
+     */
+    private var lastPeak: Int? = null
+
+    /** The open recognition window, so leaving or moving on can close it. */
+    private var listenJob: Job? = null
+
+    init {
+        load()
+        viewModelScope.launch {
+            // isAvailable asks the package manager across a binder: not on the thread drawing the turn.
+            val on = graph.settings.sttEnabled.first() && withContext(Dispatchers.Default) { graph.stt.isAvailable }
+            // With recognition off nothing about this screen changes, «Το είπα!» included.
+            _state.update { it.copy(sttOn = on, canConfirm = !on || check.canConfirm) }
+        }
+        // Only while a window is open: the bar belongs to the microphone, and nothing else draws it.
+        viewModelScope.launch {
+            graph.stt.level.collect { l -> _state.update { if (it.listening) it.copy(listenLevel = l) else it } }
+        }
+    }
 
     private fun load() {
         loadJob = viewModelScope.launch {
@@ -164,7 +213,10 @@ class ScriptsViewModel(
         // The listens belong to the turn being left, and so does any sound still in flight: the new
         // turn starts with its own count, in silence, and with «Άκου» live from its first frame.
         listens = 0
+        lastPeak = null
+        check = GentleCheck()
         stopCue()
+        stopRecogniser()
         val (line, item) = lines[i]
         if (line.speaker == Speaker.OTHER) {
             ladder = null
@@ -172,6 +224,7 @@ class ScriptsViewModel(
                 it.copy(
                     index = i, phase = ScriptPhase.OTHER_SPEAKING, level = 0, cueText = null, showsWord = false,
                     canHint = false, isRecording = false, modelPlaying = false, selfRecordingPath = null,
+                    heard = null, heardMatched = false, sttTries = 0, nudge = false, canConfirm = !it.sttOn,
                 )
             }
             if (onScreen) speakOther(i)
@@ -184,6 +237,7 @@ class ScriptsViewModel(
                     index = i, phase = ScriptPhase.WAITING_FOR_DIMITRIS,
                     level = next.level, cueText = next.cueText(), showsWord = next.showsWord, canHint = next.canHint,
                     isRecording = false, modelPlaying = false, selfRecordingPath = null,
+                    heard = null, heardMatched = false, sttTries = 0, nudge = false, canConfirm = !it.sttOn,
                 )
             }
         }
@@ -329,7 +383,15 @@ class ScriptsViewModel(
             runCatching { graph.voice.stopRecording() }
                 .onSuccess { rec ->
                     val itemId = lines[_state.value.index].second.id
-                    _state.update { it.copy(isRecording = false, selfRecordingPath = graph.files.relativize(rec.file)) }
+                    lastPeak = rec.peakAmplitude
+                    // A take nobody spoke into is not a take: it is deleted, he is asked again, the
+                    // turn stays open and nothing is written. Silence used to pass as his voice.
+                    if (rec.isSilent) {
+                        rec.file.delete()
+                        _state.update { it.copy(isRecording = false, error = Recorded.SILENT_TAKE) }
+                        return@onSuccess
+                    }
+                    _state.update { it.copy(isRecording = false, selfRecordingPath = graph.files.relativize(rec.file), error = null) }
                     // The app scope, not this screen's: the take is on disk, its row must land too.
                     recordingSave = graph.scope.async {
                         try {
@@ -379,6 +441,65 @@ class ScriptsViewModel(
         }
     }
 
+    /**
+     * «Μίλα». The recognition window opens on his turn and waits for him — no stopwatch, and no
+     * plain take that checks nothing. What comes back goes to [judge].
+     */
+    fun listen() {
+        val s = _state.value
+        if (!s.sttOn || s.listening || s.isRecording || finishing) return
+        if (s.phase != ScriptPhase.WAITING_FOR_DIMITRIS) return
+        // The microphone is about to open: whatever was being said stops here, or the recogniser
+        // hears the model line and answers «Μπράβο!» to the phone's own voice.
+        stopCue()
+        _state.update { it.copy(listening = true, listenLevel = 0f, heard = null, heardMatched = false, nudge = false, error = null) }
+        listenJob = viewModelScope.launch {
+            graph.stt.listen().fold(
+                onSuccess = { t -> judge(t.text.takeIf { it.isNotBlank() }) },
+                onFailure = { e -> graph.errors.record("scripts listen", e); judge(null) },
+            )
+        }
+    }
+
+    /** «Στοπ»: the window closes now, and what it had heard still comes back through [listen]. */
+    fun stopListening() {
+        if (_state.value.listening) graph.stt.stop()
+    }
+
+    /**
+     * What the phone heard, weighed against his line — the gentle check of spec §12, on a whole
+     * turn rather than a word, so [SpeechMatch.phraseMatches] is what decides: «θέλω καφέ» for
+     * «θέλω έναν καφέ» is the man having the conversation, not failing it.
+     *
+     * A match confirms the turn for him at the cue level he was on. A miss buys one «Δοκίμασε ξανά»
+     * with the cue untouched and «Άκου» still there; after the second, «Το είπα!» comes back and
+     * confirms exactly as it did before. A window that heard nothing counts as one of the two — a
+     * dead recogniser must not be able to lock him out of a turn he really took.
+     */
+    private fun judge(text: String?) {
+        val line = lines.getOrNull(_state.value.index)?.second?.text.orEmpty()
+        val matched = text != null && SpeechMatch.phraseMatches(text, line)
+        val verdict = check.record(text, matched)
+        _state.update {
+            it.copy(
+                listening = false, listenLevel = 0f, heard = text, heardMatched = matched,
+                sttTries = check.tries, nudge = check.nudging, canConfirm = check.canConfirm,
+                error = if (text == null) HEARD_NOTHING else null,
+            )
+        }
+        if (verdict == GentleCheck.Verdict.MATCHED) confirm() else graph.feedback.nudge()
+    }
+
+    /** Closes any open window and stops claiming to be listening. */
+    private fun stopRecogniser() {
+        listenJob?.cancel()
+        listenJob = null
+        // Only a window that is actually open is closed: «Στοπ» is his word, and a stop sent for a
+        // window nobody opened would be one more thing happening that he never asked for.
+        if (_state.value.listening) graph.stt.stop()
+        _state.update { it.copy(listening = false, listenLevel = 0f) }
+    }
+
     fun confirm() {
         if (finishing || _state.value.phase != ScriptPhase.WAITING_FOR_DIMITRIS) return
         finishLine(confirmed = true)
@@ -395,6 +516,8 @@ class ScriptsViewModel(
         // A take still running belongs to this turn: it is closed and kept, not thrown away.
         if (_state.value.isRecording) toggleRecording()
         stopCue()
+        stopRecogniser()
+        val s = _state.value
         val i = _state.value.index
         val (line, item) = lines[i]
         // Read eagerly: the ladder and the clock belong to the turn being left behind. The recorded
@@ -405,6 +528,11 @@ class ScriptsViewModel(
         val position = line.position
         val heard = listens
         val save = recordingSave
+        // What the phone made of him, and how loud his take was. The first is only meaningful while
+        // recognition is on; the second is the calibration data for [Recorded.SILENCE_PEAK].
+        val said = s.heard?.let { ""","sttHeard":${jsonString(it)}""" }.orEmpty()
+        val stt = if (s.sttOn) """$said,"sttMatched":${s.heardMatched},"sttTries":${s.sttTries}""" else ""
+        val peak = lastPeak?.let { ""","peak":$it""" }.orEmpty()
         worstCue = maxOf(worstCue, level)
         if (!confirmed) skipped = true
         val prev = lastWrite
@@ -419,7 +547,7 @@ class ScriptsViewModel(
                     Attempt(
                         itemId = item.id, module = ModuleId.SCRIPTS, sessionId = sessionId, startedAt = began,
                         durationMs = now() - began, outcome = outcome, cueLevel = level, selfRecordingId = recordingId,
-                        detail = """{"scriptId":${jsonString(scriptId)},"position":$position,"listened":$heard}""",
+                        detail = """{"scriptId":${jsonString(scriptId)},"position":$position,"listened":$heard$stt$peak}""",
                     )
                 )
             }.onFailure { graph.errors.record("scripts line", it) }
@@ -532,6 +660,7 @@ class ScriptsViewModel(
         speakJob?.cancel()
         endJob?.cancel()
         stopCue()
+        stopRecogniser()
     }
 
     override fun onCleared() {
@@ -549,6 +678,9 @@ class ScriptsViewModel(
         const val MIC_DENIED = "Χωρίς άδεια μικροφώνου"
         const val TOO_SHORT = "Πολύ σύντομη ηχογράφηση"
         const val NO_RECORDING = "Δεν ξεκίνησε η ηχογράφηση"
+
+        /** Recognition came back with nothing. Never a verdict on him: the invitation stays open. */
+        const val HEARD_NOTHING = "Δεν άκουσα τίποτα. Δοκίμασε ξανά αν θέλεις."
 
         /** Spoken at the end of the dialogue, before the module hands back. */
         const val THE_END = "Μπράβο! Τέλος διαλόγου."

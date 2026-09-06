@@ -8,16 +8,22 @@ import gr.dimitris.app.core.data.Item
 import gr.dimitris.app.core.data.ModuleId
 import gr.dimitris.app.core.data.Who
 import gr.dimitris.app.core.data.now
+import gr.dimitris.app.core.audio.Recorded
+import gr.dimitris.app.core.speech.GentleCheck
+import gr.dimitris.app.core.speech.SpeechMatch
 import gr.dimitris.app.modules.wordcoach.CueLadder
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Deferred
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 data class SingSayState(
     val index: Int = 0,
@@ -34,6 +40,22 @@ data class SingSayState(
     val hasSungModel: Boolean = false,
     val isRecording: Boolean = false,
     val selfRecordingPath: String? = null,
+    /** Recognition is on and this device has it: the last stage is checked, gently. */
+    val sttOn: Boolean = false,
+    val listening: Boolean = false,
+    /** How loud he is, 0..1, while the window is open. Drawn by the listening indicator. */
+    val listenLevel: Float = 0f,
+    val heard: String? = null,
+    val heardMatched: Boolean = false,
+    /** How many windows he has used on this phrase. */
+    val sttTries: Int = 0,
+    /** «Δοκίμασε ξανά» is on the screen: one miss, and nothing else has changed. */
+    val nudge: Boolean = false,
+    /**
+     * Whether «Το είπα!» is his to press at the last stage. Always true with recognition off; with
+     * it on, once the phone has agreed with him or has asked him twice.
+     */
+    val canConfirm: Boolean = true,
     val done: Boolean = false,
     val error: String? = null,
 )
@@ -83,7 +105,38 @@ class SingSayViewModel(private val graph: AppGraph, private val items: List<Item
     /** This phrase's sung-model lookup. Cancelled the moment another phrase loads. */
     private var loadJob: Job? = null
 
-    init { load(0) }
+    /**
+     * The gentle check for the phrase he is on, at the last stage only: the four before it are sung
+     * with the phone, and a recogniser listening to both of them would be checking the wrong voice.
+     */
+    private var check = GentleCheck()
+
+    /**
+     * The loudest sample of his last take. It rides along in the attempt's detail so that
+     * [gr.dimitris.app.core.audio.Recorded.SILENCE_PEAK] can be moved on evidence from his own phone.
+     */
+    private var lastPeak: Int? = null
+
+    /** The open recognition window, so leaving or moving on can close it. */
+    private var listenJob: Job? = null
+
+    /** Recognition, resolved once for the run: the settings and the device are asked, not the phrase. */
+    private var sttOn = false
+
+    init {
+        load(0)
+        viewModelScope.launch {
+            // isAvailable asks the package manager across a binder: not on the thread drawing the phrase.
+            val on = graph.settings.sttEnabled.first() && withContext(Dispatchers.Default) { graph.stt.isAvailable }
+            sttOn = on
+            // With recognition off nothing about this screen changes, «Το είπα!» included.
+            _state.update { it.copy(sttOn = on, canConfirm = !on || check.canConfirm) }
+        }
+        // Only while a window is open: the bar belongs to the microphone, and nothing else draws it.
+        viewModelScope.launch {
+            graph.stt.level.collect { l -> _state.update { if (it.listening) it.copy(listenLevel = l) else it } }
+        }
+    }
 
     private fun load(i: Int) {
         val item = items[i]
@@ -94,9 +147,15 @@ class SingSayViewModel(private val graph: AppGraph, private val items: List<Item
         recordingSave = null
         sungModelPath = null
         listens = 0
+        lastPeak = null
+        check = GentleCheck()
+        stopRecogniser()
         // playing from the first frame: the model is about to start, and a stage button tapped in
         // the gap would belong to the phrase he has just left.
-        _state.value = SingSayState(index = i, total = items.size, item = item, notes = Melody.forPhrase(item.text), playing = true)
+        _state.value = SingSayState(
+            index = i, total = items.size, item = item, notes = Melody.forPhrase(item.text), playing = true,
+            sttOn = sttOn, canConfirm = !sttOn,
+        )
         loadJob = viewModelScope.launch {
             val sung = try {
                 graph.items.sungRecording(item)
@@ -299,12 +358,83 @@ class SingSayViewModel(private val graph: AppGraph, private val items: List<Item
         finish(skipped = false)
     }
 
+    /**
+     * «Μίλα», at the last stage only. The window opens and waits for him — no stopwatch, and no
+     * plain take that checks nothing. What comes back goes to [judge].
+     */
+    fun listen() {
+        val s = _state.value
+        if (!s.sttOn || s.listening || s.isRecording || finishing || s.done) return
+        if (s.stage != SingStage.SPEAK) return
+        // The microphone is about to open: the melody and the model stop here, or the recogniser
+        // hears the phone singing and answers «Μπράβο!» to it.
+        claimPlayback()
+        _state.update {
+            it.copy(
+                playing = false, lit = -1, listening = true, listenLevel = 0f,
+                heard = null, heardMatched = false, nudge = false, error = null,
+            )
+        }
+        listenJob = viewModelScope.launch {
+            graph.stt.listen().fold(
+                onSuccess = { t -> judge(t.text.takeIf { it.isNotBlank() }) },
+                onFailure = { e -> graph.errors.record("singsay listen", e); judge(null) },
+            )
+        }
+    }
+
+    /** «Στοπ»: the window closes now, and what it had heard still comes back through [listen]. */
+    fun stopListening() {
+        if (_state.value.listening) graph.stt.stop()
+    }
+
+    /**
+     * What the phone heard, weighed against the phrase — the gentle check of spec §12. A phrase is
+     * a line and not a word, so [SpeechMatch.phraseMatches] is what decides.
+     *
+     * A match finishes the phrase for him at the stage he is on, which at stage five is his own
+     * work with nothing under it. A miss buys one «Δοκίμασε ξανά» with «Άκου» still there; after the
+     * second, «Το είπα!» comes back and finishes exactly as it did before. A window that heard
+     * nothing counts as one of the two — a dead recogniser must not be able to lock him out of a
+     * phrase he really said.
+     */
+    private fun judge(text: String?) {
+        val matched = text != null && SpeechMatch.phraseMatches(text, _state.value.item.text)
+        val verdict = check.record(text, matched)
+        _state.update {
+            it.copy(
+                listening = false, listenLevel = 0f, heard = text, heardMatched = matched,
+                sttTries = check.tries, nudge = check.nudging, canConfirm = check.canConfirm,
+                error = if (text == null) HEARD_NOTHING else null,
+            )
+        }
+        if (verdict == GentleCheck.Verdict.MATCHED) didIt() else graph.feedback.nudge()
+    }
+
+    /** Closes any open window and stops claiming to be listening. */
+    private fun stopRecogniser() {
+        listenJob?.cancel()
+        listenJob = null
+        // Only a window that is actually open is closed: «Στοπ» is his word, and a stop sent for a
+        // window nobody opened would be one more thing happening that he never asked for.
+        if (_state.value.listening) graph.stt.stop()
+        _state.update { it.copy(listening = false, listenLevel = 0f) }
+    }
+
     fun toggleRecording() {
         if (_state.value.isRecording) {
             runCatching { graph.voice.stopRecording() }
                 .onSuccess { rec ->
                     val itemId = _state.value.item.id
-                    _state.update { it.copy(isRecording = false, selfRecordingPath = graph.files.relativize(rec.file)) }
+                    lastPeak = rec.peakAmplitude
+                    // A take nobody spoke into is not a take: it is deleted, he is asked again, the
+                    // phrase stays open and nothing is written. Silence used to pass as his voice.
+                    if (rec.isSilent) {
+                        rec.file.delete()
+                        _state.update { it.copy(isRecording = false, error = Recorded.SILENT_TAKE) }
+                        return@onSuccess
+                    }
+                    _state.update { it.copy(isRecording = false, selfRecordingPath = graph.files.relativize(rec.file), error = null) }
                     // The app scope, not this screen's: the take is on disk, its row must land too.
                     recordingSave = graph.scope.async {
                         try {
@@ -363,6 +493,7 @@ class SingSayViewModel(private val graph: AppGraph, private val items: List<Item
         claimPlayback()
         // A take still running belongs to this phrase: it is stopped and kept, not thrown away.
         if (_state.value.isRecording) toggleRecording()
+        stopRecogniser()
         val s = _state.value
         val stageReached = s.stage
         val heard = listens
@@ -371,6 +502,11 @@ class SingSayViewModel(private val graph: AppGraph, private val items: List<Item
         // Read eagerly: the clock and the take belong to the phrase being left behind.
         val began = startedAt
         val save = recordingSave
+        // What the phone made of him, and how loud his take was. The first is only meaningful while
+        // recognition is on; the second is the calibration data for [Recorded.SILENCE_PEAK].
+        val said = s.heard?.let { ""","sttHeard":${jsonString(it)}""" }.orEmpty()
+        val stt = if (s.sttOn) """$said,"sttMatched":${s.heardMatched},"sttTries":${s.sttTries}""" else ""
+        val peak = lastPeak?.let { ""","peak":$it""" }.orEmpty()
         // Chained, because the app scope runs on a pool with no ordering: whoever joins the last
         // write must be joining every write, or a row can land after the session has counted.
         val prev = lastWrite
@@ -385,7 +521,7 @@ class SingSayViewModel(private val graph: AppGraph, private val items: List<Item
                     Attempt(
                         itemId = s.item.id, module = ModuleId.SINGSAY, sessionId = sessionId, startedAt = began,
                         durationMs = now() - began, outcome = outcome, cueLevel = cue, selfRecordingId = recordingId,
-                        detail = """{"stage":$stageReached,"listened":$heard}""",
+                        detail = """{"stage":$stageReached,"listened":$heard$stt$peak}""",
                     )
                 )
                 graph.scheduler.record(s.item.id, ModuleId.SINGSAY, outcome, cue)
@@ -410,6 +546,7 @@ class SingSayViewModel(private val graph: AppGraph, private val items: List<Item
     fun leave(then: () -> Unit) {
         loadJob?.cancel()
         claimPlayback()
+        stopRecogniser()
         if (graph.voice.isRecording) graph.voice.cancelRecording()
         graph.voice.quiet()
         val write = lastWrite
@@ -424,6 +561,7 @@ class SingSayViewModel(private val graph: AppGraph, private val items: List<Item
      */
     fun screenGone() {
         claimPlayback()
+        stopRecogniser()
         if (graph.voice.isRecording) graph.voice.cancelRecording()
         _state.update { it.copy(isRecording = false, playing = false, lit = -1) }
     }
@@ -431,8 +569,11 @@ class SingSayViewModel(private val graph: AppGraph, private val items: List<Item
     override fun onCleared() {
         loadJob?.cancel()
         claimPlayback()
+        stopRecogniser()
         if (graph.voice.isRecording) graph.voice.cancelRecording()
     }
+
+    private fun jsonString(s: String) = "\"" + s.replace("\\", "\\\\").replace("\"", "\\\"") + "\""
 
     companion object {
         /** Said on the screen when a spoken model made no sound at all. */
@@ -443,6 +584,9 @@ class SingSayViewModel(private val graph: AppGraph, private val items: List<Item
         const val MIC_DENIED = "Χωρίς άδεια μικροφώνου"
         const val TOO_SHORT = "Πολύ σύντομη ηχογράφηση"
         const val NO_RECORDING = "Δεν ξεκίνησε η ηχογράφηση"
+
+        /** Recognition came back with nothing. Never a verdict on him: the invitation stays open. */
+        const val HEARD_NOTHING = "Δεν άκουσα τίποτα. Δοκίμασε ξανά αν θέλεις."
 
         /** A tapped note marks the beat, it does not hold it: shorter than a sung one. */
         const val TAP_NOTE_MS = 350

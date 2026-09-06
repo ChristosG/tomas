@@ -1,5 +1,6 @@
 package gr.dimitris.app.modules.singsay
 
+import android.Manifest
 import androidx.compose.ui.test.hasScrollAction
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
@@ -12,13 +13,20 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollToNode
 import androidx.test.core.app.ApplicationProvider
+import androidx.test.rule.GrantPermissionRule
 import gr.dimitris.app.DimitrisApp
 import gr.dimitris.app.MainActivity
+import gr.dimitris.app.core.audio.Recorded
 import gr.dimitris.app.core.data.Attempt
+import gr.dimitris.app.core.data.Category
+import gr.dimitris.app.core.data.Item
 import gr.dimitris.app.core.data.ModuleId
 import gr.dimitris.app.core.data.Outcome
+import gr.dimitris.app.core.speech.FakeSpeechToText
+import gr.dimitris.app.core.speech.SpeechToText
 import gr.dimitris.app.ui.components.LISTEN_TAG
 import kotlinx.coroutines.runBlocking
+import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -33,9 +41,94 @@ import org.junit.Test
  * disables its buttons while the model is playing and while the next phrase is still being looked up.
  */
 class SingSayFlowTest {
-    @get:Rule val compose = createAndroidComposeRule<MainActivity>()
+    @get:Rule(order = 0) val mic: GrantPermissionRule = GrantPermissionRule.grant(Manifest.permission.RECORD_AUDIO)
+    @get:Rule(order = 1) val compose = createAndroidComposeRule<MainActivity>()
 
     private val graph get() = ApplicationProvider.getApplicationContext<DimitrisApp>().graph
+
+    /** The recogniser the gentle-check case runs against; the real one does not exist on an emulator. */
+    private val fake = FakeSpeechToText()
+    private var realStt: SpeechToText? = null
+
+    /** The phrase and the fake recogniser were ours, not his: take them both back out. */
+    @After fun putBackWhatWasBorrowed() = runBlocking<Unit> {
+        phrase?.let { graph.items.delete(it.id) }
+        realStt?.let { graph.stt = it }
+        graph.settings.setSttEnabled(false)
+    }
+
+    private var phrase: Item? = null
+
+    /**
+     * The gentle check at the fifth stage, which is the only one it belongs to: the four before it
+     * are sung *with* the phone, and a recogniser listening there would be checking the wrong voice.
+     *
+     * He gets to «Πες το κανονικά», says most of the phrase, and the phone agrees: the row is his
+     * own work at stage five, with what it heard written into it.
+     */
+    @Test fun theLastStageIsCheckedAndAMatchFinishesThePhraseForHim() {
+        withRecognition().willHear("θέλω καφέ")
+        val item = runBlocking { graph.items.save(Item(text = "Θέλω έναν καφέ", category = Category.FOOD)) }
+        phrase = item
+        val before = attempts()
+        lateinit var vm: SingSayViewModel
+        compose.runOnUiThread { vm = SingSayViewModel(graph, listOf(item), null) }
+        compose.waitUntil(TIMEOUT_MS) { vm.state.value.sttOn }
+        tapToLastStage(vm)
+
+        compose.runOnUiThread { vm.listen() }
+
+        compose.waitUntil(TIMEOUT_MS) { attempts().size == before.size + 1 }
+        val row = (attempts() - before.toSet()).single()
+        assertEquals("a phrase said alone at the last stage is his own", Outcome.CORRECT, row.outcome)
+        assertTrue("the stage he reached is still his: ${row.detail}", row.detail.contains("\"stage\":5"))
+        assertTrue("what it heard belongs in the row: ${row.detail}", row.detail.contains("\"sttHeard\":\"θέλω καφέ\""))
+        assertTrue("and that it agreed: ${row.detail}", row.detail.contains("\"sttMatched\":true"))
+        compose.runOnUiThread { vm.leave {} }
+    }
+
+    /** A take with nothing in it is deleted and said aloud; the phrase stays open and unwritten. */
+    @Test fun aSilentTakeIsCaughtAndThePhraseStaysOpen() {
+        val item = runBlocking { graph.items.save(Item(text = "Καλημέρα", category = Category.FOOD)) }
+        phrase = item
+        val before = attempts()
+        lateinit var vm: SingSayViewModel
+        compose.runOnUiThread { vm = SingSayViewModel(graph, listOf(item), null) }
+        compose.waitUntil(TIMEOUT_MS) { !vm.state.value.loading && !vm.state.value.playing }
+
+        compose.runOnUiThread { vm.toggleRecording() }
+        compose.waitUntil(TIMEOUT_MS) { vm.state.value.isRecording }
+        Thread.sleep(TAKE_MS)
+        compose.runOnUiThread { vm.toggleRecording() }
+
+        compose.waitUntil(TIMEOUT_MS) { !vm.state.value.isRecording }
+        assertEquals("he is told, in his own language", Recorded.SILENT_TAKE, vm.state.value.error)
+        assertEquals("nothing of his was kept", null, vm.state.value.selfRecordingPath)
+        assertEquals("and nothing was written for it", before.size, attempts().size)
+        compose.runOnUiThread { vm.leave {} }
+    }
+
+    /** Recognition on, with a recogniser that hears whatever the case says it hears. */
+    private fun withRecognition(): FakeSpeechToText {
+        realStt = graph.stt
+        runBlocking { graph.settings.setSttEnabled(true) }
+        graph.stt = fake
+        return fake
+    }
+
+    /**
+     * One tap per syllable, one pass per stage — the same walk the screen-driven cases make, done
+     * through the ViewModel so the recogniser can be reached without a permission dialog in the way.
+     */
+    private fun tapToLastStage(vm: SingSayViewModel) {
+        repeat(MAX_TAPS) {
+            if (vm.state.value.stage == SingStage.SPEAK) return
+            compose.waitUntil(TIMEOUT_MS) { !vm.state.value.playing && !vm.state.value.loading }
+            if (vm.state.value.stage == SingStage.SPEAK) return
+            compose.runOnUiThread { vm.tap() }
+        }
+        compose.waitUntil(TIMEOUT_MS) { vm.state.value.stage == SingStage.SPEAK && !vm.state.value.playing }
+    }
 
     @Test fun theFiveStagesEndInOneAttemptEvenWhenTheLastTapIsDoubled() {
         val before = attempts()
@@ -178,5 +271,8 @@ class SingSayFlowTest {
 
         /** Six passes (1 + 1 + 3 fading + 1) of a phrase far longer than any seeded one. */
         const val MAX_TAPS = 120
+
+        /** Long enough for a dozen loudness samples and for MediaRecorder to close cleanly. */
+        const val TAKE_MS = 1_200L
     }
 }

@@ -5,14 +5,55 @@ import android.media.MediaRecorder
 import android.os.Build
 import android.os.SystemClock
 import java.io.File
+import java.util.Timer
+import java.util.TimerTask
 
-data class Recorded(val file: File, val durationMs: Long)
+/**
+ * One finished take. [peakAmplitude] is the loudest sample of it on [MediaRecorder.getMaxAmplitude]'s
+ * 0..32767 scale, and is what tells a take he spoke into from a take he did not.
+ *
+ * It defaults to 0 so that a [Recorded] built anywhere else — a test, a future recorder — reads as
+ * silence rather than quietly passing a check it was never measured for.
+ */
+data class Recorded(val file: File, val durationMs: Long, val peakAmplitude: Int = 0) {
+    /**
+     * Nothing was said into this one. Chris found that a take never checked anything, so a silent
+     * one "passed" and was saved as his voice; the module deletes these and asks again instead.
+     */
+    val isSilent: Boolean get() = peakAmplitude < SILENCE_PEAK
+
+    companion object {
+        /**
+         * Below this, nobody spoke.
+         *
+         * Calibration: the emulator's microphone is dead silent and reports a peak of 0 — see
+         * `RecorderTest`. A voice at arm's length on a real phone reads roughly 3 000–20 000 on this
+         * scale, and room noise well under 1 000, so the line sits at 1 500: far enough above a
+         * quiet room that a rustle is not a word, far enough below a quiet voice that his is never
+         * thrown away. Every take's real peak rides along in the attempt's detail as `peak`, so the
+         * number can be moved on evidence from his phone instead of on a guess.
+         */
+        const val SILENCE_PEAK = 1_500
+
+        /** Said when the take had nothing in it. An invitation, never a verdict on his voice. */
+        const val SILENT_TAKE = "Δεν σε άκουσα. Πες το πιο δυνατά."
+    }
+}
 
 /** One recording at a time, AAC in an .m4a container. Caller must hold RECORD_AUDIO. */
 class Recorder(private val context: Context, private val files: MediaFiles) {
     private var recorder: MediaRecorder? = null
     private var current: File? = null
     private var startedAt = 0L
+
+    /**
+     * The loudest thing heard so far, and the timer filling it. `maxAmplitude` reports the peak
+     * *since it was last read*, so it has to be polled: read once at the end and the whole take
+     * before that last window would be invisible.
+     */
+    private val peakLock = Any()
+    private var sampler: Timer? = null
+    private var peak = 0
 
     val isRecording: Boolean get() = recorder != null
 
@@ -31,6 +72,7 @@ class Recorder(private val context: Context, private val files: MediaFiles) {
         recorder = r
         current = file
         startedAt = SystemClock.elapsedRealtime()
+        startSampling(r)
         return file
     }
 
@@ -38,6 +80,7 @@ class Recorder(private val context: Context, private val files: MediaFiles) {
         val r = recorder ?: error("Δεν ηχογραφεί")
         val file = current ?: error("Δεν ηχογραφεί")
         val duration = SystemClock.elapsedRealtime() - startedAt
+        val loudest = stopSampling(r)
         try {
             r.stop()
         } catch (e: RuntimeException) {
@@ -48,15 +91,54 @@ class Recorder(private val context: Context, private val files: MediaFiles) {
             recorder = null
             current = null
         }
-        return Recorded(file, duration)
+        return Recorded(file, duration, loudest)
     }
 
     fun cancel() {
         val r = recorder ?: return
+        stopSampling(r)
         runCatching { r.stop() }
         r.release()
         current?.delete()
         recorder = null
         current = null
+    }
+
+    /**
+     * A daemon timer rather than a coroutine: [Recorder] has no scope of its own, and the reading is
+     * one cheap call every tenth of a second. The lock is what keeps the tick off a recorder that
+     * `stop` has already released — reading `maxAmplitude` after that throws.
+     */
+    private fun startSampling(r: MediaRecorder) {
+        synchronized(peakLock) {
+            peak = 0
+            // Primes the counter: the first read returns the peak since the recorder started.
+            runCatching { r.maxAmplitude }
+            val timer = Timer("recorder-peak", true)
+            sampler = timer
+            timer.schedule(object : TimerTask() {
+                override fun run() {
+                    synchronized(peakLock) {
+                        if (sampler !== timer) return
+                        val amp = runCatching { r.maxAmplitude }.getOrDefault(0)
+                        if (amp > peak) peak = amp
+                    }
+                }
+            }, PEAK_SAMPLE_MS, PEAK_SAMPLE_MS)
+        }
+    }
+
+    /** Stops the timer and folds in one last reading, so the tail of the take counts too. */
+    private fun stopSampling(r: MediaRecorder): Int = synchronized(peakLock) {
+        sampler?.cancel()
+        sampler = null
+        val amp = runCatching { r.maxAmplitude }.getOrDefault(0)
+        if (amp > peak) peak = amp
+        peak
+    }
+
+    companion object {
+        /** Often enough that a single word cannot fall between two readings. */
+        const val PEAK_SAMPLE_MS = 100L
     }
 }

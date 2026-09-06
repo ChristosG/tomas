@@ -8,6 +8,8 @@ import gr.dimitris.app.core.data.Item
 import gr.dimitris.app.core.data.ModuleId
 import gr.dimitris.app.core.data.Who
 import gr.dimitris.app.core.data.now
+import gr.dimitris.app.core.audio.Recorded
+import gr.dimitris.app.core.speech.GentleCheck
 import gr.dimitris.app.core.speech.SpeechMatch
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Deferred
@@ -36,8 +38,19 @@ data class WordCoachState(
     val selfRecordingPath: String? = null,
     val sttOn: Boolean = false,
     val listening: Boolean = false,
+    /** How loud he is, 0..1, while the window is open. Drawn by the listening indicator. */
+    val listenLevel: Float = 0f,
     val heard: String? = null,
     val heardMatched: Boolean = false,
+    /** How many windows he has used on this word. */
+    val sttTries: Int = 0,
+    /** «Δοκίμασε ξανά» is on the screen: one miss, and nothing else has changed. */
+    val nudge: Boolean = false,
+    /**
+     * Whether «Το είπα!» is his to press. Always true with recognition off; with it on, once the
+     * phone has agreed with him or has asked him twice.
+     */
+    val canConfirm: Boolean = true,
     /** True after "Το είπα!": success mark shown, only "Επόμενο" remains. */
     val confirmed: Boolean = false,
     val done: Boolean = false,
@@ -80,6 +93,21 @@ class WordCoachViewModel(private val graph: AppGraph, private val items: List<It
      */
     private var finishing = false
 
+    /**
+     * The gentle check for the word he is on: what the phone heard, how many times it has asked, and
+     * whether «Το είπα!» is his to press yet. One per word.
+     */
+    private var check = GentleCheck()
+
+    /**
+     * The loudest sample of his last take. It rides along in the attempt's detail so that
+     * [gr.dimitris.app.core.audio.Recorded.SILENCE_PEAK] can be moved on evidence from his own phone.
+     */
+    private var lastPeak: Int? = null
+
+    /** The open recognition window, so leaving or moving on can close it. */
+    private var listenJob: Job? = null
+
     private val _state = MutableStateFlow(WordCoachState(total = items.size, item = items.first()))
     val state: StateFlow<WordCoachState> = _state.asStateFlow()
 
@@ -87,7 +115,12 @@ class WordCoachViewModel(private val graph: AppGraph, private val items: List<It
         viewModelScope.launch {
             // isAvailable asks the package manager across a binder: not on the thread drawing the word.
             val on = graph.settings.sttEnabled.first() && withContext(Dispatchers.Default) { graph.stt.isAvailable }
-            _state.update { it.copy(sttOn = on) }
+            // With recognition off nothing about this screen changes, «Το είπα!» included.
+            _state.update { it.copy(sttOn = on, canConfirm = !on || check.canConfirm) }
+        }
+        // Only while a window is open: the bar belongs to the microphone, and nothing else draws it.
+        viewModelScope.launch {
+            graph.stt.level.collect { l -> _state.update { if (it.listening) it.copy(listenLevel = l) else it } }
         }
     }
 
@@ -170,7 +203,17 @@ class WordCoachViewModel(private val graph: AppGraph, private val items: List<It
             runCatching { graph.voice.stopRecording() }
                 .onSuccess { rec ->
                     val itemId = _state.value.item.id
-                    _state.update { it.copy(isRecording = false, selfRecordingPath = graph.files.relativize(rec.file)) }
+                    lastPeak = rec.peakAmplitude
+                    // A take nobody spoke into is not a take. Chris found that recording never
+                    // checked anything, so silence "passed" and was saved as his voice — and then
+                    // played back to him by «Σύγκριση» as his. It is deleted and he is asked again;
+                    // the word stays open and nothing is written.
+                    if (rec.isSilent) {
+                        rec.file.delete()
+                        _state.update { it.copy(isRecording = false, error = Recorded.SILENT_TAKE) }
+                        return@onSuccess
+                    }
+                    _state.update { it.copy(isRecording = false, selfRecordingPath = graph.files.relativize(rec.file), error = null) }
                     // The app scope, not this screen's: the take is on disk, its row must land too.
                     recordingSave = graph.scope.async {
                         try {
@@ -222,28 +265,60 @@ class WordCoachViewModel(private val graph: AppGraph, private val items: List<It
     }
 
     /**
-     * Optional soft recognition: encouragement only, never a gate. A failed recognition is the
-     * phone's problem, not his, and it is said plainly instead of leaving "Ακούω..." hanging.
+     * «Μίλα». The recognition window opens and waits for him — no stopwatch, and no plain take that
+     * checks nothing. What comes back goes to [judge].
      */
     fun listen() {
-        if (!_state.value.sttOn || _state.value.listening || _state.value.isRecording) return
+        val s = _state.value
+        if (!s.sttOn || s.listening || s.isRecording || s.confirmed || finishing) return
         // The microphone is about to open: whatever the speaker was saying stops here, or the
         // recogniser hears the model and answers «Μπράβο!» to the phone's own voice.
         silence()
-        _state.update { it.copy(listening = true, heard = null, heardMatched = false, error = null) }
-        viewModelScope.launch {
+        _state.update { it.copy(listening = true, listenLevel = 0f, heard = null, heardMatched = false, nudge = false, error = null) }
+        listenJob = viewModelScope.launch {
             graph.stt.listen().fold(
-                onSuccess = { t ->
-                    val matched = SpeechMatch.matches(t.text, _state.value.item.text)
-                    if (matched) graph.feedback.success()
-                    _state.update { it.copy(listening = false, heard = t.text, heardMatched = matched) }
-                },
-                onFailure = { e ->
-                    graph.errors.record("wordcoach listen", e)
-                    _state.update { it.copy(listening = false, heard = null, heardMatched = false, error = HEARD_NOTHING) }
-                },
+                onSuccess = { t -> judge(t.text.takeIf { it.isNotBlank() }) },
+                onFailure = { e -> graph.errors.record("wordcoach listen", e); judge(null) },
             )
         }
+    }
+
+    /** «Στοπ»: the window closes now, and what it had heard still comes back through [listen]. */
+    fun stopListening() {
+        if (_state.value.listening) graph.stt.stop()
+    }
+
+    /**
+     * What the phone heard, weighed against the word — the gentle check of spec §12.
+     *
+     * A match confirms the word for him at the cue level he was on: he said it, and being made to
+     * press a button to agree with the phone is one step too many for a man who has just done the
+     * hard part. A miss buys one «Δοκίμασε ξανά» with the cue untouched and «Άκου» still there;
+     * after the second, «Το είπα!» comes back and confirms exactly as it did before. A window that
+     * heard nothing counts as one of the two — a dead recogniser must not be able to lock him out
+     * of confirming work he really did.
+     */
+    private fun judge(text: String?) {
+        val matched = text != null && SpeechMatch.phraseMatches(text, _state.value.item.text)
+        val verdict = check.record(text, matched)
+        _state.update {
+            it.copy(
+                listening = false, listenLevel = 0f, heard = text, heardMatched = matched,
+                sttTries = check.tries, nudge = check.nudging, canConfirm = check.canConfirm,
+                error = if (text == null) HEARD_NOTHING else null,
+            )
+        }
+        if (verdict == GentleCheck.Verdict.MATCHED) confirm() else graph.feedback.nudge()
+    }
+
+    /** Closes any open window and stops claiming to be listening. */
+    private fun stopRecogniser() {
+        listenJob?.cancel()
+        listenJob = null
+        // Only a window that is actually open is closed: «Στοπ» is his word, and a stop sent for a
+        // window nobody opened would be one more thing happening that he never asked for.
+        if (_state.value.listening) graph.stt.stop()
+        _state.update { it.copy(listening = false, listenLevel = 0f) }
     }
 
     fun confirm() {
@@ -259,6 +334,7 @@ class WordCoachViewModel(private val graph: AppGraph, private val items: List<It
     private fun finish(confirmed: Boolean) {
         finishing = true
         if (_state.value.isRecording) toggleRecording()
+        stopRecogniser()
         val s = _state.value
         val outcome = ladder.outcomeFor(confirmed)
         // Read eagerly: the ladder is replaced the moment the next word starts. The recorded level,
@@ -267,8 +343,12 @@ class WordCoachViewModel(private val graph: AppGraph, private val items: List<It
         val save = recordingSave
         // Every row says how many times he asked for the model, so a caregiver reading a run of
         // assisted words can see whether it was the ladder or the listening that made them assisted.
-        val heard = s.heard?.let { ""","heard":${jsonString(it)},"matched":${s.heardMatched}""" }.orEmpty()
-        val detail = """{"listened":$listens$heard}"""
+        // What the phone made of him, and how loud his take was. The first is only meaningful while
+        // recognition is on; the second is the calibration data for [Recorded.SILENCE_PEAK].
+        val said = s.heard?.let { ""","sttHeard":${jsonString(it)}""" }.orEmpty()
+        val stt = if (s.sttOn) """$said,"sttMatched":${s.heardMatched},"sttTries":${s.sttTries}""" else ""
+        val peak = lastPeak?.let { ""","peak":$it""" }.orEmpty()
+        val detail = """{"listened":$listens$stt$peak}"""
         // The app scope, not this screen's: pressing back must not lose the word he just said.
         lastWrite = graph.scope.launch {
             runCatching {
@@ -301,6 +381,7 @@ class WordCoachViewModel(private val graph: AppGraph, private val items: List<It
         // screen was saying: a model still speaking over the next picture is the previous word's.
         if (graph.voice.isRecording) graph.voice.cancelRecording()
         silence()
+        stopRecogniser()
         val i = _state.value.index + 1
         if (i >= items.size) {
             // The session counts attempt rows as soon as it is told the module is done, so the last
@@ -313,7 +394,10 @@ class WordCoachViewModel(private val graph: AppGraph, private val items: List<It
         startedAt = now()
         listens = 0
         recordingSave = null
-        _state.value = WordCoachState(index = i, total = items.size, item = items[i], sttOn = _state.value.sttOn)
+        lastPeak = null
+        check = GentleCheck()
+        val on = _state.value.sttOn
+        _state.value = WordCoachState(index = i, total = items.size, item = items[i], sttOn = on, canConfirm = !on)
     }
 
     /**
@@ -324,6 +408,7 @@ class WordCoachViewModel(private val graph: AppGraph, private val items: List<It
     fun leave(then: () -> Unit) {
         if (graph.voice.isRecording) graph.voice.cancelRecording()
         silence()
+        stopRecogniser()
         val write = lastWrite
         viewModelScope.launch { write?.join(); then() }
     }
@@ -336,12 +421,14 @@ class WordCoachViewModel(private val graph: AppGraph, private val items: List<It
      */
     fun screenGone() {
         silence()
+        stopRecogniser()
         if (graph.voice.isRecording) graph.voice.cancelRecording()
-        _state.update { it.copy(isRecording = false, listening = false) }
+        _state.update { it.copy(isRecording = false, listening = false, listenLevel = 0f) }
     }
 
     override fun onCleared() {
         speakJob?.cancel()
+        stopRecogniser()
         if (graph.voice.isRecording) graph.voice.cancelRecording()
     }
 

@@ -40,10 +40,13 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import gr.dimitris.app.LocalAppGraph
 import gr.dimitris.app.core.data.Item
 import gr.dimitris.app.core.data.Speaker
+import gr.dimitris.app.core.speech.GentleCheck
+import gr.dimitris.app.core.speech.GentleCheck.Companion.SPEAK
 import gr.dimitris.app.ui.components.BigButton
 import gr.dimitris.app.ui.components.ButtonTone
 import gr.dimitris.app.ui.components.DimitrisScreen
 import gr.dimitris.app.ui.components.ListenButton
+import gr.dimitris.app.ui.components.ListeningIndicator
 import gr.dimitris.app.ui.components.QuietButton
 import gr.dimitris.app.ui.components.SuccessMark
 import gr.dimitris.app.ui.theme.Sizes
@@ -96,6 +99,10 @@ fun ScriptsScreen(items: List<Item>, sessionId: String?, onDone: () -> Unit, onL
     val askMic = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) vm.toggleRecording() else vm.micDenied()
     }
+    // Recognition opens the microphone too, so it asks for the same permission before it starts.
+    val askListen = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) vm.listen() else vm.micDenied()
+    }
 
     DimitrisScreen(
         // The module's own name until the dialogue's is known: a header that is blank for a beat
@@ -108,7 +115,11 @@ fun ScriptsScreen(items: List<Item>, sessionId: String?, onDone: () -> Unit, onL
                 // «Άκου» is the first button of the top row from the moment the turn appears, and
                 // the confirm gets the whole width below it: three big buttons in one row would each
                 // be narrower than his thumb, and nothing shrinks to make room for this one.
-                ScriptPhase.WAITING_FOR_DIMITRIS -> {
+                ScriptPhase.WAITING_FOR_DIMITRIS -> if (s.listening) {
+                    // The window is open. Everything else goes away: there is one thing to do, which
+                    // is to speak, and one button, which stops it when he decides he is finished.
+                    ListeningIndicator(level = s.listenLevel, onStop = vm::stopListening)
+                } else {
                     Row {
                         ListenButton(
                             onClick = vm::listenModel, enabled = !s.modelPlaying && !s.isRecording,
@@ -118,7 +129,18 @@ fun ScriptsScreen(items: List<Item>, sessionId: String?, onDone: () -> Unit, onL
                         BigButton("Βοήθεια", onClick = vm::hint, tone = ButtonTone.Secondary, enabled = s.canHint, modifier = Modifier.weight(1f))
                     }
                     Spacer(Modifier.height(Sizes.gapSmall))
-                    BigButton("Το είπα!", onClick = vm::confirm, tone = ButtonTone.Success)
+                    // With recognition on, the green button is «Μίλα» until the phone has agreed
+                    // with him or has asked him twice. After that «Το είπα!» is back and confirms
+                    // exactly as it always did, with «Μίλα» still beside it for another go.
+                    if (s.sttOn && !s.canConfirm) {
+                        BigButton(SPEAK, onClick = { askListen.launch(Manifest.permission.RECORD_AUDIO) }, icon = Icons.Rounded.Mic, tone = ButtonTone.Success)
+                    } else {
+                        BigButton("Το είπα!", onClick = vm::confirm, tone = ButtonTone.Success)
+                        if (s.sttOn) {
+                            Spacer(Modifier.height(Sizes.gapSmall))
+                            QuietButton(SPEAK, onClick = { askListen.launch(Manifest.permission.RECORD_AUDIO) }, icon = Icons.Rounded.Mic)
+                        }
+                    }
                     Spacer(Modifier.height(Sizes.gapSmall))
                     QuietButton("Παράλειψη", onClick = vm::skip)
                 }
@@ -148,6 +170,10 @@ fun ScriptsScreen(items: List<Item>, sessionId: String?, onDone: () -> Unit, onL
                         word = if (s.showsWord) item.text else null,
                         recording = s.isRecording,
                         modelPlaying = s.modelPlaying,
+                        listening = s.listening,
+                        nudge = s.sttOn && s.nudge,
+                        heard = if (s.sttOn) s.heard else null,
+                        heardMatched = s.heardMatched,
                         hasTake = s.selfRecordingPath != null,
                         // Stopping is not a permission question: only starting asks.
                         onRecord = { if (s.isRecording) vm.toggleRecording() else askMic.launch(Manifest.permission.RECORD_AUDIO) },
@@ -220,6 +246,10 @@ private fun TurnCard(
     word: String?,
     recording: Boolean,
     modelPlaying: Boolean,
+    listening: Boolean,
+    nudge: Boolean,
+    heard: String?,
+    heardMatched: Boolean,
     hasTake: Boolean,
     onRecord: () -> Unit,
     onCompare: () -> Unit,
@@ -249,6 +279,25 @@ private fun TurnCard(
                         color = MaterialTheme.colorScheme.onSecondaryContainer, modifier = Modifier.fillMaxWidth(),
                     )
                 }
+                // One nudge and no more. The cue has not moved, «Άκου» is where it was, and the
+                // microphone is one tap away again: nothing has been taken away from him.
+                if (nudge) {
+                    Spacer(Modifier.height(Sizes.gapSmall))
+                    Text(
+                        GentleCheck.TRY_AGAIN, style = MaterialTheme.typography.headlineMedium,
+                        color = MaterialTheme.colorScheme.onSecondaryContainer,
+                        textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+                if (heard != null) {
+                    Spacer(Modifier.height(Sizes.gapSmall))
+                    Text(
+                        // A miss is the phone's uncertainty, never a verdict on how he said it.
+                        if (heardMatched) "Άκουσα «$heard». Μπράβο!" else "Άκουσα «$heard». Το τηλέφωνο δεν είναι σίγουρο.",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSecondaryContainer,
+                    )
+                }
                 Spacer(Modifier.height(Sizes.gapSmall))
                 // «Άκου ξανά» used to live here, dead until «Βοήθεια» had been pressed — which is
                 // what Chris found in the field. It is gone: the one «Άκου» this screen has is the
@@ -261,8 +310,9 @@ private fun TurnCard(
                     // Not while the line is being said to him: he hears «Άκου», reaches straight
                     // for the mic, and the take would be the phone's own voice — which is then what
                     // «Σύγκριση» plays back to him as his, and what his caregiver hears in the
-                    // word's recordings. «Στοπ» stays live, or a take could not be closed.
-                    enabled = recording || !modelPlaying,
+                    // word's recordings. «Στοπ» stays live, or a take could not be closed. Nor
+                    // while the recogniser has the microphone: two mouths on one microphone.
+                    enabled = recording || (!modelPlaying && !listening),
                 )
                 // Only once there is something of his to compare the model against.
                 if (hasTake && !recording) {

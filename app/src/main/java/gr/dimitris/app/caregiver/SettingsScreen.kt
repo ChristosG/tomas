@@ -210,7 +210,14 @@ fun SettingsScreen(onBack: () -> Unit) {
                     .clickable(enabled = sttAvailable) { scope.launch { graph.settings.setSttEnabled(!stt) } },
             ) {
                 Text(
-                    if (sttAvailable) "Δείχνει τι άκουσε το τηλέφωνο. Ποτέ δεν τον κόβει." else "Η συσκευή δεν έχει αναγνώριση ομιλίας.",
+                    // What it now does, in the order he meets it: the wait, the comparison, the one
+                    // gentle retry, and the promise that «Το είπα!» always comes back.
+                    if (sttAvailable) {
+                        "Περιμένει να μιλήσει, δείχνει ότι ακούει και συγκρίνει με τη λέξη. " +
+                            "Σε αστοχία προτείνει μία ακόμη προσπάθεια· μετά το «Το είπα!» επιστρέφει. Ποτέ δεν τον κόβει."
+                    } else {
+                        "Η συσκευή δεν έχει αναγνώριση ομιλίας."
+                    },
                     style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f),
                 )
                 Switch(checked = stt && sttAvailable, enabled = sttAvailable, onCheckedChange = { on -> scope.launch { graph.settings.setSttEnabled(on) } })
