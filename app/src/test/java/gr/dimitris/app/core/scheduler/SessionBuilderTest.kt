@@ -293,6 +293,38 @@ class SessionBuilderTest {
         assertEquals("and he is asked for it once", 1, focused.count { it.id == buried.id })
     }
 
+    /**
+     * A held place that turns out not to be needed costs the sitting nothing.
+     *
+     * The reservation is counted before the due list is cut, so a focused word standing between the
+     * front of that list and the cut is already inside the sitting — and the place held for it was
+     * never spent. Without a backfill the due word it displaced was simply lost, and a man with a
+     * live advice was handed an eleven-word sitting for having one at all.
+     */
+    @Test fun `a focus never shortens the sitting`() = runTest {
+        val due = (0 until 12).map { i ->
+            word("due$i", createdAt = i.toLong()).also { w ->
+                schedules.upsert(Schedule(w.id, m, box = 1, nextDueAt = noon - 100 + i, createdAt = noon - 10 * LeitnerPolicy.DAY_MS))
+            }
+        }
+        suspend fun planWith(vararg on: String) =
+            SessionBuilder(items, schedules, { noon }, newPerDay = 0, maxItems = 12, focus = focus(on.toList()))
+                .plan(m, listOf(ItemKind.WORD))
+
+        // The ruled case: twelve due words and a focus naming the fourth of them.
+        val early = planWith(due[3].text)
+        assertEquals("a focus on a word already in the sitting cost it a place", 12, early.size)
+        assertTrue("the focused word is not in it", early.any { it.id == due[3].id })
+
+        // And the case that actually lost places: a word past the front of the list but inside the
+        // cut, so a place is held for it and then never used.
+        val middle = planWith(due[8].text)
+        assertEquals("an unused reservation shortened the sitting", 12, middle.size)
+        val both = planWith(due[8].text, due[9].text)
+        assertEquals("two unused reservations shortened it twice", 12, both.size)
+        assertEquals("and every place is still a different word", 12, both.map { it.id }.distinct().size)
+    }
+
     /** No focus: the sitting is chosen and ordered exactly as it was before phase 11. */
     @Test fun `without a focus nothing about the sitting changes`() = runTest {
         val words = (0 until 5).map { i ->

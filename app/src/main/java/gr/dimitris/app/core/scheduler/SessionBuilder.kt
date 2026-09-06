@@ -75,7 +75,9 @@ class SessionBuilder(
         // items that is one held place and two due.
         val reservable = maxItems / 2
         // The front of the due list, which no reservation can reach. A focused word standing there
-        // is already coming today and needs nothing held for it.
+        // is already coming today and needs nothing held for it — and one standing further down,
+        // where a place is held that turns out to be unnecessary, costs the sitting nothing either:
+        // see the backfill below.
         val safe = due.take((maxItems - reservable).coerceAtLeast(0)).mapTo(mutableSetOf()) { it.id }
         val focusSlots = minOf(FOCUS_SLOTS, wanted.count { it.id !in safe }, reservable)
         val newSlots = minOf(NEW_SLOTS, fresh.size, reservable - focusSlots)
@@ -83,9 +85,18 @@ class SessionBuilder(
         val inCore = core.mapTo(mutableSetOf()) { it.id }
         val room = (maxItems - core.size - newSlots).coerceAtLeast(0)
 
-        // The focus into what the due end left, then the new words. `distinctBy` because a focused
-        // word may be one of the new ones, and he is not asked for the same word twice.
-        val chosen = (core + wanted.filter { it.id !in inCore }.take(room) + fresh)
+        // The focus into what the due end left, then the new words, and then the due list again.
+        //
+        // That last one is the backfill, and it is what makes a *held* place cost nothing when it
+        // turns out not to be needed. A focused word standing between [safe] and the cut is already
+        // inside `core`, so the place held for it is never spent — and without the backfill the due
+        // word it displaced was simply lost and he was handed an eleven-word sitting for having a
+        // focus at all. A reservation nobody used goes back to the due list it came from.
+        //
+        // `distinctBy` because the same word can arrive by more than one road — a focused word that
+        // is also a new one, or one of the due words the backfill offers again — and he is not
+        // asked for the same word twice.
+        val chosen = (core + wanted.filter { it.id !in inCore }.take(room) + fresh + due)
             .distinctBy { it.id }
             .take(maxItems)
         // And then the sandwich orders the whole sitting, focus and new words included.
