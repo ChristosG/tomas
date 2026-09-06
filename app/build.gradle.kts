@@ -38,6 +38,19 @@ android {
     testOptions {
         unitTests.isReturnDefaultValues = true
     }
+
+    // The Anthropic SDK pulls in three Apache HttpComponents jars, and each of them carries its
+    // own META-INF/DEPENDENCIES; the packager refuses to choose between them and fails the build.
+    // Those files are Maven's dependency listings, not code or licences, so dropping them costs
+    // nothing — META-INF/LICENSE and NOTICE stay in the APK. The other two names are the usual
+    // companions of the same clash and are excluded pre-emptively rather than one build at a time.
+    packaging {
+        resources.excludes += setOf(
+            "META-INF/INDEX.LIST",
+            "META-INF/io.netty.versions.properties",
+            "META-INF/DEPENDENCIES",
+        )
+    }
 }
 
 ksp {
@@ -71,6 +84,7 @@ dependencies {
     implementation(libs.biometric)
     implementation(libs.security.crypto)
     implementation(libs.gson)
+    implementation(libs.anthropic.java)
     implementation(libs.exifinterface)
     debugImplementation(libs.compose.ui.tooling)
 
