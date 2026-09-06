@@ -237,6 +237,12 @@ Those eight names are the complete list; a row for any other table is rejected w
 `schedules` rows are keyed on `(itemId, module)`, which the app sends as the id
 `"<itemId>:<module>"`.
 
+**`updatedAt` is three phone clocks, not one.** "Last write" means "the larger number", which is
+only "the later edit" while the phones agree about the time. If the father's phone runs two
+minutes slow, an edit he makes now can lose to an edit Chris made three minutes ago, and neither
+of them is told. **Leave automatic date & time on in every phone's settings** — that is the whole
+requirement, and Android does it by default.
+
 ## 6. Data layout and backup
 
 ```
@@ -280,6 +286,29 @@ To restore, put `data/` back and start the server. To start over, stop the serve
 - Single process, no clustering. Run exactly one instance per `DATA_DIR`.
 - After restoring a phone from a backup, the app resets its sync cursors and pulls everything
   again; last-write-wins sorts the result out.
+
+## 8. Handing it over
+
+Five things, once, and then nobody has to think about this again.
+
+1. **Put it behind TLS.** Chapter 3. The token is sent on every request, so the connection has to
+   be encrypted by a proxy that already holds a certificate. Never publish the port itself.
+2. **Generate the token once** with `openssl rand -hex 32`, and type *the same one* into every
+   phone: Φροντιστής → Συγχρονισμός → Κλειδί, with the address (`https://sync.example.com`) in
+   the field above it. Three phones, one address, one token. Send it in a way you would send a
+   house key, not in a group chat.
+3. **Set up Dimitris' phone too.** It is the one whose practice everyone else wants to see. Hold
+   his name on the first screen for two seconds, say Ναι, and the same two fields are there. His
+   own screens never mention any of this.
+4. **Leave automatic date & time on in all three phones** — see chapter 5. It is what makes "the
+   newest edit wins" mean what it says.
+5. **Back up `data/`.** Chapter 6. That directory is the whole of it: copy it, and you have
+   everything; put it back, and the server is where it was.
+
+What to expect the first time: each phone sends its whole vocabulary up (a few hundred rows and
+about 180 pictograms) and takes back whatever the others added. The screen says so in one line —
+«Έστειλα … πήρα …» — and the second sync is quiet. The bundled words and dialogues carry the same
+ids on every phone, so they merge into one copy rather than three.
 
 ---
 
@@ -330,6 +359,21 @@ curl -s https://sync.example.com/v1/health
 κινητό ξεχωριστά. Έτσι μπορείτε να αλλάξετε το επίπεδο στο κινητό του Δημήτρη χωρίς να
 επηρεαστεί το δικό σας. Όλα τα υπόλοιπα (λέξεις, φωτογραφίες, ηχογραφήσεις, προγράμματα,
 προσπάθειες, σφάλματα) συγχρονίζονται κανονικά.
+
+**Η ώρα των τηλεφώνων:** αφήστε την **αυτόματη ημερομηνία και ώρα** ανοιχτή και στα τρία
+κινητά (Ρυθμίσεις Android → Σύστημα → Ημερομηνία και ώρα). Όταν δύο άνθρωποι αλλάξουν την ίδια
+λέξη, κρατιέται η αλλαγή με τη νεότερη ώρα — κι αν ένα κινητό πηγαίνει πίσω, η δική του αλλαγή
+μπορεί να χαθεί χωρίς να το πει κανείς. Το Android το κάνει αυτόματα από μόνο του· απλώς μην
+το κλείσετε.
+
+**Το κινητό του Δημήτρη:** ρυθμίζεται κι αυτό, από εσάς. Κρατήστε πατημένο το όνομά του στην
+πρώτη οθόνη για δύο δευτερόλεπτα, «Ναι», μετά «Συγχρονισμός», και βάλτε την ίδια διεύθυνση και
+το ίδιο κλειδί. Οι δικές του οθόνες δεν δείχνουν ποτέ τίποτα από αυτά.
+
+**Την πρώτη φορά:** κάθε κινητό στέλνει όλο του το λεξιλόγιο (μερικές εκατοντάδες γραμμές και
+γύρω στις 180 εικόνες) και παίρνει ό,τι πρόσθεσαν τα άλλα. Η οθόνη το λέει σε μία γραμμή
+(«Έστειλα … πήρα …»). Ο δεύτερος συγχρονισμός δεν έχει τίποτα να πει — και οι λέξεις που
+έρχονται μαζί με την εφαρμογή δεν διπλασιάζονται, γιατί είναι οι ίδιες σε κάθε κινητό.
 
 **Αν κάτι πάει στραβά:** δείτε τα μηνύματα του διακομιστή (`docker compose logs -f` ή την
 κονσόλα). Κάθε αίτημα γράφει μία γραμμή με την ώρα, τη διαδρομή και τον κωδικό απάντησης.
