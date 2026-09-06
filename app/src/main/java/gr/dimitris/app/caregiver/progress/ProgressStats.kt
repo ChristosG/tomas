@@ -409,17 +409,33 @@ object ProgressStats {
      * word lines totalling five — and a reader who decides a table is unreliable stops using it.
      * The modules are read from the rows rather than listed as a constant, because which of them
      * writes a word depends on the level he is at that day.
+     *
+     * [known] is every item id the app has ever had, **soft-deleted rows included**. A word a
+     * caregiver has since removed was still a word he practised: counting its attempts here made a
+     * day read «εκ των οποίων 2 χωρίς λέξη: Λέξεις 2», which contradicts the section's own
+     * explanation that the word-less exercises are the ones with no vocabulary behind them.
      */
     fun wordlessByDay(
         attempts: List<Attempt>,
-        items: Map<String, Item>,
+        known: Set<String>,
         from: Long,
         to: Long,
         zone: ZoneId = ZoneId.systemDefault(),
     ): Map<Long, Map<ModuleId, Int>> =
-        exercises(attempts).filter { it.startedAt in from..to && items[it.itemId] == null }
+        exercises(attempts).filter { it.startedAt in from..to && wordless(it.itemId, known) }
             .groupBy { startOfDay(it.startedAt, zone) }
             .mapValues { (_, rows) -> rows.groupingBy { it.module }.eachCount().toSortedMap(compareBy { it.ordinal }) }
+
+    /**
+     * The item ids that were never a word: a level, a game, a sitting — `numbers:level:3`,
+     * `arcade:tap`, `trace:level:1`, `session:summary`. Nothing can look them up in the vocabulary
+     * and nothing should try.
+     */
+    val SYNTHETIC_PREFIXES = listOf("numbers:", "sentences:", "trace:", "arcade:", "session:")
+
+    /** Whether an attempt was about no word at all: a made-up id, or one nothing ever wrote. */
+    fun wordless(itemId: String, known: Set<String>): Boolean =
+        itemId !in known || SYNTHETIC_PREFIXES.any { itemId.startsWith(it) }
 
     /** `detail.level` as a number, or null when this module does not write one. */
     private fun levelOf(row: Attempt): Int? = runCatching {

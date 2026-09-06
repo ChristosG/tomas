@@ -407,6 +407,9 @@ suspend fun journeyReport(
 
     val everything = db.attempts().all(AttemptDao.LIFETIME_LIMIT)
     val items = db.items().allActive().associateBy { it.id }
+    // Every id the vocabulary has ever had, soft-deleted rows included: a word a caregiver has
+    // since removed was still a word he practised, and its attempts are not «χωρίς λέξη».
+    val everKnown = db.items().all().mapTo(mutableSetOf()) { it.id }
     val schedules = db.schedules().allRows()
     // A caregiver's voice only: his own takes are him practising, not a model to practise against.
     val voices = db.recordings().itemsWithVoice(Who.CAREGIVER).toSet()
@@ -431,7 +434,7 @@ suspend fun journeyReport(
             modules = ProgressStats.moduleHistory(everything, zone = zone),
             lifetime = ProgressStats.lifetime(everything, schedules, items, voices),
             recent = ProgressStats.recentByDay(window, items, from, to, zone),
-            wordless = ProgressStats.wordlessByDay(window, items, from, to, zone),
+            wordless = ProgressStats.wordlessByDay(window, everKnown, from, to, zone),
             days = p.days,
             previous = previous,
             levels = levels,

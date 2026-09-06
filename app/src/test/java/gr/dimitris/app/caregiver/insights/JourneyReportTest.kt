@@ -84,7 +84,7 @@ class JourneyReportTest {
         modules: List<ModuleHistory> = ProgressStats.moduleHistory(attempts, zone = zone),
         lifetime: List<ItemHistory> = ProgressStats.lifetime(attempts, schedules, items, setOf("item-id-4444")),
         recent: List<DayItemStat> = ProgressStats.recentByDay(attempts, items, from, to, zone),
-        wordless: Map<Long, Map<ModuleId, Int>> = ProgressStats.wordlessByDay(attempts, items, from, to, zone),
+        wordless: Map<Long, Map<ModuleId, Int>> = ProgressStats.wordlessByDay(attempts, items.keys, from, to, zone),
         days: List<DayStat> = listOf(
             DayStat(at("2026-09-04", 0), minutes = 12, attempts = 2),
             DayStat(at("2026-09-05", 0), minutes = 3, attempts = 2),
@@ -271,7 +271,7 @@ class JourneyReportTest {
         )
         val text = report(
             recent = ProgressStats.recentByDay(mixed, items, from, to, zone),
-            wordless = ProgressStats.wordlessByDay(mixed, items, from, to, zone),
+            wordless = ProgressStats.wordlessByDay(mixed, items.keys, from, to, zone),
             days = listOf(
                 DayStat(at("2026-09-04", 0), minutes = 12, attempts = 5),
                 DayStat(at("2026-09-05", 0), minutes = 3, attempts = 2),

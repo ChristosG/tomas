@@ -7,6 +7,7 @@ import gr.dimitris.app.core.data.Outcome
 import gr.dimitris.app.core.data.Schedule
 import gr.dimitris.app.core.data.Session
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.time.LocalDate
@@ -551,10 +552,41 @@ class ProgressStatsTest {
             attempt("2026-09-03", module = ModuleId.ARCADE, itemId = "arcade:tap"),
             attempt("2026-09-04", itemId = "i2"),
         )
-        val out = ProgressStats.wordlessByDay(rows, items, startOf("2026-09-01"), at("2026-09-05", 23, 59), zone)
+        val out = ProgressStats.wordlessByDay(rows, items.keys, startOf("2026-09-01"), at("2026-09-05", 23, 59), zone)
 
         assertEquals(mapOf(ModuleId.NUMBERS to 2, ModuleId.ARCADE to 1), out.getValue(startOf("2026-09-03")))
         assertTrue("a day whose exercises were all words is absent", startOf("2026-09-04") !in out)
+    }
+
+    /**
+     * A word a caregiver has since deleted was still a word he practised.
+     *
+     * The count used to key on the *active* vocabulary, so the day of a word she removed last night
+     * read «εκ των οποίων 2 χωρίς λέξη: Λέξεις 2» — while the section above it explains that the
+     * word-less exercises are Αριθμοί, Προτάσεις, Γράψε and Δεξί χέρι. Only a made-up id counts.
+     */
+    @Test fun `a deleted word is still a word, not a wordless exercise`() {
+        val rows = listOf(
+            attempt("2026-09-03", itemId = "i9"),
+            attempt("2026-09-03", module = ModuleId.TRACE, itemId = "trace:level:1"),
+        )
+        // «i9» is a word she deleted: gone from the active list, still in the items table.
+        val known = items.keys + "i9"
+
+        val out = ProgressStats.wordlessByDay(rows, known, startOf("2026-09-01"), at("2026-09-05", 23, 59), zone)
+        assertEquals("only the level row has no word behind it", mapOf(ModuleId.TRACE to 1), out.getValue(startOf("2026-09-03")))
+
+        // And an id nothing ever wrote is still counted: a row whose word was never in the table.
+        val lost = ProgressStats.wordlessByDay(rows, items.keys, startOf("2026-09-01"), at("2026-09-05", 23, 59), zone)
+        assertEquals(mapOf(ModuleId.WORDCOACH to 1, ModuleId.TRACE to 1), lost.getValue(startOf("2026-09-03")))
+    }
+
+    /** A level, a game and a sitting are ids, not words, whatever the items table happens to hold. */
+    @Test fun `the made-up ids are the ones nothing can look up`() {
+        for (id in listOf("numbers:level:3", "sentences:level:2", "trace:level:1", "arcade:tap", "session:summary")) {
+            assertTrue("«$id» is a word", ProgressStats.wordless(id, setOf(id)))
+        }
+        assertFalse("a word he practised is not word-less", ProgressStats.wordless("i1", items.keys))
     }
 
     // ---- the month, day by day ----------------------------------------------------------------
