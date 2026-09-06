@@ -20,6 +20,7 @@ import gr.dimitris.app.LocalAppGraph
 import gr.dimitris.app.ui.components.BigButton
 import gr.dimitris.app.ui.components.ButtonTone
 import gr.dimitris.app.ui.components.DimitrisScreen
+import gr.dimitris.app.ui.components.LISTEN
 import gr.dimitris.app.ui.components.QuietButton
 import gr.dimitris.app.ui.components.SuccessMark
 import gr.dimitris.app.ui.theme.Sizes
@@ -80,7 +81,9 @@ fun NumbersScreen(count: Int, sessionId: String?, onDone: () -> Unit, onLeave: (
                 Text(s.error!!, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyLarge)
             }
             Spacer(Modifier.height(Sizes.gapSmall))
-            QuietButton("Άκου ξανά", onClick = vm::speakPrompt, icon = Icons.Rounded.VolumeUp)
+            // The same one word as the four speech modules: «Άκου ξανά» reads as a second chance,
+            // and hearing the question again is not one — it is the question, said again.
+            QuietButton(LISTEN, onClick = vm::speakPrompt, icon = Icons.Rounded.VolumeUp)
             // Above the options, not under them: eleven buttons below it would put the tick he is
             // owed for a right answer off the bottom of the screen, and the icon is one of the three
             // things a success is made of.

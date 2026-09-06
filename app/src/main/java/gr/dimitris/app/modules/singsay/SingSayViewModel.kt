@@ -124,7 +124,12 @@ data class SingSayState(
  * sounds under him.
  */
 class SingSayViewModel(private val graph: AppGraph, private val items: List<Item>, private val sessionId: String?) : ViewModel() {
-    private val _state = MutableStateFlow(SingSayState(total = items.size, item = items.first(), notes = Melody.forPhrase(items.first().text)))
+    // `playing` from the very first frame, exactly as `load` sets it: the settings are read before
+    // the first phrase is published, and a stage button live in that gap would be one he could tap
+    // before there was anything to tap it against.
+    private val _state = MutableStateFlow(
+        SingSayState(total = items.size, item = items.first(), notes = Melody.forPhrase(items.first().text), playing = true)
+    )
     val state: StateFlow<SingSayState> = _state.asStateFlow()
 
     private var startedAt = now()
@@ -218,18 +223,30 @@ class SingSayViewModel(private val graph: AppGraph, private val items: List<Item
     private var key = Key.DEFAULT
 
     init {
-        load(0)
+        // Every setting this run sings by, read *before* the first phrase rather than beside it.
+        // The melody starts inside `load`, so a tempo that lands a moment later is a first phrase
+        // sung at the default while the caregiver's setting sits unread — one phrase in six, wrong
+        // and silently so. Nothing here is re-read afterwards: he does not open the caregiver
+        // screen mid-exercise, and a sitting that changed tempo halfway would be a different bug.
         viewModelScope.launch {
-            // isAvailable asks the package manager across a binder: not on the thread drawing the phrase.
-            val on = graph.settings.sttEnabled.first() && withContext(Dispatchers.Default) { graph.stt.isAvailable }
-            sttOn = on
+            try {
+                tempo = graph.settings.melodyTempo.first()
+                key = graph.settings.melodyKey.first()
+                // isAvailable asks the package manager across a binder: not on the thread drawing
+                // the phrase.
+                sttOn = graph.settings.sttEnabled.first() && withContext(Dispatchers.Default) { graph.stt.isAvailable }
+            } catch (ce: CancellationException) {
+                throw ce
+            } catch (e: Exception) {
+                // A settings read that fails must not cost him the exercise: the melody sings at
+                // its defaults and the recogniser stays off, which is what this module did before
+                // either setting existed.
+                graph.errors.record("singsay settings", e)
+            }
+            // With recognition off nothing about this screen changes, «Το είπα!» included; `load`
+            // below publishes both, so there is one place a phrase's state is ever built.
             sttResolved = true
-            // With recognition off nothing about this screen changes, «Το είπα!» included.
-            _state.update { it.copy(sttOn = on, sttResolved = true, canConfirm = !on || check.canConfirm) }
-        }
-        viewModelScope.launch {
-            tempo = graph.settings.melodyTempo.first()
-            key = graph.settings.melodyKey.first()
+            load(0)
         }
         // Only while a window is open: the bar belongs to the microphone, and nothing else draws it.
         viewModelScope.launch {

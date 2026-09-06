@@ -55,6 +55,9 @@ class SingSayFlowTest {
         phrase?.let { graph.items.delete(it.id) }
         realStt?.let { graph.stt = it }
         graph.settings.setSttEnabled(false)
+        // The melody is a caregiver's setting, and a test that borrows it puts it back.
+        graph.settings.setMelodyTempo(Tempo.DEFAULT)
+        graph.settings.setMelodyKey(Key.DEFAULT)
     }
 
     private var phrase: Item? = null
@@ -240,6 +243,37 @@ class SingSayFlowTest {
         assertTrue("hearing the model is level 3's worth of help: ${written.cueLevel}", (written.cueLevel ?: 0) >= 3)
         assertTrue("the row has to carry the listen: ${written.detail}", written.detail.contains("\"listened\":1"))
         assertTrue("and the stage he reached is still his: ${written.detail}", written.detail.contains("\"stage\":5"))
+    }
+
+    /**
+     * The first phrase sings at the caregiver's tempo and key, not at the defaults.
+     *
+     * The two settings used to be read in a coroutine of their own, racing the phrase load one line
+     * above them: if the DataStore read lost, phrase one sang at Κανονικός while the caregiver's
+     * «Αργό» sat unread, and nothing said so. They are now read before the phrase is published at
+     * all — which is why the state that first carries the phrase already knows the recogniser too —
+     * and the row says what it was actually sung at.
+     */
+    @Test fun theFirstPhraseIsSungAtTheCaregiverSetting() {
+        runBlocking {
+            graph.settings.setMelodyTempo(Tempo.SLOW)
+            graph.settings.setMelodyKey(Key.LOW)
+        }
+        val item = runBlocking { graph.items.save(Item(text = "Καλημέρα", category = Category.FOOD)) }
+        phrase = item
+        val before = attempts()
+        lateinit var vm: SingSayViewModel
+        compose.runOnUiThread { vm = SingSayViewModel(graph, listOf(item), null) }
+
+        // Nothing about the phrase is published until every setting it sings by has landed.
+        compose.waitUntil(TIMEOUT_MS) { !vm.state.value.loading }
+        assertTrue("the first phrase was published before its settings were read", vm.state.value.sttResolved)
+
+        compose.runOnUiThread { vm.skip() }
+        compose.waitUntil(TIMEOUT_MS) { attempts().size == before.size + 1 }
+        val row = (attempts() - before.toSet()).single()
+        assertTrue("the first phrase did not sing at the caregiver's tempo: ${row.detail}", row.detail.contains("\"tempo\":\"SLOW\""))
+        assertTrue("the first phrase did not sing in the caregiver's key: ${row.detail}", row.detail.contains("\"key\":\"LOW\""))
     }
 
     @Test fun skipMovesOnAndSaysSoInTheRow() {
