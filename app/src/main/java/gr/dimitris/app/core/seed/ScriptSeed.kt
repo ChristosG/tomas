@@ -33,6 +33,9 @@ class ScriptSeedImporter(private val graph: AppGraph) {
                     s.lines.map { LineDraft(speakerOf(it.speaker), it.text) },
                     source = Source.SEED,
                     seedIds = { i -> SeedIds.line(s.title, i) to SeedIds.lineItem(s.title, i) },
+                    // Not the clock: a second install's copies must not out-rank the first
+                    // install's work on the same dialogue. See SeedIds.EPOCH.
+                    at = SeedIds.stamp(manifest.version),
                 )
             }
             graph.settings.setScriptsSeedVersion(manifest.version)

@@ -17,7 +17,14 @@ class ItemRepository(
     fun observeByCategory(category: Category): Flow<List<Item>> = items.observeByCategory(category)
     suspend fun get(id: String): Item? = items.get(id)
 
-    suspend fun save(draft: Item): Item {
+    /**
+     * [at] is the stamp the row gets. It defaults to now, which is what every caregiver edit wants;
+     * the seed importer passes a stamp derived from the manifest version instead
+     * ([gr.dimitris.app.core.seed.SeedIds.stamp]) so that two phones importing the same bundled
+     * vocabulary write byte-identical rows — and so that any edit the family makes, stamped with a
+     * real clock, always out-ranks a fresh import under last-write-wins.
+     */
+    suspend fun save(draft: Item, at: Long = clock()): Item {
         val text = draft.text.trim()
         val override = draft.firstSyllableOverride?.trim()?.takeIf { it.isNotEmpty() }
         val saved = draft.copy(
@@ -25,7 +32,7 @@ class ItemRepository(
             firstSound = Greek.firstSound(text),
             firstSyllable = override ?: Syllabifier.firstSyllable(text),
             firstSyllableOverride = override,
-            updatedAt = clock(),
+            updatedAt = at,
         )
         items.upsert(saved)
         return saved

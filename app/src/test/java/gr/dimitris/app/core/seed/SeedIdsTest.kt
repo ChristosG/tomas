@@ -2,6 +2,7 @@ package gr.dimitris.app.core.seed
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.util.UUID
 
@@ -47,5 +48,19 @@ class SeedIdsTest {
     @Test fun `the ids are real UUIDs, which is what the database column expects`() {
         val id = SeedIds.item("ψωμί")
         assertEquals(id, UUID.fromString(id).toString())
+    }
+
+
+    /**
+     * The stamp is a constant plus the manifest version — never the clock. Two installs of the same
+     * APK have to write the same number, or the second one's copies are "newer" than the first
+     * one's photos, voices, pins and prices, and one sync reverts all of them.
+     */
+    @Test fun `the seed stamp is fixed, in the past, and moves only with the manifest`() {
+        assertEquals(SeedIds.EPOCH + 2, SeedIds.stamp(2))
+        assertEquals(SeedIds.stamp(2), SeedIds.stamp(2))
+        assertTrue(SeedIds.stamp(3) > SeedIds.stamp(2))
+        // September 2020: before the app existed, so anything the family does out-ranks an import.
+        assertTrue(SeedIds.stamp(99) < 1_700_000_000_000L)
     }
 }

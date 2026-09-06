@@ -21,13 +21,11 @@ class SeedImporter(private val graph: AppGraph) {
             // Every item the device has ever had, not only the seeded ones: see newEntries.
             for (entry in newEntries(manifest, onDevice(graph.db.items().all()))) {
                 val image = entry.image?.let { copyAsset("seed/$it") }
-                // The id comes from the word, not from a fresh UUID: see SeedIds. Two phones that
-                // import the same vocabulary have to write the same row, or sync merges the two
-                // copies onto both of them and Dimitris gets every word twice.
-                graph.items.save(Item(id = SeedIds.item(entry.text), text = entry.text,
-                    kind = runCatching { ItemKind.valueOf(entry.kind) }.getOrDefault(ItemKind.WORD),
-                    category = runCatching { Category.valueOf(entry.category) }.getOrDefault(Category.CUSTOM),
-                    imagePath = image?.let { graph.files.relativize(it) }, source = Source.SEED))
+                // Nothing here comes from the clock or from a fresh UUID — see [row] and SeedIds.
+                graph.items.save(
+                    row(entry, manifest.version, image?.let { graph.files.relativize(it) }),
+                    at = SeedIds.stamp(manifest.version),
+                )
             }
             graph.settings.setSeedVersion(manifest.version)
         } catch (ce: CancellationException) {
@@ -49,6 +47,28 @@ class SeedImporter(private val graph: AppGraph) {
     }.getOrElse { graph.errors.record("seed asset $name", it); null }
 
     companion object {
+        /**
+         * One bundled word as a row — the same row on every phone that ever imports this manifest.
+         *
+         * Nothing in it comes from the device: the id is derived from the text ([SeedIds.item]) and
+         * the timestamps from the manifest version ([SeedIds.stamp]). That is what makes the second
+         * caregiver's install a no-op on the server instead of a wave of "newer" rows that reverts
+         * every photo, voice, pin, price and deletion the family had made to the bundled words.
+         *
+         * [imagePath] is the copied pictogram's path on this phone, which is
+         * `photos/<the file name in the manifest>` and therefore the same everywhere too.
+         */
+        fun row(entry: SeedEntry, version: Int, imagePath: String?): Item = Item(
+            id = SeedIds.item(entry.text),
+            text = entry.text,
+            kind = runCatching { ItemKind.valueOf(entry.kind) }.getOrDefault(ItemKind.WORD),
+            category = runCatching { Category.valueOf(entry.category) }.getOrDefault(Category.CUSTOM),
+            imagePath = imagePath,
+            source = Source.SEED,
+            createdAt = SeedIds.stamp(version),
+            updatedAt = SeedIds.stamp(version),
+        )
+
         /**
          * What counts as "already on this device" for the vocabulary seed.
          *

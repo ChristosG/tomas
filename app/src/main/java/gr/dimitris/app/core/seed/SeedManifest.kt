@@ -35,6 +35,21 @@ object SeedText {
  * add by text, so a row that is there stays as it is, with the id it was born with.
  */
 object SeedIds {
+    /**
+     * The instant every seeded row claims to have been written, plus the manifest version.
+     *
+     * September 2020 — before the app existed, and far before any caregiver ever touched it. It is
+     * a *constant*, never the clock, and that is the whole point. Two phones importing the same
+     * manifest have to write byte-identical rows, or the second install's copies are newer than the
+     * first install's photos, voices, pins, prices and deletions, and the first «Συγχρόνισε τώρα»
+     * reverts all of them on all three phones. Anything the family actually does is stamped with a
+     * real clock, so it always out-ranks an import; a later manifest version out-ranks an earlier
+     * one; and re-importing the same version changes nothing at all.
+     */
+    const val EPOCH = 1_600_000_000_000L
+
+    fun stamp(version: Int): Long = EPOCH + version
+
     fun item(text: String): String = of("seed:item:${SeedText.key(text)}")
     fun script(title: String): String = of("seed:script:${SeedText.key(title)}")
     fun line(title: String, position: Int): String = of("seed:line:${SeedText.key(title)}:$position")

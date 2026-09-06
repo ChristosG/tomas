@@ -73,8 +73,15 @@ class ScriptRepository(
          * fresh ones. Only new rows use it: a turn kept from a previous save keeps its own id.
          */
         seedIds: ((Int) -> Pair<String, String>)? = null,
+        /**
+         * The stamp every row of this save gets. Now, for a dialogue a caregiver typed; for a
+         * seeded one, a number derived from the manifest version, so two phones importing the same
+         * bundled dialogue write identical rows and neither can revert the other's work. See
+         * [ItemRepository.save].
+         */
+        at: Long = clock(),
     ): Script {
-        val t = clock()
+        val t = at
         val existing = id?.let { scripts.get(it) }
         // A caller that asked for a particular id and has no row yet gets that id, not a fresh one:
         // it is how two phones importing the same bundled dialogue write the same row.
@@ -94,7 +101,7 @@ class ScriptRepository(
                 kept.second.id
             } else {
                 items.save(Item(id = fixed?.second ?: newId(), text = text, kind = ItemKind.SCRIPT_LINE,
-                    category = Category.CUSTOM, source = source)).id
+                    category = Category.CUSTOM, source = source, createdAt = t), at = t).id
             }
             if (d.recordingFile != null) items.addRecording(itemId, d.recordingFile, d.recordingMs, Who.CAREGIVER)
             // The kept row's own id, so nothing that pointed at the turn has to be rewritten; the
