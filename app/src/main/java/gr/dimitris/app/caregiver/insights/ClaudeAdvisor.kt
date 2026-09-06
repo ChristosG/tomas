@@ -59,6 +59,10 @@ class ClaudeAdvisor(private val secrets: Secrets, private val model: suspend () 
                 // the answer; the socket, the IO thread and the key in that request's headers must
                 // not outlive their patience by eight minutes.
                 .timeout(Duration.ofSeconds(TIMEOUT_SECONDS))
+                // One retry, not the SDK's two. The timeout is per attempt, so three attempts of a
+                // stalled connection is six minutes of a caregiver watching a spinner — and three
+                // billed requests where they asked for one.
+                .maxRetries(MAX_RETRIES)
                 .build()
             val params = MessageCreateParams.builder()
                 .model(chosen)
@@ -70,8 +74,12 @@ class ClaudeAdvisor(private val secrets: Secrets, private val model: suspend () 
             val response = client.messages().create(params)
             if (refused(response)) return@withContext Result.failure(AdviceException(REFUSED))
             val text = textOf(response)
-            if (text.isEmpty()) return@withContext Result.failure(AdviceException(EMPTY))
-            Result.success(parse(text).copy(truncated = truncated(response)))
+            // Truncation is checked before emptiness: with adaptive thinking the budget can be gone
+            // before a single text block is emitted, and telling the caregiver «δεν απάντησε» when
+            // the honest answer is «κόπηκε» sends them retrying the same wall.
+            val cut = truncated(response)
+            if (text.isEmpty()) return@withContext Result.failure(AdviceException(if (cut) TRUNCATED else EMPTY))
+            Result.success(parse(text).copy(truncated = cut))
         } catch (ce: CancellationException) {
             throw ce
         } catch (e: AnthropicServiceException) {
@@ -92,8 +100,11 @@ class ClaudeAdvisor(private val secrets: Secrets, private val model: suspend () 
         /** Room for the two short sections plus the thinking that leads to them. */
         const val MAX_TOKENS = 8_000L
 
-        /** Long enough for a considered answer, short enough that a cancelled one really stops. */
+        /** Long enough for a considered answer, short enough that a stalled one gives up. */
         const val TIMEOUT_SECONDS = 120L
+
+        /** Per attempt, and [TIMEOUT_SECONDS] is per attempt too, so this is the wait a caregiver gets. */
+        const val MAX_RETRIES = 1
 
         /**
          * How much of the answer is ever read out loud to him. The prompt asks for two sentences;
@@ -147,6 +158,10 @@ class ClaudeAdvisor(private val secrets: Secrets, private val model: suspend () 
             Το πολύ δύο σύντομες, ζεστές προτάσεις προς τον ίδιο τον Δημήτρη, σε δεύτερο πρόσωπο, σε
             πολύ απλά ελληνικά, χωρίς αριθμούς και χωρίς ποσοστά. Το τηλέφωνο θα τις διαβάσει
             δυνατά, οπότε γράψε τες όπως θα τις έλεγες.
+
+            Οι δύο τίτλοι είναι οι μόνες γραμμές που ξεκινούν με ##. Μην γράψεις τους τίτλους μέσα
+            στο κείμενο. Καθόλου άλλο markdown: χωρίς αστερίσκους για έντονα γράμματα, με παύλες για
+            τις λίστες.
         """.trimIndent()
 
         private fun serviceMessage(status: Int): String =
@@ -169,21 +184,44 @@ class ClaudeAdvisor(private val secrets: Secrets, private val model: suspend () 
 
         private fun stopReason(m: Message): String? = m.stopReason().orElse(null)?.asString()
 
+        /** A heading is a whole line of its own — never a heading named inside a sentence. */
+        private val CAREGIVERS_LINE = Regex("^##\\s*Για τους φροντιστές\\s*:?\\s*$", RegexOption.MULTILINE)
+        private val DIMITRIS_LINE = Regex("^##\\s*Για τον Δημήτρη\\s*:?\\s*$", RegexOption.MULTILINE)
+
         /**
          * Splits the answer on the two headings. A reply that lost them is not thrown away — the
          * caregivers get the whole thing and nothing is read out loud to Dimitris, which is the
          * safe way round: an unsplit answer is a full answer in the wrong shape, and reading an
          * answer meant for caregivers to him would be the actual harm.
+         *
+         * The headings are matched as whole lines, and the **last** such line wins. `indexOf` was
+         * not enough: the prompt names both headings, so a model writing «διάβασέ του την ενότητα
+         * ## Για τον Δημήτρη» *inside* the caregivers' advice would have moved the split onto that
+         * sentence — and the rest of the caregivers' text would then have been read out loud to a
+         * man with expressive aphasia, which is precisely what this function exists to prevent.
          */
         fun parse(text: String): Advice {
-            val c = text.indexOf(CAREGIVERS)
-            val d = text.indexOf(DIMITRIS)
-            if (c == -1 || d == -1 || d < c) return Advice(text.trim(), "")
+            val c = CAREGIVERS_LINE.findAll(text).lastOrNull()
+            val d = DIMITRIS_LINE.findAll(text).lastOrNull()
+            if (c == null || d == null || d.range.first < c.range.last) return Advice(plain(text), "")
             return Advice(
-                caregivers = text.substring(c + CAREGIVERS.length, d).trim(),
-                dimitris = forDimitris(text.substring(d + DIMITRIS.length)),
+                caregivers = plain(text.substring(c.range.last + 1, d.range.first)),
+                dimitris = forDimitris(text.substring(d.range.last + 1)),
             )
         }
+
+        /**
+         * The model's markdown, taken off before either half reaches a screen or the speaker. The
+         * prompt asks for plain text; models emit `**bold**` and `###` sub-headings anyway, the
+         * screen renders them literally, and TTS reads an asterisk out loud at a man who cannot ask
+         * what it means. Bullets are kept: a dash is a list either way.
+         */
+        internal fun plain(text: String): String = text.trim().lines().joinToString("\n") { line ->
+            line.replace(MARKDOWN_EMPHASIS, "").replaceFirst(MARKDOWN_HEADING, "").trimEnd()
+        }.trim()
+
+        private val MARKDOWN_EMPHASIS = Regex("\\*\\*|__")
+        private val MARKDOWN_HEADING = Regex("^\\s*#{1,6}\\s*")
 
         /**
          * His half, capped once, here — so what is on the screen and what is spoken are the same
@@ -191,7 +229,7 @@ class ClaudeAdvisor(private val secrets: Secrets, private val model: suspend () 
          * otherwise cut plainly rather than hand him a two-word stub.
          */
         internal fun forDimitris(raw: String): String {
-            val text = raw.trim()
+            val text = plain(raw)
             if (text.length <= MAX_DIMITRIS) return text
             val head = text.take(MAX_DIMITRIS)
             val end = head.lastIndexOfAny(SENTENCE_ENDS)

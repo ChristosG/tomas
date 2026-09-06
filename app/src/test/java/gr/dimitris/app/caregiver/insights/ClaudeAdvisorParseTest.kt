@@ -50,8 +50,63 @@ class ClaudeAdvisorParseTest {
         val text = "${ClaudeAdvisor.DIMITRIS}\nΜπράβο.\n\n${ClaudeAdvisor.CAREGIVERS}\n- Ένα."
         val advice = ClaudeAdvisor.parse(text)
 
-        assertEquals(text.trim(), advice.caregivers)
+        // Everything to the caregivers, with the model's own `##` taken off for reading.
+        assertTrue(advice.caregivers, advice.caregivers.contains("Μπράβο."))
+        assertTrue(advice.caregivers, advice.caregivers.contains("- Ένα."))
         assertEquals("", advice.dimitris)
+    }
+
+    /**
+     * The prompt names both headings, so a model writing «διάβασέ του την ενότητα ## Για τον
+     * Δημήτρη» *inside* the caregivers' advice is a plausible sentence — and with a plain `indexOf`
+     * the split landed on that mention, handing the rest of the caregivers' text to the screen and
+     * to the speaker as though it had been written for him.
+     */
+    @Test fun `a heading named inside a sentence is not a heading`() {
+        val text = ClaudeAdvisor.CAREGIVERS + "\n" +
+            "- Δούλεψε τα ψώνια.\n" +
+            "- Στο τέλος διάβασέ του την ενότητα " + ClaudeAdvisor.DIMITRIS + ".\n\n" +
+            ClaudeAdvisor.DIMITRIS + "\n" +
+            "Πάει καλά."
+
+        val advice = ClaudeAdvisor.parse(text)
+
+        assertEquals("Πάει καλά.", advice.dimitris)
+        assertTrue(advice.caregivers, advice.caregivers.contains("Δούλεψε τα ψώνια."))
+        assertTrue(advice.caregivers, advice.caregivers.contains("διάβασέ του την ενότητα"))
+    }
+
+    /** Two real heading lines: the last one is the one the answer is actually written under. */
+    @Test fun `the last heading line wins`() {
+        val text = answer("- Πρόχειρο.", "Πρόχειρο.") + "\n" + answer("- Το κανονικό.", "Το κανονικό.")
+
+        val advice = ClaudeAdvisor.parse(text)
+
+        assertEquals("- Το κανονικό.", advice.caregivers)
+        assertEquals("Το κανονικό.", advice.dimitris)
+    }
+
+    /** A heading with a colon, or trailing spaces, is still a heading. */
+    @Test fun `a heading with a colon still splits`() {
+        val advice = ClaudeAdvisor.parse(
+            ClaudeAdvisor.CAREGIVERS + ":\n- Ένα.\n\n" + ClaudeAdvisor.DIMITRIS + ":  \nΜπράβο."
+        )
+
+        assertEquals("- Ένα.", advice.caregivers)
+        assertEquals("Μπράβο.", advice.dimitris)
+    }
+
+    /**
+     * The prompt asks for plain text; models emit markdown anyway. The screen renders it literally
+     * and TextToSpeech reads an asterisk out loud at a man who cannot ask what it means.
+     */
+    @Test fun `markdown is taken off both halves`() {
+        val advice = ClaudeAdvisor.parse(
+            answer("### Την Δευτέρα\n- **Ψώνια** μαζί.", "**Μπράβο!** Συνέχισε.")
+        )
+
+        assertEquals("Την Δευτέρα\n- Ψώνια μαζί.", advice.caregivers)
+        assertEquals("Μπράβο! Συνέχισε.", advice.dimitris)
     }
 
     @Test fun `an empty section for him stays empty rather than becoming whitespace`() {
