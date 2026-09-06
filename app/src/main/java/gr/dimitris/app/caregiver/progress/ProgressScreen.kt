@@ -157,7 +157,8 @@ fun ProgressScreen(onBack: () -> Unit, onAdvice: () -> Unit = {}) {
                 )
             }
 
-            Section("Μαθημένες λέξεις: ${p.mastered}")
+            // Lifetime, not the window: it is the one number on this screen that is not four weeks.
+            Section("Μαθημένες λέξεις συνολικά: ${p.mastered}")
 
             Section("Δύσκολες λέξεις")
             WordList(p.mostSkipped.take(5))

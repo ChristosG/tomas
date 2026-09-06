@@ -40,6 +40,8 @@ object InsightRules {
     const val IDLE_DAYS = 3
 
     fun generate(p: Progress, attempts: List<Attempt>, items: Map<String, Item>): List<String> {
+        // Nothing has ever been recorded: this is the first launch, not four weeks of neglect.
+        val everPractised = attempts.any { !it.deleted }
         val out = mutableListOf<String>()
 
         if (p.streakDays >= STREAK_DAYS) out += "Σερί ${p.streakDays} ημερών. Συνέχισε έτσι!"
@@ -52,7 +54,7 @@ object InsightRules {
 
         hardWords(p)?.let { out += "Δύσκολες λέξεις: ${it.joinToString(", ")}. Δοκίμασε φωτογραφία ή φωνή." }
 
-        idleDays(p)?.let { out += "Καμία άσκηση εδώ και $it μέρες." }
+        if (everPractised) idleDays(p)?.let { out += "Καμία άσκηση εδώ και $it μέρες." }
 
         return out.take(MAX_LINES)
     }
@@ -87,10 +89,18 @@ object InsightRules {
             // Ties go to the module listed first, so the same week always names the same one.
             .maxWithOrNull(compareBy<ModuleStat> { it.attempts }.thenByDescending { it.module.ordinal })
 
-    /** Lower is better: the first week of the window against the last. */
+    /**
+     * Lower is better: the last two measured weeks. The sentence says «από την προηγούμενη
+     * εβδομάδα», so it has to be the previous one — comparing the first week of a four-week window
+     * would let an improvement a month old be announced as this week's news, and the same sentence
+     * is copied into the summary Claude is asked to advise on.
+     *
+     * Weeks with no cue-ladder attempt are simply absent from the trend, so "the previous one" is
+     * the previous week he was measured in. Fewer than two of those and the rule stays quiet.
+     */
     private fun needsLessHelp(p: Progress): Boolean {
         if (p.cueTrend.size < 2) return false
-        return p.cueTrend.first().meanCue - p.cueTrend.last().meanCue >= CUE_DROP
+        return p.cueTrend[p.cueTrend.lastIndex - 1].meanCue - p.cueTrend.last().meanCue >= CUE_DROP
     }
 
     /**
@@ -103,8 +113,11 @@ object InsightRules {
         // Graded modules only. Every talk-board tap is written as CORRECT because it is him
         // speaking, so counting the board here would let "he used the board more this month" arrive
         // on the dashboard as "the «π» words got better" — the one thing this rule must never say.
+        // The cue-ladder modules only. The talk board writes CORRECT for every tap, and «Γράψε» at
+        // levels 4–5 writes real item ids for words he *traced* — a claim about word-finding driven
+        // by handwriting is still a false claim.
         val live = attempts.filter {
-            !it.deleted && it.module in ProgressStats.GRADED_MODULES && items[it.itemId]?.firstSound?.isNotBlank() == true
+            !it.deleted && it.module in ProgressStats.CUE_MODULES && items[it.itemId]?.firstSound?.isNotBlank() == true
         }
         val now = live.filter { it.startedAt in p.from..p.to }.groupBy { items.getValue(it.itemId).firstSound }
         val before = live.filter { it.startedAt >= p.from - span && it.startedAt < p.from }
@@ -129,6 +142,10 @@ object InsightRules {
     /**
      * Days since the last day he did anything. Counted by position in [Progress.days], which is one
      * row per calendar day, so a clock change cannot add or lose a day.
+     *
+     * The caller only asks when there is history to be idle *from*: on a fresh install the whole
+     * window is empty and «Καμία άσκηση εδώ και 28 μέρες» would be a reproach for four weeks that
+     * happened before the app existed. The screen's «Τίποτα ιδιαίτερο…» covers that day.
      */
     private fun idleDays(p: Progress): Int? {
         if (p.days.isEmpty()) return null

@@ -78,9 +78,13 @@ class AdviceSummaryTest {
         val text = AdviceSummary.build(progress(), listOf("Σερί 3 ημερών. Συνέχισε έτσι!"), levels, zone = zone)
 
         assertTrue(text, text.contains("Περίοδος: 3/9/2026 – 5/9/2026 (3 μέρες)"))
-        assertTrue(text, text.contains("Σύνολο: 12 λεπτά, 6 ασκήσεις"))
+        // Twelve minutes of the one session, plus a minute for each of the three days he practised
+        // without one — free practice and the talk board write no session row at all.
+        assertTrue(text, text.contains("Σύνολο: 15 λεπτά, 6 ασκήσεις"))
         assertTrue(text, text.contains("Σερί: 3 μέρες"))
-        assertTrue(text, text.contains("Μαθημένες λέξεις: 1"))
+        // Lifetime, and labelled as such: the count has no date filter, and a bare number three
+        // lines under «Περίοδος: …» reads as "this month".
+        assertTrue(text, text.contains("Μαθημένες λέξεις συνολικά (από την αρχή): 1"))
         assertTrue(text, text.contains("- Λέξεις: 3 ασκήσεις, 67% σωστά (σωστά 2, με βοήθεια 0, προσπέρασε 1)"))
         // The talk board is counted but never scored — see `the talk board is counted, not graded`.
         assertTrue(text, text.contains("- Μίλα: 2 ασκήσεις (πίνακας επικοινωνίας, χωρίς σωστό και λάθος)"))

@@ -35,9 +35,15 @@ class ProgressStatsTest {
         itemId: String = "i1",
         cue: Int? = null,
         hour: Int = 9,
-    ) = Attempt(itemId = itemId, module = module, startedAt = at(date, hour), durationMs = 1000, outcome = outcome, cueLevel = cue)
+        minute: Int = 0,
+        sessionId: String? = null,
+    ) = Attempt(
+        itemId = itemId, module = module, sessionId = sessionId, startedAt = at(date, hour, minute),
+        durationMs = 1000, outcome = outcome, cueLevel = cue,
+    )
 
-    private fun session(date: String, startHour: Int, minutes: Long?) = Session(
+    private fun session(date: String, startHour: Int, minutes: Long?, id: String = "s") = Session(
+        id = id,
         startedAt = at(date, startHour),
         endedAt = minutes?.let { at(date, startHour) + it * 60_000 },
         plannedModules = "WORDCOACH",
@@ -197,6 +203,84 @@ class ProgressStatsTest {
             )
         )
         assertEquals(listOf("νερό" to 2, "καφές" to 1), p.mostUsedTalk)
+    }
+
+    /**
+     * Free practice writes no session row at all — a module opened from the Today grid, and every
+     * tap on the talk board. Those are real minutes of his life, so they are reconstructed from the
+     * attempts: anything closer together than five minutes is one sitting, and a sitting lasts as
+     * long as it spans. Twenty minutes of word coach used to read as «0 λεπτά».
+     */
+    @Test fun `free practice is counted as a sitting as long as it spans`() {
+        val p = compute(
+            attempts = listOf(
+                attempt("2026-09-02", hour = 10, minute = 0),
+                attempt("2026-09-02", hour = 10, minute = 2),
+                attempt("2026-09-02", hour = 10, minute = 4),
+            )
+        )
+        assertEquals(4, p.days[2].minutes)
+    }
+
+    /** Standing at the talk board to say one word is a minute of his day, not nothing. */
+    @Test fun `a lone tap is worth one minute`() {
+        val p = compute(attempts = listOf(attempt("2026-09-02", module = ModuleId.TALKBOARD, itemId = "i3")))
+        assertEquals(1, p.days[2].minutes)
+    }
+
+    /** More than five minutes apart is two sittings, not one long one with a pause in it. */
+    @Test fun `a long gap starts a second sitting`() {
+        val p = compute(
+            attempts = listOf(
+                attempt("2026-09-02", hour = 10, minute = 0),
+                attempt("2026-09-02", hour = 10, minute = 3),
+                attempt("2026-09-02", hour = 17, minute = 0),
+                attempt("2026-09-02", hour = 17, minute = 4),
+            )
+        )
+        // Three minutes in the morning, four in the evening — not seven hours in between.
+        assertEquals(7, p.days[2].minutes)
+    }
+
+    /** An attempt that belongs to a sitting the app already timed must not be counted twice. */
+    @Test fun `attempts inside a session add no minutes of their own`() {
+        val p = compute(
+            attempts = listOf(
+                attempt("2026-09-02", hour = 9, minute = 1, sessionId = "s"),
+                attempt("2026-09-02", hour = 9, minute = 5, sessionId = "s"),
+            ),
+            sessions = listOf(session("2026-09-02", 9, 10)),
+        )
+        assertEquals(10, p.days[2].minutes)
+    }
+
+    /**
+     * `schedules.itemId` is not one namespace: script practice records against the *script's* id,
+     * not an item's. A mastered dialogue is not a mastered word, and «Μαθημένες λέξεις» says word.
+     */
+    @Test fun `a mastered dialogue is not a mastered word`() {
+        val p = compute(
+            schedules = listOf(
+                Schedule(itemId = "i1", module = ModuleId.WORDCOACH, box = 5, nextDueAt = 0),
+                Schedule(itemId = "script-7", module = ModuleId.SCRIPTS, box = 5, nextDueAt = 0),
+            )
+        )
+        assertEquals(1, p.mastered)
+    }
+
+    /**
+     * «Δύσκολες λέξεις» carries the advice «Δοκίμασε φωτογραφία ή φωνή», which is about finding a
+     * word. «Γράψε» at levels 4–5 writes real item ids, so a word he skipped *tracing* would
+     * otherwise arrive there as a word he cannot find.
+     */
+    @Test fun `a word skipped while writing is not a word he cannot find`() {
+        val p = compute(
+            attempts = listOf(
+                attempt("2026-09-01", outcome = Outcome.SKIPPED, itemId = "i1"),
+                attempt("2026-09-01", outcome = Outcome.SKIPPED, itemId = "i2", module = ModuleId.TRACE),
+            )
+        )
+        assertEquals(listOf("καφές" to 1), p.mostSkipped)
     }
 
     /** The caller may hand over a wider list than the window — the insights need one. */

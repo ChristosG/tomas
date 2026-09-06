@@ -84,11 +84,21 @@ interface ScheduleDao {
     @Query("SELECT * FROM schedules WHERE module = :module AND deleted = 0") suspend fun all(module: ModuleId): List<Schedule>
 
     /**
-     * How many distinct words have reached the last Leitner box: what the dashboard shows as
+     * How many distinct **words** have reached the last Leitner box: what the dashboard shows as
      * «Μαθημένες λέξεις». Counted by SQLite rather than by reading items × modules rows into memory
-     * only to count them. Distinct *items*, not rows — a word learned in three modules is one word.
+     * only to count them.
+     *
+     * The join is the point. `schedules.itemId` is not one namespace: the word coach and sing-say
+     * store an item's id, but script practice stores the *script's* id
+     * ([gr.dimitris.app.modules.scripts.ScriptsViewModel] records against `scriptId`), and both are
+     * UUIDs, so a mastered dialogue used to arrive on the dashboard as a mastered word. Only rows
+     * that point at a live WORD or PHRASE count — distinct items, not rows, so a word learned in
+     * three modules is still one word.
      */
-    @Query("SELECT COUNT(DISTINCT itemId) FROM schedules WHERE deleted = 0 AND box >= :topBox")
+    @Query(
+        "SELECT COUNT(DISTINCT s.itemId) FROM schedules s JOIN items i ON i.id = s.itemId " +
+            "WHERE s.deleted = 0 AND i.deleted = 0 AND s.box >= :topBox AND i.kind IN ('WORD', 'PHRASE')"
+    )
     suspend fun masteredCount(topBox: Int): Int
 }
 

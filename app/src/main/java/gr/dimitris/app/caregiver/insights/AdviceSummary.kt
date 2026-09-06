@@ -72,7 +72,9 @@ object AdviceSummary {
             appendLine()
             appendLine("Σύνολο: ${minutesLine(p.days.sumOf { it.minutes })}, ${attemptsLine(p.days.sumOf { it.attempts })}")
             appendLine(streakLine(p.streakDays))
-            appendLine("Μαθημένες λέξεις: ${p.mastered}")
+            // "Συνολικά", because it is: the count has no date filter, and three lines under
+            // «Περίοδος: …» a bare number reads as "this month", to a caregiver and to Claude alike.
+            appendLine("Μαθημένες λέξεις συνολικά (από την αρχή): ${p.mastered}")
             appendLine()
 
             appendLine("Ανά άσκηση")

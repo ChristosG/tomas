@@ -2,6 +2,7 @@ package gr.dimitris.app.caregiver.progress
 
 import gr.dimitris.app.core.data.Attempt
 import gr.dimitris.app.core.data.Item
+import gr.dimitris.app.core.data.ItemKind
 import gr.dimitris.app.core.data.ModuleId
 import gr.dimitris.app.core.data.Outcome
 import gr.dimitris.app.core.data.Schedule
@@ -71,6 +72,18 @@ object ProgressStats {
      */
     val GRADED_MODULES: Set<ModuleId> = ModuleId.entries.toSet() - ModuleId.TALKBOARD
 
+    /**
+     * What «Μαθημένες λέξεις» is allowed to count. A dialogue line is an item too, but it is a line
+     * of a script, not a word he now has.
+     */
+    val WORD_KINDS = setOf(ItemKind.WORD, ItemKind.PHRASE)
+
+    /** Two attempts further apart than this are two sittings, not one with a pause in it. */
+    const val SITTING_GAP_MS = 5L * 60 * 1000
+
+    /** A sitting is never worth less than a minute, however fast he was. */
+    const val MIN_SITTING_MS = 60L * 1000
+
     /** Midnight [days] days back, counting today as one of them. */
     fun from(now: Long, days: Int = DEFAULT_DAYS, zone: ZoneId = ZoneId.systemDefault()): Long =
         Instant.ofEpochMilli(startOfDay(now, zone)).atZone(zone).toLocalDate()
@@ -104,6 +117,10 @@ object ProgressStats {
             val key = startOfDay(s.startedAt, zone)
             msPerDay[key] = (msPerDay[key] ?: 0L) + length
         }
+        // The rest of his practice, which writes no session row at all: a module opened from the
+        // Today grid, and the talk board. Without this, twenty minutes of word coach read as
+        // «0 λεπτά» on the screen and went to Claude as the premise for a week's advice.
+        sittings(window, zone).forEach { (day, ms) -> msPerDay[day] = (msPerDay[day] ?: 0L) + ms }
         // Summed first and rounded once: three short sittings are a quarter of an hour, not zero.
         val days = dayKeys.map { d ->
             DayStat(d, minutes = ((msPerDay[d] ?: 0L) / 60_000.0).roundToInt(), attempts = attemptsPerDay[d] ?: 0)
@@ -133,12 +150,57 @@ object ProgressStats {
             streakDays = streak(busy, startOfDay(to, zone), zone),
             modules = modules,
             cueTrend = cueTrend,
-            // One word learned is one word, even when it is learned in three modules.
-            mastered = mastered
-                ?: schedules.filter { !it.deleted && it.box >= LeitnerPolicy.MAX_BOX }.map { it.itemId }.distinct().size,
-            mostSkipped = byText(window.filter { it.outcome == Outcome.SKIPPED }, items),
+            // One word learned is one word, even when it is learned in three modules — and a
+            // schedule row only counts when it points at a live word. Script practice schedules
+            // against the *script's* id, so without the [items] membership test a mastered dialogue
+            // arrived here as a mastered word.
+            mastered = mastered ?: schedules
+                .filter { !it.deleted && it.box >= LeitnerPolicy.MAX_BOX && items[it.itemId]?.kind in WORD_KINDS }
+                .map { it.itemId }.distinct().size,
+            // Cue-ladder modules only. «Δύσκολες λέξεις» carries the advice «Δοκίμασε φωτογραφία ή
+            // φωνή», which is about finding a word; a word he skipped *tracing* at level 4 is a
+            // statement about his right hand, and it writes a real item id, so nothing else keeps
+            // it out of this list.
+            mostSkipped = byText(window.filter { it.outcome == Outcome.SKIPPED && it.module in CUE_MODULES }, items),
             mostUsedTalk = byText(window.filter { it.module == ModuleId.TALKBOARD }, items),
         )
+    }
+
+    /**
+     * Minutes he practised without a session row, per day.
+     *
+     * Only one screen in the app writes a [Session]: the Today session. A module opened from the
+     * Today grid and every tap on the talk board write attempts with no `sessionId`, and those are
+     * real minutes of his life — so they are reconstructed from the attempts themselves. Attempts
+     * closer together than [SITTING_GAP_MS] are one sitting; the sitting is as long as it spans,
+     * never less than [MIN_SITTING_MS] (one tap is a minute of standing at the board, not nothing)
+     * and never more than [MAX_SESSION_MS] (the phone was on the table). A sitting belongs to the
+     * day it began, exactly as a session does, so nothing is split across a midnight.
+     *
+     * Attempts that *do* carry a `sessionId` are left out: their minutes are already in the session.
+     */
+    private fun sittings(window: List<Attempt>, zone: ZoneId): Map<Long, Long> {
+        val loose = window.filter { it.sessionId == null }.map { it.startedAt }.sorted()
+        if (loose.isEmpty()) return emptyMap()
+        val out = mutableMapOf<Long, Long>()
+        var first = loose.first()
+        var last = first
+        fun close() {
+            val ms = (last - first).coerceIn(MIN_SITTING_MS, MAX_SESSION_MS)
+            val key = startOfDay(first, zone)
+            out[key] = (out[key] ?: 0L) + ms
+        }
+        loose.drop(1).forEach { at ->
+            if (at - last < SITTING_GAP_MS) {
+                last = at
+            } else {
+                close()
+                first = at
+                last = at
+            }
+        }
+        close()
+        return out
     }
 
     /** Consecutive days with at least one attempt, ending today — or yesterday, when today is young. */

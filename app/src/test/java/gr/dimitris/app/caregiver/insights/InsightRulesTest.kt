@@ -53,6 +53,15 @@ class InsightRulesTest {
     private fun lines(p: Progress, attempts: List<Attempt> = emptyList(), items: Map<String, Item> = emptyMap()) =
         InsightRules.generate(p, attempts, items)
 
+    /**
+     * One row from before the window, so the rules know he has practised at some point. Its item is
+     * not in any test's [Item] map, so it can only ever answer "has he ever?" and never feed a rule.
+     */
+    private val someHistory = listOf(
+        Attempt(itemId = "history", module = ModuleId.WORDCOACH, startedAt = from - 40 * 86_400_000L,
+            durationMs = 1000, outcome = Outcome.CORRECT)
+    )
+
     @Test fun `a quiet week says nothing at all`() =
         assertEquals(emptyList<String>(), lines(progress()))
 
@@ -141,6 +150,38 @@ class InsightRulesTest {
         assertTrue("Χρειάζεται λιγότερη βοήθεια από την προηγούμενη εβδομάδα." in lines(progress(cueTrend = trend)))
     }
 
+    /**
+     * The sentence names last week, so it has to be last week. A four-week window that improved
+     * sharply a month ago and has been flat since would otherwise announce that old change as this
+     * week's news — on the screen and in the summary Claude is asked to advise on.
+     */
+    @Test fun `an improvement a month ago is not last week's news`() {
+        val trend = listOf(
+            WeekCue(startOf("2026-08-10"), 3.4f),
+            WeekCue(startOf("2026-08-17"), 1.9f),
+            WeekCue(startOf("2026-08-24"), 1.9f),
+            WeekCue(startOf("2026-08-31"), 1.9f),
+        )
+        assertTrue(lines(progress(cueTrend = trend)).none { it.contains("λιγότερη βοήθεια") })
+    }
+
+    /** And a real fall between the last two measured weeks still is. */
+    @Test fun `less help than the previous measured week is still news`() {
+        val trend = listOf(
+            WeekCue(startOf("2026-08-10"), 1.9f),
+            WeekCue(startOf("2026-08-17"), 1.9f),
+            WeekCue(startOf("2026-08-24"), 2.8f),
+            WeekCue(startOf("2026-08-31"), 1.8f),
+        )
+        assertTrue("Χρειάζεται λιγότερη βοήθεια από την προηγούμενη εβδομάδα." in lines(progress(cueTrend = trend)))
+    }
+
+    /** One measured week has no previous week to be better than. */
+    @Test fun `a single measured week says nothing about help`() {
+        val trend = listOf(WeekCue(startOf("2026-08-31"), 0.2f))
+        assertTrue(lines(progress(cueTrend = trend)).none { it.contains("λιγότερη βοήθεια") })
+    }
+
     @Test fun `a small change in help is not news`() {
         val trend = listOf(WeekCue(startOf("2026-08-24"), 2.2f), WeekCue(startOf("2026-08-31"), 2.0f))
         assertTrue(lines(progress(cueTrend = trend)).none { it.contains("λιγότερη βοήθεια") })
@@ -160,6 +201,23 @@ class InsightRulesTest {
                 durationMs = 1000, outcome = if (i < 5) Outcome.CORRECT else Outcome.SKIPPED)
         }
         assertTrue("Οι λέξεις που αρχίζουν από «π» βελτιώθηκαν." in lines(progress(), old + fresh, items))
+    }
+
+    /**
+     * «Γράψε» at levels 4–5 writes real item ids, so without a module filter a word he *traced*
+     * well would produce a claim about his word-finding.
+     */
+    @Test fun `writing a word well is not finding it more easily`() {
+        val items = mapOf("p1" to Item(id = "p1", text = "πόρτα", firstSound = "π"))
+        val old = List(6) {
+            Attempt(itemId = "p1", module = ModuleId.TRACE, startedAt = from - 5 * 86_400_000L,
+                durationMs = 1000, outcome = Outcome.SKIPPED)
+        }
+        val fresh = List(6) {
+            Attempt(itemId = "p1", module = ModuleId.TRACE, startedAt = from + 5 * 86_400_000L,
+                durationMs = 1000, outcome = Outcome.CORRECT)
+        }
+        assertTrue(lines(progress(), old + fresh, items).none { it.contains("αρχίζουν από") })
     }
 
     @Test fun `a first sound with no past to compare against stays quiet`() {
@@ -185,18 +243,28 @@ class InsightRulesTest {
 
     @Test fun `a long silence is said plainly`() {
         val p = progress(days = days(busyTo = "2026-08-31"))
-        assertTrue("Καμία άσκηση εδώ και 5 μέρες." in lines(p))
+        assertTrue("Καμία άσκηση εδώ και 5 μέρες." in lines(p, someHistory))
     }
 
     @Test fun `two quiet days are not worth a line`() {
         val p = progress(days = days(busyTo = "2026-09-03"))
-        assertTrue(lines(p).none { it.startsWith("Καμία άσκηση") })
+        assertTrue(lines(p, someHistory).none { it.startsWith("Καμία άσκηση") })
     }
 
     /** Nothing at all in four weeks is still one honest line, not a blank screen. */
     @Test fun `a window with no work at all counts the whole window`() {
         val p = progress(days = days().map { it.copy(minutes = 0, attempts = 0) })
-        assertTrue("Καμία άσκηση εδώ και 28 μέρες." in lines(p))
+        assertTrue("Καμία άσκηση εδώ και 28 μέρες." in lines(p, someHistory))
+    }
+
+    /**
+     * Day one. There is no history to have stopped: «Καμία άσκηση εδώ και 28 μέρες» would be a
+     * reproach for four weeks that happened before the app existed, and it would be the only
+     * sentence on the screen. The screen's «Τίποτα ιδιαίτερο…» covers that day instead.
+     */
+    @Test fun `a brand new install is not four weeks of neglect`() {
+        val p = progress(days = days().map { it.copy(minutes = 0, attempts = 0) })
+        assertEquals(emptyList<String>(), lines(p))
     }
 
     @Test fun `six lines at most, best news first`() {
