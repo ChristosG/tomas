@@ -26,6 +26,10 @@ captures/
 *.jks
 secrets.properties
 
+# The family's own folder: reports, notes and anything written about Dimitris by hand. It lives
+# beside the code so it is easy to find and is never committed, on any branch.
+docs/private/
+
 # Claude Code worktrees and SDD workspaces
 .claude/
 .superpowers/
