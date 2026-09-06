@@ -14,7 +14,9 @@ android {
         targetSdk = 37
         versionCode = 1
         versionName = "0.1"
-        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        // Ours, not the stock one: it answers the first-run "whose phone is this?" before any test
+        // opens a screen. See DimitrisTestRunner.
+        testInstrumentationRunner = "gr.dimitris.app.DimitrisTestRunner"
     }
 
     buildTypes {

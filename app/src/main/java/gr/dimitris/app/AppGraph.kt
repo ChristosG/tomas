@@ -23,6 +23,10 @@ import gr.dimitris.app.core.speech.AndroidTextToSpeech
 import gr.dimitris.app.core.speech.ItemSpeaker
 import gr.dimitris.app.core.speech.SpeechToText
 import gr.dimitris.app.core.speech.TextToSpeech
+import gr.dimitris.app.core.sync.DaoSyncStore
+import gr.dimitris.app.core.sync.HttpSyncClient
+import gr.dimitris.app.core.sync.SyncDaos
+import gr.dimitris.app.core.sync.SyncEngine
 import gr.dimitris.app.modules.Module
 import gr.dimitris.app.modules.arcade.ArcadeModule
 import gr.dimitris.app.modules.numbers.NumbersModule
@@ -100,6 +104,26 @@ class AppGraph(context: Context) {
 
     /** Always built from the current db, so it survives a backup import. */
     val scheduler: Scheduler get() = Scheduler(db.schedules())
+
+    /**
+     * The one sync, held for the life of the app rather than built per use: it owns the guard that
+     * keeps two runs from overlapping, and the last result the caregiver's screen shows. It reads
+     * the database and the settings through lambdas, so a backup import — which swaps the database
+     * underneath everything — leaves it holding nothing stale.
+     *
+     * Nothing here touches the network until a caregiver has typed both an address and a token.
+     */
+    val sync: SyncEngine by lazy {
+        SyncEngine(
+            client = HttpSyncClient(baseUrl = { settings.syncUrl.first() }, token = { secrets.getSyncToken() }),
+            store = DaoSyncStore { SyncDaos.of(db) },
+            files = files,
+            settings = settings,
+            onPulled = { dbGeneration.update { it + 1 } },
+            record = { where, e -> errors.record(where, e) },
+            configured = { settings.syncUrl.first().isNotBlank() && !secrets.getSyncToken().isNullOrBlank() },
+        )
+    }
 
     /**
      * Recording-or-TTS voice for items. Built per use so it always sees the current db and settings,

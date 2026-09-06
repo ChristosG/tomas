@@ -24,6 +24,11 @@ class DimitrisApp : Application() {
         graph.scope.launch {
             SeedImporter(graph).importIfNeeded()
             ScriptSeedImporter(graph).importIfNeeded()
+            // Last, and in the same coroutine: the seed has to be in the database before the first
+            // sync reads it, or a fresh phone would push nothing and then merge the vocabulary it
+            // was about to import anyway. Nothing waits for this — it is off the main thread, on the
+            // graph's own scope, and a phone with no server address does not even open a socket.
+            graph.sync.syncAtStart()
         }
     }
 }

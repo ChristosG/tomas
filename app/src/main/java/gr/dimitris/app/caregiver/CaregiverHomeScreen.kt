@@ -13,6 +13,7 @@ import androidx.compose.material.icons.rounded.Image
 import androidx.compose.material.icons.rounded.Insights
 import androidx.compose.material.icons.rounded.Person
 import androidx.compose.material.icons.rounded.Settings
+import androidx.compose.material.icons.rounded.Sync
 import androidx.compose.material3.Text
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
@@ -33,6 +34,10 @@ val caregiverEntries: List<CaregiverEntry> = listOf(
     CaregiverEntry("Λέξεις και εικόνες", Icons.Rounded.Image, Routes.ITEMS),
     CaregiverEntry("Διάλογοι", Icons.Rounded.Chat, Routes.SCRIPTS),
     CaregiverEntry("Ρυθμίσεις", Icons.Rounded.Settings, Routes.SETTINGS),
+    // Inside the caregiver area on every phone, his included: the father sets his son's phone up
+    // from here, and there is nowhere else he could. Dimitris' own screens never mention sync, and
+    // getting here needs the two-second hold on the title and, if it is on, the caregiver lock.
+    CaregiverEntry("Συγχρονισμός", Icons.Rounded.Sync, Routes.SYNC),
     CaregiverEntry("Σφάλματα", Icons.Rounded.BugReport, Routes.ERRORS),
     CaregiverEntry("Αντίγραφο ασφαλείας", Icons.Rounded.Backup, Routes.BACKUP),
 )

@@ -35,6 +35,9 @@ class FakeAttemptDao : AttemptDao {
     override suspend fun changedSince(since: Long): List<Attempt> =
         rows.value.filter { it.updatedAt > since }.sortedBy { it.updatedAt }
 
+    override suspend fun stamps(ids: List<String>): List<RowStamp> =
+        rows.value.filter { it.id in ids }.map { RowStamp(it.id, it.updatedAt) }
+
     /** Append-only, like the real `@Insert(IGNORE)`: an id already here keeps the row it has. */
     override suspend fun upsertFromSync(rows: List<Attempt>) {
         val known = this.rows.value.mapTo(mutableSetOf()) { it.id }

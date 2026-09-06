@@ -4,6 +4,7 @@ import android.net.Uri
 import gr.dimitris.app.AppGraph
 import gr.dimitris.app.core.data.AppDatabase
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.text.SimpleDateFormat
@@ -60,6 +61,11 @@ class Backup(private val graph: AppGraph) {
             swapIn(listOf(photosNew to graph.files.photosDir, recordingsNew to graph.files.recordingsDir))
         } finally {
             graph.reopenDatabase()   // whatever happened, the app has a database again
+            // The database that arrived is not the one the sync cursors were counted against — a
+            // restore can move this phone backwards or sideways — so the only honest position is
+            // the start. It costs one long pull; last-write-wins sorts out what comes back.
+            // NonCancellable: a cancelled import must still leave the cursors telling the truth.
+            runCatching { withContext(NonCancellable) { graph.settings.resetSyncCursors() } }
             listOf(
                 backup, staged, tmp, photosNew, recordingsNew,
                 File(graph.files.photosDir.path + ".old"), File(graph.files.recordingsDir.path + ".old"),

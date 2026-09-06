@@ -2,6 +2,7 @@ package gr.dimitris.app.core.log
 
 import gr.dimitris.app.core.data.ErrorLog
 import gr.dimitris.app.core.data.ErrorLogDao
+import gr.dimitris.app.core.data.RowStamp
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
 import org.junit.Assert.assertEquals
@@ -18,6 +19,9 @@ open class FakeErrorLogDao : ErrorLogDao {
 
     override suspend fun changedSince(since: Long): List<ErrorLog> =
         rows.filter { it.updatedAt > since }.sortedBy { it.updatedAt }
+
+    override suspend fun stamps(ids: List<String>): List<RowStamp> =
+        rows.filter { it.id in ids }.map { RowStamp(it.id, it.updatedAt) }
 
     /** Append-only, like the real `@Insert(IGNORE)`. */
     override suspend fun upsertFromSync(rows: List<ErrorLog>) {

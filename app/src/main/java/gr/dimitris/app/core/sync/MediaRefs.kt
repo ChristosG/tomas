@@ -103,6 +103,16 @@ object MediaRefs {
         return out
     }
 
+    /**
+     * The hashes a row needs before it can be stored, each with the extension its bytes get here.
+     * Asked first so the fetching — which is a network call — happens outside [incoming], and
+     * [incoming] itself stays a plain function anyone can test.
+     */
+    fun needed(table: String, row: Map<String, Any?>): List<Pair<String, String>> =
+        Tables.of(table)?.mediaFields.orEmpty().mapNotNull { (field, extension) ->
+            shaOf(row[field])?.let { it to extension }
+        }
+
     /** Where a downloaded file belongs: pictures with the pictures, voices with the voices. */
     fun folderFor(extension: String, files: MediaPaths): File =
         if (extension == Tables.RECORDING_EXT) files.recordingsDir else files.photosDir

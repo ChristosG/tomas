@@ -100,6 +100,7 @@ interface AttemptDao {
     suspend fun lastUsePerModule(skipped: Outcome): List<ModuleUse>
 
     @Query("SELECT * FROM attempts WHERE updatedAt > :since ORDER BY updatedAt") suspend fun changedSince(since: Long): List<Attempt>
+    @Query("SELECT id, updatedAt FROM attempts WHERE id IN (:ids)") suspend fun stamps(ids: List<String>): List<RowStamp>
 
     /**
      * Append-only, so the database enforces the merge rule the server also holds: the first row
@@ -203,6 +204,7 @@ interface ErrorLogDao {
     @Query("UPDATE error_logs SET deleted = 1, updatedAt = :now WHERE deleted = 0") suspend fun clearAll(now: Long)
 
     @Query("SELECT * FROM error_logs WHERE updatedAt > :since ORDER BY updatedAt") suspend fun changedSince(since: Long): List<ErrorLog>
+    @Query("SELECT id, updatedAt FROM error_logs WHERE id IN (:ids)") suspend fun stamps(ids: List<String>): List<RowStamp>
 
     /** Append-only, like [AttemptDao.upsertFromSync]: a logged error is a fact, not a value. */
     @Insert(onConflict = OnConflictStrategy.IGNORE) suspend fun upsertFromSync(rows: List<ErrorLog>)

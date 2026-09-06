@@ -38,6 +38,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import gr.dimitris.app.LocalAppGraph
 import gr.dimitris.app.core.data.ModuleId
 import gr.dimitris.app.core.secrets.SecretStore
+import gr.dimitris.app.core.settings.DeviceRole
 import gr.dimitris.app.core.settings.Settings
 import gr.dimitris.app.ui.components.DimitrisScreen
 import gr.dimitris.app.ui.components.QuietButton
@@ -49,6 +50,18 @@ import kotlinx.coroutines.withContext
 /** One of the two hands, as a 72dp target: a chip the size of a chip is not a caregiver's tap either. */
 @Composable
 private fun HandChip(label: String, value: String, chosen: String, modifier: Modifier = Modifier, onPick: (String) -> Unit) {
+    FilterChip(
+        selected = chosen == value,
+        onClick = { onPick(value) },
+        label = { Text(label, style = MaterialTheme.typography.bodyLarge) },
+        shape = RoundedCornerShape(Sizes.corner),
+        modifier = modifier.heightIn(min = Sizes.touchMin),
+    )
+}
+
+/** The same 72dp chip, for the two answers to "whose phone is this?". */
+@Composable
+private fun RoleChip(label: String, value: DeviceRole, chosen: DeviceRole, modifier: Modifier = Modifier, onPick: (DeviceRole) -> Unit) {
     FilterChip(
         selected = chosen == value,
         onClick = { onPick(value) },
@@ -155,6 +168,25 @@ fun SettingsScreen(onBack: () -> Unit) {
                 )
                 Switch(checked = stt && sttAvailable, enabled = sttAvailable, onCheckedChange = { on -> scope.launch { graph.settings.setSttEnabled(on) } })
             }
+            Spacer(Modifier.height(Sizes.gap))
+
+            // Asked once on the very first launch, and changed here when the answer was wrong or
+            // when a phone changes hands. It decides where the app opens and nothing else.
+            Text("Τίνος είναι αυτό το τηλέφωνο;", style = MaterialTheme.typography.titleLarge)
+            val role by graph.settings.deviceRole.collectAsStateWithLifecycle(initialValue = DeviceRole.DIMITRIS)
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth().heightIn(min = Sizes.touchMin),
+            ) {
+                RoleChip("Του Δημήτρη", DeviceRole.DIMITRIS, role, Modifier.weight(1f)) { scope.launch { graph.settings.setDeviceRole(it) } }
+                Spacer(Modifier.width(Sizes.gapSmall))
+                RoleChip("Φροντιστή", DeviceRole.CAREGIVER, role, Modifier.weight(1f)) { scope.launch { graph.settings.setDeviceRole(it) } }
+            }
+            Text(
+                "Ισχύει από το επόμενο άνοιγμα της εφαρμογής.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
             Spacer(Modifier.height(Sizes.gap))
 
             ClaudeSection()
