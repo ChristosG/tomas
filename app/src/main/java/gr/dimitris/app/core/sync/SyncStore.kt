@@ -163,6 +163,8 @@ class DaoSyncStore(private val daos: () -> SyncDaos) : SyncStore {
         Tables.ERROR_LOGS -> Rows.to(row, ErrorLog::class.java)
         Tables.SCRIPTS -> Rows.to(row, Script::class.java)
         Tables.SCRIPT_LINES -> Rows.to(row, ScriptLine::class.java)
+        Tables.ADVICE -> Rows.to(row, Advice::class.java)
+        Tables.NOTES -> Rows.to(row, Note::class.java)
         else -> error("unknown table $table")
     }
 

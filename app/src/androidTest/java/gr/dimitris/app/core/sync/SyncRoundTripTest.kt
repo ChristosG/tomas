@@ -8,8 +8,10 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.platform.app.InstrumentationRegistry
+import gr.dimitris.app.core.data.Advice
 import gr.dimitris.app.core.data.AppDatabase
 import gr.dimitris.app.core.data.Item
+import gr.dimitris.app.core.data.Note
 import gr.dimitris.app.core.data.ModuleId
 import gr.dimitris.app.core.data.Recording
 import gr.dimitris.app.core.data.Schedule
@@ -164,6 +166,50 @@ class SyncRoundTripTest {
         assertTrue(voiceBytes.contentEquals(there.files.resolve(voiceRow.path).readBytes()))
 
         assertNotNull("the schedule did not arrive", there.db.schedules().get(id, ModuleId.WORDCOACH))
+    }
+
+    /**
+     * A note and an advice across the wire, against the real server.
+     *
+     * This is the regression that would have cost the family the feature. `advice` and `notes`
+     * shipped registered on the phone and not on the server; the server rejects a batch containing
+     * an unknown table **whole**, and the engine then holds the push watermark in front of the
+     * offending row for ever — so the father writes one note and nothing leaves his phone again.
+     * A unit test cannot see that: only the two ends really talking can.
+     */
+    @Test fun aNoteAndAnAdviceCrossOver() = runTest {
+        val here = phone()
+        val noteId = UUID.randomUUID().toString()
+        val adviceId = UUID.randomUUID().toString()
+        val focus = """{"items":["καφές"],"sounds":["π"]}"""
+
+        here.db.notes().upsert(
+            Note(id = noteId, at = 1_757_000_000_000, text = "Είπε «καλημέρα» μόνος του — $noteId", author = "CAREGIVER")
+        )
+        here.db.advice().upsert(
+            Advice(
+                id = adviceId, at = 1_757_000_000_000, model = "claude-opus-5",
+                report = "Προφίλ\nΟ Δημήτρης…", caregivers = "- Δούλεψε τα «π».", dimitris = "Πάει καλά.",
+                focusJson = focus,
+            )
+        )
+
+        val sent = here.engine.syncNow().getOrThrow()
+        assertTrue("the batch was refused: ${sent.errors}", sent.ok)
+        assertTrue("pushed ${sent.pushed}", sent.pushed >= 2)
+
+        val there = phone()
+        there.engine.syncNow().getOrThrow()
+
+        val note = there.db.notes().recent(500).firstOrNull { it.id == noteId }
+        assertNotNull("the note did not arrive", note)
+        assertEquals("CAREGIVER", note!!.author)
+        assertTrue(note.text, note.text.contains("καλημέρα"))
+
+        val advice = there.db.advice().recent(500).firstOrNull { it.id == adviceId }
+        assertNotNull("the advice did not arrive", advice)
+        assertEquals(focus, advice!!.focusJson)
+        assertEquals("- Δούλεψε τα «π».", advice.caregivers)
     }
 
     /** The one thing a caregiver will get wrong: a mistyped token, and a Greek sentence about it. */

@@ -11,9 +11,12 @@ import gr.dimitris.app.core.data.Outcome
 import gr.dimitris.app.core.data.Schedule
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
+import org.junit.Assume.assumeTrue
 import org.junit.Test
+import java.io.File
 
 class SyncModelTest {
 
@@ -86,6 +89,41 @@ class SyncModelTest {
             names.toSet(),
         )
         assertEquals(names.size, names.toSet().size)
+    }
+
+    /**
+     * The same list, read out of the server rather than repeated here.
+     *
+     * The test above is named "every table **the server knows**" and it was once edited to agree
+     * with the client instead — which is how `advice` and `notes` shipped registered on one side
+     * only. A row for a table the server does not know is rejected with the *whole batch*, and the
+     * phone's push watermark can then never advance past the first note: the father writes one
+     * sentence and nothing leaves his phone again. So the two lists are compared for real.
+     *
+     * Skipped rather than failed when `server/store.mjs` is not beside the app — the suite has to
+     * run on a checkout of the app alone.
+     */
+    @Test fun `the app and the server agree on the list, letter for letter`() {
+        val file = File("../server/store.mjs")
+        assumeTrue("no server/store.mjs beside the app", file.isFile)
+        val block = Regex("export const TABLES = Object\\.freeze\\(\\[(.*?)]", RegexOption.DOT_MATCHES_ALL)
+            .find(file.readText())?.groupValues?.get(1)
+        assertNotNull("could not find TABLES in server/store.mjs", block)
+        val server = Regex("'([a-z_]+)'").findAll(block!!).map { it.groupValues[1] }.toList()
+
+        assertEquals("server/store.mjs and Tables.all have drifted apart", Tables.all.map { it.name }.toSet(), server.toSet())
+    }
+
+    /** The same contract for the other half of the rule, also read out of the server. */
+    @Test fun `the app and the server agree on which tables are append-only`() {
+        val file = File("../server/store.mjs")
+        assumeTrue("no server/store.mjs beside the app", file.isFile)
+        val block = Regex("export const APPEND_ONLY_TABLES = Object\\.freeze\\(\\[(.*?)]", RegexOption.DOT_MATCHES_ALL)
+            .find(file.readText())?.groupValues?.get(1)
+        assertNotNull("could not find APPEND_ONLY_TABLES in server/store.mjs", block)
+        val server = Regex("'([a-z_]+)'").findAll(block!!).map { it.groupValues[1] }.toSet()
+
+        assertEquals(Tables.all.filter { it.appendOnly }.map { it.name }.toSet(), server)
     }
 
     /**
