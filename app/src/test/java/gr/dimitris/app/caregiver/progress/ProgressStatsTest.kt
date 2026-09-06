@@ -373,4 +373,104 @@ class ProgressStatsTest {
         )
         assertEquals(7, p.mastered)
     }
+
+    // ---- his whole journey, for the report ---------------------------------------------------
+
+    /**
+     * The lifetime pass has no window at all — a word he was stuck on in March is exactly what four
+     * weeks of totals cannot show, and it is the reason phase 11 reads the whole table.
+     */
+    @Test fun `a word's lifetime spans everything, not the window`() {
+        val rows = listOf(
+            attempt("2026-03-02", cue = 4),
+            attempt("2026-07-14", outcome = Outcome.ASSISTED, cue = 2),
+            attempt("2026-09-05", cue = 0),
+        )
+        val schedules = listOf(
+            Schedule(itemId = "i1", module = ModuleId.WORDCOACH, box = 3, nextDueAt = 0),
+            Schedule(itemId = "i1", module = ModuleId.SINGSAY, box = 5, nextDueAt = 0),
+        )
+
+        val h = ProgressStats.lifetime(rows, schedules, items).single()
+
+        assertEquals("καφές", h.text)
+        assertEquals(3, h.attempts)
+        assertEquals(2, h.correct)
+        assertEquals(1, h.assisted)
+        assertEquals(2f, h.meanCue!!, 0.001f)
+        assertEquals("the highest box it has reached in any module", 5, h.box)
+        assertEquals(at("2026-03-02"), h.firstAt)
+        assertEquals(at("2026-09-05"), h.lastAt)
+    }
+
+    /** Busiest first, then the most recently practised, then alphabetical: two reports must diff. */
+    @Test fun `the lifetime list is ordered so two reports can be compared`() {
+        val rows = listOf(
+            attempt("2026-09-01", itemId = "i1"), attempt("2026-09-02", itemId = "i1"),
+            attempt("2026-09-05", itemId = "i2"),
+            attempt("2026-08-01", itemId = "i3"),
+        )
+        assertEquals(
+            listOf("καφές", "ψωμί", "νερό"),
+            ProgressStats.lifetime(rows, emptyList(), items).map { it.text },
+        )
+    }
+
+    /** «Πόσο» counts every module; «πόσο καλά» counts only the ones that mark him. */
+    @Test fun `the board is counted in a word's attempts but never in its score`() {
+        val rows = listOf(
+            attempt("2026-09-01", module = ModuleId.TALKBOARD),
+            attempt("2026-09-01", module = ModuleId.TALKBOARD),
+            attempt("2026-09-02", module = ModuleId.WORDCOACH, cue = 1),
+        )
+        val h = ProgressStats.lifetime(rows, emptyList(), items).single()
+
+        assertEquals(3, h.attempts)
+        assertEquals("only the graded try", 1, h.correct)
+        assertEquals("the board has no cue ladder", 1f, h.meanCue!!, 0.001f)
+    }
+
+    /** A word a caregiver deleted drops out rather than arriving as a bare id. */
+    @Test fun `an attempt against a word that no longer exists is not a line`() {
+        val rows = listOf(attempt("2026-09-01", itemId = "gone"), attempt("2026-09-01", itemId = "i1"))
+        assertEquals(listOf("καφές"), ProgressStats.lifetime(rows, emptyList(), items).map { it.text })
+    }
+
+    @Test fun `a photograph and a voice are booleans, from the item and from any recording`() {
+        val withPhoto = mapOf("i1" to Item(id = "i1", text = "καφές", imagePath = "photos/x.jpg", modelRecordingId = "r1"))
+        val plain = ProgressStats.lifetime(listOf(attempt("2026-09-01")), emptyList(), items).single()
+        val rich = ProgressStats.lifetime(listOf(attempt("2026-09-01")), emptyList(), withPhoto).single()
+        val voiced = ProgressStats.lifetime(listOf(attempt("2026-09-01")), emptyList(), items, setOf("i1")).single()
+
+        assertTrue(rich.hasPhoto && rich.hasVoice)
+        assertTrue(!plain.hasPhoto && !plain.hasVoice)
+        assertTrue("a caregiver's recording is a voice too", voiced.hasVoice)
+    }
+
+    // ---- the month, day by day ----------------------------------------------------------------
+
+    @Test fun `the days are walked forwards and each one's busiest word comes first`() {
+        val rows = listOf(
+            attempt("2026-09-04", itemId = "i2", cue = 3, outcome = Outcome.SKIPPED),
+            attempt("2026-09-03", itemId = "i1", cue = 1),
+            attempt("2026-09-03", itemId = "i1", cue = 3),
+            attempt("2026-09-03", itemId = "i3"),
+        )
+        val out = ProgressStats.recentByDay(rows, items, startOf("2026-09-01"), at("2026-09-05", 23, 59), zone)
+
+        assertEquals(
+            listOf(startOf("2026-09-03") to "καφές", startOf("2026-09-03") to "νερό", startOf("2026-09-04") to "ψωμί"),
+            out.map { it.day to it.text },
+        )
+        assertEquals(2, out.first().attempts)
+        assertEquals(2f, out.first().meanCue!!, 0.001f)
+        assertEquals(1, out.last().skipped)
+        assertTrue("a quiet day is simply absent", out.none { it.day == startOf("2026-09-01") })
+    }
+
+    @Test fun `a day outside the window is not in the detail`() {
+        val rows = listOf(attempt("2026-08-01"), attempt("2026-09-03"))
+        val out = ProgressStats.recentByDay(rows, items, startOf("2026-09-01"), at("2026-09-05", 23, 59), zone)
+        assertEquals(listOf(startOf("2026-09-03")), out.map { it.day })
+    }
 }

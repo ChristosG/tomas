@@ -7,6 +7,7 @@ class FakeRecordingDao : RecordingDao {
     override suspend fun latestFor(itemId: String, who: Who, style: RecordingStyle): Recording? =
         rows.values.filter { it.itemId == itemId && it.who == who && it.style == style && !it.deleted }.maxByOrNull { it.recordedAt }
     override suspend fun softDelete(id: String, now: Long) { rows[id]?.let { rows[id] = it.copy(deleted = true, updatedAt = now) } }
+    override suspend fun itemsWithVoice(): List<String> = rows.values.filter { !it.deleted }.map { it.itemId }.distinct()
 
     override suspend fun changedSince(since: Long): List<Recording> =
         rows.values.filter { it.updatedAt > since }.sortedBy { it.updatedAt }

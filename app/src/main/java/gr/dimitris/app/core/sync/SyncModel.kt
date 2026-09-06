@@ -7,10 +7,12 @@ import com.google.gson.JsonElement
 import com.google.gson.JsonNull
 import com.google.gson.JsonObject
 import com.google.gson.JsonPrimitive
+import gr.dimitris.app.core.data.Advice
 import gr.dimitris.app.core.data.Attempt
 import gr.dimitris.app.core.data.ErrorLog
 import gr.dimitris.app.core.data.Item
 import gr.dimitris.app.core.data.ModuleId
+import gr.dimitris.app.core.data.Note
 import gr.dimitris.app.core.data.Outcome
 import gr.dimitris.app.core.data.Recording
 import gr.dimitris.app.core.data.Schedule
@@ -72,7 +74,7 @@ data class TableSpec(
 }
 
 /**
- * The eight tables that sync. Listed with items before the rows that point at them, which is how
+ * The ten tables that sync. Listed with items before the rows that point at them, which is how
  * they are *read*; what goes on the wire is sorted by `updatedAt` across all of them, because the
  * push watermark is one number and a failed batch must only hold back rows at least as new as
  * itself ([SyncEngine]). Nothing depends on either order — there are no foreign keys and every row
@@ -87,6 +89,8 @@ object Tables {
     const val ERROR_LOGS = "error_logs"
     const val SCRIPTS = "scripts"
     const val SCRIPT_LINES = "script_lines"
+    const val ADVICE = "advice"
+    const val NOTES = "notes"
 
     /** What a photo is called once it is content-addressed. Coil sniffs the bytes, not the name. */
     const val PHOTO_EXT = "jpg"
@@ -115,6 +119,12 @@ object Tables {
             sample = { Attempt(itemId = "", module = ModuleId.WORDCOACH, startedAt = 0, durationMs = 0, outcome = Outcome.CORRECT) }),
         TableSpec(ERROR_LOGS, ErrorLog::class.java, appendOnly = true, idOf = ::plainId,
             sample = { ErrorLog(where_ = "", message = "", stack = "") }),
+        // Last-write-wins, both of them. An advice and a note are things people wrote, which is to
+        // say things people may correct or take back — not facts about him like an attempt.
+        TableSpec(ADVICE, Advice::class.java, appendOnly = false, idOf = ::plainId,
+            sample = { Advice(model = "", report = "", caregivers = "", dimitris = "") }),
+        TableSpec(NOTES, Note::class.java, appendOnly = false, idOf = ::plainId,
+            sample = { Note(text = "", author = "") }),
     )
 
     private val byName: Map<String, TableSpec> = all.associateBy { it.name }

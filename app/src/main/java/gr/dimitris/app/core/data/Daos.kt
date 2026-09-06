@@ -74,6 +74,13 @@ interface RecordingDao {
     suspend fun latestFor(itemId: String, who: Who, style: RecordingStyle): Recording?
     @Query("UPDATE recordings SET deleted = 1, updatedAt = :now WHERE id = :id") suspend fun softDelete(id: String, now: Long)
 
+    /**
+     * The words that have a voice on them, whosever it is. The journey report says «φωνή ναι/όχι»
+     * per word so a caregiver can be told which words are still silent, and that is the whole use:
+     * ids of items, never paths.
+     */
+    @Query("SELECT DISTINCT itemId FROM recordings WHERE deleted = 0") suspend fun itemsWithVoice(): List<String>
+
     @Query("SELECT * FROM recordings WHERE updatedAt > :since ORDER BY updatedAt") suspend fun changedSince(since: Long): List<Recording>
     @Query("SELECT id, updatedAt FROM recordings WHERE id IN (:ids)") suspend fun stamps(ids: List<String>): List<RowStamp>
 
@@ -90,6 +97,19 @@ interface AttemptDao {
     /** One window of history, for the progress dashboard. Inclusive at both ends. */
     @Query("SELECT * FROM attempts WHERE deleted = 0 AND startedAt BETWEEN :from AND :to ORDER BY startedAt")
     suspend fun between(from: Long, to: Long): List<Attempt>
+
+    /**
+     * His whole journey: every attempt ever recorded, newest first, bounded.
+     *
+     * The bound is the point. «Όλη η πορεία ανά λέξη» is what makes the advisor able to say
+     * something about a word he was stuck on in March, and there is no window that gives that — but
+     * "read the whole table into memory" is not a plan either, and after enough years it would be
+     * an out-of-memory crash on a caregiver's phone instead of a report. A hundred thousand rows is
+     * decades of daily practice, it costs a few megabytes, and it is aggregated and thrown away
+     * immediately. [LIFETIME_LIMIT] is what the callers pass.
+     */
+    @Query("SELECT * FROM attempts WHERE deleted = 0 ORDER BY startedAt DESC LIMIT :limit")
+    suspend fun all(limit: Int): List<Attempt>
 
     @Query("SELECT COUNT(*) FROM attempts WHERE deleted = 0 AND itemId = :itemId AND module = :module")
     suspend fun countFor(itemId: String, module: ModuleId): Int
@@ -116,6 +136,11 @@ interface AttemptDao {
      * stored for an id wins and a second one is dropped. An attempt is something that happened.
      */
     @Insert(onConflict = OnConflictStrategy.IGNORE) suspend fun upsertFromSync(rows: List<Attempt>)
+
+    companion object {
+        /** See [all]. Decades of daily practice, and a ceiling a phone can hold. */
+        const val LIFETIME_LIMIT = 100_000
+    }
 }
 
 @Dao
@@ -124,6 +149,13 @@ interface ScheduleDao {
     @Query("SELECT * FROM schedules WHERE itemId = :itemId AND module = :module AND deleted = 0") suspend fun get(itemId: String, module: ModuleId): Schedule?
     @Query("SELECT * FROM schedules WHERE module = :module AND deleted = 0 AND nextDueAt <= :now ORDER BY nextDueAt") suspend fun due(module: ModuleId, now: Long): List<Schedule>
     @Query("SELECT * FROM schedules WHERE module = :module AND deleted = 0") suspend fun all(module: ModuleId): List<Schedule>
+
+    /**
+     * Every live schedule, all modules. Only the journey report wants this: a word's box is the one
+     * number that says how well he now holds it, and the report gives one line per word rather than
+     * one per (word, module) — so it needs them all at once to take the highest.
+     */
+    @Query("SELECT * FROM schedules WHERE deleted = 0") suspend fun allRows(): List<Schedule>
 
     /**
      * How many distinct **words** have reached the last Leitner box: what the dashboard shows as
@@ -223,4 +255,41 @@ interface ErrorLogDao {
 
     /** Append-only, like [AttemptDao.upsertFromSync]: a logged error is a fact, not a value. */
     @Insert(onConflict = OnConflictStrategy.IGNORE) suspend fun upsertFromSync(rows: List<ErrorLog>)
+}
+
+@Dao
+interface AdviceDao {
+    @Upsert suspend fun upsert(advice: Advice)
+
+    /** Newest first. The report sends the last few; the screen lists them the same way. */
+    @Query("SELECT * FROM advice WHERE deleted = 0 ORDER BY at DESC LIMIT :limit") suspend fun recent(limit: Int): List<Advice>
+    @Query("SELECT * FROM advice WHERE deleted = 0 ORDER BY at DESC LIMIT :limit") fun observeRecent(limit: Int): Flow<List<Advice>>
+
+    /**
+     * The one the session builder asks about. Newest first, one row: whether it is still live is
+     * [gr.dimitris.app.caregiver.insights.Focus]'s judgement and not SQLite's, because "within
+     * seven days" is a policy, and a policy belongs where a test can argue with it.
+     */
+    @Query("SELECT * FROM advice WHERE deleted = 0 ORDER BY at DESC LIMIT 1") suspend fun newest(): Advice?
+
+    @Query("SELECT * FROM advice WHERE updatedAt > :since ORDER BY updatedAt") suspend fun changedSince(since: Long): List<Advice>
+    @Query("SELECT id, updatedAt FROM advice WHERE id IN (:ids)") suspend fun stamps(ids: List<String>): List<RowStamp>
+
+    /**
+     * Last-write-wins, not append-only. An advice is a value rather than a fact about him: a phone
+     * that meets a newer copy of the same row must take it, and a caregiver may yet delete one.
+     */
+    @Upsert suspend fun upsertFromSync(rows: List<Advice>)
+}
+
+@Dao
+interface NoteDao {
+    @Upsert suspend fun upsert(note: Note)
+    @Query("SELECT * FROM notes WHERE deleted = 0 ORDER BY at DESC LIMIT :limit") suspend fun recent(limit: Int): List<Note>
+    @Query("SELECT * FROM notes WHERE deleted = 0 ORDER BY at DESC LIMIT :limit") fun observeRecent(limit: Int): Flow<List<Note>>
+    @Query("UPDATE notes SET deleted = 1, updatedAt = :now WHERE id = :id") suspend fun softDelete(id: String, now: Long)
+
+    @Query("SELECT * FROM notes WHERE updatedAt > :since ORDER BY updatedAt") suspend fun changedSince(since: Long): List<Note>
+    @Query("SELECT id, updatedAt FROM notes WHERE id IN (:ids)") suspend fun stamps(ids: List<String>): List<RowStamp>
+    @Upsert suspend fun upsertFromSync(rows: List<Note>)
 }

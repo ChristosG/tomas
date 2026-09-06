@@ -184,3 +184,61 @@ data class ScriptLine(
     val updatedAt: Long = now(),
     val deleted: Boolean = false,
 )
+
+/**
+ * One answer from Claude, kept for ever.
+ *
+ * Chris asked for the advisor to *remember*: "even a vector DB if needed". It does not need one —
+ * these are tables, and a table is exactly what a language model reads best. Every advice is stored
+ * whole: the report that was sent ([report]), both halves of what came back, and the focus it
+ * chose, so the next question can be asked as "here is what you said last time, say what changed".
+ *
+ * [focusJson] is the raw `## Εστίαση` object as the model wrote it, not a parsed one. A word it
+ * named that is not in the vocabulary today may be in it next week — a caregiver adds words all the
+ * time — so the filtering happens on every read, against the items that exist then. See
+ * [gr.dimitris.app.caregiver.insights.Focus].
+ */
+@Entity(tableName = "advice", indices = [Index("updatedAt")])
+data class Advice(
+    @PrimaryKey val id: String = newId(),
+    /** When it was asked for. The report's «Προηγούμενες συμβουλές» is ordered on it. */
+    val at: Long = now(),
+    val model: String,
+    /** Exactly the text that went out, so what the answer was based on is never in doubt. */
+    val report: String,
+    val caregivers: String,
+    val dimitris: String,
+    /** `{"items":[…],"sounds":[…],"modules":[…],"levels":{…},"why":"…"}`, or "" when there was none. */
+    val focusJson: String = "",
+    val createdAt: Long = now(),
+    val updatedAt: Long = now(),
+    val deleted: Boolean = false,
+)
+
+/**
+ * Something a caregiver noticed, in their own words.
+ *
+ * The numbers say how many exercises he did; they cannot say that he said «καλημέρα» to the
+ * neighbour on his own, or that he was tired all week because of the dentist. That is what the
+ * people around him know and nothing else in this database records, so it goes to Claude with
+ * everything else — and it syncs, because Chris and his father each see a different half of his
+ * week.
+ *
+ * [author] is the device role that wrote it ([gr.dimitris.app.core.settings.DeviceRole]), so two
+ * phones' notes stay told apart after they meet.
+ */
+@Entity(tableName = "notes", indices = [Index("updatedAt")])
+data class Note(
+    @PrimaryKey val id: String = newId(),
+    val at: Long = now(),
+    val text: String,
+    val author: String,
+    val createdAt: Long = now(),
+    val updatedAt: Long = now(),
+    val deleted: Boolean = false,
+) {
+    companion object {
+        /** A note is a note, not a chapter. Long enough for a paragraph about a good afternoon. */
+        const val MAX_TEXT = 2_000
+    }
+}

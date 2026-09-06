@@ -84,6 +84,56 @@ class MigrationTest {
         }
     }
 
+    /**
+     * Phase 11 adds two tables and nothing else: `advice`, which is how the advisor remembers what
+     * it said, and `notes`, which is what the people around him noticed. His whole history has to
+     * come through untouched — this migration runs on a phone with years of attempts on it.
+     */
+    @Test fun migrate6To7CreatesAdviceAndNotesAndKeepsHisHistory() {
+        val name = "migration-test-7.db"
+        helper.createDatabase(name, 6).use { db ->
+            db.execSQL(
+                "INSERT INTO items (id, text, kind, category, firstSound, source, pinned, createdAt, updatedAt, deleted) " +
+                    "VALUES ('a', 'καφές', 'WORD', 'FOOD', 'κ', 'CAREGIVER', 1, 1, 1, 0)"
+            )
+            db.execSQL(
+                "INSERT INTO attempts (id, itemId, module, startedAt, durationMs, outcome, cueLevel, detail, createdAt, updatedAt, deleted) " +
+                    "VALUES ('at1', 'a', 'WORDCOACH', 1000, 900, 'ASSISTED', 2, '{}', 1, 1, 0)"
+            )
+        }
+        helper.runMigrationsAndValidate(name, 7, true).use { db ->
+            db.query("SELECT name FROM sqlite_master WHERE type='table' AND name IN ('advice','notes')").use { c ->
+                assertEquals("advice and notes should both exist after 6 to 7", 2, c.count)
+            }
+            // Both are pulled by "rows changed since X", so both must be indexed on updatedAt.
+            db.query("SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='advice' AND name LIKE '%updatedAt%'").use { c ->
+                assertEquals("advice.updatedAt should be indexed", 1, c.count)
+            }
+            db.query("SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='notes' AND name LIKE '%updatedAt%'").use { c ->
+                assertEquals("notes.updatedAt should be indexed", 1, c.count)
+            }
+            db.query("SELECT text, pinned FROM items WHERE id = 'a'").use { c ->
+                c.moveToFirst()
+                assertEquals("καφές", c.getString(0))
+                assertEquals("a pinned item should stay pinned", 1, c.getInt(1))
+            }
+            db.query("SELECT outcome, cueLevel FROM attempts WHERE id = 'at1'").use { c ->
+                c.moveToFirst()
+                assertEquals("ASSISTED", c.getString(0))
+                assertEquals("an attempt is a fact; it must come through as it was", 2, c.getInt(1))
+            }
+            // Writable straight away, which is the only thing that makes the new tables real.
+            db.execSQL(
+                "INSERT INTO notes (id, at, text, author, createdAt, updatedAt, deleted) " +
+                    "VALUES ('n1', 5, 'Είπε «καλημέρα» μόνος του.', 'CAREGIVER', 5, 5, 0)"
+            )
+            db.query("SELECT text FROM notes WHERE id = 'n1'").use { c ->
+                c.moveToFirst()
+                assertEquals("Είπε «καλημέρα» μόνος του.", c.getString(0))
+            }
+        }
+    }
+
     /** Phase 5 only adds tables, so the rows a caregiver already has must come through untouched. */
     @Test fun migrate4To5CreatesScriptTablesAndKeepsTheOldRows() {
         val name = "migration-test-5.db"

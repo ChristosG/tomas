@@ -37,6 +37,21 @@ class MergeTest {
         assertTrue(Merge.decide(nothing, row("i1", 1), appendOnly = false))
     }
 
+    /**
+     * Phase 11's tables through the same rule, by the registry rather than by hand: an advice the
+     * father's phone corrected, and a note Chris edited, both have to be able to win. They are
+     * things people wrote — the append-only rule is for things that happened.
+     */
+    @Test fun `an advice and a note are last-write-wins like every other written row`() {
+        listOf(Tables.ADVICE, Tables.NOTES).forEach { name ->
+            val spec = Tables.of(name)!!
+            assertFalse(name, spec.appendOnly)
+            assertTrue(name, Merge.decide(row("x", 10), row("x", 11), spec.appendOnly))
+            assertFalse(name, Merge.decide(row("x", 11), row("x", 10), spec.appendOnly))
+            assertFalse("$name: a round trip must not churn", Merge.decide(row("x", 10), row("x", 10), spec.appendOnly))
+        }
+    }
+
     /** Gson hands numbers back as whatever fits; the merge must read them all the same way. */
     @Test fun `updatedAt is read from any number`() {
         val asDouble = mapOf<String, Any?>("id" to "i1", "updatedAt" to 1_757_000_000_001.0)

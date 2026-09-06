@@ -1,7 +1,9 @@
 package gr.dimitris.app.core.sync
 
+import gr.dimitris.app.core.data.Advice
 import gr.dimitris.app.core.data.Attempt
 import gr.dimitris.app.core.data.Category
+import gr.dimitris.app.core.data.Note
 import gr.dimitris.app.core.data.Item
 import gr.dimitris.app.core.data.ItemKind
 import gr.dimitris.app.core.data.ModuleId
@@ -77,10 +79,58 @@ class SyncModelTest {
     @Test fun `every table the server knows is registered exactly once`() {
         val names = Tables.all.map { it.name }
         assertEquals(
-            setOf("items", "recordings", "attempts", "schedules", "sessions", "error_logs", "scripts", "script_lines"),
+            setOf(
+                "items", "recordings", "attempts", "schedules", "sessions", "error_logs", "scripts", "script_lines",
+                "advice", "notes",
+            ),
             names.toSet(),
         )
         assertEquals(names.size, names.toSet().size)
+    }
+
+    /**
+     * Phase 11's two tables. Both are last-write-wins: an advice and a note are things people
+     * wrote, and a person may correct or take back what they wrote — unlike an attempt, which is
+     * something that happened.
+     */
+    @Test fun `an advice survives the round trip and carries its focus`() {
+        val advice = Advice(
+            id = "a1", at = 1_757_000_000_000, model = "claude-opus-5",
+            report = "Προφίλ\nΟ Δημήτρης…", caregivers = "- Δούλεψε τα ψώνια.", dimitris = "Πάει καλά.",
+            focusJson = """{"items":["καφές"],"sounds":["κ"]}""",
+            createdAt = 1_757_000_000_000, updatedAt = 1_757_000_000_001,
+        )
+        val row = Rows.of(advice)
+
+        assertEquals("a1", Tables.of(Tables.ADVICE)!!.idOf(row))
+        assertEquals(1_757_000_000_001L, Rows.updatedAt(row))
+        assertEquals(advice, Rows.to(row, Advice::class.java))
+        assertFalse(Tables.of(Tables.ADVICE)!!.appendOnly)
+    }
+
+    @Test fun `a note survives the round trip and keeps who wrote it`() {
+        val note = Note(id = "n1", at = 5, text = "Είπε «καλημέρα» μόνος του.", author = "CAREGIVER", updatedAt = 9)
+        val row = Rows.of(note)
+
+        assertEquals("n1", Tables.of(Tables.NOTES)!!.idOf(row))
+        assertEquals("CAREGIVER", row["author"])
+        assertEquals(note, Rows.to(row, Note::class.java))
+        assertFalse(Tables.of(Tables.NOTES)!!.appendOnly)
+    }
+
+    /**
+     * The validator's whole basis: a sample entity is turned into a row and read for its shape, so
+     * a partial row pushed by hand is recognised and passed over instead of reaching Room as an
+     * entity with a null where a non-null Kotlin property should be.
+     */
+    @Test fun `the new tables know which of their columns are required`() {
+        val advice = Tables.of(Tables.ADVICE)!!
+        assertTrue(advice.required.containsAll(listOf("id", "at", "model", "report", "caregivers", "dimitris", "updatedAt")))
+        assertEquals(listOf("report"), advice.missing(mapOf("id" to "a", "at" to 1L, "model" to "m", "caregivers" to "c", "dimitris" to "d", "focusJson" to "", "createdAt" to 1L, "updatedAt" to 1L, "deleted" to false)))
+
+        val notes = Tables.of(Tables.NOTES)!!
+        assertTrue(notes.required.containsAll(listOf("id", "at", "text", "author", "updatedAt")))
+        assertEquals(listOf("author"), notes.missing(mapOf("id" to "n", "at" to 1L, "text" to "x", "createdAt" to 1L, "updatedAt" to 1L, "deleted" to false)))
     }
 
     @Test fun `only attempts and error logs are append-only`() {

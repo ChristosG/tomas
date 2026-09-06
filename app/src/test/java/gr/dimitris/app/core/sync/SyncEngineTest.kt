@@ -2,8 +2,10 @@ package gr.dimitris.app.core.sync
 
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import gr.dimitris.app.core.data.Attempt
+import gr.dimitris.app.core.data.FakeAdviceDao
 import gr.dimitris.app.core.data.FakeAttemptDao
 import gr.dimitris.app.core.data.FakeItemDao
+import gr.dimitris.app.core.data.FakeNoteDao
 import gr.dimitris.app.core.data.FakeRecordingDao
 import gr.dimitris.app.core.data.FakeScheduleDao
 import gr.dimitris.app.core.data.FakeScriptDao
@@ -53,13 +55,15 @@ class SyncEngineTest {
         val sessions = FakeSessionDao()
         val errorLogs = FakeErrorLogDao()
         val scripts = FakeScriptDao()
+        val advice = FakeAdviceDao()
+        val notes = FakeNoteDao()
         val files = FakeMediaPaths()
         val settings = newSettings()
         val recorded = mutableListOf<Pair<String, Throwable>>()
         var bumps = 0
 
         private val store = wrap(
-            DaoSyncStore { SyncDaos(items, recordings, attempts, schedules, sessions, errorLogs, scripts) }
+            DaoSyncStore { SyncDaos(items, recordings, attempts, schedules, sessions, errorLogs, scripts, advice, notes) }
         )
 
         fun engine(clock: () -> Long = { AT }) = SyncEngine(

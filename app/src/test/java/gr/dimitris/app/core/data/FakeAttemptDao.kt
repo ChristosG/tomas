@@ -16,6 +16,9 @@ class FakeAttemptDao : AttemptDao {
     override suspend fun between(from: Long, to: Long): List<Attempt> =
         active().filter { it.startedAt in from..to }.sortedBy { it.startedAt }
 
+    override suspend fun all(limit: Int): List<Attempt> =
+        active().sortedByDescending { it.startedAt }.take(limit)
+
     override suspend fun countFor(itemId: String, module: ModuleId): Int =
         active().count { it.itemId == itemId && it.module == module }
 

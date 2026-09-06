@@ -1,6 +1,7 @@
 package gr.dimitris.app.caregiver.progress
 
 import gr.dimitris.app.core.data.Attempt
+import gr.dimitris.app.core.data.Category
 import gr.dimitris.app.core.data.Item
 import gr.dimitris.app.core.data.ItemKind
 import gr.dimitris.app.core.data.ModuleId
@@ -23,6 +24,52 @@ data class ModuleStat(val module: ModuleId, val attempts: Int, val correct: Int,
 
 /** Mean cue level of one ISO week. Lower is better: it is how much help he needed. */
 data class WeekCue(val weekStart: Long, val meanCue: Float)
+
+/**
+ * One word, from the first time he ever met it to the last. The unit of «Όλη η πορεία ανά λέξη».
+ *
+ * The house rule of this file decides which counter counts what: **how much** counts every module,
+ * **how well** counts [ProgressStats.GRADED_MODULES] only. So [attempts] includes the talk board —
+ * saying a word at the board is practice and belongs in his journey — while [correct], [assisted]
+ * and [skipped] do not, because every tap on the board is written as CORRECT for the simple reason
+ * that it is him speaking and not him being marked. The three therefore need not add up to
+ * [attempts], and the report says so where it prints them.
+ *
+ * [meanCue] is over attempts that carry a cue level at all, which is the cue-ladder modules; it is
+ * `null` when he has never been given a ladder for this word.
+ *
+ * No id, no path: an [ItemHistory] is what may leave the phone, so it holds nothing that could not
+ * be read out loud in a room. [hasPhoto] and [hasVoice] are the two facts a caregiver can act on —
+ * "this word has no picture yet" — and they are booleans, never file names.
+ */
+data class ItemHistory(
+    val text: String,
+    val kind: ItemKind,
+    val category: Category,
+    val firstSound: String,
+    val attempts: Int,
+    val correct: Int,
+    val assisted: Int,
+    val skipped: Int,
+    val meanCue: Float?,
+    /** The highest Leitner box this word has reached in any module; 0 when it is not scheduled. */
+    val box: Int,
+    val firstAt: Long,
+    val lastAt: Long,
+    val hasPhoto: Boolean,
+    val hasVoice: Boolean,
+)
+
+/** One word on one day: the detail under «Τελευταίες 4 εβδομάδες ανά ημέρα». */
+data class DayItemStat(
+    val day: Long,
+    val text: String,
+    val attempts: Int,
+    val correct: Int,
+    val assisted: Int,
+    val skipped: Int,
+    val meanCue: Float?,
+)
 
 data class Progress(
     val from: Long,
@@ -165,6 +212,91 @@ object ProgressStats {
             mostUsedTalk = byText(window.filter { it.module == ModuleId.TALKBOARD }, items),
         )
     }
+
+    /**
+     * Every word he has ever practised, once each, busiest first.
+     *
+     * This is the part of the report no window can give: a word he was stuck on in March and has
+     * not been offered since is exactly the kind of thing the advisor should be able to notice, and
+     * four weeks of history cannot show it. [attempts] may reach back years — [ItemDao] rows are
+     * the vocabulary as it stands *today*, so a word a caregiver deleted simply drops out of the
+     * list rather than arriving as a bare id, which is the same rule the dashboard's word lists
+     * follow.
+     *
+     * Ties are broken by the most recent practice and then alphabetically, so the same history
+     * always produces the same lines and a diff of two reports is readable.
+     */
+    fun lifetime(
+        attempts: List<Attempt>,
+        schedules: List<Schedule>,
+        items: Map<String, Item>,
+        recordings: Set<String> = emptySet(),
+    ): List<ItemHistory> {
+        val topBox = schedules.filter { !it.deleted }
+            .groupBy { it.itemId }.mapValues { (_, rows) -> rows.maxOf { it.box } }
+        return attempts.filter { !it.deleted && items[it.itemId] != null }
+            .groupBy { it.itemId }
+            .mapNotNull { (id, rows) ->
+                val item = items[id] ?: return@mapNotNull null
+                val graded = rows.filter { it.module in GRADED_MODULES }
+                val cued = rows.mapNotNull { it.cueLevel }
+                ItemHistory(
+                    text = item.text,
+                    kind = item.kind,
+                    category = item.category,
+                    firstSound = item.firstSound,
+                    attempts = rows.size,
+                    correct = graded.count { it.outcome == Outcome.CORRECT },
+                    assisted = graded.count { it.outcome == Outcome.ASSISTED },
+                    skipped = graded.count { it.outcome == Outcome.SKIPPED },
+                    meanCue = if (cued.isEmpty()) null else cued.sum().toFloat() / cued.size,
+                    box = topBox[id] ?: 0,
+                    firstAt = rows.minOf { it.startedAt },
+                    lastAt = rows.maxOf { it.startedAt },
+                    hasPhoto = !item.imagePath.isNullOrBlank(),
+                    // The item's own model voice, or any recording made against it: both are "there
+                    // is a voice for this word", which is the only thing a caregiver acts on.
+                    hasVoice = !item.modelRecordingId.isNullOrBlank() || id in recordings,
+                )
+            }
+            .sortedWith(
+                compareByDescending<ItemHistory> { it.attempts }
+                    .thenByDescending { it.lastAt }
+                    .thenBy { it.text }
+            )
+    }
+
+    /**
+     * The window, word by word and day by day: what he actually did each morning, not a monthly
+     * average of it. Days he did nothing are simply absent — [Progress.days] already carries the
+     * empty ones, and repeating them here would be four hundred lines of «τίποτα».
+     *
+     * Ordered oldest day first, and within a day busiest word first, because that is how the report
+     * reads: a month walked forwards.
+     */
+    fun recentByDay(
+        attempts: List<Attempt>,
+        items: Map<String, Item>,
+        from: Long,
+        to: Long,
+        zone: ZoneId = ZoneId.systemDefault(),
+    ): List<DayItemStat> =
+        attempts.filter { !it.deleted && it.startedAt in from..to && items[it.itemId] != null }
+            .groupBy { startOfDay(it.startedAt, zone) to items.getValue(it.itemId).text }
+            .map { (key, rows) ->
+                val graded = rows.filter { it.module in GRADED_MODULES }
+                val cued = rows.mapNotNull { it.cueLevel }
+                DayItemStat(
+                    day = key.first,
+                    text = key.second,
+                    attempts = rows.size,
+                    correct = graded.count { it.outcome == Outcome.CORRECT },
+                    assisted = graded.count { it.outcome == Outcome.ASSISTED },
+                    skipped = graded.count { it.outcome == Outcome.SKIPPED },
+                    meanCue = if (cued.isEmpty()) null else cued.sum().toFloat() / cued.size,
+                )
+            }
+            .sortedWith(compareBy<DayItemStat> { it.day }.thenByDescending { it.attempts }.thenBy { it.text })
 
     /**
      * Minutes he practised without a session row, per day.

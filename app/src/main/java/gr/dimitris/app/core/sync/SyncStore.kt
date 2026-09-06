@@ -1,5 +1,7 @@
 package gr.dimitris.app.core.sync
 
+import gr.dimitris.app.core.data.Advice
+import gr.dimitris.app.core.data.AdviceDao
 import gr.dimitris.app.core.data.AppDatabase
 import gr.dimitris.app.core.data.Attempt
 import gr.dimitris.app.core.data.AttemptDao
@@ -7,6 +9,8 @@ import gr.dimitris.app.core.data.ErrorLog
 import gr.dimitris.app.core.data.ErrorLogDao
 import gr.dimitris.app.core.data.Item
 import gr.dimitris.app.core.data.ItemDao
+import gr.dimitris.app.core.data.Note
+import gr.dimitris.app.core.data.NoteDao
 import gr.dimitris.app.core.data.Recording
 import gr.dimitris.app.core.data.RecordingDao
 import gr.dimitris.app.core.data.Schedule
@@ -48,7 +52,7 @@ interface SyncStore {
     suspend fun awaitingMedia(table: String): List<Map<String, Any?>>
 }
 
-/** The seven DAOs the sync writes through. [of] takes them from the live database. */
+/** The nine DAOs the sync writes through. [of] takes them from the live database. */
 class SyncDaos(
     val items: ItemDao,
     val recordings: RecordingDao,
@@ -57,10 +61,13 @@ class SyncDaos(
     val sessions: SessionDao,
     val errorLogs: ErrorLogDao,
     val scripts: ScriptDao,
+    val advice: AdviceDao,
+    val notes: NoteDao,
 ) {
     companion object {
         fun of(db: AppDatabase) = SyncDaos(
             db.items(), db.recordings(), db.attempts(), db.schedules(), db.sessions(), db.errorLogs(), db.scripts(),
+            db.advice(), db.notes(),
         )
     }
 }
@@ -84,6 +91,8 @@ class DaoSyncStore(private val daos: () -> SyncDaos) : SyncStore {
             Tables.ERROR_LOGS -> d.errorLogs.changedSince(since)
             Tables.SCRIPTS -> d.scripts.scriptsChangedSince(since)
             Tables.SCRIPT_LINES -> d.scripts.linesChangedSince(since)
+            Tables.ADVICE -> d.advice.changedSince(since)
+            Tables.NOTES -> d.notes.changedSince(since)
             else -> emptyList()
         }
         return entities.map { spec.withId(Rows.of(it)) }
@@ -107,6 +116,8 @@ class DaoSyncStore(private val daos: () -> SyncDaos) : SyncStore {
             Tables.ERROR_LOGS -> d.errorLogs.stamps(ids)
             Tables.SCRIPTS -> d.scripts.scriptStamps(ids)
             Tables.SCRIPT_LINES -> d.scripts.lineStamps(ids)
+            Tables.ADVICE -> d.advice.stamps(ids)
+            Tables.NOTES -> d.notes.stamps(ids)
             else -> emptyList()
         }
         return stamps.associate { it.id to it.updatedAt }
@@ -167,6 +178,8 @@ class DaoSyncStore(private val daos: () -> SyncDaos) : SyncStore {
             Tables.ERROR_LOGS -> d.errorLogs.upsertFromSync(entities as List<ErrorLog>)
             Tables.SCRIPTS -> d.scripts.upsertScriptsFromSync(entities as List<Script>)
             Tables.SCRIPT_LINES -> d.scripts.upsertLinesFromSync(entities as List<ScriptLine>)
+            Tables.ADVICE -> d.advice.upsertFromSync(entities as List<Advice>)
+            Tables.NOTES -> d.notes.upsertFromSync(entities as List<Note>)
         }
     }
 }
