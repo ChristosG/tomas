@@ -306,9 +306,12 @@ private fun ClaudeSection() {
         // Written when the field is left, not on every keystroke. Typing `claude-opus-5` used to
         // store thirteen partial model ids, and walking away mid-word left one of them stored — a
         // Greek «(σφάλμα 404)» whose cause was invisible.
+        // On the graph's scope, not the screen's: losing focus is what a caregiver does by tapping
+        // «Πίσω», and that same tap tears the composition down. A write launched on the screen's
+        // scope was cancelled by it about half the time, and the model quietly stayed what it was.
         modifier = Modifier.fillMaxWidth().heightIn(min = Sizes.touchMin)
             .onFocusChanged { focus ->
-                if (!focus.isFocused) modelDraft?.let { typed -> scope.launch { graph.settings.setClaudeModel(typed) } }
+                if (!focus.isFocused) modelDraft?.let { typed -> graph.scope.launch { graph.settings.setClaudeModel(typed) } }
             },
     )
     Text(

@@ -267,6 +267,10 @@ fun AdviceScreen(onBack: () -> Unit) {
                 Spacer(Modifier.height(Sizes.gap))
             }
 
+            // What is on screen decides what the label can honestly say. With an answer showing,
+            // the text below it is the one that produced it — not the summary this screen rebuilt
+            // from newer numbers when it was reopened.
+            val shown = if (advice == null) state.summary else session.sent.orEmpty()
             QuietButton(
                 if (advice == null) "Τι θα σταλεί" else "Τι στάλθηκε",
                 onClick = { showSummary = !showSummary },
@@ -275,7 +279,7 @@ fun AdviceScreen(onBack: () -> Unit) {
             if (showSummary) {
                 Spacer(Modifier.height(Sizes.gapSmall))
                 Text(
-                    state.summary.ifBlank { AdviceViewModel.COULD_NOT_READ },
+                    shown.ifBlank { AdviceViewModel.COULD_NOT_READ },
                     style = MaterialTheme.typography.bodyMedium,
                     modifier = Modifier.fillMaxWidth().semantics { testTag = "advice-summary" },
                 )
