@@ -61,6 +61,37 @@ class ClaudeAdvisorParseTest {
         assertEquals("", advice.dimitris)
     }
 
+    /**
+     * The prompt asks for two sentences. This is what happens when it does not get them: a wall of
+     * text read at 0.8× to a man with expressive aphasia is not advice, and past about 4 000
+     * characters Android's TextToSpeech refuses outright and he gets an error instead of a voice.
+     */
+    @Test fun `his half is capped, and cut at the end of a sentence`() {
+        val sentence = "Πάει καλά και συνεχίζεις. "
+        val wall = sentence.repeat(60)                      // ~1 500 characters
+        val advice = ClaudeAdvisor.parse(answer("- Ένα.", wall))
+
+        assertTrue("${advice.dimitris.length}", advice.dimitris.length <= ClaudeAdvisor.MAX_DIMITRIS)
+        assertTrue(advice.dimitris, advice.dimitris.endsWith("."))
+        assertTrue(advice.dimitris, advice.dimitris.startsWith("Πάει καλά"))
+        // The caregivers' half is not capped: they read at their own pace, on a screen.
+        assertEquals("- Ένα.", advice.caregivers)
+    }
+
+    @Test fun `a two-sentence answer is left exactly as it was written`() {
+        val two = "Πάει πολύ καλά. Συνέχισε έτσι."
+        assertEquals(two, ClaudeAdvisor.parse(answer("- Ένα.", two)).dimitris)
+    }
+
+    /** No sentence end late enough to keep: a plain cut beats handing him a three-word stub. */
+    @Test fun `one endless sentence is cut plainly rather than to a stub`() {
+        val endless = "Ναι. " + "και ".repeat(400)
+        val capped = ClaudeAdvisor.parse(answer("- Ένα.", endless)).dimitris
+
+        assertTrue("${capped.length}", capped.length <= ClaudeAdvisor.MAX_DIMITRIS)
+        assertTrue("${capped.length}", capped.length > ClaudeAdvisor.MAX_DIMITRIS / 2)
+    }
+
     /** The prompt has to keep asking for the exact headings the parser looks for. */
     @Test fun `the system prompt names both headings`() {
         assertTrue(ClaudeAdvisor.SYSTEM_PROMPT.contains(ClaudeAdvisor.CAREGIVERS))
