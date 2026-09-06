@@ -61,17 +61,30 @@ class SecretStore(context: Context) : Secrets {
 
     /**
      * The encrypted file, opened once. A file the keystore can no longer read — a restored phone, a
-     * cleared lock screen — is deleted and made again rather than left as a permanent failure: the
+     * cleared lock screen — is emptied and made again rather than left as a permanent failure: the
      * caregiver retypes the key, which is a minute, instead of reinstalling the app.
      */
     private fun prefs(): SharedPreferences = cached ?: synchronized(this) {
         cached ?: open().also { cached = it }
     }
 
+    /**
+     * The self-heal has to go through the framework, not the filesystem.
+     * `EncryptedSharedPreferences` keeps its Tink keyset *inside this same preferences file* and
+     * reads it with `Context.getSharedPreferences`, so by the time `create()` throws, this process
+     * already holds a `SharedPreferencesImpl` for the file with the undecryptable keyset in memory.
+     * Deleting the XML would leave that instance untouched and the retry would fail exactly as the
+     * first attempt did — the caregiver would get «Δεν μπόρεσα να αποθηκεύσω το κλειδί.» until the
+     * app was force-stopped. Clearing through `getSharedPreferences(...).edit().clear().commit()`
+     * empties the cached instance *and* the file, so the retry generates a fresh keyset.
+     *
+     * The file is deleted afterwards as well, to leave nothing behind on disk.
+     */
     private fun open(): SharedPreferences = try {
         create()
     } catch (_: Throwable) {
-        File(app.filesDir.parentFile, "shared_prefs/$FILE.xml").delete()
+        runCatching { app.getSharedPreferences(FILE, Context.MODE_PRIVATE).edit().clear().commit() }
+        runCatching { File(app.filesDir.parentFile, "shared_prefs/$FILE.xml").delete() }
         create()
     }
 

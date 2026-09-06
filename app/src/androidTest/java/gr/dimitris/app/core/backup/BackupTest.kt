@@ -59,11 +59,17 @@ class BackupTest {
 
             val zip = backup.export()
 
+            // By entry name, not by scanning the bytes: the zip is DEFLATE'd (Zips.kt), so a key
+            // inside a packed file would not appear as plaintext and a byte scan could never fail.
+            // What the zip contains is exactly its list of entries, so that is what is asserted.
             ZipFile(zip).use { z ->
                 val names = z.entries().toList().map { it.name }
                 assertFalse("$names", names.any { it.contains(SecretStore.FILE) || it.contains("shared_prefs") })
+                assertTrue(
+                    "the zip should hold the database and the two media folders only: $names",
+                    names.all { it == AppDatabase.NAME || it.startsWith("photos/") || it.startsWith("recordings/") },
+                )
             }
-            assertFalse("the key was inside the zip", zip.readBytes().toString(Charsets.ISO_8859_1).contains("sk-ant-backup-needle"))
         } finally {
             secrets.setClaudeKey(before)
         }
