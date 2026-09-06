@@ -53,6 +53,11 @@ interface RecordingDao {
 interface AttemptDao {
     @Insert suspend fun insert(attempt: Attempt)
     @Query("SELECT * FROM attempts WHERE deleted = 0 AND startedAt >= :since ORDER BY startedAt") suspend fun since(since: Long): List<Attempt>
+
+    /** One window of history, for the progress dashboard. Inclusive at both ends. */
+    @Query("SELECT * FROM attempts WHERE deleted = 0 AND startedAt BETWEEN :from AND :to ORDER BY startedAt")
+    suspend fun between(from: Long, to: Long): List<Attempt>
+
     @Query("SELECT COUNT(*) FROM attempts WHERE deleted = 0 AND itemId = :itemId AND module = :module")
     suspend fun countFor(itemId: String, module: ModuleId): Int
     /** A Flow, so favourites re-rank themselves the moment an attempt is inserted. */
@@ -77,6 +82,9 @@ interface ScheduleDao {
     @Query("SELECT * FROM schedules WHERE itemId = :itemId AND module = :module AND deleted = 0") suspend fun get(itemId: String, module: ModuleId): Schedule?
     @Query("SELECT * FROM schedules WHERE module = :module AND deleted = 0 AND nextDueAt <= :now ORDER BY nextDueAt") suspend fun due(module: ModuleId, now: Long): List<Schedule>
     @Query("SELECT * FROM schedules WHERE module = :module AND deleted = 0") suspend fun all(module: ModuleId): List<Schedule>
+
+    /** Every live row, every module: what the dashboard counts the mastered words from. */
+    @Query("SELECT * FROM schedules WHERE deleted = 0") suspend fun allActive(): List<Schedule>
 }
 
 @Dao
@@ -84,6 +92,10 @@ interface SessionDao {
     @Upsert suspend fun upsert(session: Session)
     @Query("SELECT * FROM sessions WHERE id = :id") suspend fun get(id: String): Session?
     @Query("SELECT * FROM sessions WHERE deleted = 0 ORDER BY startedAt DESC LIMIT :limit") suspend fun recent(limit: Int): List<Session>
+
+    /** Sittings that *began* in the window: a session is counted on the day he sat down. */
+    @Query("SELECT * FROM sessions WHERE deleted = 0 AND startedAt BETWEEN :from AND :to ORDER BY startedAt")
+    suspend fun between(from: Long, to: Long): List<Session>
 }
 
 @Dao

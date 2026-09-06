@@ -10,6 +10,7 @@ import androidx.compose.material.icons.rounded.Backup
 import androidx.compose.material.icons.rounded.BugReport
 import androidx.compose.material.icons.rounded.Chat
 import androidx.compose.material.icons.rounded.Image
+import androidx.compose.material.icons.rounded.Insights
 import androidx.compose.material.icons.rounded.Person
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material3.Text
@@ -26,6 +27,9 @@ import gr.dimitris.app.ui.theme.Sizes
 data class CaregiverEntry(val title: String, val icon: ImageVector, val route: String)
 
 val caregiverEntries: List<CaregiverEntry> = listOf(
+    // First: it is the question a caregiver opens this area with, and the one thing here that is
+    // about him rather than about the app's content.
+    CaregiverEntry("Πρόοδος", Icons.Rounded.Insights, Routes.PROGRESS),
     CaregiverEntry("Λέξεις και εικόνες", Icons.Rounded.Image, Routes.ITEMS),
     CaregiverEntry("Διάλογοι", Icons.Rounded.Chat, Routes.SCRIPTS),
     CaregiverEntry("Ρυθμίσεις", Icons.Rounded.Settings, Routes.SETTINGS),
