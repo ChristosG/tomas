@@ -207,3 +207,35 @@ not a fault to log.
 3. The release build is unminified; the Anthropic SDK's HttpComponents and victools weight is dead
    code the moment R8 is turned on, and whoever turns it on will need keep rules for the SDK's
    reflective Jackson models.
+
+## Execution record (controller rulings, 2026-09-06)
+
+Copied from the SDD ledger at phase close. Task reviews + final review: 0 Critical / 13 Important / 28 Minor in total, all fixed or ruled across two fix waves; the last re-review left two Minors (a stale answer shown against a fresh summary; the model-id write racing back) fixed in phase 10. No live Claude call has been made: the dev machine has no ANTHROPIC_API_KEY — Chris runs ClaudeAdvisorLiveTest once with a key (see Verification notes).
+
+## Pre-flight conflict scan (2026-09-05)
+
+| Tasks | Shared surface | Produces vs consumes | Finding |
+|---|---|---|---|
+| 1 / phases 3–8 | synthetic attempt ids (numbers:level:N, sentences:level:N, trace:level:N, arcade:<game>) | ProgressStats excludes them from mostSkipped | Ruling: synthetic = itemId absent from the items map (no string parsing) — cost: none |
+| 1 / phase 4 | SINGSAY cueLevel = 5 − stage (phase-4 ruling) | cue trend over WORDCOACH/SCRIPTS/SINGSAY | consistent (lower = better in all three) |
+| 1 / phase 2 | Session.endedAt nullable; sessions finalized once | minutes per day from endedAt − startedAt capped at 60 min; unfinished sessions count 0 | consistent |
+| 2 / phases 3, 6, 7 | Settings.numbersLevel (1–7), sentencesLevel (1–4), traceLevel (1–5) | steppers | consistent (all three exist by phase 9) |
+| 2 / phase 0 | CaregiverHomeScreen entries; Nav routes | "Πρόοδος" first | consistent |
+| 3 / toolchain | anthropic-java 2.34.0 on Android (OkHttp, Java 17 bytecode, possible META-INF duplicates; Kotlin uses the Java SDK) | build must pass; network on Dispatchers.IO | Ruling: if the SDK cannot be made to build on Android within the task, the implementer reports BLOCKED with the exact error rather than switching to raw HTTP — cost: a fix dispatch |
+| 3 / phase 0 | SecretStore (EncryptedSharedPreferences) — the key must never reach error_logs, logs, the summary, or a backup zip | Backup exports app files: check that EncryptedSharedPreferences' file is not inside the exported set | Ruling: the key is excluded from backups; error messages from the SDK are sanitised before graph.errors — cost: none |
+| 3 / phase 1 | the Dimitris part is read aloud through graph.voice.speak (Result checked) | consistent |
+| 3 alone | model string configurable, default claude-opus-5; adaptive thinking; maxTokens 4000; refusal stop reason handled | consistent with the claude-api skill |
+| all | Greek-only, 72dp, bottom actions | consistent |
+
+Scan result: three rulings carried into dispatches.
+
+## Task log
+Tasks 1+2: dispatched as one batch — BASE c4d8441, model opus (in parallel with the phase-8 scoped re-review, read-only; residuals fold into this task's fix round)
+Tasks 1+2: implementer DONE (5a52db2, 5401236; JVM 333, connected 69). Accepted: mastered = distinct items in box 5; per-module Greek subjects; 56-day load for the previous period. Review dispatched (opus); Task 3 (Claude advisor) dispatched in parallel — BASE = the phase-8 docs commit after 5401236, model opus; review residuals fold into the Task 3 fix round.
+Tasks 1+2: review DONE (0 Critical / 4 Important / 14 Minor; both ✅). Ruling: all four Important (talk board excluded from the first-sound rule and from the accuracy line, a 4-week caption, optimistic stepper state) and the real minors (index on sessions.startedAt via an additive migration if cheap — else a bounded query; count query for mastered; clock seam in the ViewModel; midnight/DST/zone tests; ProgressScreenTest independent of pre-existing rows) fold into the Task 3 fix round — one implementer at a time.
+Task 3: implementer DONE_WITH_CONCERNS (7b469d1 sdk, 9f85d88; JVM 346 + 1 skipped live test, connected 75; no live call — no ANTHROPIC_API_KEY on this machine). Rulings: maxTokens raised to 8000 (AI cost is no concern; thinking counts against it) — into the fix round; explicit refusal handling kept (no fallback flag); the 401/403 key message accepted; APK 33 MB and release minify off — noted for Chris, not changed. Review dispatched (opus).
+Task 3: review DONE (0 Critical / 4 Important / 7 Minor). Rulings: the Dimitris section is capped at 400 characters at parse time (two short sentences); client timeout 120 s; maxTokens 8000 with max_tokens stop detection surfaced as a Greek 'answer cut short' line; keystore mismatch heals by clearing the prefs through SharedPreferences; password keyboard on the key field; network half unit-tested through builder-built Messages. Fix wave — BASE 9f85d88, resuming implementer ac87706e9e9bd1498 with both reviews (Tasks 1+2 and Task 3) and Task 4 verification notes.
+Fix wave DONE (cd59252, 1f6584d, d3e6f4d, 7c39d65; JVM 362 + 1 skipped, connected 79; DB v6 adds the sessions.startedAt index). Accepted: bestModule excludes the talk board; Throwable-wide keystore recovery; no MockWebServer seam; no ProgressViewModelTest. Final whole-phase review dispatched (opus) over c4d8441..7c39d65. Phase 10 Task 1 (server/ only, Node) dispatched in parallel — it must NOT commit; the controller commits its files when no app implementer is running.
+Final review DONE: 0 Critical / 5 Important / 7 Minor. Rulings — I1: mastered joins items (WORD/PHRASE only); I2: minutes per day = session durations plus sittings of attempts without a session (consecutive attempts with gaps under 5 min, each sitting at least 1 min, talk board included); I3: line-anchored marker regex + duplicated-marker test; I4: one request at a time (a second ask while one is in flight shows 'Περίμενε την απάντηση.'), the request runs on graph.scope so back never orphans a billed call, SDK maxRetries(1); I5: cue-trend insight compares the last two weeks. Fix wave 2 — BASE 7c39d65, resuming implementer ac87706e9e9bd1498; explicit git paths only (untracked server/ files belong to phase 10).
+Fix wave 2 DONE (b8740c4, e2d97e6, 87ac0c4, 863a1b1; JVM 383 + 1 skipped, connected 79). Accepted: cancel = outlive (guard prevents a second request); sittings are an under-estimate; idle line silent beyond 56 days. Scoped re-review dispatched (opus).
+Fix-wave-2 re-review: 2 Minor open — A: a previous answer shown against a fresh summary (clear the answer when the summary changes / show the sent summary), B: the model id write on focus loss can be cancelled by back (write through graph.scope). Ruling: both fold into the phase 10 fix round (one implementer at a time). Phase 9 closed — execution record commit deferred until the phase-10 implementer reports.
