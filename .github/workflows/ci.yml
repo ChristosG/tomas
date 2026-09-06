@@ -1,0 +1,33 @@
+# Runs the JVM unit tests and the server tests on every push to main and on pull requests.
+# The instrumented (emulator) suite is not run here: it would cost ~30 minutes of the free plan's
+# monthly Actions minutes per push. Run it locally with ./gradlew connectedDebugAndroidTest.
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  unit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+      - uses: gradle/actions/setup-gradle@v4
+      - run: ./gradlew --no-daemon -q testDebugUnitTest
+
+  server:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: node --test
+        working-directory: server

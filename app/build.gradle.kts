@@ -12,17 +12,35 @@ android {
         applicationId = "gr.dimitris.app"
         minSdk = 26
         targetSdk = 37
-        versionCode = 1
-        versionName = "0.1"
+        // The release workflow passes both from the git tag (-PversionName=0.2 -PversionCode=<run>).
+        versionCode = (project.findProperty("versionCode") as String?)?.toInt() ?: 1
+        versionName = (project.findProperty("versionName") as String?) ?: "0.1"
         // Ours, not the stock one: it answers the first-run "whose phone is this?" before any test
         // opens a screen. See DimitrisTestRunner.
         testInstrumentationRunner = "gr.dimitris.app.DimitrisTestRunner"
+    }
+
+    // Release signing comes from the environment (the GitHub release workflow sets these from the
+    // repository secrets; locally, source ~/.dimitris-app/README.txt). Without them a release build
+    // falls back to the debug key so that `assembleRelease` still works on any machine.
+    val keystorePath = System.getenv("DIMITRIS_KEYSTORE_PATH")
+    val hasReleaseKey = keystorePath != null && file(keystorePath).exists()
+    signingConfigs {
+        if (hasReleaseKey) {
+            create("release") {
+                storeFile = file(keystorePath!!)
+                storePassword = System.getenv("DIMITRIS_KEYSTORE_PASSWORD")
+                keyAlias = System.getenv("DIMITRIS_KEY_ALIAS")
+                keyPassword = System.getenv("DIMITRIS_KEY_PASSWORD")
+            }
+        }
     }
 
     buildTypes {
         release {
             isMinifyEnabled = false
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            signingConfig = if (hasReleaseKey) signingConfigs.getByName("release") else signingConfigs.getByName("debug")
         }
     }
 
