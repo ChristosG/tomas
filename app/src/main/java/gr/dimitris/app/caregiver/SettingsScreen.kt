@@ -30,6 +30,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -227,7 +228,14 @@ private fun ClaudeSection() {
         QuietButton("Αποθήκευση κλειδιού", enabled = draft.isNotBlank(), modifier = Modifier.weight(1f), onClick = {
             val typed = draft
             scope.launch {
-                val ok = withContext(Dispatchers.IO) { runCatching { graph.secrets.setClaudeKey(typed) }.isSuccess }
+                val ok = withContext(Dispatchers.IO) {
+                    runCatching { graph.secrets.setClaudeKey(typed) }
+                        // A keystore that refuses is exactly the case where someone will be asked
+                        // "what does Σφάλματα say?". The throwable is a keystore or IO error and
+                        // carries no secret, so recording it is safe and silence is not.
+                        .onFailure { graph.errors.record("claude key save", it) }
+                        .isSuccess
+                }
                 if (ok) {
                     saved = SecretStore.mask(typed)
                     draft = ""
@@ -240,7 +248,11 @@ private fun ClaudeSection() {
         Spacer(Modifier.width(Sizes.gapSmall))
         QuietButton("Διαγραφή", enabled = saved != null, modifier = Modifier.weight(1f), onClick = {
             scope.launch {
-                val ok = withContext(Dispatchers.IO) { runCatching { graph.secrets.setClaudeKey(null) }.isSuccess }
+                val ok = withContext(Dispatchers.IO) {
+                    runCatching { graph.secrets.setClaudeKey(null) }
+                        .onFailure { graph.errors.record("claude key delete", it) }
+                        .isSuccess
+                }
                 if (ok) {
                     saved = null
                     draft = ""
@@ -256,13 +268,16 @@ private fun ClaudeSection() {
     Spacer(Modifier.height(Sizes.gapSmall))
     OutlinedTextField(
         value = modelDraft ?: storedModel,
-        onValueChange = { typed ->
-            modelDraft = typed
-            scope.launch { graph.settings.setClaudeModel(typed) }
-        },
+        onValueChange = { typed -> modelDraft = typed },
         label = { Text("Μοντέλο") },
         singleLine = true,
-        modifier = Modifier.fillMaxWidth().heightIn(min = Sizes.touchMin),
+        // Written when the field is left, not on every keystroke. Typing `claude-opus-5` used to
+        // store thirteen partial model ids, and walking away mid-word left one of them stored — a
+        // Greek «(σφάλμα 404)» whose cause was invisible.
+        modifier = Modifier.fillMaxWidth().heightIn(min = Sizes.touchMin)
+            .onFocusChanged { focus ->
+                if (!focus.isFocused) modelDraft?.let { typed -> scope.launch { graph.settings.setClaudeModel(typed) } }
+            },
     )
     Text(
         "Άφησέ το κενό για ${Settings.DEFAULT_CLAUDE_MODEL}.",
