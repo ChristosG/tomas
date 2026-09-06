@@ -27,6 +27,12 @@ data class TemplatePoint(val pt: Pt, val segment: Int, val letter: Int = 0)
  * [left] and [right] are what his ink is shared out by. A stroke that crosses from one letter into
  * the next is split at the boundary, point by point, so the «Κ» he drew over the «η» is the «η»'s
  * problem and not the «μ»'s.
+ *
+ * [inside] is this letter's own ink, and it is what precision is measured against. The word's mask
+ * says "there is ink here" anywhere in the word, so a point given to the «η» but sitting on the
+ * «μ» beside it used to count as precise; against the letter's own mask it does not. Null means the
+ * letter has no mask of its own — a hand-built target, or a glyph too thin to fill — and the word's
+ * is used instead, which is what the marking did before per-letter masks existed.
  */
 data class GlyphLetter(
     val text: String,
@@ -34,10 +40,23 @@ data class GlyphLetter(
     val left: Float,
     val right: Float,
     val skeleton: Float,
+    val inside: ((Pt) -> Boolean)? = null,
 )
 
-/** How one letter of the word came out. [text] is the letter as it is shown, so it can be said. */
-data class LetterScore(val text: String, val coverage: Float, val precision: Float, val passed: Boolean)
+/**
+ * How one letter of the word came out. [text] is the letter as it is shown, so it can be said.
+ *
+ * [ink] is how much line he drew on this letter against how long the letter is — the same ratio
+ * [TraceScore.inkRatio] is for the whole word, per letter, so that scribbling over one letter of
+ * eight can be seen and refused where the word's own average hides it.
+ */
+data class LetterScore(
+    val text: String,
+    val coverage: Float,
+    val precision: Float,
+    val passed: Boolean,
+    val ink: Float = 0f,
+)
 
 /**
  * Everything he was asked to write, as the scorer needs it: the outline in pieces, the letters those
@@ -69,6 +88,10 @@ data class Target(
  * inside the ink dilutes a wrong letter until it passes. It is a different sentence on the screen,
  * because "do less" is not the same advice as "look at the shape". [inkRatio] is how much line he
  * drew against how long the letter is, kept on every row so the budget can be set from real hands.
+ * The budget is measured **per letter**: scribbling over one letter of eight is well inside the
+ * word's own budget, and it is still not writing. On that refusal [letters] carries every letter
+ * with its own [LetterScore.ink] and nothing else — nothing was marked — and `passed` is false on
+ * exactly the letters that were flooded, so the paper can mark them and the nudge can name them.
  *
  * [letters] is the word marked letter by letter, and [passed] is the *worst* of them, not the
  * average: a word is eight letters he is learning to write, and seven of them being right is seven
@@ -298,9 +321,12 @@ object TraceScorer {
      * gets his ink from its own slice of the paper, its own ceiling on the two distances, and its own
      * pieces to be gone over; the numbers on [TraceScore] itself are the whole word, for the record.
      *
-     * [Target.skeleton] is how long the whole thing is as a line (see [skeleton]); drawing more than
-     * [INK_BUDGET] times that is refused as [TraceScore.tooMuchInk] before the shape is judged at
-     * all. Zero switches the budget off, for a caller with no letter to measure against.
+     * [GlyphLetter.skeleton] is how long one letter is as a line (see [skeleton]); drawing more than
+     * [INK_BUDGET] times that **on any one letter** is refused as [TraceScore.tooMuchInk] before the
+     * shape is judged at all. Per letter, because a scribble over one letter of eight is a seventh
+     * of the word's own budget and is no more writing than a scribble over a capital.
+     * A [Target.skeleton] of zero switches the budget off, for a caller with no letter to measure
+     * against.
      *
      * Long enough to be worth a background thread on a big word: it is one distance per ink point
      * per outline point, and the caller runs it off the main one.
@@ -321,29 +347,56 @@ object TraceScorer {
         // Fine enough for the smallest letter, so no piece of it is stepped over.
         val step = (bars.minOf { it.tolerancePx } * STEP_OF_TOLERANCE).coerceAtLeast(MIN_STEP)
 
-        // Evenly spaced along each stroke, so speed stops being part of the mark.
+        // Evenly spaced along each stroke, so speed stops being part of the mark — and shared out
+        // among the letters as it is walked. A stroke that runs from one letter into the next is
+        // split where they meet, point by point, and so is its *length*: half of every step goes to
+        // the letter at each end of it, so the ink is divided exactly as the points are.
         val walked = ArrayList<Pt>()
+        val hisInk = Array(letters.size) { ArrayList<Pt>() }
+        val drawnPer = FloatArray(letters.size)
         var drawn = 0f
         for (stroke in strokes) {
             if (stroke.isEmpty()) continue
             val even = resample(stroke, step)
-            // Measured along the path he actually walked, so a slow finger is not more ink.
-            for (i in 1 until even.size) drawn += dist(even[i - 1], even[i])
+            var previous = -1
+            for (i in even.indices) {
+                val owner = nearestLetter(even[i], letters)
+                hisInk[owner] += even[i]
+                // Measured along the path he actually walked, so a slow finger is not more ink.
+                // The gap between two strokes is never walked: this only ever runs inside one.
+                if (i > 0) {
+                    val d = dist(even[i - 1], even[i])
+                    drawn += d
+                    drawnPer[previous] += d / 2f
+                    drawnPer[owner] += d / 2f
+                }
+                previous = owner
+            }
             walked += even
         }
         // Nothing drawn is not a bad attempt, it is no attempt.
         if (walked.isEmpty()) return NOTHING
         val ratio = if (target.skeleton > 0f) drawn / target.skeleton else 0f
+        val used = FloatArray(letters.size) { if (letters[it].skeleton > 0f) drawnPer[it] / letters[it].skeleton else 0f }
         // Refused before the shape is judged: colouring the letter in reaches every piece of it and
         // never leaves the ink, and no number below could tell it from writing.
-        if (target.skeleton > 0f && ratio > INK_BUDGET) {
-            return TraceScore(0f, 0f, Float.MAX_VALUE, passed = false, tooMuchInk = true, inkRatio = ratio)
+        //
+        // Per letter, not per word: a scribble over one letter of eight is a seventh of the word's
+        // own budget and every bit as much not-writing as a scribble over a capital. A word skeleton
+        // of zero is a caller with no letter to measure against, and switches the whole budget off.
+        if (target.skeleton > 0f && letters.indices.any { used[it] > INK_BUDGET }) {
+            return TraceScore(
+                0f, 0f, Float.MAX_VALUE, passed = false, tooMuchInk = true, inkRatio = ratio,
+                // Nothing was marked, so there are no shape numbers to give; what each letter does
+                // carry is its own ink, and whether that letter is one of the flooded ones. The
+                // paper marks those and the nudge names them, exactly as it does for a wrong shape.
+                letters = letters.indices.map {
+                    LetterScore(letters[it].text, 0f, 0f, passed = used[it] <= INK_BUDGET, ink = used[it])
+                },
+            )
         }
 
-        // His ink shared out among the letters, and the letter's own outline with it. A stroke that
-        // runs from one letter into the next is split where they meet, point by point.
-        val hisInk = Array(letters.size) { ArrayList<Pt>() }
-        for (p in walked) hisInk[nearestLetter(p, letters)] += p
+        // Each letter's own outline, so a piece of the «η» is not a piece of the «μ».
         val outlines = Array(letters.size) { ArrayList<TemplatePoint>() }
         for (t in target.points) if (t.letter in outlines.indices) outlines[t.letter] += t
 
@@ -358,6 +411,11 @@ object TraceScorer {
             if (outline.isEmpty()) continue
             val mine = hisInk[i]
             val bar = bars[i]
+            // This letter's own ink. The word's mask is true anywhere in the word, so against it a
+            // point given to the «η» but standing on the «μ» next to it was precise; against the
+            // «η»'s own it is not. A letter with no mask of its own falls back to the word's, which
+            // is what every target built by hand has.
+            val ink = letters[i].inside ?: target.inside
 
             val present = HashSet<Int>()
             for (t in outline) present += t.segment
@@ -368,7 +426,7 @@ object TraceScorer {
 
             for (p in mine) {
                 // On the ink costs nothing: a line down the middle of a stroke is the letter, written.
-                val onInk = target.inside(p)
+                val onInk = ink(p)
                 var best = Float.MAX_VALUE
                 if (onInk) {
                     // The radius is measured from the edge of the letter, not from the middle of it:
@@ -406,6 +464,7 @@ object TraceScorer {
                 coverage = coverage,
                 precision = precision,
                 passed = coverage >= bar.minCoverage && precision >= bar.minPrecision,
+                ink = used[i],
             )
             coveredAll += covered.size
             presentAll += present.size

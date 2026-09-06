@@ -97,11 +97,17 @@ fun TraceCanvas(
                     live += Pt(down.position.x, down.position.y)
                     // Consumed: this is his handwriting, not a scroll or a swipe for anyone else.
                     down.consume()
-                    drag(down.id) { change ->
+                    val drawn = drag(down.id) { change ->
                         change.consume()
                         live += Pt(change.position.x, change.position.y)
                     }
-                    if (live.isNotEmpty()) emit(live.toList())
+                    // A finger that came down and went up again without moving is not a stroke: a
+                    // knuckle resting on the paper, or a stray tap, would otherwise leave a dot that
+                    // arms «Έτοιμο», counts as one point of the marking and spends a try. And a drag
+                    // another gesture cancelled — `drag` returning false — is half a stroke nobody
+                    // finished; it is dropped rather than handed in. Either way the paper is wiped
+                    // of the ink under his finger, so nothing is left drawn that was not counted.
+                    if (drawn && live.size > 1) emit(live.toList()) else live.clear()
                 }
             }
     ) {
@@ -143,7 +149,8 @@ fun TraceCanvas(
 /** One stroke, as wide as a marker and rounded at both ends like one. */
 private fun DrawScope.ink(points: List<Pt>, width: Float, colour: Color) {
     if (points.isEmpty()) return
-    // A tap that never moved is still a mark he made: a dot, not nothing.
+    // The one point under a finger that has not moved yet: a dot, so he can see the glass answering
+    // him. It is never handed in as a stroke — see the gesture above — only drawn while he is down.
     if (points.size == 1) {
         drawCircle(colour, radius = width / 2f, center = Offset(points[0].x, points[0].y))
         return

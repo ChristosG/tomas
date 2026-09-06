@@ -87,8 +87,10 @@ object Glyphs {
             val contours = sample(letter)
             // A space has no outline: nothing to trace, and nothing he can be marked as missing.
             if (contours.isEmpty()) continue
+            // Copied in now, before the letter's own path is moved below: the two are then
+            // independent, and each can be filled into a mask of its own.
             whole.addPath(letter)
-            drawn += Letter(text.substring(i, i + 1), contours)
+            drawn += Letter(text.substring(i, i + 1), contours, letter)
         }
         if (drawn.isEmpty()) return EMPTY
 
@@ -118,6 +120,8 @@ object Glyphs {
             val cut = TraceScorer.segments(moved, height)
             for (t in cut) points += TemplatePoint(t.pt, nextSegment + t.segment, index)
             nextSegment += (cut.maxOfOrNull { it.segment } ?: -1) + 1
+            // The same move applied to this letter's own path, so its mask stands where its dots do.
+            letter.path.offset(dx, dy)
             letters += GlyphLetter(
                 text = letter.text,
                 height = height,
@@ -126,6 +130,9 @@ object Glyphs {
                 left = flat.minOf { it.x },
                 right = flat.maxOf { it.x },
                 skeleton = TraceScorer.skeleton(moved),
+                // This letter's own ink: what he drew on the «μ» is not precision on the «η» beside
+                // it. A glyph too thin to fill has none, and falls back to the word's.
+                inside = mask(letter.path),
             )
         }
         if (points.isEmpty()) return EMPTY
@@ -137,7 +144,7 @@ object Glyphs {
                 points = points,
                 letters = share(letters),
                 skeleton = letters.sumOf { it.skeleton.toDouble() }.toFloat(),
-                inside = mask(whole),
+                inside = mask(whole) ?: { false },
             ),
             height = maxY - minY,
         )
@@ -156,15 +163,22 @@ object Glyphs {
         )
     }
 
-    /** One letter as it was laid out: what it says, and its outline walked contour by contour. */
-    private class Letter(val text: String, val contours: List<List<Pt>>)
+    /**
+     * One letter as it was laid out: what it says, its outline walked contour by contour, and the
+     * filled path itself, which is what its own ink mask is made from.
+     */
+    private class Letter(val text: String, val contours: List<List<Pt>>, val path: Path)
 
     /**
      * Where the ink is. [Region] fills the path with the font's own winding rule, so the hole in an
      * «Ο» is outside the letter exactly as the eye says it is — which is what stops a scribble
      * through the middle of a letter from being scored as the letter.
+     *
+     * Null when the path is too complex or too thin to fill: the caller then falls back to the
+     * outline distance (or, for one letter of a word, to the word's own mask), which is the
+     * behaviour the marking had before the mask existed.
      */
-    private fun mask(path: Path): (Pt) -> Boolean {
+    private fun mask(path: Path): ((Pt) -> Boolean)? {
         val bounds = RectF()
         @Suppress("DEPRECATION") path.computeBounds(bounds, true)
         val clip = Rect(
@@ -172,9 +186,7 @@ object Glyphs {
             bounds.right.toInt() + 1, bounds.bottom.toInt() + 1,
         )
         val region = Region()
-        // A path too complex or too thin to fill leaves an empty region; the scorer then falls back
-        // to the outline distance, which is the behaviour it had before the mask existed.
-        if (!region.setPath(path, Region(clip))) return { false }
+        if (!region.setPath(path, Region(clip))) return null
         return { p -> region.contains(p.x.roundToInt(), p.y.roundToInt()) }
     }
 

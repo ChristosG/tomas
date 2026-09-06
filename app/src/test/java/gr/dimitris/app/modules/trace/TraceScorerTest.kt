@@ -249,6 +249,59 @@ class TraceScorerTest {
         assertFalse("writing «Η» by hand was called too much ink", score(handH, h, TraceStrictness.NORMAL).tooMuchInk)
     }
 
+    /**
+     * The budget is one letter's, not one word's. A man who colours in a single letter of eight has
+     * drawn about a seventh more than the word is long, which is well inside a budget measured over
+     * the whole of it — and colouring one letter in is no more writing than colouring a capital in.
+     *
+     * The second letter of the two is scribbled; the first is written by hand. The word's own ratio
+     * stays under the budget, which is exactly what makes this test worth having.
+     */
+    @Test fun `a scribble over one letter of a word is refused for that letter`() {
+        val both = word(h, h.at(GAP))
+        val second = listOf(
+            scribble(Pt(180f + GAP, 100f), Pt(180f + GAP, 900f)),
+            scribble(Pt(620f + GAP, 100f), Pt(620f + GAP, 900f)),
+            scribble(Pt(180f + GAP, 500f), Pt(620f + GAP, 500f)),
+        )
+        val s = TraceScorer.score(handH + second, both, TraceStrictness.NORMAL, DENSITY, recall = false)
+
+        assertTrue("colouring one letter of a word in was not called too much ink: $s", s.tooMuchInk)
+        assertFalse("colouring one letter of a word in passed: $s", s.passed)
+        // The whole word's ratio is what the budget used to be measured on, and it lets this through.
+        assertTrue("the word's own ratio ${s.inkRatio} was already over budget, so this proves nothing", s.inkRatio < TraceScorer.INK_BUDGET)
+        // And the refusal knows which letter it was, so «Πολύ μελάνι» can name it.
+        assertTrue("the letter he wrote by hand was blamed for the scribble: $s", s.letters[0].passed)
+        assertFalse("the letter he coloured in was not the one blamed: $s", s.letters[1].passed)
+        assertTrue("the scribbled letter's own ratio ${s.letters[1].ink} is not over the budget", s.letters[1].ink > TraceScorer.INK_BUDGET)
+        assertTrue("writing a letter by hand used ${s.letters[0].ink} of its own length", s.letters[0].ink < TraceScorer.INK_BUDGET)
+    }
+
+    /**
+     * Precision is measured against the letter's own ink, not against the word's.
+     *
+     * The word's mask says "there is ink here" anywhere in the word, so a stroke standing on the
+     * neighbour — which happens wherever two letters overlap in the slice of paper they are shared
+     * out by — used to count as precise for a letter it never touched. Two «Η»s set close enough to
+     * overlap, and a stem drawn down the second one inside the first one's slice: nothing about it
+     * is the first letter, and its mark has to say so.
+     */
+    @Test fun `a letter is marked on its own ink and not on its neighbour's`() {
+        val both = word(h, h.at(OVERLAP))
+        // Down the second letter's left stem, in the paper the first letter owns, and stopping well
+        // clear of the first letter's crossbar: no part of it is near a stroke of that letter.
+        val onTheNeighbour = listOf(line(Pt(180f + OVERLAP, 130f), Pt(180f + OVERLAP, 400f)))
+        val mine = TraceScorer.score(onTheNeighbour, both, TraceStrictness.NORMAL, DENSITY, recall = false)
+        assertEquals("ink on the next letter counted as writing this one: $mine", 0f, mine.letters[0].precision, 0.001f)
+        assertFalse("a stem drawn on the next letter passed as this one: $mine", mine.passed)
+
+        // The same ink against the same letters with only the word's mask, which is what the
+        // marking had before: every point of it is "on the letter", and the number is meaningless.
+        val wordWide = both.copy(letters = both.letters.map { it.copy(inside = null) })
+        val theirs = TraceScorer.score(onTheNeighbour, wordWide, TraceStrictness.NORMAL, DENSITY, recall = false)
+        assertEquals("the word's mask no longer counts the neighbour's ink: $theirs", 1f, theirs.letters[0].precision, 0.001f)
+    }
+
     @Test fun `a single tap is never a letter`() {
         val tap = listOf(listOf(Pt(400f, 500f)))
         for (level in TraceStrictness.entries) {
@@ -422,7 +475,9 @@ class TraceScorerTest {
     @Test fun `with no ink to measure against, the outline is what is left`() {
         val s = TraceScorer.score(
             strokes = listOf(line(Pt(180f, 100f), Pt(180f, 900f))),
-            target = h.target.copy(inside = { false }),
+            // The letter's own mask as well as the word's: a letter with neither falls all the way
+            // back to the outline distance, which is what this measures.
+            target = h.target.copy(inside = { false }, letters = h.target.letters.map { it.copy(inside = null) }),
             level = TraceStrictness.NORMAL,
             density = DENSITY,
             recall = false,
@@ -538,6 +593,12 @@ private const val WORD_SCALE = 0.15f
 /** How far the second letter of the two-letter word stands from the first. */
 private const val GAP = 1000f
 
+/**
+ * The same, close enough that the two letters' ink overlaps in x — a tail, a kerned pair, an
+ * italic face. It is the one arrangement where the paper a letter owns holds its neighbour's ink.
+ */
+private const val OVERLAP = 200f
+
 /** How much line he drew, as a multiple of the letter's own length. See [TraceScorer.INK_BUDGET]. */
 private fun inkRatio(strokes: List<List<Pt>>, glyph: TestGlyph): Float {
     val step = (TraceStrictness.NORMAL.toleranceDp * DENSITY * TraceScorer.STEP_OF_TOLERANCE)
@@ -633,7 +694,7 @@ private fun word(vararg glyphs: TestGlyph): Target {
     for ((i, g) in glyphs.withIndex()) {
         for (t in g.template) points += TemplatePoint(t.pt, next + t.segment, i)
         next += (g.template.maxOfOrNull { it.segment } ?: -1) + 1
-        letters += GlyphLetter(g.text, g.height, g.left, g.right, g.skeleton)
+        letters += GlyphLetter(g.text, g.height, g.left, g.right, g.skeleton, inside = g.inside)
     }
     val shared = letters.mapIndexed { i, letter ->
         letter.copy(

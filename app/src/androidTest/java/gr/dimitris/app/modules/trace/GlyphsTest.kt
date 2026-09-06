@@ -233,6 +233,41 @@ class GlyphsTest {
         }
     }
 
+    /**
+     * The other way of not writing one letter of eight: going over it again and again.
+     *
+     * Every piece of the letter is touched and nothing leaves its ink, so both shape numbers say
+     * 1.00 — only the *length* of what he drew refuses it, and measured over the whole word that
+     * length is well inside the budget. The budget is therefore per letter, and the refusal names
+     * the letter exactly as a wrong shape does.
+     */
+    @Test fun aLetterOfHisNameGoneOverAgainAndAgainIsRefusedAndNamed() {
+        val name = Glyphs.template("Δημήτρης", boxWidth, boxHeight)
+        val eta = name.letters.indexOfLast { it.text == "η" }
+        assertTrue("no «η» in «Δημήτρης»", eta > 0)
+        val its = name.points.filter { it.letter == eta }
+        val left = its.minOf { it.pt.x }.toDouble()
+        val right = its.maxOf { it.pt.x }.toDouble()
+
+        val hand = HandTrace.centreLine(name)
+        val mine = hand.filter { stroke -> stroke.map { it.x }.average() in left..right }
+        assertTrue("no stroke of the word belongs to the «η»", mine.isNotEmpty())
+        // The word written by hand, and that one letter written over itself four more times.
+        val over = hand + List(TIMES_OVER) { mine }.flatten()
+
+        for (level in TraceStrictness.entries) {
+            val s = score(over, name, level)
+            Log.i(TAG, "one «η» of the name gone over ${TIMES_OVER + 1} times at $level: $s")
+            Log.i(TAG, "  ink: " + s.letters.joinToString { "${it.text} ${it.ink}" })
+            assertTrue("going over one letter of eight again and again passed at $level: $s", !s.passed)
+            assertTrue("going over one letter again and again was not called too much ink: $s", s.tooMuchInk)
+            assertTrue("the letter that was drowned is not the one named: ${s.failed.map { it.text }}", s.failed.any { it.text == "η" })
+            assertTrue("more letters were blamed than he drowned: ${s.failed.map { it.text }}", s.failed.size <= 2)
+            // The whole word's ratio is what the budget used to be measured on, and it lets it pass.
+            assertTrue("the word's own ratio ${s.inkRatio} is over budget, so this proves nothing", s.inkRatio < TraceScorer.INK_BUDGET)
+        }
+    }
+
     private fun score(strokes: List<List<Pt>>, glyph: GlyphTemplate, level: TraceStrictness) =
         TraceScorer.score(strokes, glyph.target, level, density, recall = false)
 
@@ -272,6 +307,17 @@ class GlyphsTest {
             val ratio = drawn / glyph.skeleton
             Log.i(TAG, "$text by hand uses $ratio of its own length (budget ${TraceScorer.INK_BUDGET})")
             assertTrue("writing «$text» by hand used $ratio of the letter's length", ratio < TraceScorer.INK_BUDGET * 0.8f)
+
+            // And letter by letter, which is where the budget is actually applied: a word whose
+            // every letter is inside its own budget is the promise this measurement is here for.
+            val s = score(HandTrace.centreLine(glyph), glyph, TraceStrictness.NORMAL)
+            Log.i(TAG, "$text by hand, letter by letter: " + s.letters.joinToString { "${it.text} ${it.ink}" })
+            for (letter in s.letters) {
+                assertTrue(
+                    "writing «$text» by hand used ${letter.ink} of the «${letter.text}»'s own length",
+                    letter.ink < TraceScorer.INK_BUDGET * 0.8f,
+                )
+            }
         }
     }
 
@@ -279,5 +325,8 @@ class GlyphsTest {
     private companion object {
         const val STEM_PROBE = 12f
         const val TAG = "TraceNumbers"
+
+        /** How many extra times one letter is written over itself: enough to be past its budget. */
+        const val TIMES_OVER = 4
     }
 }

@@ -496,11 +496,18 @@ class TraceViewModel(
         const val TRY_AGAIN = "Ξανά"
 
         /**
+         * The two halves of the ink refusal, kept apart so the letter can be named between them:
+         * «Πολύ μελάνι στο «η». Ξανά, πιο απλά.»
+         */
+        private const val TOO_MUCH_INK_HEAD = "Πολύ μελάνι"
+        private const val TOO_MUCH_INK_TAIL = "Ξανά, πιο απλά."
+
+        /**
          * What too much ink says instead. Colouring the letter in touches every piece of it without
          * ever writing it, so it is refused — and "do less" is different advice from "look at the
          * shape", so it is a different sentence.
          */
-        const val TOO_MUCH_INK = "Πολύ μελάνι. Ξανά, πιο απλά."
+        const val TOO_MUCH_INK = "$TOO_MUCH_INK_HEAD. $TOO_MUCH_INK_TAIL"
 
         /**
          * The nudge, and where to look. «Ξανά» over a word of eight letters says nothing a man with
@@ -508,16 +515,22 @@ class TraceViewModel(
          * screen, and the paper marks it too.
          *
          * One letter is named, two are named, and more than two are not: a list of five letters is
-         * a page of text, and the marked letters on the paper say it better.
+         * a page of text, and the marked letters on the paper say it better. The ink refusal names
+         * its letters the same way: the budget is per letter, so «Πολύ μελάνι» can say *which*
+         * letter was drowned exactly as «Ξανά» says which was the wrong shape.
          */
         fun tryAgain(score: TraceScore?): String {
-            if (score?.tooMuchInk == true) return TOO_MUCH_INK
-            val missed = score?.failed.orEmpty()
             // A single letter he was asked for: there is nothing to point at but the letter itself.
-            if (missed.isEmpty() || score?.letters.orEmpty().size < 2) return TRY_AGAIN
-            return when (missed.size) {
-                1 -> "$TRY_AGAIN — δες το «${missed[0].text}»."
-                2 -> "$TRY_AGAIN — δες το «${missed[0].text}» και το «${missed[1].text}»."
+            val named = if (score?.letters.orEmpty().size < 2) emptyList() else score?.failed.orEmpty()
+            if (score?.tooMuchInk == true) return when (named.size) {
+                1 -> "$TOO_MUCH_INK_HEAD στο «${named[0].text}». $TOO_MUCH_INK_TAIL"
+                2 -> "$TOO_MUCH_INK_HEAD στο «${named[0].text}» και στο «${named[1].text}». $TOO_MUCH_INK_TAIL"
+                else -> TOO_MUCH_INK
+            }
+            if (named.isEmpty()) return TRY_AGAIN
+            return when (named.size) {
+                1 -> "$TRY_AGAIN — δες το «${named[0].text}»."
+                2 -> "$TRY_AGAIN — δες το «${named[0].text}» και το «${named[1].text}»."
                 else -> "$TRY_AGAIN — δες τα γράμματα."
             }
         }

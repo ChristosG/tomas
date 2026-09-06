@@ -149,6 +149,29 @@ class TraceFlowTest {
         compose.onNodeWithText("Έτοιμο").assertIsDisplayed()
     }
 
+    /**
+     * A finger that came down on the paper and went up again without moving is not a stroke.
+     *
+     * A knuckle resting on the glass, or a stray tap, would otherwise leave a dot that arms
+     * «Έτοιμο» *and* «Καθάρισε» and joins the marking as one point of it — so an accidental touch
+     * would spend a try. For a man writing left-handed with a tremor this is the likeliest thing to
+     * happen by accident, and nothing should come of it.
+     */
+    @Test fun aBareTapOnThePaperIsNotAStroke() {
+        openPractice(level = 1)
+        val (width, height) = canvasSize()
+        compose.onNodeWithTag(TRACE_CANVAS_TAG).performTouchInput {
+            down(Offset(width / 2f, height / 2f))
+            up()
+        }
+        compose.waitForIdle()
+
+        // Nothing to wipe and nothing to hand in: the paper is as empty as before he touched it.
+        compose.onNodeWithText("Καθάρισε").assertIsNotEnabled()
+        compose.onNodeWithText("Έτοιμο").assertIsNotEnabled()
+        assertTrue("a tap was recorded as an attempt", attempts().isEmpty())
+    }
+
     /** Written beautifully, and not the letter he was asked for. */
     @Test fun theWrongLetterIsNotTheLetter() {
         val letter = openPractice(level = 1)
