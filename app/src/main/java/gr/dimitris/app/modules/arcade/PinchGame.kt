@@ -17,6 +17,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
@@ -30,6 +31,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
+import gr.dimitris.app.core.data.now
 import gr.dimitris.app.ui.theme.LocalFeedback
 import gr.dimitris.app.ui.theme.Sizes
 import java.io.File
@@ -62,7 +64,7 @@ const val PINCH_MAX = 3f
 fun PinchGame(
     sizeDp: Float,
     photos: List<File>,
-    onResult: (hits: Int, misses: Int, newSizeDp: Float) -> Unit,
+    onResult: (hits: Int, misses: Int, newSizeDp: Float, play: ArcadePlay) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val feedback = LocalFeedback.current
@@ -74,6 +76,12 @@ fun PinchGame(
     var peak by remember { mutableFloatStateOf(1f) }
     /** True from an opened photo until he puts his fingers down again: the tick by the counter. */
     var opened by remember { mutableStateOf(false) }
+    /**
+     * When this photo went up, and how long each one took him. There is no distance to report here
+     * — a pinch either opens the picture or it does not — so [ArcadePlay.missDistanceDp] stays empty.
+     */
+    var roundAt by remember { mutableLongStateOf(now()) }
+    val taken = remember { mutableListOf<Long>() }
     val finish by rememberUpdatedState(onResult)
 
     Column(modifier) {
@@ -109,10 +117,12 @@ fun PinchGame(
                                     scored = true
                                     opened = true
                                     round += 1
+                                    taken += now() - roundAt
+                                    roundAt = now()
                                     size = Adaptive.afterHit(size)
                                     scale = 1f
                                     peak = 1f
-                                    if (round >= PINCH_ROUNDS) finish(round, misses, size)
+                                    if (round >= PINCH_ROUNDS) finish(round, misses, size, ArcadePlay(taken.toList()))
                                 }
                             }
                         } while (event.changes.any { it.pressed })

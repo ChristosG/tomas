@@ -2,8 +2,8 @@ package gr.dimitris.app.modules.trace
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.google.gson.Gson
 import gr.dimitris.app.AppGraph
+import gr.dimitris.app.core.data.Adapt
 import gr.dimitris.app.core.data.Attempt
 import gr.dimitris.app.core.data.Item
 import gr.dimitris.app.core.data.ItemKind
@@ -21,6 +21,46 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+
+/**
+ * One finished letter or word, as the row will carry it.
+ *
+ * Free of the ViewModel so that what is written down can be argued with in a unit test rather than
+ * on a phone: see `TelemetryTest`. Everything down to `inkRatio` is what phase 6 already wrote, in
+ * the order it always had; the three at the end are what `docs/ADAPTATION.md` would move the
+ * strictness from — how long the letter took him, how many separate strokes it took, and how big
+ * the thing on the paper actually was, without which a distance in pixels means nothing.
+ */
+internal fun traceDetail(s: TraceState, score: TraceScore?, ms: Long): String = Adapt.detail {
+    // His own vocabulary, and it was on these rows before this helper existed.
+    kept("text", s.text)
+    put("level", s.level)
+    put("tries", s.tries)
+    // Which hand he was told to use. Nothing else records it, the rows are append-only,
+    // and "was this his good hand?" is the first question anyone will ask of them.
+    put("hand", s.hand)
+    kept("meanDistance", score?.meanDistance?.takeIf { it != Float.MAX_VALUE })
+    // The two numbers the marking is actually made of, and the line they were held to:
+    // "he passed" a year from now is unreadable without them. A skipped letter has no
+    // score, and a null is left out altogether: the three keys are simply absent on those
+    // rows rather than present and null.
+    kept("coverage", score?.coverage)
+    kept("precision", score?.precision)
+    put("strictness", s.strictness)
+    // Letter by letter, because that is how it was marked and how it will be read: a
+    // word he passes with one weak letter is a letter to practise, not a word.
+    kept("letters", score?.letters?.map { mapOf("c" to it.text, "coverage" to it.coverage, "precision" to it.precision) })
+    // How much line he drew against how long the letter is. Kept on every row so the
+    // budget that refuses colouring-in can be set from real hands instead of guesses.
+    kept("inkRatio", score?.inkRatio?.takeIf { it > 0f })
+    put("ms", ms)
+    // The strokes of the try that was marked, not of everything still on the paper: a «Δ» drawn in
+    // one stroke and a «Δ» drawn in five are different hands, and only this tells them apart.
+    put("strokes", s.fresh.size)
+    // How tall the letter came out on this phone. Every distance above is in these pixels, so
+    // without it none of them can be compared between a tablet and a phone.
+    put("templateHeightPx", s.templateHeight)
+}
 
 /** One thing to write, and the card it came from when it came from one (levels 4 only). */
 data class TraceTarget(val text: String, val itemId: String? = null)
@@ -95,7 +135,6 @@ class TraceViewModel(
     private var targets: List<TraceTarget> = emptyList()
     private var startedAt = now()
     private val results = mutableListOf<Boolean>()
-    private val gson = Gson()
 
     /** The canvas in pixels, as the screen last measured it. Zero until it has been laid out once. */
     private var boxWidth = 0f
@@ -417,32 +456,9 @@ class TraceViewModel(
         // Every finished letter is evidence, a skip included: passing on a letter is not neutral, it
         // is one he could not write.
         results += (outcome == Outcome.CORRECT)
-        val detail = gson.toJson(
-            mapOf(
-                "text" to s.text,
-                "level" to s.level,
-                "tries" to s.tries,
-                // Which hand he was told to use. Nothing else records it, the rows are append-only,
-                // and "was this his good hand?" is the first question anyone will ask of them.
-                "hand" to s.hand,
-                "meanDistance" to score?.meanDistance?.takeIf { it != Float.MAX_VALUE },
-                // The two numbers the marking is actually made of, and the line they were held to:
-                // "he passed" a year from now is unreadable without them. A skipped letter has no
-                // score, and Gson leaves a null map value out altogether: the three keys are simply
-                // absent on those rows rather than present and null.
-                "coverage" to score?.coverage,
-                "precision" to score?.precision,
-                "strictness" to s.strictness.name,
-                // Letter by letter, because that is how it was marked and how it will be read: a
-                // word he passes with one weak letter is a letter to practise, not a word.
-                "letters" to score?.letters?.map { mapOf("c" to it.text, "coverage" to it.coverage, "precision" to it.precision) },
-                // How much line he drew against how long the letter is. Kept on every row so the
-                // budget that refuses colouring-in can be set from real hands instead of guesses.
-                "inkRatio" to score?.inkRatio?.takeIf { it > 0f },
-            )
-        )
         // Read eagerly: the clock is restarted the moment the next letter arrives.
         val began = startedAt
+        val detail = traceDetail(s, score, ms = now() - began)
         // The word's own row only where the word was the exercise; everywhere else the level is what
         // the row is about, because a random capital is not an item anything can look up.
         val itemId = s.itemId ?: "$ITEM_PREFIX${s.level}"

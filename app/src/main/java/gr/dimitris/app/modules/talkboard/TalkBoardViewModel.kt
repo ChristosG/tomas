@@ -3,6 +3,7 @@ package gr.dimitris.app.modules.talkboard
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import gr.dimitris.app.AppGraph
+import gr.dimitris.app.core.data.Adapt
 import gr.dimitris.app.core.data.Attempt
 import gr.dimitris.app.core.data.Category
 import gr.dimitris.app.core.data.Item
@@ -24,6 +25,24 @@ import kotlinx.coroutines.launch
 
 /** Shown under the strip when a tap made no sound at all. */
 const val SPEECH_FAILED = "Δεν ακούγεται η φωνή. Δες τις ρυθμίσεις."
+
+/**
+ * One tap on the board, as the row will carry it.
+ *
+ * Free of the ViewModel so that what is written down can be argued with in a unit test rather than
+ * on a phone: see `TelemetryTest`. There is nothing to time here and nothing to mark: a tap is him
+ * saying a word, and the app is a voice, not an examiner. `strip` is what phase 1 already wrote and
+ * an off-strip tap still writes nothing at all, so those rows are untouched.
+ *
+ * [stripLen] is how many words stood on the strip once this one joined it. It is the only knob the
+ * board has — how long a sentence it lets him build — and nothing else records how long the ones he
+ * really builds are. See `docs/ADAPTATION.md`.
+ */
+internal fun talkBoardDetail(inStrip: Boolean, stripLen: Int?): String = Adapt.detail {
+    if (!inStrip) return@detail
+    put("strip", true)
+    put("stripLen", stripLen)
+}
 
 sealed class Tab(val label: String) {
     object Favourites : Tab("Αγαπημένα")
@@ -92,7 +111,8 @@ class TalkBoardViewModel(private val graph: AppGraph) : ViewModel() {
         val added = strip.add(item)
         _stripFull.value = !added
         if (added) _spoken.value = false
-        viewModelScope.launch { heard(graph.speaker.speak(item)); log(item, inStrip = added) }
+        val len = strip.items.value.size
+        viewModelScope.launch { heard(graph.speaker.speak(item)); log(item, inStrip = added, stripLen = len) }
     }
 
     /** Quick row tap: say it immediately, never added to the sentence. */
@@ -126,12 +146,12 @@ class TalkBoardViewModel(private val graph: AppGraph) : ViewModel() {
         return result.isSuccess
     }
 
-    private suspend fun log(item: Item, inStrip: Boolean) {
+    private suspend fun log(item: Item, inStrip: Boolean, stripLen: Int? = null) {
         val t = now()
         runCatching {
             graph.db.attempts().insert(
                 Attempt(itemId = item.id, module = ModuleId.TALKBOARD, startedAt = t, durationMs = 0, outcome = Outcome.CORRECT,
-                    cueLevel = null, detail = if (inStrip) """{"strip":true}""" else "{}")
+                    cueLevel = null, detail = talkBoardDetail(inStrip, stripLen))
             )
         }.onFailure { graph.errors.record("talkboard log", it) }
     }

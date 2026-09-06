@@ -44,3 +44,21 @@ object Adaptive {
      */
     fun clamp(size: Float): Float = if (size.isNaN()) START else size.coerceIn(MIN, MAX)
 }
+
+/**
+ * What one round of a game noticed about his hand, beyond the count of hits and misses.
+ *
+ * The size the arcade carries to tomorrow is [Adaptive]'s two constants applied blind: eight per
+ * cent off a hit, fifteen back on a miss, whoever is playing. These two lists are what would let
+ * those be his own. A hand that misses by two dp needs a nudge; a hand that misses by twenty needs
+ * a different exercise, and today's row cannot tell them apart. See `docs/ADAPTATION.md`.
+ *
+ * Both are per round and both may be empty — the pinch game has no distance to report, and a game
+ * he walked out of reports nothing at all. The medians are taken when the row is written.
+ */
+data class ArcadePlay(
+    /** Milliseconds from a target appearing to it being caught, one entry per target caught. */
+    val msPerTarget: List<Long> = emptyList(),
+    /** How far outside the target each miss landed, in dp. One entry per miss the game could measure. */
+    val missDistanceDp: List<Float> = emptyList(),
+)

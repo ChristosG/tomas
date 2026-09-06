@@ -2,8 +2,8 @@ package gr.dimitris.app.modules.numbers
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.google.gson.Gson
 import gr.dimitris.app.AppGraph
+import gr.dimitris.app.core.data.Adapt
 import gr.dimitris.app.core.data.Attempt
 import gr.dimitris.app.core.data.ModuleId
 import gr.dimitris.app.core.data.Outcome
@@ -17,6 +17,29 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+
+/**
+ * One finished exercise, as the row will carry it.
+ *
+ * Free of the ViewModel so that what is written down can be argued with in a unit test rather than
+ * on a phone: see `TelemetryTest`. The first four keys are the ones phase 3 already wrote, in the
+ * order they always had; [given] is the option he tapped, and where it is not the answer the
+ * *distance* between the two says how far off he was, which is the whole reason it is kept.
+ */
+internal fun numbersDetail(e: NumberExercise, given: Int?, retries: Int, ms: Long): String = Adapt.detail {
+    put("type", e.type)
+    // The exercise itself, as it always was: the numbers he was shown are not reconstructible
+    // from the level alone, and a year from now "he was wrong" without them is unreadable.
+    kept("exercise", e)
+    put("given", given)
+    put("answer", e.answer)
+    put("level", e.level)
+    // How many options were on the screen. A wrong tap out of two is a coin toss; out of four it
+    // is an answer, and the level progression cannot tell them apart without this.
+    put("optionCount", e.options.size)
+    put("retries", retries)
+    put("ms", ms)
+}
 
 data class NumbersState(
     val level: Int = 1,
@@ -49,7 +72,6 @@ class NumbersViewModel(
     private var exercises: List<NumberExercise> = emptyList()
     private var startedAt = now()
     private val results = mutableListOf<Boolean>()
-    private val gson = Gson()
 
     /**
      * The attempt write of the exercise just answered. It runs on the app scope, so the end of the
@@ -118,7 +140,7 @@ class NumbersViewModel(
             finishing = true
             _state.update { it.copy(chosen = value, correct = true) }
             viewModelScope.launch { report(graph.speaker.speakText(sayAnswer(e) + ". Σωστά!")) }
-            record(e, firstTry = s.wrongTries == 0, given = value)
+            record(e, firstTry = s.wrongTries == 0, given = value, retries = s.wrongTries)
         } else if (s.wrongTries + 1 >= WRONG_TRIES_BEFORE_REVEAL) {
             // Second miss: he is shown and told the answer instead of being left to tap on. It counts
             // as helped, and a helped answer is what lets the progression step him back down from a
@@ -127,7 +149,7 @@ class NumbersViewModel(
             finishing = true
             _state.update { it.copy(chosen = value, correct = false, wrongTries = it.wrongTries + 1, revealed = true) }
             viewModelScope.launch { report(graph.speaker.speakText("Να το σωστό: ${sayAnswer(e)}.")) }
-            record(e, firstTry = false, given = value)
+            record(e, firstTry = false, given = value, retries = s.wrongTries + 1)
         } else {
             graph.feedback.nudge()
             _state.update { it.copy(chosen = value, correct = false, wrongTries = it.wrongTries + 1) }
@@ -142,7 +164,7 @@ class NumbersViewModel(
         if (finishing || ending) return
         finishing = true
         graph.feedback.nudge()
-        record(e, firstTry = false, given = null, skipped = true)
+        record(e, firstTry = false, given = null, retries = _state.value.wrongTries, skipped = true)
         advance()
     }
 
@@ -194,14 +216,14 @@ class NumbersViewModel(
         viewModelScope.launch { write?.join(); then() }
     }
 
-    private fun record(e: NumberExercise, firstTry: Boolean, given: Int?, skipped: Boolean = false) {
+    private fun record(e: NumberExercise, firstTry: Boolean, given: Int?, retries: Int, skipped: Boolean = false) {
         val outcome = when { skipped -> Outcome.SKIPPED; firstTry -> Outcome.CORRECT; else -> Outcome.ASSISTED }
         // Every finished exercise is evidence, a skip included: passing on a question is not neutral,
         // it is one he could not do, and a level he skips his way through has to be steppable down.
         results += (outcome == Outcome.CORRECT)
-        val detail = gson.toJson(mapOf("type" to e.type, "exercise" to e, "given" to given, "answer" to e.answer))
         // Read eagerly: the clock is restarted the moment the next exercise arrives.
         val began = startedAt
+        val detail = numbersDetail(e, given = given, retries = retries, ms = now() - began)
         // Chained, because the app scope runs on a pool with no ordering: whoever joins the last
         // write must be joining every write, or a row can land after the session has counted.
         val prev = lastWrite

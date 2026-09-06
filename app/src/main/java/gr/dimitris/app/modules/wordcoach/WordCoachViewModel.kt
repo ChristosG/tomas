@@ -3,6 +3,7 @@ package gr.dimitris.app.modules.wordcoach
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import gr.dimitris.app.AppGraph
+import gr.dimitris.app.core.data.Adapt
 import gr.dimitris.app.core.data.Attempt
 import gr.dimitris.app.core.data.Item
 import gr.dimitris.app.core.data.ModuleId
@@ -11,6 +12,7 @@ import gr.dimitris.app.core.data.now
 import gr.dimitris.app.core.audio.Recorded
 import gr.dimitris.app.core.speech.GentleCheck
 import gr.dimitris.app.core.speech.Recognition
+import gr.dimitris.app.core.speech.RecognizerIntents
 import gr.dimitris.app.core.speech.SpeechFailure
 import gr.dimitris.app.core.speech.SpeechMatch
 import kotlinx.coroutines.CancellationException
@@ -25,6 +27,43 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+
+/**
+ * One finished word, as the row will carry it.
+ *
+ * Free of the ViewModel so that what is written down can be argued with in a unit test rather than
+ * on a phone: see `TelemetryTest`. The first five arguments are the keys phase 4 already wrote and
+ * they come first, in the order they always had, so a row written today is a row written then with
+ * more on the end of it. The rest is what `docs/ADAPTATION.md` would tune the cue ladder and the
+ * recognition window from — how long he stayed with the word, how long before he asked for help,
+ * how long his own take ran, and the wait the recogniser was actually given.
+ */
+internal fun wordCoachDetail(
+    listened: Int,
+    sttOn: Boolean,
+    heard: String?,
+    matched: Boolean,
+    sttTries: Int,
+    peak: Int?,
+    ms: Long,
+    hintMsFirst: Long?,
+    takeMs: Long?,
+): String = Adapt.detail {
+    put("listened", listened)
+    if (sttOn) {
+        put("sttHeard", heard)
+        put("sttMatched", matched)
+        put("sttTries", sttTries)
+    }
+    put("peak", peak)
+    put("ms", ms)
+    put("hintMsFirst", hintMsFirst)
+    put("takeMs", takeMs)
+    put("sttOn", sttOn)
+    // The window he was really given, not the one the settings screen says: it is a constant today,
+    // and the day it stops being one these rows are what says whether it helped.
+    if (sttOn) put("sttWaitMs", RecognizerIntents.COMPLETE_SILENCE_MS)
+}
 
 data class WordCoachState(
     val index: Int = 0,
@@ -113,6 +152,16 @@ class WordCoachViewModel(private val graph: AppGraph, private val items: List<It
      */
     private var lastPeak: Int? = null
 
+    /** How long his last take ran. See [wordCoachDetail]. */
+    private var lastTakeMs: Long? = null
+
+    /**
+     * When «Βοήθεια» was first pressed on this word, as a stopwatch from the word appearing. It is
+     * the one number that says how long he was willing to stay with a word before asking, which is
+     * what any rule about *when* to offer the cue would have to be built on. See `docs/ADAPTATION.md`.
+     */
+    private var firstHintAt: Long? = null
+
     /** The open recognition window, so leaving or moving on can close it. */
     private var listenJob: Job? = null
 
@@ -149,6 +198,7 @@ class WordCoachViewModel(private val graph: AppGraph, private val items: List<It
         // into an open recogniser. «Βοήθεια» is not composed while listening either, but the guard
         // belongs here — the view model is the layer that cannot be got round.
         if (!ladder.canHint || _state.value.listening) return
+        if (firstHintAt == null) firstHintAt = now()
         ladder.hint()
         publishLadder()
         speakCue()
@@ -223,6 +273,7 @@ class WordCoachViewModel(private val graph: AppGraph, private val items: List<It
                 .onSuccess { rec ->
                     val itemId = _state.value.item.id
                     lastPeak = rec.peakAmplitude
+                    lastTakeMs = rec.durationMs
                     // A take nobody spoke into is not a take. Chris found that recording never
                     // checked anything, so silence "passed" and was saved as his voice — and then
                     // played back to him by «Σύγκριση» as his. It is deleted and he is asked again;
@@ -391,12 +442,18 @@ class WordCoachViewModel(private val graph: AppGraph, private val items: List<It
         val save = recordingSave
         // Every row says how many times he asked for the model, so a caregiver reading a run of
         // assisted words can see whether it was the ladder or the listening that made them assisted.
-        // What the phone made of him, and how loud his take was. The first is only meaningful while
-        // recognition is on; the second is the calibration data for [Recorded.SILENCE_PEAK].
-        val said = s.heard?.let { ""","sttHeard":${jsonString(it)}""" }.orEmpty()
-        val stt = if (s.sttOn) """$said,"sttMatched":${s.heardMatched},"sttTries":${s.sttTries}""" else ""
-        val peak = lastPeak?.let { ""","peak":$it""" }.orEmpty()
-        val detail = """{"listened":$listens$stt$peak}"""
+        val began = startedAt
+        val detail = wordCoachDetail(
+            listened = listens,
+            sttOn = s.sttOn,
+            heard = s.heard,
+            matched = s.heardMatched,
+            sttTries = s.sttTries,
+            peak = lastPeak,
+            ms = now() - began,
+            hintMsFirst = firstHintAt?.let { it - began },
+            takeMs = lastTakeMs,
+        )
         // The app scope, not this screen's: pressing back must not lose the word he just said.
         lastWrite = graph.scope.launch {
             runCatching {
@@ -443,6 +500,8 @@ class WordCoachViewModel(private val graph: AppGraph, private val items: List<It
         listens = 0
         recordingSave = null
         lastPeak = null
+        lastTakeMs = null
+        firstHintAt = null
         check = GentleCheck()
         val on = _state.value.sttOn
         // Resolved once per run, not once per word: only the first word can ever wait for it.
@@ -483,8 +542,6 @@ class WordCoachViewModel(private val graph: AppGraph, private val items: List<It
         stopRecogniser()
         if (graph.voice.isRecording) graph.voice.cancelRecording()
     }
-
-    private fun jsonString(s: String) = "\"" + s.replace("\\", "\\\\").replace("\"", "\\\"") + "\""
 
     companion object {
         /** Said on the screen when a tap made no sound at all. */

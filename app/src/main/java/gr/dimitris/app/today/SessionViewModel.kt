@@ -3,6 +3,8 @@ package gr.dimitris.app.today
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import gr.dimitris.app.AppGraph
+import gr.dimitris.app.core.data.Adapt
+import gr.dimitris.app.core.data.Attempt
 import gr.dimitris.app.core.data.Item
 import gr.dimitris.app.core.data.ModuleId
 import gr.dimitris.app.core.data.Outcome
@@ -44,6 +46,37 @@ internal fun planToday(
     return today.map { (m, items) -> m to SessionBudget.share(items, allowance, m.atomic) }
 }
 
+/**
+ * The sitting itself, as the one synthetic row at the end of it will carry it.
+ *
+ * Every module writes down what its own exercises cost him; nothing wrote down what the *sitting*
+ * cost him, and that is the number the session's length is set from. It goes into an attempt row
+ * with [SessionViewModel.SESSION_SUMMARY] as its item id rather than into a new column: [gr.dimitris.app.core.data.Session]
+ * is synced and backed up as it stands, and a schema change for one JSON object would be a migration
+ * on every phone for nothing.
+ *
+ * Free of the ViewModel so that what is written down can be argued with in a unit test rather than
+ * on a phone: see `TelemetryTest`.
+ *
+ * [leftEarly] is the honest half of it: a sitting he walked out of is not a short sitting, it is a
+ * sitting that lost him, and telling the two apart is what any rule about session length needs.
+ */
+internal fun sessionSummaryDetail(
+    plannedModules: List<String>,
+    plannedCount: Int,
+    completed: Int,
+    leftEarly: Boolean,
+    ms: Long,
+    msPerModule: Map<String, Long>,
+): String = Adapt.detail {
+    words("plannedModules", plannedModules)
+    put("plannedCount", plannedCount)
+    put("completed", completed)
+    put("leftEarly", leftEarly)
+    put("ms", ms)
+    times("msPerModule", msPerModule)
+}
+
 sealed class SessionStep {
     object Loading : SessionStep()
 
@@ -70,6 +103,13 @@ class SessionViewModel(private val graph: AppGraph) : ViewModel() {
 
     /** Set the moment the session starts winding down, so "done" and "back" cannot both end it. */
     private var ending = false
+
+    /**
+     * True only when the last planned module said it was finished. Everything else — the back arrow
+     * inside a module, the screen going away — is him leaving early, and the summary row says which
+     * it was.
+     */
+    private var ranToTheEnd = false
 
     init {
         viewModelScope.launch {
@@ -103,6 +143,7 @@ class SessionViewModel(private val graph: AppGraph) : ViewModel() {
             _state.value = SessionStep.Run(next, plans[next].first, plans[next].second, step.sessionId)
             return
         }
+        ranToTheEnd = true
         endSession()
     }
 
@@ -136,25 +177,65 @@ class SessionViewModel(private val graph: AppGraph) : ViewModel() {
     /** What he actually did: how many exercises, and which modules they were in. */
     private data class Done(val count: Int = 0, val titles: List<String> = emptyList())
 
+    /** Every row this session wrote, skips included: the timings are about his time, not his score. */
+    private suspend fun rowsOf(s: Session): List<Attempt> =
+        runCatching { graph.db.attempts().since(s.startedAt).filter { it.sessionId == s.id } }
+            .getOrElse { graph.errors.record("session count", it); emptyList() }
+
     /**
      * Read back from the attempts this session wrote — the back arrow ends a session early, and
      * skipped words were never said, so neither may be counted as work.
      */
-    private suspend fun practised(s: Session): Done {
-        val rows = runCatching { graph.db.attempts().since(s.startedAt).filter { it.sessionId == s.id && it.outcome != Outcome.SKIPPED } }
-            .getOrElse { graph.errors.record("session count", it); emptyList() }
-        val modules = rows.map { it.module }.toSet()
-        return Done(rows.size, plans.map { it.first }.filter { it.id in modules }.map { it.titleGreek })
+    private fun practised(rows: List<Attempt>): Done {
+        val real = rows.filter { it.outcome != Outcome.SKIPPED }
+        val modules = real.map { it.module }.toSet()
+        return Done(real.size, plans.map { it.first }.filter { it.id in modules }.map { it.titleGreek })
     }
 
     /** Closes the session row with the honest count. Runs once, whichever way the session ends. */
     private suspend fun finalize(s: Session): Done {
-        val done = practised(s)
+        val rows = rowsOf(s)
+        val done = practised(rows)
         if (finalized.compareAndSet(false, true)) {
-            runCatching { graph.db.sessions().upsert(s.copy(endedAt = now(), completedItemCount = done.count, updatedAt = now())) }
+            val ended = now()
+            runCatching { graph.db.sessions().upsert(s.copy(endedAt = ended, completedItemCount = done.count, updatedAt = ended)) }
                 .onFailure { graph.errors.record("session end", it) }
+            writeSummary(s, rows, done, ended)
         }
         return done
+    }
+
+    /**
+     * The one row that is about the sitting rather than about a word.
+     *
+     * Written after [practised] has counted, and only once, so it can never be counted as an
+     * exercise he did: `session:summary` is not an item id anything can look up, which is the same
+     * rule `numbers:level:3` and `arcade:tap` already live by — the caregiver's word lists find it
+     * absent from the vocabulary and leave it out. Its module is the last one that was planned,
+     * because a row has to have one; see the note in `docs/ADAPTATION.md` about what that costs.
+     */
+    private suspend fun writeSummary(s: Session, rows: List<Attempt>, done: Done, ended: Long) {
+        val last = plans.lastOrNull()?.first?.id ?: return
+        val detail = sessionSummaryDetail(
+            plannedModules = plans.map { it.first.id.name },
+            plannedCount = s.plannedItemCount,
+            completed = done.count,
+            leftEarly = !ranToTheEnd,
+            ms = (ended - s.startedAt).coerceAtLeast(0L),
+            // Time on exercises, module by module: the gaps between them are his, not the app's.
+            msPerModule = rows.groupBy { it.module.name }
+                .mapValues { (_, r) -> r.sumOf { it.durationMs } }
+                .toSortedMap(),
+        )
+        runCatching {
+            graph.db.attempts().insert(
+                Attempt(
+                    itemId = SESSION_SUMMARY, module = last, sessionId = s.id, startedAt = s.startedAt,
+                    durationMs = (ended - s.startedAt).coerceAtLeast(0L), outcome = Outcome.CORRECT,
+                    cueLevel = null, detail = detail,
+                )
+            )
+        }.onFailure { graph.errors.record("session summary", it) }
     }
 
     /** Walking away also ends the session. viewModelScope is already cancelled, so the app scope writes it. */
@@ -169,6 +250,12 @@ class SessionViewModel(private val graph: AppGraph) : ViewModel() {
             .onFailure { graph.errors.record("session speak", it) }
 
     companion object {
+        /**
+         * The item id of the one row per sitting that is about the sitting itself. Not a word, not a
+         * level, not a game: nothing can look it up in the vocabulary, and nothing should try.
+         */
+        const val SESSION_SUMMARY = "session:summary"
+
         /** Everything due is done. A good ending, said as one. */
         const val NOTHING_TODAY = "Τίποτα για σήμερα. Τα λέμε αύριο!"
 

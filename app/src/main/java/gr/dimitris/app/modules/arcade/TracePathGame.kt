@@ -14,6 +14,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -28,6 +29,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
+import gr.dimitris.app.core.data.now
 import gr.dimitris.app.modules.trace.Pt
 import gr.dimitris.app.modules.trace.TraceScorer
 import gr.dimitris.app.ui.theme.LocalFeedback
@@ -53,7 +55,7 @@ const val TRACE_PATH_TRY_AGAIN = "Ξανά"
 @Composable
 fun TracePathGame(
     sizeDp: Float,
-    onResult: (hits: Int, misses: Int, newSizeDp: Float) -> Unit,
+    onResult: (hits: Int, misses: Int, newSizeDp: Float, play: ArcadePlay) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val feedback = LocalFeedback.current
@@ -64,6 +66,14 @@ fun TracePathGame(
     var missed by remember { mutableStateOf(false) }
     /** True from a line he followed until he starts the next one: the tick beside the counter. */
     var followed by remember { mutableStateOf(false) }
+    /**
+     * When this line went up, and what the round has cost his hand so far. A miss here is measured
+     * by how far off the line he was on average, which is the same distance the writing module
+     * marks him on. See [ArcadePlay].
+     */
+    var lineAt by remember { mutableLongStateOf(now()) }
+    val taken = remember { mutableListOf<Long>() }
+    val missedBy = remember { mutableListOf<Float>() }
     val finish by rememberUpdatedState(onResult)
 
     Column(modifier) {
@@ -115,12 +125,19 @@ fun TracePathGame(
                                 feedback.success()
                                 followed = true
                                 index += 1
+                                // The whole line, from it going up: the goes that wandered off are
+                                // part of what it cost him.
+                                taken += now() - lineAt
+                                lineAt = now()
                                 size = Adaptive.afterHit(size)
-                                if (index >= TRACE_PATHS) finish(index, misses, size)
+                                if (index >= TRACE_PATHS) finish(index, misses, size, ArcadePlay(taken.toList(), missedBy.toList()))
                             } else {
                                 feedback.nudge()
                                 misses += 1
                                 missed = true
+                                // How far off the line his finger ran, in dp.
+                                score.meanDistance.takeIf { it.isFinite() && it != Float.MAX_VALUE }
+                                    ?.let { missedBy += it / density.density }
                                 size = Adaptive.afterMiss(size)
                             }
                         },

@@ -2,8 +2,8 @@ package gr.dimitris.app.modules.sentences
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.google.gson.Gson
 import gr.dimitris.app.AppGraph
+import gr.dimitris.app.core.data.Adapt
 import gr.dimitris.app.core.data.Attempt
 import gr.dimitris.app.core.data.Item
 import gr.dimitris.app.core.data.ItemKind
@@ -19,6 +19,36 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+
+/**
+ * One finished sentence, as the row will carry it.
+ *
+ * Free of the ViewModel so that what is written down can be argued with in a unit test rather than
+ * on a phone: see `TelemetryTest`. The first four keys are the ones phase 4 already wrote, in the
+ * order they always had; the order he put the cards in is kept whole because *which* word went
+ * where is the exercise, and a count of right and wrong throws exactly that away.
+ */
+internal fun sentencesDetail(
+    tiles: List<String>,
+    chosen: List<String>,
+    firstTry: Boolean,
+    listened: Int,
+    level: Int,
+    retries: Int,
+    undo: Int,
+    ms: Long,
+): String = Adapt.detail {
+    // Kept, not put: an empty list was written as `[]` before this helper existed and still is,
+    // and the labels are his own vocabulary, which these rows already carried.
+    kept("tiles", tiles)
+    kept("chosen", chosen)
+    put("firstTry", firstTry)
+    put("listened", listened)
+    put("level", level)
+    put("retries", retries)
+    put("undo", undo)
+    put("ms", ms)
+}
 
 data class SentencesState(
     val level: Int = SentenceTemplates.MIN_LEVEL,
@@ -65,13 +95,22 @@ class SentencesViewModel(
     private var sentences: List<Sentence> = emptyList()
     private var startedAt = now()
     private val results = mutableListOf<Boolean>()
-    private val gson = Gson()
 
     /** The vocabulary read. Cancelled on the way out, so nothing arrives to speak over the next screen. */
     private var loadJob: Job? = null
 
     /** How many times he asked to hear this sentence. It goes into the attempt's detail as it stands. */
     private var listens = 0
+
+    /**
+     * How many cards he took back off this sentence.
+     *
+     * Nothing is judged by it and nothing ever will be — «Αναίρεση» is there to be used. It is kept
+     * because it is the one thing that separates a sentence he built straight through from one he
+     * assembled by trial, and the two look identical in every other column of the row. See
+     * `docs/ADAPTATION.md`.
+     */
+    private var undos = 0
 
     /** Whatever this screen is saying: a tapped word, the verdict, or the model sentence. */
     private var speakJob: Job? = null
@@ -180,7 +219,7 @@ class SentencesViewModel(
             finishing = true
             _state.update { it.copy(correct = true) }
             speaking { report(graph.speaker.speakText(sentence.text)) }
-            record(sentence, chosen, firstTry = s.wrongTries == 0)
+            record(sentence, chosen, firstTry = s.wrongTries == 0, retries = s.wrongTries)
         } else {
             // Never a fail state: the sentence is said and left on the screen, the cards come back,
             // and he tries again as often as he likes. Only the first-try mark is spent.
@@ -193,6 +232,8 @@ class SentencesViewModel(
     /** The last card back off the sentence. */
     fun undo() {
         if (finishing || ending) return
+        if (_state.value.chosen.isEmpty()) return
+        undos++
         _state.update { it.copy(chosen = it.chosen.dropLast(1)) }
     }
 
@@ -251,7 +292,7 @@ class SentencesViewModel(
         if (finishing || ending) return
         finishing = true
         graph.feedback.nudge()
-        record(sentence, s.chosen, firstTry = false, skipped = true)
+        record(sentence, s.chosen, firstTry = false, retries = s.wrongTries, skipped = true)
         advance()
     }
 
@@ -278,6 +319,7 @@ class SentencesViewModel(
         // second or two — Chris's field bug in miniature, on the one screen where «Άκου» is the
         // answer. The new sentence starts with its own count, in silence, and with the button live.
         listens = 0
+        undos = 0
         silence()
         _state.update {
             it.copy(index = i, sentence = sentence, shuffledTiles = board(sentence), chosen = emptyList(), correct = null, wrongTries = 0)
@@ -326,7 +368,7 @@ class SentencesViewModel(
         onFailure = { e -> graph.errors.record("sentences speak", e); _state.update { it.copy(error = SPEECH_FAILED) } },
     )
 
-    private fun record(sentence: Sentence, chosen: List<Tile>, firstTry: Boolean, skipped: Boolean = false) {
+    private fun record(sentence: Sentence, chosen: List<Tile>, firstTry: Boolean, retries: Int, skipped: Boolean = false) {
         // A sentence he asked to hear is a sentence he was given: assisted work, on the same footing
         // as one he had to be corrected on. The button stays; only the row knows.
         val heard = listens
@@ -338,16 +380,18 @@ class SentencesViewModel(
         // Every finished sentence is evidence, a skip included: passing on a sentence is not neutral,
         // it is one he could not do, and a level he skips his way through has to be steppable down.
         results += (outcome == Outcome.CORRECT)
-        val detail = gson.toJson(
-            mapOf(
-                "tiles" to sentence.tiles.map { it.label },
-                "chosen" to chosen.map { it.label },
-                "firstTry" to firstTry,
-                "listened" to heard,
-            )
-        )
         // Read eagerly: the clock is restarted the moment the next sentence arrives.
         val began = startedAt
+        val detail = sentencesDetail(
+            tiles = sentence.tiles.map { it.label },
+            chosen = chosen.map { it.label },
+            firstTry = firstTry,
+            listened = heard,
+            level = sentence.level,
+            retries = retries,
+            undo = undos,
+            ms = now() - began,
+        )
         // Chained, because the app scope runs on a pool with no ordering: whoever joins the last
         // write must be joining every write, or a row can land after the session has counted.
         val prev = lastWrite

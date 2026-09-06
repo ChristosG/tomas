@@ -3,6 +3,7 @@ package gr.dimitris.app.modules.scripts
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import gr.dimitris.app.AppGraph
+import gr.dimitris.app.core.data.Adapt
 import gr.dimitris.app.core.data.Attempt
 import gr.dimitris.app.core.data.Item
 import gr.dimitris.app.core.data.ModuleId
@@ -14,6 +15,7 @@ import gr.dimitris.app.core.data.now
 import gr.dimitris.app.core.audio.Recorded
 import gr.dimitris.app.core.speech.GentleCheck
 import gr.dimitris.app.core.speech.Recognition
+import gr.dimitris.app.core.speech.RecognizerIntents
 import gr.dimitris.app.core.speech.SpeechFailure
 import gr.dimitris.app.core.speech.SpeechMatch
 import gr.dimitris.app.modules.wordcoach.CueLadder
@@ -30,6 +32,44 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+
+/**
+ * One finished turn of a dialogue, as the row will carry it.
+ *
+ * Free of the ViewModel so that what is written down can be argued with in a unit test rather than
+ * on a phone: see `TelemetryTest`. The first keys are the ones phase 5 already wrote, in the order
+ * they always had — [scriptId] included, which is the one id in any detail and is here because the
+ * row would otherwise not say which dialogue the turn belonged to. Everything after [peak] is new
+ * and is what `docs/ADAPTATION.md` would tune the cue ladder and the recognition window from.
+ */
+internal fun scriptsDetail(
+    scriptId: String,
+    position: Int,
+    listened: Int,
+    sttOn: Boolean,
+    heard: String?,
+    matched: Boolean,
+    sttTries: Int,
+    peak: Int?,
+    ms: Long,
+    hintMsFirst: Long?,
+    takeMs: Long?,
+): String = Adapt.detail {
+    kept("scriptId", scriptId)
+    put("position", position)
+    put("listened", listened)
+    if (sttOn) {
+        put("sttHeard", heard)
+        put("sttMatched", matched)
+        put("sttTries", sttTries)
+    }
+    put("peak", peak)
+    put("ms", ms)
+    put("hintMsFirst", hintMsFirst)
+    put("takeMs", takeMs)
+    put("sttOn", sttOn)
+    if (sttOn) put("sttWaitMs", RecognizerIntents.COMPLETE_SILENCE_MS)
+}
 
 enum class ScriptPhase { LOADING, OTHER_SPEAKING, WAITING_FOR_DIMITRIS, FINISHED }
 
@@ -174,6 +214,16 @@ class ScriptsViewModel(
      */
     private var lastPeak: Int? = null
 
+    /** How long his last take ran. See [scriptsDetail]. */
+    private var lastTakeMs: Long? = null
+
+    /**
+     * When «Βοήθεια» was first pressed on this turn, as a stopwatch from the turn arriving. How long
+     * he is willing to stay with a line before asking is the number any rule about *when* to offer
+     * the prop would have to be built on. See `docs/ADAPTATION.md`.
+     */
+    private var firstHintAt: Long? = null
+
     /** The open recognition window, so leaving or moving on can close it. */
     private var listenJob: Job? = null
 
@@ -229,6 +279,8 @@ class ScriptsViewModel(
         // turn starts with its own count, in silence, and with «Άκου» live from its first frame.
         listens = 0
         lastPeak = null
+        lastTakeMs = null
+        firstHintAt = null
         check = GentleCheck()
         stopCue()
         stopRecogniser()
@@ -309,6 +361,7 @@ class ScriptsViewModel(
         // into an open recogniser. «Βοήθεια» is not composed while listening either, but the guard
         // belongs here — the view model is the layer that cannot be got round.
         if (_state.value.phase != ScriptPhase.WAITING_FOR_DIMITRIS || !l.canHint || _state.value.listening) return
+        if (firstHintAt == null) firstHintAt = now()
         l.hint()
         publishLadder(l)
         speakCue()
@@ -412,6 +465,7 @@ class ScriptsViewModel(
                 .onSuccess { rec ->
                     val itemId = lines[_state.value.index].second.id
                     lastPeak = rec.peakAmplitude
+                    lastTakeMs = rec.durationMs
                     // A take nobody spoke into is not a take: it is deleted, he is asked again, the
                     // turn stays open and nothing is written. Silence used to pass as his voice.
                     if (rec.isSilent) {
@@ -585,9 +639,19 @@ class ScriptsViewModel(
         val save = recordingSave
         // What the phone made of him, and how loud his take was. The first is only meaningful while
         // recognition is on; the second is the calibration data for [Recorded.SILENCE_PEAK].
-        val said = s.heard?.let { ""","sttHeard":${jsonString(it)}""" }.orEmpty()
-        val stt = if (s.sttOn) """$said,"sttMatched":${s.heardMatched},"sttTries":${s.sttTries}""" else ""
-        val peak = lastPeak?.let { ""","peak":$it""" }.orEmpty()
+        val detail = scriptsDetail(
+            scriptId = scriptId,
+            position = position,
+            listened = heard,
+            sttOn = s.sttOn,
+            heard = s.heard,
+            matched = s.heardMatched,
+            sttTries = s.sttTries,
+            peak = lastPeak,
+            ms = now() - began,
+            hintMsFirst = firstHintAt?.let { it - began },
+            takeMs = lastTakeMs,
+        )
         worstCue = maxOf(worstCue, level)
         if (!confirmed) skipped = true
         val prev = lastWrite
@@ -602,7 +666,7 @@ class ScriptsViewModel(
                     Attempt(
                         itemId = item.id, module = ModuleId.SCRIPTS, sessionId = sessionId, startedAt = began,
                         durationMs = now() - began, outcome = outcome, cueLevel = level, selfRecordingId = recordingId,
-                        detail = """{"scriptId":${jsonString(scriptId)},"position":$position,"listened":$heard$stt$peak}""",
+                        detail = detail,
                     )
                 )
             }.onFailure { graph.errors.record("scripts line", it) }
@@ -723,8 +787,6 @@ class ScriptsViewModel(
         stopEverything()
         if (graph.voice.isRecording) graph.voice.cancelRecording()
     }
-
-    private fun jsonString(s: String) = "\"" + s.replace("\\", "\\\\").replace("\"", "\\\"") + "\""
 
     companion object {
         /** Said on the screen when a tap made no sound at all. */

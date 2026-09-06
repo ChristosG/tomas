@@ -2,8 +2,8 @@ package gr.dimitris.app.modules.arcade
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.google.gson.Gson
 import gr.dimitris.app.AppGraph
+import gr.dimitris.app.core.data.Adapt
 import gr.dimitris.app.core.data.Attempt
 import gr.dimitris.app.core.data.ModuleId
 import gr.dimitris.app.core.data.Outcome
@@ -17,6 +17,24 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.io.File
+
+/**
+ * One finished game, as the row will carry it.
+ *
+ * Free of the ViewModel so that what is written down can be argued with in a unit test rather than
+ * on a phone: see `TelemetryTest`. The first three keys are the ones phase 8 already wrote, in the
+ * order they always had. The two medians are what would make [Adaptive]'s blind eight-and-fifteen
+ * per cent his own: see [ArcadePlay] and `docs/ADAPTATION.md`.
+ */
+internal fun arcadeDetail(hits: Int, misses: Int, sizeDp: Float, play: ArcadePlay, ms: Long): String = Adapt.detail {
+    put("hits", hits)
+    put("misses", misses)
+    // Kept: this is a raw float and it was written as one before this helper existed.
+    kept("sizeDp", sizeDp)
+    put("ms", ms)
+    put("msPerTarget", Adapt.medianMs(play.msPerTarget))
+    put("missDistanceDp", Adapt.medianDp(play.missDistanceDp))
+}
 
 data class ArcadeState(
     val index: Int = 0,
@@ -57,7 +75,6 @@ class ArcadeViewModel(
     private val _state = MutableStateFlow(ArcadeState(total = games.size, game = games.first()))
     val state: StateFlow<ArcadeState> = _state.asStateFlow()
 
-    private val gson = Gson()
     private var startedAt = now()
 
     /**
@@ -118,14 +135,14 @@ class ArcadeViewModel(
      * [newSizeDp] across. The size is persisted before anything else, because it is the only thing
      * the arcade carries from one day to the next.
      */
-    fun onResult(hits: Int, misses: Int, newSizeDp: Float) {
+    fun onResult(hits: Int, misses: Int, newSizeDp: Float, play: ArcadePlay = ArcadePlay()) {
         if (finishing || ending) return
         finishing = true
         val size = Adaptive.clamp(newSizeDp)
         graph.feedback.success()
         sizes[_state.value.game] = size
         _state.update { it.copy(sizeDp = size) }
-        record(hits, misses, size, skipped = false)
+        record(hits, misses, size, play, skipped = false)
         advance()
     }
 
@@ -134,7 +151,7 @@ class ArcadeViewModel(
         if (finishing || ending) return
         finishing = true
         graph.feedback.nudge()
-        record(0, 0, _state.value.sizeDp, skipped = true)
+        record(0, 0, _state.value.sizeDp, ArcadePlay(), skipped = true)
         advance()
     }
 
@@ -186,7 +203,7 @@ class ArcadeViewModel(
         onFailure = { e -> graph.errors.record("arcade speak", e); _state.update { it.copy(error = SPEECH_FAILED) } },
     )
 
-    private fun record(hits: Int, misses: Int, size: Float, skipped: Boolean) {
+    private fun record(hits: Int, misses: Int, size: Float, play: ArcadePlay, skipped: Boolean) {
         val game = _state.value.game
         val tries = hits + misses
         // Seven out of ten is his own work; below it the hand needed the target to keep growing,
@@ -196,9 +213,9 @@ class ArcadeViewModel(
             tries > 0 && hits * 100 >= tries * PASS_PERCENT -> Outcome.CORRECT
             else -> Outcome.ASSISTED
         }
-        val detail = gson.toJson(mapOf("hits" to hits, "misses" to misses, "sizeDp" to size))
         // Read eagerly: the clock is restarted the moment the next game arrives.
         val began = startedAt
+        val detail = arcadeDetail(hits, misses, size, play, ms = now() - began)
         val itemId = "$ITEM_PREFIX${game.id}"
         // Chained, because the app scope runs on a pool with no ordering: whoever joins the last
         // write must be joining every write, or a row can land after the session has counted.

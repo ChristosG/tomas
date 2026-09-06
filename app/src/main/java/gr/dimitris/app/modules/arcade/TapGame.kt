@@ -16,6 +16,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
@@ -27,6 +28,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import gr.dimitris.app.core.data.now
 import gr.dimitris.app.modules.trace.Pt
 import gr.dimitris.app.ui.theme.LocalFeedback
 import gr.dimitris.app.ui.theme.Sizes
@@ -50,7 +52,7 @@ const val TAP_TARGETS = 12
 @Composable
 fun TapGame(
     sizeDp: Float,
-    onResult: (hits: Int, misses: Int, newSizeDp: Float) -> Unit,
+    onResult: (hits: Int, misses: Int, newSizeDp: Float, play: ArcadePlay) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val feedback = LocalFeedback.current
@@ -60,6 +62,13 @@ fun TapGame(
     var hits by remember { mutableIntStateOf(0) }
     var misses by remember { mutableIntStateOf(0) }
     var target by remember { mutableStateOf<Pt?>(null) }
+    /**
+     * When the circle he is aiming at now appeared, and what the round has cost his hand so far:
+     * how long each target took him and how far outside it his misses landed. See [ArcadePlay].
+     */
+    var shownAt by remember { mutableLongStateOf(now()) }
+    val taken = remember { mutableListOf<Long>() }
+    val missedBy = remember { mutableListOf<Float>() }
     /** True from a caught target until the next press: the tick beside the counter. */
     var caught by remember { mutableStateOf(false) }
     // The gesture is installed once and outlives every recomposition, so it must not close over a
@@ -74,7 +83,10 @@ fun TapGame(
             // Placed the moment the board is measured, and again if it is ever measured differently:
             // a target remembered from a taller box would sit outside a shorter one.
             LaunchedEffect(width, height) {
-                if (width > 0f && height > 0f) target = placer.next(width, height, sizePx, target)
+                if (width > 0f && height > 0f) {
+                    target = placer.next(width, height, sizePx, target)
+                    shownAt = now()
+                }
             }
 
             Box(
@@ -87,13 +99,20 @@ fun TapGame(
                         // would charge a hand steadying itself against the 70 % line.
                         if (at.x < 0f || at.y < 0f || at.x > width || at.y > height) return@detectTapGestures
                         val radius = size.dp.toPx() / 2f
-                        if (hypot(at.x - t.x, at.y - t.y) <= radius) {
+                        val reach = hypot(at.x - t.x, at.y - t.y)
+                        if (reach <= radius) {
                             feedback.success()
                             caught = true
                             hits += 1
+                            // The whole time the target stood there, failed tries included: what is
+                            // being timed is the circle, not the last press at it.
+                            taken += now() - shownAt
                             size = Adaptive.afterHit(size)
-                            if (hits >= TAP_TARGETS) finish(hits, misses, size)
-                            else target = placer.next(width, height, size.dp.toPx(), t)
+                            if (hits >= TAP_TARGETS) finish(hits, misses, size, ArcadePlay(taken.toList(), missedBy.toList()))
+                            else {
+                                target = placer.next(width, height, size.dp.toPx(), t)
+                                shownAt = now()
+                            }
                         } else {
                             // Never a fail state: the buzz, a bigger circle, and the same target
                             // still there to be found — nudged back on to the board if it has grown
@@ -101,6 +120,9 @@ fun TapGame(
                             feedback.nudge()
                             caught = false
                             misses += 1
+                            // How far outside the circle the press landed, in dp: a hand that misses
+                            // by two is a hand that nearly had it, and nothing else on the row says so.
+                            missedBy += (reach - radius) / density.density
                             size = Adaptive.afterMiss(size)
                             target = TargetPlacer.onBoard(t, width, height, size.dp.toPx())
                         }

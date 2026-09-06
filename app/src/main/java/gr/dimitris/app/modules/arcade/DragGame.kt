@@ -17,6 +17,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
@@ -28,6 +29,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import gr.dimitris.app.core.data.now
 import gr.dimitris.app.modules.trace.Pt
 import gr.dimitris.app.ui.theme.LocalFeedback
 import gr.dimitris.app.ui.theme.Sizes
@@ -52,7 +54,7 @@ const val HOME_RATIO = 1.6f
 @Composable
 fun DragGame(
     sizeDp: Float,
-    onResult: (hits: Int, misses: Int, newSizeDp: Float) -> Unit,
+    onResult: (hits: Int, misses: Int, newSizeDp: Float, play: ArcadePlay) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val feedback = LocalFeedback.current
@@ -64,6 +66,10 @@ fun DragGame(
     var puck by remember { mutableStateOf<Pt?>(null) }
     var home by remember { mutableStateOf<Pt?>(null) }
     var held by remember { mutableStateOf(false) }
+    /** When this ball was laid out, and what the round has cost his hand so far. See [ArcadePlay]. */
+    var roundAt by remember { mutableLongStateOf(now()) }
+    val taken = remember { mutableListOf<Long>() }
+    val missedBy = remember { mutableListOf<Float>() }
     /** True from a ball he got home until he reaches for the next one: the tick by the counter. */
     var docked by remember { mutableStateOf(false) }
     val finish by rememberUpdatedState(onResult)
@@ -83,6 +89,7 @@ fun DragGame(
                     val ring = placer.next(width, height, homePx, null, margin = homePx / 2f)
                     home = ring
                     puck = placer.clearOf(width, height, sizePx, ring, clearance = homePx / 2f + sizePx / 2f)
+                    roundAt = now()
                 }
             }
 
@@ -119,16 +126,22 @@ fun DragGame(
                             // would be drawn wide and judged narrow — the app buzzing at a ball he
                             // put plainly inside the circle it drew him.
                             val accept = (size * HOME_RATIO).dp.toPx() / 2f
-                            if (hypot(p.x - ring.x, p.y - ring.y) <= accept) {
+                            val reach = hypot(p.x - ring.x, p.y - ring.y)
+                            if (reach <= accept) {
                                 feedback.success()
                                 docked = true
                                 round += 1
+                                // The whole journey, from the ball being laid out: the drops short
+                                // of the ring are part of what it cost him, not separate from it.
+                                taken += now() - roundAt
                                 size = Adaptive.afterHit(size)
-                                if (round >= DRAG_ROUNDS) finish(round, misses, size)
+                                if (round >= DRAG_ROUNDS) finish(round, misses, size, ArcadePlay(taken.toList(), missedBy.toList()))
                             } else {
                                 // The ball stays where he let go of it. He pushes it on from there.
                                 feedback.nudge()
                                 misses += 1
+                                // How far short of the ring he let go, in dp.
+                                missedBy += (reach - accept) / density.density
                                 size = Adaptive.afterMiss(size)
                             }
                         },

@@ -3,6 +3,7 @@ package gr.dimitris.app.modules.singsay
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import gr.dimitris.app.AppGraph
+import gr.dimitris.app.core.data.Adapt
 import gr.dimitris.app.core.data.Attempt
 import gr.dimitris.app.core.data.Item
 import gr.dimitris.app.core.data.ModuleId
@@ -11,6 +12,7 @@ import gr.dimitris.app.core.data.now
 import gr.dimitris.app.core.audio.Recorded
 import gr.dimitris.app.core.speech.GentleCheck
 import gr.dimitris.app.core.speech.Recognition
+import gr.dimitris.app.core.speech.RecognizerIntents
 import gr.dimitris.app.core.speech.SpeechFailure
 import gr.dimitris.app.core.speech.SpeechMatch
 import gr.dimitris.app.modules.wordcoach.CueLadder
@@ -26,6 +28,54 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+
+/**
+ * One finished phrase, as the row will carry it.
+ *
+ * Free of the ViewModel so that what is written down can be argued with in a unit test rather than
+ * on a phone: see `TelemetryTest`. The first keys are the ones phase 4 already wrote, in the order
+ * they always had, so an old reader still finds what it looks for; the rest is what
+ * `docs/ADAPTATION.md` would set the melody's tempo and key from — how many passes each stage cost
+ * him and how long he spent in it.
+ *
+ * [repsPerStage] and [msPerStage] are five entries each, stage 1 to stage 5.
+ */
+internal fun singSayDetail(
+    stage: Int,
+    listened: Int,
+    tempo: Tempo,
+    key: Key,
+    sttOn: Boolean,
+    heard: String?,
+    matched: Boolean,
+    sttTries: Int,
+    peak: Int?,
+    ms: Long,
+    repsPerStage: List<Int>,
+    msPerStage: List<Long>,
+    sung: Boolean,
+    takeMs: Long?,
+): String = Adapt.detail {
+    put("stage", stage)
+    put("listened", listened)
+    put("tempo", tempo)
+    put("key", key)
+    if (sttOn) {
+        put("sttHeard", heard)
+        put("sttMatched", matched)
+        put("sttTries", sttTries)
+    }
+    put("peak", peak)
+    put("ms", ms)
+    counts("repsPerStage", repsPerStage)
+    times("msPerStage", msPerStage)
+    // Whether the melody he was singing along with was a caregiver's own voice or the synthesiser.
+    // A stage that costs him twice as much without her take is an argument for asking her to record.
+    put("sung", sung)
+    put("takeMs", takeMs)
+    put("sttOn", sttOn)
+    if (sttOn) put("sttWaitMs", RecognizerIntents.COMPLETE_SILENCE_MS)
+}
 
 data class SingSayState(
     val index: Int = 0,
@@ -125,6 +175,24 @@ class SingSayViewModel(private val graph: AppGraph, private val items: List<Item
      */
     private var lastPeak: Int? = null
 
+    /** How long his last take ran. See [singSayDetail]. */
+    private var lastTakeMs: Long? = null
+
+    /**
+     * How many passes through the phrase he made at each of the five stages, and how long he spent
+     * in each. Indexed by the stage itself, so [SingStage.LISTEN] is `1` and slot `0` is never used.
+     *
+     * This is the melody's own evidence. The tempo and the key are set by hand today, and the only
+     * honest way to set them from him is how much work each stage costs: a man who needs four passes
+     * of «Τραγούδα μαζί» before he can face the fading one is a man the melody is going too fast for.
+     * See `docs/ADAPTATION.md`.
+     */
+    private val reps = IntArray(SingStage.SPEAK + 1)
+    private val stageMs = LongArray(SingStage.SPEAK + 1)
+
+    /** When the stage he is on now began. */
+    private var stageAt = now()
+
     /** The open recognition window, so leaving or moving on can close it. */
     private var listenJob: Job? = null
 
@@ -179,6 +247,9 @@ class SingSayViewModel(private val graph: AppGraph, private val items: List<Item
         sungModelPath = null
         listens = 0
         lastPeak = null
+        lastTakeMs = null
+        reps.fill(0)
+        stageMs.fill(0L)
         check = GentleCheck()
         stopRecogniser()
         // playing from the first frame: the model is about to start, and a stage button tapped in
@@ -204,9 +275,17 @@ class SingSayViewModel(private val graph: AppGraph, private val items: List<Item
             _state.update { it.copy(hasSungModel = sung != null, loading = false) }
             // Not before the query: its wait is not his time on the phrase.
             startedAt = now()
+            stageAt = startedAt
             finishing = false
             enterStage(SingStage.LISTEN)
         }
+    }
+
+    /** The clock of the stage being left, stopped and added to its total. */
+    private fun closeStage(stage: Int) {
+        val at = now()
+        if (stage in stageMs.indices) stageMs[stage] += at - stageAt
+        stageAt = at
     }
 
     /**
@@ -365,6 +444,8 @@ class SingSayViewModel(private val graph: AppGraph, private val items: List<Item
      */
     private fun advance(last: Note, gain: Float) {
         val s = _state.value
+        // One pass through the phrase at the stage he is on, whichever branch it takes him to.
+        if (s.stage in reps.indices) reps[s.stage]++
         when {
             s.stage == SingStage.FADING && s.repetition + 1 < SingStage.FADING_REPS -> {
                 // The lit syllable stays where his tap left it; the next tap wraps round to the first.
@@ -377,6 +458,7 @@ class SingSayViewModel(private val graph: AppGraph, private val items: List<Item
                 // playing from this instant and not from inside the job: the pad must be closed
                 // before the tap after this one can reach it.
                 _state.update { it.copy(stage = next, repetition = 0, playing = true) }
+                closeStage(s.stage)
                 enterStage(next, lead = last, leadGain = gain)
             }
             // Stage 5 has no tap pad — «Το είπα!» stands where it was — so there is nowhere to go.
@@ -490,6 +572,7 @@ class SingSayViewModel(private val graph: AppGraph, private val items: List<Item
                 .onSuccess { rec ->
                     val itemId = _state.value.item.id
                     lastPeak = rec.peakAmplitude
+                    lastTakeMs = rec.durationMs
                     // A take nobody spoke into is not a take: it is deleted, he is asked again, the
                     // phrase stays open and nothing is written. Silence used to pass as his voice.
                     if (rec.isSilent) {
@@ -567,11 +650,24 @@ class SingSayViewModel(private val graph: AppGraph, private val items: List<Item
         // Read eagerly: the clock and the take belong to the phrase being left behind.
         val began = startedAt
         val save = recordingSave
-        // What the phone made of him, and how loud his take was. The first is only meaningful while
-        // recognition is on; the second is the calibration data for [Recorded.SILENCE_PEAK].
-        val said = s.heard?.let { ""","sttHeard":${jsonString(it)}""" }.orEmpty()
-        val stt = if (s.sttOn) """$said,"sttMatched":${s.heardMatched},"sttTries":${s.sttTries}""" else ""
-        val peak = lastPeak?.let { ""","peak":$it""" }.orEmpty()
+        // The stage he stopped on is closed here: he was in it right up to «Το είπα!».
+        closeStage(stageReached)
+        val detail = singSayDetail(
+            stage = stageReached,
+            listened = heard,
+            tempo = tempo,
+            key = key,
+            sttOn = s.sttOn,
+            heard = s.heard,
+            matched = s.heardMatched,
+            sttTries = s.sttTries,
+            peak = lastPeak,
+            ms = now() - began,
+            repsPerStage = reps.drop(1),
+            msPerStage = stageMs.drop(1),
+            sung = s.hasSungModel,
+            takeMs = lastTakeMs,
+        )
         // Chained, because the app scope runs on a pool with no ordering: whoever joins the last
         // write must be joining every write, or a row can land after the session has counted.
         val prev = lastWrite
@@ -586,7 +682,7 @@ class SingSayViewModel(private val graph: AppGraph, private val items: List<Item
                     Attempt(
                         itemId = s.item.id, module = ModuleId.SINGSAY, sessionId = sessionId, startedAt = began,
                         durationMs = now() - began, outcome = outcome, cueLevel = cue, selfRecordingId = recordingId,
-                        detail = """{"stage":$stageReached,"listened":$heard,"tempo":"${tempo.name}","key":"${key.name}"$stt$peak}""",
+                        detail = detail,
                     )
                 )
                 graph.scheduler.record(s.item.id, ModuleId.SINGSAY, outcome, cue)
@@ -637,8 +733,6 @@ class SingSayViewModel(private val graph: AppGraph, private val items: List<Item
         stopRecogniser()
         if (graph.voice.isRecording) graph.voice.cancelRecording()
     }
-
-    private fun jsonString(s: String) = "\"" + s.replace("\\", "\\\\").replace("\"", "\\\"") + "\""
 
     companion object {
         /** Said on the screen when a spoken model made no sound at all. */
