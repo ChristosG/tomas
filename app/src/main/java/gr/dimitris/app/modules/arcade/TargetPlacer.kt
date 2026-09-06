@@ -22,10 +22,10 @@ class TargetPlacer(private val random: Random = Random.Default) {
      * A point inside [width] x [height] for a target [sizePx] across, away from [previous] when the
      * box allows it. [previous] null is the first target of a round.
      */
-    fun next(width: Float, height: Float, sizePx: Float, previous: Pt?): Pt {
+    fun next(width: Float, height: Float, sizePx: Float, previous: Pt?, margin: Float = sizePx): Pt {
         val size = sizePx.coerceAtLeast(0f)
-        val x = span(width, size)
-        val y = span(height, size)
+        val x = span(width, margin)
+        val y = span(height, margin)
         if (previous == null) return Pt(pick(x), pick(y))
 
         val far = FAR_ENOUGH * size
@@ -47,14 +47,53 @@ class TargetPlacer(private val random: Random = Random.Default) {
     }
 
     /**
-     * Where a centre may fall along one side: a whole target's width in from both ends, or the
-     * middle of the side when there is not that much room to give.
+     * A place for a target [sizePx] across that is never nearer than [clearance] to [avoid], and is
+     * fully on the board rather than a whole width in from it — [margin] is a radius here, because
+     * this is the drag game's ball and it needs the room the ring is taking up.
+     *
+     * Unlike [next], the clearance is a rule and not a wish: a ball that starts inside its own ring
+     * is a round he wins by touching the glass, a CORRECT row that overstates his hand, and five
+     * steps down the size ladder he did not earn. When no random candidate clears, the place
+     * farthest from [avoid] is taken — the corner of the span, which on any board the games are
+     * played on is well outside the ring.
      */
-    private fun span(length: Float, size: Float): ClosedFloatingPointRange<Float> {
-        val margin = minOf(size, length / 2f)
-        val from = margin
-        val to = length - margin
-        return if (to > from) from..to else (length / 2f)..(length / 2f)
+    fun clearOf(
+        width: Float,
+        height: Float,
+        sizePx: Float,
+        avoid: Pt,
+        clearance: Float,
+        margin: Float = sizePx / 2f,
+    ): Pt {
+        val x = span(width, margin)
+        val y = span(height, margin)
+        var best = Pt(pick(x), pick(y))
+        var bestDistance = hypot(best.x - avoid.x, best.y - avoid.y)
+        for (i in 1 until TRIES) {
+            if (bestDistance >= maxOf(clearance, FAR_ENOUGH * sizePx)) return best
+            val candidate = Pt(pick(x), pick(y))
+            val distance = hypot(candidate.x - avoid.x, candidate.y - avoid.y)
+            if (distance > bestDistance) {
+                best = candidate
+                bestDistance = distance
+            }
+        }
+        if (bestDistance >= clearance) return best
+        // Nothing random cleared it: take the farthest place there is, which is always a corner.
+        return listOf(
+            Pt(x.start, y.start), Pt(x.start, y.endInclusive),
+            Pt(x.endInclusive, y.start), Pt(x.endInclusive, y.endInclusive),
+        ).maxBy { hypot(it.x - avoid.x, it.y - avoid.y) }
+    }
+
+    /**
+     * Where a centre may fall along one side: [margin] in from both ends, or the middle of the side
+     * when there is not that much room to give.
+     */
+    private fun span(length: Float, margin: Float): ClosedFloatingPointRange<Float> {
+        val edge = minOf(margin.coerceAtLeast(0f), length / 2f)
+        val to = length - edge
+        return if (to > edge) edge..to else (length / 2f)..(length / 2f)
     }
 
     private fun pick(range: ClosedFloatingPointRange<Float>): Float =
@@ -62,6 +101,21 @@ class TargetPlacer(private val random: Random = Random.Default) {
         else range.start + random.nextFloat() * (range.endInclusive - range.start)
 
     companion object {
+        /**
+         * [p] moved as little as it can be for a target [sizePx] across to sit fully on the board.
+         *
+         * A missed target stays exactly where it is and grows, so one placed near the edge at 40 dp
+         * can reach past it at 130 dp and be drawn with a slice cut off by the board's clip. This
+         * nudges it back by the overhang and no further: he is aiming at it, and a target that
+         * jumps away from a finger already on its way is worse than one that shifts a few pixels.
+         */
+        fun onBoard(p: Pt, width: Float, height: Float, sizePx: Float): Pt {
+            val radius = sizePx / 2f
+            fun within(v: Float, length: Float): Float =
+                if (length < sizePx) length / 2f else v.coerceIn(radius, length - radius)
+            return Pt(within(p.x, width), within(p.y, height))
+        }
+
         /** How far the next target must be from the last one, in target widths. */
         const val FAR_ENOUGH = 2f
 

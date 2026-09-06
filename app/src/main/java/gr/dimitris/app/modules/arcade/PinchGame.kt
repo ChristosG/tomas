@@ -17,6 +17,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
@@ -71,10 +72,12 @@ fun PinchGame(
     var scale by remember { mutableFloatStateOf(1f) }
     /** The widest it has been since this photo began: what says whether he really opened it. */
     var peak by remember { mutableFloatStateOf(1f) }
+    /** True from an opened photo until he puts his fingers down again: the tick by the counter. */
+    var opened by remember { mutableStateOf(false) }
     val finish by rememberUpdatedState(onResult)
 
     Column(modifier) {
-        GameProgress(round, PINCH_ROUNDS)
+        GameProgress(round, PINCH_ROUNDS, celebrate = opened)
         Spacer(Modifier.height(Sizes.gapSmall))
         GameBoard(Modifier.fillMaxWidth().weight(1f)) { _, _ ->
             Box(
@@ -89,6 +92,9 @@ fun PinchGame(
                     // movement a weak hand has.
                     awaitEachGesture {
                         awaitFirstDown(requireUnconsumed = false)
+                        opened = false
+                        /** True once this gesture has already opened and closed a photo. */
+                        var scored = false
                         do {
                             val event = awaitPointerEvent()
                             val zoom = event.calculateZoom()
@@ -98,8 +104,10 @@ fun PinchGame(
                                 event.changes.forEach { it.consume() }
                                 // Opened wide and brought back: that is the whole movement, and it
                                 // counts the moment he completes it rather than when he lets go.
-                                if (peak >= PINCH_OPEN && scale <= PINCH_CLOSED) {
+                                if (!scored && peak >= PINCH_OPEN && scale <= PINCH_CLOSED) {
                                     feedback.success()
+                                    scored = true
+                                    opened = true
                                     round += 1
                                     size = Adaptive.afterHit(size)
                                     scale = 1f
@@ -110,7 +118,11 @@ fun PinchGame(
                         } while (event.changes.any { it.pressed })
                         // Off the glass. Anything more than a touch that did not finish the movement
                         // is a try that did not come off: a buzz and a bigger photo.
-                        if (peak >= PINCH_CLOSED) {
+                        //
+                        // Never after a photo he has just opened, though: two fingers coming off the
+                        // glass spread a little as they lift, and the round he had already won would
+                        // be followed by a buzz and a bigger photo for lifting his hand.
+                        if (!scored && peak >= PINCH_CLOSED) {
                             feedback.nudge()
                             misses += 1
                             size = Adaptive.afterMiss(size)

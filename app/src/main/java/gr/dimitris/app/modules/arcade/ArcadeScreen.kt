@@ -2,11 +2,15 @@ package gr.dimitris.app.modules.arcade
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.BoxWithConstraintsScope
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -14,6 +18,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.testTag
@@ -136,15 +141,30 @@ fun GameBoard(
     }
 }
 
-/** How far he is through the round, for anyone watching over his shoulder. */
+/**
+ * How far he is through the round, and — when [celebrate] — the tick for the one he has just got.
+ *
+ * Success in this app is never one channel: the sound may be off and the buzz may be missed, so
+ * every caught target says so in writing as well. The tick keeps its place in the layout whether it
+ * is showing or not, because a row that changes height would resize the board under his hand.
+ */
 @Composable
-fun GameProgress(done: Int, of: Int) {
-    Text(
-        "$done/$of",
-        style = MaterialTheme.typography.bodyLarge,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-    )
+fun GameProgress(done: Int, of: Int, celebrate: Boolean = false) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(
+            "$done/$of",
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(Modifier.width(Sizes.gapSmall))
+        Box(Modifier.size(TICK), contentAlignment = Alignment.Center) {
+            SuccessMark(visible = celebrate, size = TICK)
+        }
+    }
 }
 
 /** The board's edge: enough to see where the game ends, not enough to be part of it. */
 private val EDGE = 2.dp
+
+/** The per-target tick, beside the counter: seen without being the thing he is looking at. */
+private val TICK = 32.dp

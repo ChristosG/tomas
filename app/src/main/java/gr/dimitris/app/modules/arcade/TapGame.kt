@@ -60,12 +60,14 @@ fun TapGame(
     var hits by remember { mutableIntStateOf(0) }
     var misses by remember { mutableIntStateOf(0) }
     var target by remember { mutableStateOf<Pt?>(null) }
+    /** True from a caught target until the next press: the tick beside the counter. */
+    var caught by remember { mutableStateOf(false) }
     // The gesture is installed once and outlives every recomposition, so it must not close over a
     // callback that has since been replaced.
     val finish by rememberUpdatedState(onResult)
 
     Column(modifier) {
-        GameProgress(hits, TAP_TARGETS)
+        GameProgress(hits, TAP_TARGETS, celebrate = caught)
         Spacer(Modifier.height(Sizes.gapSmall))
         GameBoard(Modifier.fillMaxWidth().weight(1f)) { width, height ->
             val sizePx = with(density) { size.dp.toPx() }
@@ -79,19 +81,28 @@ fun TapGame(
                 Modifier.matchParentSize().pointerInput(Unit) {
                     detectTapGestures { at ->
                         val t = target ?: return@detectTapGestures
+                        // A press that landed off the paper is not an attempt at the circle. The
+                        // gesture still reports it — a finger that drifts over the edge inside the
+                        // tap slop comes back with a position outside the board — and counting it
+                        // would charge a hand steadying itself against the 70 % line.
+                        if (at.x < 0f || at.y < 0f || at.x > width || at.y > height) return@detectTapGestures
                         val radius = size.dp.toPx() / 2f
                         if (hypot(at.x - t.x, at.y - t.y) <= radius) {
                             feedback.success()
+                            caught = true
                             hits += 1
                             size = Adaptive.afterHit(size)
                             if (hits >= TAP_TARGETS) finish(hits, misses, size)
                             else target = placer.next(width, height, size.dp.toPx(), t)
                         } else {
                             // Never a fail state: the buzz, a bigger circle, and the same target
-                            // still there to be found.
+                            // still there to be found — nudged back on to the board if it has grown
+                            // out past the edge, so what he is aiming at is all there.
                             feedback.nudge()
+                            caught = false
                             misses += 1
                             size = Adaptive.afterMiss(size)
+                            target = TargetPlacer.onBoard(t, width, height, size.dp.toPx())
                         }
                     }
                 }

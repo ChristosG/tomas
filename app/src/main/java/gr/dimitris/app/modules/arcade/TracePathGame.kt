@@ -62,11 +62,13 @@ fun TracePathGame(
     var index by remember { mutableIntStateOf(0) }
     var misses by remember { mutableIntStateOf(0) }
     var missed by remember { mutableStateOf(false) }
+    /** True from a line he followed until he starts the next one: the tick beside the counter. */
+    var followed by remember { mutableStateOf(false) }
     val finish by rememberUpdatedState(onResult)
 
     Column(modifier) {
         Row {
-            GameProgress(index, TRACE_PATHS)
+            GameProgress(index, TRACE_PATHS, celebrate = followed)
             if (missed) {
                 Spacer(Modifier.width(Sizes.gapSmall))
                 Text(
@@ -93,7 +95,7 @@ fun TracePathGame(
                 Modifier.matchParentSize().pointerInput(path) {
                     if (path.isEmpty()) return@pointerInput
                     detectDragGestures(
-                        onDragStart = { live.clear(); missed = false; live += Pt(it.x, it.y) },
+                        onDragStart = { live.clear(); missed = false; followed = false; live += Pt(it.x, it.y) },
                         // Consumed: this is his finger on the line, not a scroll for anyone else.
                         onDrag = { change, _ -> change.consume(); live += Pt(change.position.x, change.position.y) },
                         onDragEnd = {
@@ -111,6 +113,7 @@ fun TracePathGame(
                             live.clear()
                             if (score.passed) {
                                 feedback.success()
+                                followed = true
                                 index += 1
                                 size = Adaptive.afterHit(size)
                                 if (index >= TRACE_PATHS) finish(index, misses, size)
