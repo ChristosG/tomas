@@ -162,28 +162,36 @@ export class Store {
       truncateSync(this.rowsFile, keep);
       end = keep;
     }
-    const lines = buf.subarray(0, end).toString('utf8').split('\n');
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i];
+    // Decoded one line at a time, straight out of the buffer. Joining the whole file into a
+    // single string first cost roughly three copies of it at peak and, worse, V8 refuses a string
+    // over about half a gigabyte outright - so a log that grew that far would be a server that
+    // will not start rather than a server that is slow. This way only one line is ever a string.
+    let lineNo = 0;
+    for (let start = 0; start < end; ) {
+      let stop = buf.indexOf(NEWLINE, start);
+      if (stop === -1 || stop > end) stop = end;
+      const line = buf.toString('utf8', start, stop);
+      start = stop + 1;
+      lineNo++;
       if (line.trim() === '') continue;
       let entry = null;
       try {
         entry = JSON.parse(line);
       } catch {
-        this.#skip(i + 1, 'not valid JSON');
+        this.#skip(lineNo, 'not valid JSON');
         continue;
       }
       if (!entry || typeof entry !== 'object' || !Number.isInteger(entry.seq) || entry.seq < 1) {
-        this.#skip(i + 1, 'missing or invalid seq');
+        this.#skip(lineNo, 'missing or invalid seq');
         continue;
       }
       if (!this.tables.has(entry.table)) {
-        this.#skip(i + 1, `unknown table ${JSON.stringify(entry.table)}`);
+        this.#skip(lineNo, `unknown table ${JSON.stringify(entry.table)}`);
         continue;
       }
       const id = rowId(entry.row);
       if (id === null) {
-        this.#skip(i + 1, 'row has no usable id');
+        this.#skip(lineNo, 'row has no usable id');
         continue;
       }
       // Replayed in file order, so the last entry for an id wins - the same

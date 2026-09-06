@@ -132,8 +132,8 @@ curl -s -X POST $BASE/v1/push \
   -H "Authorization: Bearer $TOKEN" \
   -H 'Content-Type: application/json' \
   -d '{"rows":[
-        {"table":"items","row":{"id":"i1","updatedAt":1757000000000,"deleted":false,"greek":"ψωμί"}},
-        {"table":"attempts","row":{"id":"a1","updatedAt":1757000000001,"itemId":"i1","correct":true}}
+        {"table":"items","row":{"id":"i1","updatedAt":1757000000000,"deleted":false,"text":"ψωμί"}},
+        {"table":"attempts","row":{"id":"a1","updatedAt":1757000000001,"itemId":"i1","outcome":"CORRECT"}}
       ]}'
 # {"ok":true,"seq":2,"accepted":2,"ignored":0}
 ```
@@ -237,6 +237,11 @@ Those eight names are the complete list; a row for any other table is rejected w
 `schedules` rows are keyed on `(itemId, module)`, which the app sends as the id
 `"<itemId>:<module>"`.
 
+**An open editor does not know about a delete that arrived while it was open.** If Chris deletes
+«ψωμί» while the father has that word open on his screen, the father's next save writes the word
+back — a newer row with `deleted: false` — and it returns on all three phones. That is
+last-write-wins doing what it says; the word is visible and can simply be deleted again.
+
 **`updatedAt` is three phone clocks, not one.** "Last write" means "the larger number", which is
 only "the later edit" while the phones agree about the time. If the father's phone runs two
 minutes slow, an edit he makes now can lose to an edit Chris made three minutes ago, and neither
@@ -286,6 +291,18 @@ To restore, put `data/` back and start the server. To start over, stop the serve
 - Single process, no clustering. Run exactly one instance per `DATA_DIR`.
 - After restoring a phone from a backup, the app resets its sync cursors and pulls everything
   again; last-write-wins sorts the result out.
+- **Clearing the error list is per phone.** `error_logs` is append-only on both sides, so hiding
+  the list on one phone leaves those rows on the other two and on the server. There is no way to
+  clear them everywhere short of deleting `rows.jsonl`.
+- **`rows.jsonl` only grows.** Every accepted edit appends a line and nothing compacts it, and the
+  whole file is read back into memory on start. At a few hundred thousand rows that is a second and
+  a couple of hundred megabytes; a log that ever grew past about half a gigabyte would stop the
+  server from starting at all. For three phones that is decades away, but if it ever matters: stop
+  the server, keep only the newest line per `table` + `row.id`, and start it again.
+- **Sync does not ask whether the phone is on mobile data.** A phone that has just been set up
+  sends its whole vocabulary and about 180 pictograms, and every launch afterwards syncs whatever
+  has changed. That is a few hundred megabytes once and very little after that, so the app does not
+  bother anyone with a question — but the first sync is better done on wi-fi.
 
 ## 8. Handing it over
 
