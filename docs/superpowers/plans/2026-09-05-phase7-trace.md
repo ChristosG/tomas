@@ -110,3 +110,30 @@ chip); back after a pass lands the row; a session of «Γράψε» alone report
 **Left for Chris.** `TraceScorer` is still marked *rewrite me*: it is order- and direction-blind — the
 letter drawn bottom-up or mirrored-where-symmetric scores the same — and the thresholds above are a
 programmer's guess, not a therapist's.
+
+## Execution record (controller rulings, 2026-09-06)
+
+Copied from the SDD ledger at phase close. Combined task + final review: 2 Critical / 6 Important / 8 Minor, all fixed or ruled (the scorer now treats the filled glyph as ink and uses finger-sized floors); the fix-wave re-review left three small items that phase 8 fixed (58fbd8d, 8cd577f). Known: the paper floor makes the extreme small-screen case scroll from the margins only.
+
+## Pre-flight conflict scan (2026-09-05)
+
+| Tasks | Shared surface | Produces vs consumes | Finding |
+|---|---|---|---|
+| 1 / 2 | Pt, TraceScore, TraceScorer.score(user, template, templateHeight, maxMeanFraction, minCoverage), resample | ViewModel calls score with level-5 thresholds | consistent |
+| 2 / phase 6 | LevelProgression(min 1, max 5) | produced by phase 6 Task 1 with the revised semantics (hold under 5 results) | consistent |
+| 2 / phase 2+3 | Screen(items, …) — plan drops items (`TraceScreen(sessionId, …)`) and "6 targets per session" | SessionBudget truncates | Ruling: run exactly items.size targets in a session (cap 6; free practice 6); planFor returns 6 transient items always (phase-3 rulings I1, I-F) |
+| 2 / phase 3 | end of run → LevelProgression → Settings.traceLevel; end screen | numbers rule: auto-onDone in sessions unless the level changed | Ruling: same rule |
+| 2 / phase 3 | speech Results ("speak the text" after a pass) | must be surfaced in the error slot | Ruling carried |
+| 2 alone | `detectDragGestures` inside a `verticalScroll` host (DimitrisScreen content scrolls) | the canvas must consume drags or the page scrolls instead of drawing | Ruling: the canvas sits in a non-scrolling column; pointerInput on the canvas takes the gesture (verify on the emulator with `adb shell input swipe`) |
+| 2 alone | Glyphs.template via Paint.getTextPath needs a Context-free Paint — fine; templateHeight derived from the path bounds | consistent |
+| 2 / level 4 | "six shortest WORD items" — attempts use the item id, module TRACE | consistent with the scheduler? Ruling: no Scheduler.record for TRACE (tracing is not a vocabulary recall signal) — cost if wrong: none |
+| all | Greek-only, 72dp, no timers, a poor trace = nudge + "Ξανά", never a fail state | consistent |
+
+Scan result: three rulings carried into dispatches.
+
+## Task log
+Tasks 1+2: dispatched as one batch — BASE 3e90466, model opus (in parallel with the phase-6 scoped re-review, which is read-only; any phase-6 residual folds into this task's fix round)
+Tasks 1+2: implementer DONE (27e948c, c1aa3f8; JVM 257, connected 58). Deviations accepted pending review: clear() as retry, TraceCanvas(enabled), BoxWithConstraints sizing, stroke rescale on resize, levels 4/5 fall back to his name without WORD items. Ruling: strokes are scored per stroke (resampled individually, pen-up gaps never walked) — into the fix wave. Combined task + final review dispatched (opus).
+Review DONE (2 Critical / 6 Important / 8 Minor; Task 1 ✅, Task 2 ❌ on level-5 thresholds and detail.hand). Rulings — C1/C2: the template comes from a regular-weight font; the scorer treats a point inside the filled glyph as distance 0 (mask predicate supplied by Glyphs, rectangle in JVM tests); tolerance = max(0.10·H, 10dp) and coverage radius = max(0.15·H, 14dp) for levels 1–4, level 5 = the pinned 0.14/0.4 with the same mask and floors; the paper is the largest that fits (I6); a centre-line trace offset half a stem from the outline must pass at every level and a scribble must fail (verified by swipe on the emulator). I2: «Το είδα» is mandatory at level 5 (check disabled until the hide). I3: «Έτοιμο» disabled with no strokes. I4: a level-5 pass reveals word + template. I5: detail carries hand (and tries). Per-stroke scoring. Fix wave — BASE c1aa3f8 (docs commit 3609cb2 interleaved), resuming implementer aaf995a777f27f062.
+Fix wave DONE (c14f669, 186eac9, 0d2ecb3; JVM 259, connected 64; hand-like centre-line traces pass at every level with 3.7x headroom at level 3). Ruling on M5 (six modules x allowance 3 = 18 per session): a session takes at most 4 modules a day — the word coach always plus 3 others rotating by least-recent module use — so 15 holds; shared-host change carried into the phase 8 dispatch as a first fix(phase2) commit — cost if wrong: none. Template drawn over the ink accepted. Scoped re-review dispatched (opus).
+Fix-wave re-review: 3 open — I2 partial (hide() must clear the strokes so a level-5 recall never scores a trace made while the word was visible; TraceFlowTest to trace after the hide), M2 partial (paper floor via requiredSize/min height), R1 (single-letter canvas non-uniform rescale: keep a square paper for letters or rescale strokes with the true per-axis factors). Ruling: all three go into the phase 8 fix round (one implementer at a time in the worktree) — cost if wrong: none. Phase 7 closed pending those three; execution record commit deferred until the phase-8 implementer reports.
