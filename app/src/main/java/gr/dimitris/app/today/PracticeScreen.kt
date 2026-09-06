@@ -12,9 +12,14 @@ import gr.dimitris.app.core.data.ModuleId
 import gr.dimitris.app.ui.components.BigButton
 import gr.dimitris.app.ui.components.DimitrisScreen
 
-/** Free practice of one module from the Today grid: same screen, no session row. */
+/**
+ * Free practice of one module from the Today grid: same screen, no session row.
+ *
+ * [itemId] and [scriptId] come from the caregiver's «Δοκίμασέ το» / «Παίξ' το»: the sitting is then
+ * that one word or that one dialogue, and [onDone] goes back to the editor she came from.
+ */
 @Composable
-fun PracticeScreen(moduleId: ModuleId, onDone: () -> Unit) {
+fun PracticeScreen(moduleId: ModuleId, onDone: () -> Unit, itemId: String? = null, scriptId: String? = null) {
     val graph = LocalAppGraph.current
     // Leaving practice stops whatever it was saying or playing, the same as leaving a session does.
     // The microphone too: the module screens hand the take back on *back*, but the «Μίλα» button in
@@ -29,7 +34,9 @@ fun PracticeScreen(moduleId: ModuleId, onDone: () -> Unit) {
 
     // Scoped to this route entry, not to the composition: a «Μίλα» detour and back resumes the same
     // items instead of asking the module for a fresh plan and losing his place.
-    val vm: PracticeViewModel = viewModel(key = "practice-${moduleId.name}") { PracticeViewModel(graph, moduleId) }
+    val vm: PracticeViewModel = viewModel(key = "practice-${moduleId.name}-${itemId ?: scriptId ?: ""}") {
+        PracticeViewModel(graph, moduleId, itemId, scriptId)
+    }
     val items by vm.items.collectAsStateWithLifecycle()
     val module = vm.module
 

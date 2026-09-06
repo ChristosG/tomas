@@ -48,6 +48,32 @@ class SessionBuilderTest {
     }
 
     /**
+     * Chris' own report, in one plan: he adds a word in caregiver mode and then has "to use the app
+     * for hours until it randomly appears".
+     *
+     * Personal items already came before seed ones, but among *them* the oldest went first — so a
+     * word written last night queued behind every word he had ever written, and behind a shipped
+     * vocabulary of hundreds waiting its turn at eight a day. The word somebody has just sat down
+     * and typed is the one that matters today, so it goes in first; the seed list keeps its own
+     * curated easiest-first order behind them both.
+     */
+    @Test fun `the word she added yesterday is introduced before the seed words, newest of hers first`() = runTest {
+        // A pile of fresh seed words, every one of them written *after* hers.
+        repeat(10) { i -> word("seed$i", Source.SEED, createdAt = noon - 1000 + i) }
+        val lastWeek = word("περσινή", Source.CAREGIVER, createdAt = noon - 7 * LeitnerPolicy.DAY_MS)
+        val yesterday = word("χθεσινή", Source.CAREGIVER, createdAt = noon - LeitnerPolicy.DAY_MS)
+
+        val oneSlot = SessionBuilder(items, schedules, { noon }, newPerDay = 1, maxItems = 5).plan(m, listOf(ItemKind.WORD))
+        assertEquals("the one place goes to the word she wrote last", listOf(yesterday.id), oneSlot.map { it.id })
+
+        val twoSlots = SessionBuilder(items, schedules, { noon }, newPerDay = 2, maxItems = 5).plan(m, listOf(ItemKind.WORD))
+        assertEquals(
+            "and both of hers still come in ahead of ten fresher seed words",
+            setOf(yesterday.id, lastWeek.id), twoSlots.map { it.id }.toSet(),
+        )
+    }
+
+    /**
      * The one thing «Άκου» being on every screen could have broken, and the only place it shows.
      *
      * A word he asks to hear is ASSISTED, and ASSISTED holds its Leitner box instead of promoting

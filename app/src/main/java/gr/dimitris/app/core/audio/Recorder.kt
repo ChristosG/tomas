@@ -38,6 +38,13 @@ data class Recorded(val file: File, val durationMs: Long, val peakAmplitude: Int
 
         /** Said when the take had nothing in it. An invitation, never a verdict on his voice. */
         const val SILENT_TAKE = "Δεν σε άκουσα. Πες το πιο δυνατά."
+
+        /**
+         * The same refusal in the caregiver's editors. Hers is about the take, not about her: she
+         * is recording a model, often at arm's length across a kitchen table, and "δεν σε άκουσα"
+         * would read as the app addressing her the way it addresses him.
+         */
+        const val SILENT_TAKE_CAREGIVER = "Δεν ακούστηκε τίποτα. Ξαναπές το πιο δυνατά."
     }
 }
 

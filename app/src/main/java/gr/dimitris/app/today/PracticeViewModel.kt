@@ -6,6 +6,7 @@ import gr.dimitris.app.AppGraph
 import gr.dimitris.app.core.data.Item
 import gr.dimitris.app.core.data.ModuleId
 import gr.dimitris.app.modules.Module
+import gr.dimitris.app.modules.scripts.ScriptsModule
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -23,8 +24,16 @@ import kotlinx.coroutines.launch
  *
  * [items] is null while the plan is being built and empty when the module has nothing to offer;
  * the screen has a different thing to say for each.
+ *
+ * [itemId] and [scriptId] are «Δοκίμασέ το» and «Παίξ' το» from the caregiver's editors: the route
+ * names the one thing to run, and the module gets exactly that instead of a plan of its own.
  */
-class PracticeViewModel(private val graph: AppGraph, moduleId: ModuleId) : ViewModel() {
+class PracticeViewModel(
+    private val graph: AppGraph,
+    moduleId: ModuleId,
+    private val itemId: String? = null,
+    private val scriptId: String? = null,
+) : ViewModel() {
     /** Null only if the route outlived the module registry; the empty screen is the answer either way. */
     val module: Module? = graph.modules.firstOrNull { it.id == moduleId }
 
@@ -34,8 +43,23 @@ class PracticeViewModel(private val graph: AppGraph, moduleId: ModuleId) : ViewM
     init {
         viewModelScope.launch {
             _items.value = module?.let { m ->
-                runCatching { m.practiceFor(graph) }.getOrElse { graph.errors.record("practice ${m.id}", it); emptyList() }
+                runCatching { plan(m) }.getOrElse { graph.errors.record("practice ${m.id}", it); emptyList() }
             } ?: emptyList()
         }
+    }
+
+    /**
+     * What this sitting runs. Named on the route, or the module's own free-practice plan.
+     *
+     * Chris added a word in caregiver mode and had no way to see it in use — "I would have to use
+     * the app for hours until it randomly appears". A named item is therefore never a hint to the
+     * module's chooser: it is the whole list, so the word she just wrote is the word that opens.
+     * A word or a dialogue that has been deleted between the tap and here comes back empty, and the
+     * screen already knows how to say so.
+     */
+    private suspend fun plan(m: Module): List<Item> = when {
+        itemId != null -> listOfNotNull(graph.items.get(itemId))
+        scriptId != null -> ScriptsModule.turnsOf(graph, scriptId)
+        else -> m.practiceFor(graph)
     }
 }

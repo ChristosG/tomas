@@ -14,8 +14,9 @@ fun startOfDay(epochMs: Long, zone: ZoneId = ZoneId.systemDefault()): Long =
     Instant.ofEpochMilli(epochMs).atZone(zone).toLocalDate().atStartOfDay(zone).toInstant().toEpochMilli()
 
 /**
- * Picks today's items for one module: everything due, then new items (personal before seed)
- * up to [newPerDay] introduced per day, capped at [maxItems], ordered easy–hard–easy.
+ * Picks today's items for one module: everything due, then new items (the caregiver's own first and
+ * newest of those first of all — see [NEWEST_OF_HERS_FIRST] — then seed) up to [newPerDay]
+ * introduced per day, capped at [maxItems], ordered easy–hard–easy.
  *
  * A couple of the places are held for words he has never seen — see [NEW_SLOTS].
  */
@@ -37,7 +38,7 @@ class SessionBuilder(
         val introducedToday = rows.count { it.createdAt >= startOfDay(t) }
         val scheduledIds = rows.map { it.itemId }.toSet()
         val fresh = pool.filter { it.id !in scheduledIds }
-            .sortedWith(compareBy<Item> { it.source != Source.CAREGIVER }.thenBy { it.createdAt })
+            .sortedWith(NEWEST_OF_HERS_FIRST)
             .take((newPerDay - introducedToday).coerceAtLeast(0))
 
         // Due first, but never *all* the way: a couple of places are held back for a word he has
@@ -48,6 +49,31 @@ class SessionBuilder(
     }
 
     companion object {
+        /**
+         * The order new items are taken in: everything a caregiver wrote first, newest of hers at
+         * the front, and the seed vocabulary after it in the order it ships.
+         *
+         * The newest-first half is Chris' own report. He would add a word in caregiver mode and
+         * then have "to use the app for hours until it randomly appears": personal items already
+         * came before seed ones, but *within* them the oldest went first, so a word added tonight
+         * queued behind every earlier one he had ever written and could be weeks away. The word
+         * somebody has just sat down and typed is the word that matters today — it is almost always
+         * about something happening now — so it goes in first, and «Δοκίμασέ το» in the editor is
+         * the other half of the same answer.
+         *
+         * The seed list keeps its own ascending order: it is curated easiest-first, and reversing
+         * it would hand him the hardest words the app ships with on day one.
+         */
+        internal val NEWEST_OF_HERS_FIRST: Comparator<Item> = Comparator { a, b ->
+            val hersA = a.source == Source.CAREGIVER
+            val hersB = b.source == Source.CAREGIVER
+            when {
+                hersA != hersB -> if (hersA) -1 else 1
+                hersA -> b.createdAt.compareTo(a.createdAt)
+                else -> a.createdAt.compareTo(b.createdAt)
+            }
+        }
+
         /**
          * Places kept for a word he has never met, however long the due list is.
          *

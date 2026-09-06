@@ -3,6 +3,7 @@ package gr.dimitris.app.caregiver.scripts
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import gr.dimitris.app.AppGraph
+import gr.dimitris.app.core.audio.CaregiverTake
 import gr.dimitris.app.core.audio.Recorded
 import gr.dimitris.app.core.data.LineDraft
 import gr.dimitris.app.core.data.Speaker
@@ -38,11 +39,23 @@ data class ScriptEditState(
     val recordingIndex: Int? = null,
     val loading: Boolean = false,
     val saving: Boolean = false,
+    /**
+     * Something has been changed since the last save. Only «Παίξ' το» reads it: playing the
+     * dialogue means playing what is *written down*, so a form with an unsaved turn in it saves
+     * first and a form without one does not touch the rows at all.
+     */
+    val dirty: Boolean = false,
     /** The dialogue she opened is gone (a restore, a sync). This form is not a new one: it is a dead end. */
     val notFound: Boolean = false,
     val error: String? = null,
 ) {
     val isNew: Boolean get() = id == null && !notFound
+
+    /**
+     * «Παίξ' το» needs a dialogue that exists. A draft that has never been saved has no id to hand
+     * the module, and the microphone being open is not the moment to leave the screen.
+     */
+    val canTry: Boolean get() = id != null && !notFound && !loading && !saving && recordingIndex == null
 }
 
 /**
@@ -84,7 +97,7 @@ class ScriptEditViewModel(private val graph: AppGraph, private val scriptId: Str
         }
     }
 
-    fun setTitle(title: String) = _state.update { it.copy(title = title, error = null) }
+    fun setTitle(title: String) = _state.update { it.copy(title = title, dirty = true, error = null) }
 
     fun clearError() = _state.update { it.copy(error = null) }
 
@@ -92,7 +105,7 @@ class ScriptEditViewModel(private val graph: AppGraph, private val scriptId: Str
     fun addLine() = _state.update {
         if (it.lines.size >= MAX_LINES) return@update it.copy(error = TOO_MANY_LINES)
         val next = if (it.lines.lastOrNull()?.speaker == Speaker.OTHER) Speaker.DIMITRIS else Speaker.OTHER
-        it.copy(lines = it.lines + EditLine(next, ""), error = null)
+        it.copy(lines = it.lines + EditLine(next, ""), dirty = true, error = null)
     }
 
     fun setLineText(index: Int, text: String) = edit(index) { it.copy(text = text) }
@@ -119,6 +132,7 @@ class ScriptEditViewModel(private val graph: AppGraph, private val scriptId: Str
             it.copy(
                 lines = it.lines.filterIndexed { i, _ -> i != index },
                 recordingIndex = shifted(it.recordingIndex, index),
+                dirty = true,
                 error = null,
             )
         }
@@ -178,7 +192,19 @@ class ScriptEditViewModel(private val graph: AppGraph, private val scriptId: Str
      * bubbles, and a dialogue with no turn of his own is refused: the module only ever plans scripts
      * that give him something to say, so saving one would be saving something that never appears.
      */
-    fun save(onSaved: () -> Unit) {
+    /**
+     * «Παίξ' το»: run this very dialogue, now. The other half of Chris' report about words — a
+     * conversation she has just written is the one she needs to hear, not whichever one the boxes
+     * would have picked. Anything unsaved goes down first, because the module reads the rows and
+     * not this form; a save that is refused stops here with its own line and nothing opens.
+     */
+    fun tryIt(onReady: (String) -> Unit) {
+        val s = _state.value
+        if (!s.canTry) return
+        if (s.dirty) save(onReady) else s.id?.let(onReady)
+    }
+
+    fun save(onSaved: (String) -> Unit) {
         if (_state.value.saving || _state.value.notFound) return
         // A take still running belongs to this dialogue: it is closed and kept, not thrown away.
         // If closing it failed — too short to be a voice — that is what she needs to read, so the
@@ -228,7 +254,7 @@ class ScriptEditViewModel(private val graph: AppGraph, private val scriptId: Str
                     },
                 )
                 graph.feedback.success()
-                onSaved()
+                onSaved(saved.id)
             } catch (ce: CancellationException) {
                 throw ce
             } catch (e: Exception) {
@@ -262,25 +288,37 @@ class ScriptEditViewModel(private val graph: AppGraph, private val scriptId: Str
      * The finished take, onto the line it was made for. The two file deletions happen out here and
      * not inside the [MutableStateFlow.update] block: that block is retried under contention, and a
      * retried delete would be a second delete of a file the first pass had already removed.
+     *
+     * A take with nothing in it is not kept at all. On the other person's line it *is* the voice he
+     * hears, and on his own it is the model the cue ladder plays: either way a silent one is a
+     * dialogue that plays silence at him. She is told and the line keeps whatever it had.
      */
     private fun keep(index: Int, rec: Recorded) {
+        val take = CaregiverTake.keptOrDiscarded(rec)
+        if (take == null) {
+            _state.update { it.copy(recordingIndex = null, error = Recorded.SILENT_TAKE_CAREGIVER) }
+            return
+        }
         val line = _state.value.lines.getOrNull(index)
         if (line == null) {
             // The line was removed while its take was running: the file has nowhere to go.
-            rec.file.delete()
+            take.file.delete()
             _state.update { it.copy(recordingIndex = null) }
             return
         }
         line.newRecording?.file?.delete()
         _state.update { s ->
             val current = s.lines.getOrNull(index) ?: return@update s.copy(recordingIndex = null)
-            s.copy(lines = s.lines.replacing(index, current.copy(newRecording = rec)), recordingIndex = null, error = null)
+            s.copy(
+                lines = s.lines.replacing(index, current.copy(newRecording = take)),
+                recordingIndex = null, dirty = true, error = null,
+            )
         }
     }
 
     private fun edit(index: Int, change: (EditLine) -> EditLine) = _state.update { s ->
         val line = s.lines.getOrNull(index) ?: return@update s
-        s.copy(lines = s.lines.replacing(index, change(line)), error = null)
+        s.copy(lines = s.lines.replacing(index, change(line)), dirty = true, error = null)
     }
 
     private fun swap(from: Int, to: Int) = _state.update { s ->
@@ -294,7 +332,7 @@ class ScriptEditViewModel(private val graph: AppGraph, private val scriptId: Str
             to -> from
             else -> s.recordingIndex
         }
-        s.copy(lines = lines, recordingIndex = recording, error = null)
+        s.copy(lines = lines, recordingIndex = recording, dirty = true, error = null)
     }
 
     private fun List<EditLine>.replacing(index: Int, line: EditLine): List<EditLine> =

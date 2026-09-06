@@ -4,6 +4,7 @@ import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import gr.dimitris.app.AppGraph
+import gr.dimitris.app.core.audio.CaregiverTake
 import gr.dimitris.app.core.audio.Recorded
 import gr.dimitris.app.core.data.Category
 import gr.dimitris.app.core.data.Item
@@ -45,11 +46,24 @@ data class ItemEditState(
     val newSungRecording: Recorded? = null,
     val isRecordingSung: Boolean = false,
     val saving: Boolean = false,
+    /**
+     * Something has been changed since the last save (or since the item was loaded). Only
+     * «Δοκίμασέ το» reads it: running the word means running what is *written down*, so a form with
+     * an unsaved change in it saves first and a form without one does not touch the row at all.
+     */
+    val dirty: Boolean = false,
     val error: String? = null,
 ) {
     val recordingPath: String? get() = newRecording?.file?.absolutePath ?: savedRecordingPath
     val sungPath: String? get() = newSungRecording?.file?.absolutePath ?: savedSungPath
     val isNew: Boolean get() = id == null
+
+    /**
+     * «Δοκίμασέ το» needs a row to run. A draft that has never been saved has no id to hand the
+     * word coach, so the button is there — it is part of what the screen offers — but dead until
+     * the first save has given the word an identity.
+     */
+    val canTry: Boolean get() = id != null && !saving
 }
 
 class ItemEditViewModel(private val graph: AppGraph, private val itemId: String?) : ViewModel() {
@@ -70,7 +84,9 @@ class ItemEditViewModel(private val graph: AppGraph, private val itemId: String?
         }
     }
 
-    fun setText(text: String) = _state.update { it.copy(text = text, autoSyllable = Syllabifier.firstSyllable(text.trim()), error = null) }
+    fun setText(text: String) = _state.update {
+        it.copy(text = text, autoSyllable = Syllabifier.firstSyllable(text.trim()), dirty = true, error = null)
+    }
     /**
      * The sung row — its «Στοπ» included — is drawn only for a phrase, so switching to «Λέξη» while
      * a sung take runs would take away the only control that could stop it and leave the spoken
@@ -79,18 +95,18 @@ class ItemEditViewModel(private val graph: AppGraph, private val itemId: String?
      */
     fun setKind(kind: ItemKind) {
         if (kind != ItemKind.PHRASE && _state.value.isRecordingSung) toggleSungRecording()
-        _state.update { it.copy(kind = kind) }
+        _state.update { it.copy(kind = kind, dirty = true) }
     }
-    fun setCategory(category: Category) = _state.update { it.copy(category = category) }
-    fun setPinned(on: Boolean) = _state.update { it.copy(pinned = on) }
-    fun setPriceText(t: String) = _state.update { it.copy(priceText = t, error = null) }
-    fun setOverride(value: String) = _state.update { it.copy(firstSyllableOverride = value) }
+    fun setCategory(category: Category) = _state.update { it.copy(category = category, dirty = true) }
+    fun setPinned(on: Boolean) = _state.update { it.copy(pinned = on, dirty = true) }
+    fun setPriceText(t: String) = _state.update { it.copy(priceText = t, dirty = true, error = null) }
+    fun setOverride(value: String) = _state.update { it.copy(firstSyllableOverride = value, dirty = true) }
     fun clearError() = _state.update { it.copy(error = null) }
 
     fun photoPicked(uri: Uri) {
         viewModelScope.launch(Dispatchers.IO) {
             runCatching { graph.images.import(graph.app.contentResolver, uri) }
-                .onSuccess { file -> _state.update { it.copy(imagePath = graph.files.relativize(file)) } }
+                .onSuccess { file -> _state.update { it.copy(imagePath = graph.files.relativize(file), dirty = true) } }
                 .onFailure { e -> graph.errors.record("photo import", e); _state.update { it.copy(error = "Δεν άνοιξε η φωτογραφία") } }
         }
     }
@@ -102,31 +118,40 @@ class ItemEditViewModel(private val graph: AppGraph, private val itemId: String?
                 graph.errors.record("photo shrink", e)
                 _state.update { it.copy(error = "Η φωτογραφία δεν επεξεργάστηκε, αλλά κρατήθηκε.") }
             }
-            _state.update { it.copy(imagePath = graph.files.relativize(file)) }
+            _state.update { it.copy(imagePath = graph.files.relativize(file), dirty = true) }
         }
     }
 
     fun toggleRecording() = toggle(
         recording = _state.value.isRecording,
         setRecording = { on -> _state.update { it.copy(isRecording = on) } },
-        keep = { rec -> _state.value.newRecording?.file?.delete(); _state.update { it.copy(newRecording = rec) } },
+        // The error goes with the take that earned it: a good one replaces a refusal she has read.
+        keep = { rec -> _state.value.newRecording?.file?.delete(); _state.update { it.copy(newRecording = rec, dirty = true, error = null) } },
     )
 
     /** The sung take: the same microphone, kept in its own field so neither recording overwrites the other. */
     fun toggleSungRecording() = toggle(
         recording = _state.value.isRecordingSung,
         setRecording = { on -> _state.update { it.copy(isRecordingSung = on) } },
-        keep = { rec -> _state.value.newSungRecording?.file?.delete(); _state.update { it.copy(newSungRecording = rec) } },
+        keep = { rec -> _state.value.newSungRecording?.file?.delete(); _state.update { it.copy(newSungRecording = rec, dirty = true, error = null) } },
     )
 
     /**
      * One start/stop dance for both takes. Only where the finished recording is kept differs, so the
      * refusal wording, the error log and the "not recording any more" state live here once.
+     *
+     * A take with nothing in it never reaches [keep]: hers is the model voice, and one that plays
+     * silence is an «Άκου» that answers him with nothing. It is deleted and she is asked again —
+     * the same rule his own takes have had since [Recorded.isSilent], said to her instead.
      */
     private fun toggle(recording: Boolean, setRecording: (Boolean) -> Unit, keep: (Recorded) -> Unit) {
         if (recording) {
             runCatching { graph.voice.stopRecording() }
-                .onSuccess { rec -> keep(rec); setRecording(false) }
+                .onSuccess { rec ->
+                    setRecording(false)
+                    val kept = CaregiverTake.keptOrDiscarded(rec)
+                    if (kept == null) _state.update { it.copy(error = Recorded.SILENT_TAKE_CAREGIVER) } else keep(kept)
+                }
                 .onFailure { e ->
                     graph.errors.record("recorder stop", e)
                     setRecording(false)
@@ -158,7 +183,22 @@ class ItemEditViewModel(private val graph: AppGraph, private val itemId: String?
     fun micDenied() = _state.update { it.copy(isRecording = false, error = "Χωρίς άδεια μικροφώνου") }
     fun cameraDenied() = _state.update { it.copy(error = "Χωρίς άδεια κάμερας") }
 
-    fun save(onSaved: () -> Unit) {
+    /**
+     * «Δοκίμασέ το»: run this very word through the word coach, now.
+     *
+     * Chris' report is what this is for — he would add a word and then have "to use the app for
+     * hours until it randomly appears". Anything unsaved goes down first, because the word coach
+     * reads the row and not this form; with nothing to save it goes straight through and the row is
+     * left exactly as it is. A save that is refused (no text, a half-typed price) stops here with
+     * its own red line, and nothing opens.
+     */
+    fun tryIt(onReady: (String) -> Unit) {
+        val s = _state.value
+        if (!s.canTry) return
+        if (s.dirty) save(onReady) else s.id?.let(onReady)
+    }
+
+    fun save(onSaved: (String) -> Unit) {
         val s = _state.value
         if (s.text.isBlank()) { _state.update { it.copy(error = "Γράψε τη λέξη πρώτα") }; return }
         // A half-typed price would silently become no price at all, so it stops the save instead.
@@ -166,8 +206,11 @@ class ItemEditViewModel(private val graph: AppGraph, private val itemId: String?
             _state.update { it.copy(error = "Η τιμή θέλει μορφή 3,50") }
             return
         }
-        if (s.isRecording) toggleRecording()
-        if (s.isRecordingSung) toggleSungRecording()
+        // Closing an open take can fail — too short, or nothing said into it at all — and that is
+        // the one thing she has to read. Saving through it would close the editor over the message
+        // and write the word with the voice she thought she had just given it missing.
+        if (s.isRecording) { toggleRecording(); if (_state.value.error != null) return }
+        if (s.isRecordingSung) { toggleSungRecording(); if (_state.value.error != null) return }
         _state.update { it.copy(saving = true) }
         viewModelScope.launch {
             try {
@@ -188,11 +231,11 @@ class ItemEditViewModel(private val graph: AppGraph, private val itemId: String?
                     it.copy(
                         id = saved.id, newRecording = null, savedRecordingPath = it.recordingPath,
                         newSungRecording = null, savedSungPath = if (sung != null) it.sungPath else it.savedSungPath,
-                        saving = false,
+                        saving = false, dirty = false,
                     )
                 }
                 graph.feedback.success()
-                onSaved()
+                onSaved(saved.id)
             } catch (ce: CancellationException) {
                 throw ce
             } catch (e: Exception) {

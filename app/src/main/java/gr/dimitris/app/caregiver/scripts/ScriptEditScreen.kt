@@ -22,6 +22,7 @@ import androidx.compose.material.icons.rounded.ArrowUpward
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Mic
 import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material.icons.rounded.PlayCircle
 import androidx.compose.material.icons.rounded.Stop
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
@@ -52,8 +53,13 @@ import gr.dimitris.app.ui.components.DimitrisScreen
 import gr.dimitris.app.ui.components.QuietButton
 import gr.dimitris.app.ui.theme.Sizes
 
+/**
+ * [onTry] is «Παίξ' το»: it is handed the saved dialogue's id and runs that dialogue. Defaulted to
+ * nothing so a preview or a test that hosts the editor alone still compiles; [gr.dimitris.app.AppNav]
+ * is the only caller that passes it.
+ */
 @Composable
-fun ScriptEditScreen(scriptId: String?, onClose: () -> Unit) {
+fun ScriptEditScreen(scriptId: String?, onClose: () -> Unit, onTry: (String) -> Unit = {}) {
     val graph = LocalAppGraph.current
     val vm: ScriptEditViewModel = viewModel(key = scriptId ?: "new-script") { ScriptEditViewModel(graph, scriptId) }
     val s by vm.state.collectAsStateWithLifecycle()
@@ -78,9 +84,13 @@ fun ScriptEditScreen(scriptId: String?, onClose: () -> Unit) {
                 Text(s.error!!, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyLarge)
                 Spacer(Modifier.height(Sizes.gapSmall))
             }
+            // The same answer the word editor gives: a dialogue she has just written is one tap
+            // from being heard, instead of waiting for the boxes to bring it round.
+            QuietButton("Παίξ' το", onClick = { vm.tryIt(onTry) }, icon = Icons.Rounded.PlayCircle, enabled = s.canTry)
+            Spacer(Modifier.height(Sizes.gapSmall))
             // A dialogue that is not there any more cannot be saved: the button would write a second
             // copy of the one she opened.
-            BigButton("Αποθήκευση", onClick = { vm.save(onClose) }, tone = ButtonTone.Success, enabled = !s.saving && !s.loading && !s.notFound)
+            BigButton("Αποθήκευση", onClick = { vm.save { onClose() } }, tone = ButtonTone.Success, enabled = !s.saving && !s.loading && !s.notFound)
         },
     ) {
         Column(Modifier.verticalScroll(rememberScrollState())) {

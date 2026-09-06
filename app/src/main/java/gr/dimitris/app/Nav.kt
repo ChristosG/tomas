@@ -1,14 +1,17 @@
 package gr.dimitris.app
 
+import android.net.Uri
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
 import gr.dimitris.app.caregiver.BackupScreen
 import gr.dimitris.app.caregiver.CaregiverHomeScreen
 import gr.dimitris.app.caregiver.ErrorListScreen
@@ -34,8 +37,17 @@ object Routes {
     const val ROLE = "role"
     const val TODAY = "today"
     const val SESSION = "session"
-    const val PRACTICE = "practice/{moduleId}"
+    /**
+     * Free practice of one module. The two query arguments are optional and normally absent: they
+     * are the caregiver's «Δοκίμασέ το» and «Παίξ' το», naming the one word or the one dialogue to
+     * run instead of letting the module pick.
+     */
+    const val PRACTICE = "practice/{moduleId}?item={item}&script={script}"
     fun practice(id: ModuleId) = "practice/${id.name}"
+    /** That one word, through the module that drills words. */
+    fun practiceItem(itemId: String) = "practice/${ModuleId.WORDCOACH.name}?item=${Uri.encode(itemId)}"
+    /** That one dialogue. Only [ModuleId.SCRIPTS] knows what to do with a script id. */
+    fun practiceScript(scriptId: String) = "practice/${ModuleId.SCRIPTS.name}?script=${Uri.encode(scriptId)}"
     const val TALKBOARD = "talk"
     const val CAREGIVER = "caregiver"
     const val ITEMS = "caregiver/items"
@@ -98,9 +110,25 @@ fun AppNav() {
             composable(Routes.SESSION) {
                 SessionScreen(onDone = { nav.popBackStack(Routes.TODAY, inclusive = false) })
             }
-            composable(Routes.PRACTICE) { entry ->
+            composable(
+                Routes.PRACTICE,
+                // Nullable with a default is what makes a query argument optional: `practice/WORDCOACH`
+                // on its own still matches, which is how the Today grid has always opened a module.
+                arguments = listOf(
+                    navArgument("item") { type = NavType.StringType; nullable = true; defaultValue = null },
+                    navArgument("script") { type = NavType.StringType; nullable = true; defaultValue = null },
+                ),
+            ) { entry ->
                 val id = ModuleId.valueOf(entry.arguments?.getString("moduleId") ?: ModuleId.WORDCOACH.name)
-                PracticeScreen(moduleId = id, onDone = { nav.popBackStack(Routes.TODAY, inclusive = false) })
+                val itemId = entry.arguments?.getString("item")
+                val scriptId = entry.arguments?.getString("script")
+                // A caregiver came here from her editor to see one thing run: back is that editor,
+                // not Today. Free practice from the grid still ends where it always did.
+                val fromEditor = itemId != null || scriptId != null
+                PracticeScreen(
+                    moduleId = id, itemId = itemId, scriptId = scriptId,
+                    onDone = { if (fromEditor) nav.popBackStack() else nav.popBackStack(Routes.TODAY, inclusive = false) },
+                )
             }
             composable(Routes.TALKBOARD) { TalkBoardScreen(onBack = { nav.popBackStack() }) }
             composable(Routes.CAREGIVER) {
@@ -111,14 +139,22 @@ fun AppNav() {
             }
             composable(Routes.ITEM_EDIT) { entry ->
                 val id = entry.arguments?.getString("itemId")?.takeIf { it != Routes.NEW_ITEM }
-                ItemEditScreen(itemId = id, onClose = { nav.popBackStack() })
+                ItemEditScreen(
+                    itemId = id,
+                    onClose = { nav.popBackStack() },
+                    onTry = { saved -> nav.navigate(Routes.practiceItem(saved)) },
+                )
             }
             composable(Routes.SCRIPTS) {
                 ScriptListScreen(onBack = { nav.popBackStack() }, onEdit = { id -> nav.navigate(Routes.scriptEdit(id)) })
             }
             composable(Routes.SCRIPT_EDIT) { entry ->
                 val id = entry.arguments?.getString("scriptId")?.takeIf { it != Routes.NEW_SCRIPT }
-                ScriptEditScreen(scriptId = id, onClose = { nav.popBackStack() })
+                ScriptEditScreen(
+                    scriptId = id,
+                    onClose = { nav.popBackStack() },
+                    onTry = { saved -> nav.navigate(Routes.practiceScript(saved)) },
+                )
             }
             composable(Routes.PROGRESS) {
                 ProgressScreen(onBack = { nav.popBackStack() }, onAdvice = { nav.navigate(Routes.ADVICE) })

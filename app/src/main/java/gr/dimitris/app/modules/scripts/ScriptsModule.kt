@@ -82,7 +82,13 @@ object ScriptsModule : Module {
         return ids.minByOrNull { seen[it] ?: NEVER } ?: ids.first()
     }
 
-    private suspend fun turnsOf(graph: AppGraph, scriptId: String): List<Item> =
+    /**
+     * The items one named dialogue is run from: his own turns, in order. Internal because
+     * [gr.dimitris.app.today.PracticeViewModel] resolves «Παίξ' το» through it — the dialogue the
+     * caregiver just wrote, not the one the boxes would have picked — and the screen reads the
+     * script back out of the first of them, so both routes in must build the list the same way.
+     */
+    internal suspend fun turnsOf(graph: AppGraph, scriptId: String): List<Item> =
         graph.scripts.load(scriptId)?.lines.orEmpty()
             .filter { (line, _) -> line.speaker == Speaker.DIMITRIS }
             .map { (_, item) -> item }

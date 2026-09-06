@@ -27,6 +27,7 @@ import androidx.compose.material.icons.rounded.Mic
 import androidx.compose.material.icons.rounded.MusicNote
 import androidx.compose.material.icons.rounded.PhotoLibrary
 import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material.icons.rounded.PlayCircle
 import androidx.compose.material.icons.rounded.Stop
 import androidx.compose.material.icons.rounded.VolumeUp
 import androidx.compose.material3.AlertDialog
@@ -67,9 +68,14 @@ import java.io.File
 /** Derived, not spelled out, so a renamed package or a build suffix cannot break the camera. */
 fun fileAuthority(context: Context): String = "${context.packageName}.files"
 
+/**
+ * [onTry] is «Δοκίμασέ το»: it is handed the saved item's id and opens the word coach on that one
+ * word. Defaulted to nothing so a preview or a test that hosts the editor alone still compiles;
+ * [gr.dimitris.app.AppNav] is the only caller that passes it.
+ */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun ItemEditScreen(itemId: String?, onClose: () -> Unit) {
+fun ItemEditScreen(itemId: String?, onClose: () -> Unit, onTry: (String) -> Unit = {}) {
     val graph = LocalAppGraph.current
     val context = LocalContext.current
     val vm: ItemEditViewModel = viewModel(key = itemId ?: "new") { ItemEditViewModel(graph, itemId) }
@@ -111,7 +117,14 @@ fun ItemEditScreen(itemId: String?, onClose: () -> Unit) {
                 Text(s.error!!, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyLarge)
                 Spacer(Modifier.height(Sizes.gapSmall))
             }
-            BigButton("Αποθήκευση", onClick = { vm.save(onClose) }, tone = ButtonTone.Success, enabled = !s.saving)
+            // Chris added a word and had no way of seeing it in use: «he would have to use the app
+            // for hours until it randomly appears». One tap runs it, and back comes here.
+            QuietButton(
+                "Δοκίμασέ το", onClick = { vm.tryIt(onTry) }, icon = Icons.Rounded.PlayCircle,
+                enabled = s.canTry,
+            )
+            Spacer(Modifier.height(Sizes.gapSmall))
+            BigButton("Αποθήκευση", onClick = { vm.save { onClose() } }, tone = ButtonTone.Success, enabled = !s.saving)
         },
     ) {
         Column(Modifier.verticalScroll(rememberScrollState())) {
