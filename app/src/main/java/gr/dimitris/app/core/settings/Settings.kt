@@ -14,6 +14,8 @@ import androidx.datastore.preferences.preferencesDataStore
 import gr.dimitris.app.core.data.ModuleId
 import gr.dimitris.app.modules.arcade.Adaptive
 import gr.dimitris.app.modules.arcade.ArcadeGame
+import gr.dimitris.app.modules.singsay.Key
+import gr.dimitris.app.modules.singsay.Tempo
 import gr.dimitris.app.modules.trace.TraceStrictness
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
@@ -90,6 +92,21 @@ class Settings(private val store: DataStore<Preferences>) {
      */
     val traceStrictness: Flow<TraceStrictness> = store.data.map { TraceStrictness.named(it[TRACE_STRICTNESS]) }
     suspend fun setTraceStrictness(level: TraceStrictness) { store.edit { it[TRACE_STRICTNESS] = level.name } }
+
+    /**
+     * How fast the sing-then-say melody moves. Κανονικός (=[Tempo.NORMAL]) until a caregiver slows
+     * it down; a name that is no longer one of the two — an old backup, a version that renamed them
+     * — reads as [Tempo.DEFAULT] rather than crashing him out of the module.
+     */
+    val melodyTempo: Flow<Tempo> = store.data.map { Tempo.named(it[MELODY_TEMPO]) }
+    suspend fun setMelodyTempo(tempo: Tempo) { store.edit { it[MELODY_TEMPO] = tempo.name } }
+
+    /**
+     * Which key the sing-then-say melody sings in. Κανονικός (=[Key.NORMAL]) until a caregiver
+     * drops it, for a voice — or a day — a lower register sits easier under.
+     */
+    val melodyKey: Flow<Key> = store.data.map { Key.named(it[MELODY_KEY]) }
+    suspend fun setMelodyKey(key: Key) { store.edit { it[MELODY_KEY] = key.name } }
 
     /**
      * How big one arcade game's targets are, in dp. It is his difficulty and the arcade's whole
@@ -233,6 +250,8 @@ class Settings(private val store: DataStore<Preferences>) {
         private val TRACE_LEVEL = intPreferencesKey("trace_level")
         private val TRACE_HAND = stringPreferencesKey("trace_hand")
         private val TRACE_STRICTNESS = stringPreferencesKey("trace_strictness")
+        private val MELODY_TEMPO = stringPreferencesKey("melody_tempo")
+        private val MELODY_KEY = stringPreferencesKey("melody_key")
         private val CLAUDE_MODEL = stringPreferencesKey("claude_model")
         private val SYNC_URL = stringPreferencesKey("sync_url")
         private val DEVICE_ROLE = stringPreferencesKey("device_role")

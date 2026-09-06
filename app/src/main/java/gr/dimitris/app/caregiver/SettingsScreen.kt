@@ -41,6 +41,8 @@ import gr.dimitris.app.core.data.ModuleId
 import gr.dimitris.app.core.secrets.SecretStore
 import gr.dimitris.app.core.settings.DeviceRole
 import gr.dimitris.app.core.settings.Settings
+import gr.dimitris.app.modules.singsay.Key
+import gr.dimitris.app.modules.singsay.Tempo
 import gr.dimitris.app.modules.trace.TraceStrictness
 import gr.dimitris.app.ui.components.DimitrisScreen
 import gr.dimitris.app.ui.components.QuietButton
@@ -91,6 +93,30 @@ private fun StrictnessChip(label: String, value: TraceStrictness, chosen: TraceS
                 modifier = Modifier.fillMaxWidth(),
             )
         },
+        shape = RoundedCornerShape(Sizes.corner),
+        modifier = modifier.heightIn(min = Sizes.touchMin),
+    )
+}
+
+/** The same 72dp chip, for how fast the sing-then-say melody moves. */
+@Composable
+private fun TempoChip(label: String, value: Tempo, chosen: Tempo, modifier: Modifier = Modifier, onPick: (Tempo) -> Unit) {
+    FilterChip(
+        selected = chosen == value,
+        onClick = { onPick(value) },
+        label = { Text(label, style = MaterialTheme.typography.bodyLarge) },
+        shape = RoundedCornerShape(Sizes.corner),
+        modifier = modifier.heightIn(min = Sizes.touchMin),
+    )
+}
+
+/** The same 72dp chip, for which key the sing-then-say melody sings in. */
+@Composable
+private fun KeyChip(label: String, value: Key, chosen: Key, modifier: Modifier = Modifier, onPick: (Key) -> Unit) {
+    FilterChip(
+        selected = chosen == value,
+        onClick = { onPick(value) },
+        label = { Text(label, style = MaterialTheme.typography.bodyLarge) },
         shape = RoundedCornerShape(Sizes.corner),
         modifier = modifier.heightIn(min = Sizes.touchMin),
     )
@@ -200,6 +226,42 @@ fun SettingsScreen(onBack: () -> Unit) {
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            Spacer(Modifier.height(Sizes.gapSmall))
+
+            // How fast, and in which key, «Τραγούδα και πες το» sings. His voice is not always at
+            // its steadiest — a bad day wants the tune slower, or lower, and that is a caregiver's
+            // call to make once, not something he has to ask for on the screen he cannot read well.
+            Text("Τραγούδα", style = MaterialTheme.typography.bodyLarge)
+            val tempo by graph.settings.melodyTempo.collectAsStateWithLifecycle(initialValue = Tempo.DEFAULT)
+            Text(
+                "Ρυθμός: Κανονικός / Αργός",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth().heightIn(min = Sizes.touchMin),
+            ) {
+                TempoChip("Κανονικός", Tempo.NORMAL, tempo, Modifier.weight(1f)) { scope.launch { graph.settings.setMelodyTempo(it) } }
+                Spacer(Modifier.width(Sizes.gapSmall))
+                TempoChip("Αργός", Tempo.SLOW, tempo, Modifier.weight(1f)) { scope.launch { graph.settings.setMelodyTempo(it) } }
+            }
+            Spacer(Modifier.height(Sizes.gapSmall))
+
+            val melodyKey by graph.settings.melodyKey.collectAsStateWithLifecycle(initialValue = Key.DEFAULT)
+            Text(
+                "Τόνος: Κανονικός / Χαμηλός",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth().heightIn(min = Sizes.touchMin),
+            ) {
+                KeyChip("Κανονικός", Key.NORMAL, melodyKey, Modifier.weight(1f)) { scope.launch { graph.settings.setMelodyKey(it) } }
+                Spacer(Modifier.width(Sizes.gapSmall))
+                KeyChip("Χαμηλός", Key.LOW, melodyKey, Modifier.weight(1f)) { scope.launch { graph.settings.setMelodyKey(it) } }
+            }
             Spacer(Modifier.height(Sizes.gap))
 
             Text("Αναγνώριση ομιλίας (δοκιμαστικό)", style = MaterialTheme.typography.titleLarge)

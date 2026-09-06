@@ -5,6 +5,7 @@ import android.media.AudioAttributes
 import android.media.AudioFocusRequest
 import android.media.AudioManager
 import gr.dimitris.app.core.speech.TextToSpeech
+import gr.dimitris.app.modules.singsay.Key
 import gr.dimitris.app.modules.singsay.Melody
 import gr.dimitris.app.modules.singsay.Pitch
 import java.io.File
@@ -88,20 +89,22 @@ class Voice(
     /**
      * The two-note melody of "Τραγούδα και πες το", played through the same door as everything else
      * that makes sound: it takes the transient focus so another app's music ducks under it, it is
-     * refused while the microphone is open, and [quiet] stops it.
+     * refused while the microphone is open, and [quiet] stops it. [key] is a caregiver setting, not
+     * a property of [notes] — the same [Pitch] list sings in whichever register [key] names.
      */
     suspend fun playMelody(
         notes: List<Pitch>,
         noteMs: Int = Melody.NOTE_MS,
         gapMs: Int = Melody.GAP_MS,
         gain: Float = 1f,
+        key: Key = Key.NORMAL,
         onNote: (Int) -> Unit = {},
     ): Result<Unit> {
         if (isRecording) return Result.failure(IllegalStateException(RECORDING_NOW))
         quiet()
         return try {
             holdOutputFocus()
-            synth.play(notes, noteMs, gapMs, gain, onNote)
+            synth.play(notes, noteMs, gapMs, gain, key, onNote)
         } finally {
             releaseOutputFocus()
         }

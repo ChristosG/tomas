@@ -7,6 +7,8 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import gr.dimitris.app.core.data.ModuleId
 import gr.dimitris.app.modules.arcade.Adaptive
 import gr.dimitris.app.modules.arcade.ArcadeGame
+import gr.dimitris.app.modules.singsay.Key
+import gr.dimitris.app.modules.singsay.Tempo
 import gr.dimitris.app.modules.trace.TraceStrictness
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -206,6 +208,49 @@ class SettingsTest {
         )
         store.edit { it[stringPreferencesKey("trace_strictness")] = "VERY_STRICT" }
         assertEquals(TraceStrictness.NORMAL, Settings(store).traceStrictness.first())
+    }
+
+    /**
+     * How fast the sing-then-say melody moves. Κανονικός until a caregiver slows it down, and a
+     * name that is no longer one of the two — an old backup — reads as Κανονικός rather than
+     * crashing him out of the module.
+     */
+    @Test fun `the melody moves at Κανονικός tempo until a caregiver slows it down`() = runBlocking {
+        val s = newSettings()
+        assertEquals(Tempo.NORMAL, s.melodyTempo.first())
+        s.setMelodyTempo(Tempo.SLOW)
+        assertEquals(Tempo.SLOW, s.melodyTempo.first())
+        s.setMelodyTempo(Tempo.NORMAL)
+        assertEquals(Tempo.NORMAL, s.melodyTempo.first())
+
+        val dir = createTempDirectory("settings").toFile()
+        val store = PreferenceDataStoreFactory.create(
+            scope = CoroutineScope(Dispatchers.IO + SupervisorJob()),
+            produceFile = { File(dir, "settings.preferences_pb") },
+        )
+        store.edit { it[stringPreferencesKey("melody_tempo")] = "PRESTO" }
+        assertEquals(Tempo.NORMAL, Settings(store).melodyTempo.first())
+    }
+
+    /**
+     * Which key the sing-then-say melody sings in. Κανονικός until a caregiver drops it, and an
+     * unrecognised name reads as Κανονικός the same way.
+     */
+    @Test fun `the melody sings in Κανονικός key until a caregiver lowers it`() = runBlocking {
+        val s = newSettings()
+        assertEquals(Key.NORMAL, s.melodyKey.first())
+        s.setMelodyKey(Key.LOW)
+        assertEquals(Key.LOW, s.melodyKey.first())
+        s.setMelodyKey(Key.NORMAL)
+        assertEquals(Key.NORMAL, s.melodyKey.first())
+
+        val dir = createTempDirectory("settings").toFile()
+        val store = PreferenceDataStoreFactory.create(
+            scope = CoroutineScope(Dispatchers.IO + SupervisorJob()),
+            produceFile = { File(dir, "settings.preferences_pb") },
+        )
+        store.edit { it[stringPreferencesKey("melody_key")] = "MEZZO" }
+        assertEquals(Key.NORMAL, Settings(store).melodyKey.first())
     }
 
     /** Empty means the app never touches the network by itself; a trailing slash is not a difference. */

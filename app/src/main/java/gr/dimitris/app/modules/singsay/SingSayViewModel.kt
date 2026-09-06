@@ -123,6 +123,14 @@ class SingSayViewModel(private val graph: AppGraph, private val items: List<Item
     /** Recognition, resolved once for the run: the settings and the device are asked, not the phrase. */
     private var sttOn = false
 
+    /**
+     * How fast, and in which key, the melody sings — a caregiver setting, resolved once for the
+     * run like [sttOn]: he does not open the caregiver screen mid-exercise, so every phrase of one
+     * sitting sings the same way.
+     */
+    private var tempo = Tempo.DEFAULT
+    private var key = Key.DEFAULT
+
     init {
         load(0)
         viewModelScope.launch {
@@ -131,6 +139,10 @@ class SingSayViewModel(private val graph: AppGraph, private val items: List<Item
             sttOn = on
             // With recognition off nothing about this screen changes, «Το είπα!» included.
             _state.update { it.copy(sttOn = on, canConfirm = !on || check.canConfirm) }
+        }
+        viewModelScope.launch {
+            tempo = graph.settings.melodyTempo.first()
+            key = graph.settings.melodyKey.first()
         }
         // Only while a window is open: the bar belongs to the microphone, and nothing else draws it.
         viewModelScope.launch {
@@ -192,7 +204,7 @@ class SingSayViewModel(private val graph: AppGraph, private val items: List<Item
                 // the pass ends on his tap, not on the phone interrupting it.
                 if (lead != null && leadGain > 0f) {
                     report(
-                        graph.voice.playMelody(listOf(lead.pitch), noteMs = TAP_NOTE_MS, gapMs = 0, gain = leadGain),
+                        graph.voice.playMelody(listOf(lead.pitch), noteMs = TAP_NOTE_MS, gapMs = 0, gain = leadGain, key = key),
                         SYNTH_FAILED, "singsay tap",
                     )
                 }
@@ -274,7 +286,9 @@ class SingSayViewModel(private val graph: AppGraph, private val items: List<Item
     }
 
     private suspend fun playMelody(gain: Float) = report(
-        graph.voice.playMelody(_state.value.notes.map { it.pitch }, gain = gain) { i -> _state.update { it.copy(lit = i) } },
+        graph.voice.playMelody(
+            _state.value.notes.map { it.pitch }, noteMs = tempo.noteMs, gapMs = tempo.gapMs, gain = gain, key = key,
+        ) { i -> _state.update { it.copy(lit = i) } },
         SYNTH_FAILED, "singsay melody",
     )
 
@@ -312,7 +326,7 @@ class SingSayViewModel(private val graph: AppGraph, private val items: List<Item
         claimPlayback()
         playJob = viewModelScope.launch {
             report(
-                graph.voice.playMelody(listOf(note.pitch), noteMs = TAP_NOTE_MS, gapMs = 0, gain = gain),
+                graph.voice.playMelody(listOf(note.pitch), noteMs = TAP_NOTE_MS, gapMs = 0, gain = gain, key = key),
                 SYNTH_FAILED, "singsay tap",
             )
         }
@@ -521,7 +535,7 @@ class SingSayViewModel(private val graph: AppGraph, private val items: List<Item
                     Attempt(
                         itemId = s.item.id, module = ModuleId.SINGSAY, sessionId = sessionId, startedAt = began,
                         durationMs = now() - began, outcome = outcome, cueLevel = cue, selfRecordingId = recordingId,
-                        detail = """{"stage":$stageReached,"listened":$heard$stt$peak}""",
+                        detail = """{"stage":$stageReached,"listened":$heard,"tempo":"${tempo.name}","key":"${key.name}"$stt$peak}""",
                     )
                 )
                 graph.scheduler.record(s.item.id, ModuleId.SINGSAY, outcome, cue)

@@ -30,4 +30,22 @@ class MelodyTest {
         assertEquals(550, Melody.NOTE_MS)
         assertEquals(80, Melody.GAP_MS)
     }
+
+    /** The caregiver's slow setting, worth exactly its documented note and gap length. */
+    @Test fun `slow tempo holds every note longer and widens the gap`() {
+        assertEquals(750, Tempo.SLOW.noteMs)
+        assertEquals(110, Tempo.SLOW.gapMs)
+        // Normal is still Melody's own pace: a caregiver who never touches the setting hears nothing new.
+        assertEquals(Melody.NOTE_MS, Tempo.NORMAL.noteMs)
+        assertEquals(Melody.GAP_MS, Tempo.NORMAL.gapMs)
+    }
+
+    /** The lower key, read the way the synth reads it — through [Key.hz], never [Pitch.hz] directly. */
+    @Test fun `the low key drops both pitches to their documented frequencies`() {
+        assertEquals(146.83, Key.LOW.hz(Pitch.LOW), 0.001)
+        assertEquals(185.0, Key.LOW.hz(Pitch.HIGH), 0.001)
+        // The normal key is exactly Pitch's own frequencies: nothing sounds different unasked.
+        assertEquals(Pitch.LOW.hz, Key.NORMAL.hz(Pitch.LOW), 0.001)
+        assertEquals(Pitch.HIGH.hz, Key.NORMAL.hz(Pitch.HIGH), 0.001)
+    }
 }

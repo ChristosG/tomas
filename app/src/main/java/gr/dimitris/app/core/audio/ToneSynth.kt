@@ -3,6 +3,7 @@ package gr.dimitris.app.core.audio
 import android.media.AudioAttributes
 import android.media.AudioFormat
 import android.media.AudioTrack
+import gr.dimitris.app.modules.singsay.Key
 import gr.dimitris.app.modules.singsay.Melody
 import gr.dimitris.app.modules.singsay.Pitch
 import kotlinx.coroutines.CancellationException
@@ -46,6 +47,7 @@ class ToneSynth {
         noteMs: Int = Melody.NOTE_MS,
         gapMs: Int = Melody.GAP_MS,
         gain: Float = 1f,
+        key: Key = Key.NORMAL,
         onNote: (Int) -> Unit = {},
     ): Result<Unit> {
         if (notes.isEmpty()) return Result.success(Unit)
@@ -54,7 +56,7 @@ class ToneSynth {
         // melody plays has to invalidate it *now*, or the newest melody would politely wait for the
         // one it was meant to replace.
         claim(self)
-        return gate.withLock { playHoldingGate(self, notes, noteMs, gapMs, gain, onNote) }
+        return gate.withLock { playHoldingGate(self, notes, noteMs, gapMs, gain, key, onNote) }
     }
 
     private suspend fun playHoldingGate(
@@ -63,6 +65,7 @@ class ToneSynth {
         noteMs: Int,
         gapMs: Int,
         gain: Float,
+        key: Key,
         onNote: (Int) -> Unit,
     ): Result<Unit> {
         // Superseded while we waited for the gate: the caller behind us already owns the output.
@@ -88,7 +91,7 @@ class ToneSynth {
                 // Bluetooth) is still unplayed when the track is released, and it would take the
                 // last note's decay with it.
                 val pcm = Pcm.concat(
-                    notes.flatMap { listOf(Pcm.tone(it.hz, noteMs, gain), Pcm.silence(gapMs)) } + listOf(Pcm.silence(TAIL_MS)),
+                    notes.flatMap { listOf(Pcm.tone(key.hz(it), noteMs, gain), Pcm.silence(gapMs)) } + listOf(Pcm.silence(TAIL_MS)),
                 )
                 pcmSize = pcm.size
                 // build() throws (it does not return an uninitialised track) when the platform
