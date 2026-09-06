@@ -35,11 +35,18 @@ import java.util.UUID
  * The real thing: two databases, two media folders, and the Node server from `server/` running on
  * the development machine. The emulator reaches it at `10.0.2.2`.
  *
- * Start it before running this:
+ * Start it before running this, and **give it an empty `DATA_DIR` every time**:
  *
  * ```
  * SYNC_TOKEN=test PORT=18787 DATA_DIR=$(mktemp -d) node server/server.mjs
  * ```
+ *
+ * The empty directory is a requirement, not a flourish. Nothing here can clean the server up
+ * afterwards — the protocol has no delete — so a directory reused from an earlier run carries that
+ * run's rows and blobs into this one. The tests themselves are order-independent (fresh UUIDs, an
+ * in-memory database and its own media folder per phone) and they assert on their own rows rather
+ * than on what a pull as a whole did, so leftovers cannot fail them; but a shared directory grows
+ * for ever and makes a failure much harder to read.
  *
  * The address and the token can be overridden with instrumentation arguments `syncBase` and
  * `syncToken`. Without a server the tests are skipped rather than failed — the rest of the suite
@@ -56,10 +63,12 @@ class SyncRoundTripTest {
         val db: AppDatabase = AppDatabase.inMemory(context)
         val files = TempMediaPaths(File(context.cacheDir, "sync-${UUID.randomUUID()}"))
 
+        private val storeFile = File(context.cacheDir, "sync-${UUID.randomUUID()}.preferences_pb")
+
         /** Kept, so a test can write a cursor the settings themselves would refuse to store. */
         val store: DataStore<Preferences> = PreferenceDataStoreFactory.create(
             scope = CoroutineScope(Dispatchers.IO + SupervisorJob()),
-            produceFile = { File(context.cacheDir, "sync-${UUID.randomUUID()}.preferences_pb") },
+            produceFile = { storeFile },
         )
         val settings = Settings(store)
         val recorded = mutableListOf<Pair<String, Throwable>>()
@@ -79,6 +88,9 @@ class SyncRoundTripTest {
         fun close() {
             db.close()
             files.root.deleteRecursively()
+            // The DataStore file too: one per phone per test, in the app's cache dir, and the
+            // instrumented app is not reinstalled between test classes.
+            storeFile.delete()
         }
     }
 
@@ -124,8 +136,10 @@ class SyncRoundTripTest {
         assertEquals(2, sent.mediaUp)
 
         val there = phone()
-        val got = there.engine.syncNow().getOrThrow()
-        assertTrue(got.errors.toString(), got.ok)
+        // Deliberately not asserting `got.ok`: this pull takes in everything the server holds,
+        // which on a shared DATA_DIR includes other runs' rows. What this test is about is the
+        // three rows and two files below.
+        there.engine.syncNow().getOrThrow()
 
         val arrived = there.db.items().get(id)
         assertNotNull("the word did not arrive", arrived)

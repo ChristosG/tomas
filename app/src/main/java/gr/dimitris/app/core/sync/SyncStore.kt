@@ -30,6 +30,13 @@ interface SyncStore {
 
     /** Writes rows another phone sent, exactly as they arrived. Never touches `updatedAt`. */
     suspend fun apply(table: String, rows: List<Map<String, Any?>>)
+
+    /**
+     * Rows still holding a `media://` in a media column: a file that did not download when the row
+     * arrived. The server will never offer the row again — the cursor has passed it — so every sync
+     * asks for these itself.
+     */
+    suspend fun awaitingMedia(table: String): List<Map<String, Any?>>
 }
 
 /** The seven DAOs the sync writes through. [of] takes them from the live database. */
@@ -94,6 +101,18 @@ class DaoSyncStore(private val daos: () -> SyncDaos) : SyncStore {
             else -> emptyList()
         }
         return stamps.associate { it.id to it.updatedAt }
+    }
+
+    override suspend fun awaitingMedia(table: String): List<Map<String, Any?>> {
+        val spec = Tables.of(table) ?: return emptyList()
+        if (spec.mediaFields.isEmpty()) return emptyList()
+        val d = daos()
+        val entities: List<Any> = when (table) {
+            Tables.ITEMS -> d.items.awaitingMedia()
+            Tables.RECORDINGS -> d.recordings.awaitingMedia()
+            else -> emptyList()
+        }
+        return entities.map { spec.withId(Rows.of(it)) }
     }
 
     override suspend fun apply(table: String, rows: List<Map<String, Any?>>) {

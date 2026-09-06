@@ -13,4 +13,5 @@ class FakeRecordingDao : RecordingDao {
     override suspend fun stamps(ids: List<String>): List<RowStamp> =
         rows.values.filter { it.id in ids }.map { RowStamp(it.id, it.updatedAt) }
     override suspend fun upsertFromSync(rows: List<Recording>) { rows.forEach { upsert(it) } }
+    override suspend fun awaitingMedia(): List<Recording> = rows.values.filter { it.path.startsWith("media://") }
 }

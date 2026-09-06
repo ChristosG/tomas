@@ -34,11 +34,27 @@ class FakeSyncClient(private val cap: Int = 500) : SyncClient {
     /** Rows over this many in one push are answered with a 413, like a body over the server's limit. */
     var maxRowsPerPush = Int.MAX_VALUE
 
+    /**
+     * A row the server will not take at all, by `table/id`. A batch containing it is answered `400`
+     * whole, like the real server, which validates a push before it stores any of it.
+     */
+    var refuses: String? = null
+
+    /** Run at the top of every push — the window in which a caregiver goes on using the phone. */
+    var duringPush: (suspend () -> Unit)? = null
+
     override suspend fun health(): Long = seq
 
     override suspend fun push(rows: List<SyncRow>): PushResult {
+        duringPush?.invoke()
         failPush?.let { failPush = null; throw it }
         if (rows.size > maxRowsPerPush) throw SyncException(HttpSyncClient.TOO_BIG, 413)
+        refuses?.let { bad ->
+            // Whole-batch validation, exactly like server/store.mjs: one bad entry, nothing stored.
+            if (rows.any { "${it.table}/${Tables.of(it.table)?.idOf(it.row)}" == bad }) {
+                throw SyncException(HttpSyncClient.REFUSED, 400)
+            }
+        }
         pushes++
         var accepted = 0
         for (row in rows) {

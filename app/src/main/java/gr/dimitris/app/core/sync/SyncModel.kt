@@ -44,9 +44,11 @@ data class TableSpec(
 )
 
 /**
- * The eight tables that sync, in push order: items before the rows that point at them, so a server
- * log read from the top never mentions a word before it exists. (Nothing depends on the order —
- * every row is merged on its own — but a readable log is worth the two lines it costs.)
+ * The eight tables that sync. Listed with items before the rows that point at them, which is how
+ * they are *read*; what goes on the wire is sorted by `updatedAt` across all of them, because the
+ * push watermark is one number and a failed batch must only hold back rows at least as new as
+ * itself ([SyncEngine]). Nothing depends on either order — there are no foreign keys and every row
+ * is merged on its own.
  */
 object Tables {
     const val ITEMS = "items"

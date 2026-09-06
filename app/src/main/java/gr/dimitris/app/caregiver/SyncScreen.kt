@@ -78,11 +78,20 @@ fun SyncScreen(onBack: () -> Unit) {
         title = "Συγχρονισμός",
         onBack = onBack,
         bottom = {
+            // Enabled on what is *typed*, and the draft is saved by the button itself. The address
+            // field only writes when it loses focus, and a caregiver who types the address and
+            // reaches straight for the button used to find it greyed out with nothing said.
+            val typedUrl = (urlDraft ?: url).trim()
             BigButton(
                 if (state.running) "Συγχρονίζω…" else "Συγχρόνισε τώρα",
-                enabled = !state.running && url.isNotBlank(),
+                enabled = !state.running && typedUrl.isNotBlank(),
                 icon = Icons.Rounded.Sync,
-                onClick = { scope.launch { graph.sync.syncNow() } },
+                onClick = {
+                    scope.launch {
+                        if (typedUrl != url) graph.settings.setSyncUrl(typedUrl)
+                        graph.sync.syncNow()
+                    }
+                },
                 modifier = Modifier.semantics { testTag = "syncNow" },
             )
         },

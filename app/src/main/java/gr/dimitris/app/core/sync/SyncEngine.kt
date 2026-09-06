@@ -40,17 +40,25 @@ data class SyncState(
  * Two cursors, both kept in the settings and both moved only after the work they describe
  * succeeded:
  *
- * * `syncPushedUpTo` is an `updatedAt`. Everything newer than it goes up next time. A row whose
- *   photo would not upload holds the mark below itself, so the next sync tries that row again
- *   rather than leaving the server with a `media://` nobody can resolve. Rows that arrive in the
- *   pull are above the mark too, so the next sync offers them back once and the server ignores
- *   them as ties — a little noise bought for a mark that is one number and cannot lose a row.
+ * * `syncPushedUpTo` is an `updatedAt`. Everything newer than it goes up next time. It never passes
+ *   **the clock as it was read before the first query**: the eight table reads and the uploads
+ *   between them take seconds, and a word the caregiver saves during that window must not end up
+ *   below a mark computed from a row a later table happened to hold. It never passes the newest row
+ *   actually accepted either, and a row whose photo would not upload holds it below itself, so the
+ *   next sync tries that row again rather than leaving the server with a `media://` nobody can
+ *   resolve. Rows that arrive in the pull are above the mark too, so the next sync offers them back
+ *   once and the server ignores them as ties — a little noise bought for a mark that is one number
+ *   and cannot lose a row.
  * * `syncCursor` is the server's sequence number, advanced to the highest one **received** — never
- *   to the number the server reports as its own top, which a capped page would leave rows behind.
- *   The loop asks again until a page comes back **empty**, not merely shorter than it asked for: a
- *   server that clamps the page smaller than the client asked — a proxy, a later version — would
- *   otherwise stop the sync halfway with nothing said. A cursor the server refuses is a corrupt
- *   one: it goes back to zero and the sync pulls again.
+ *   to the number the server reports as its own top, which a capped page would leave rows behind,
+ *   and never past a page this phone could not finish writing. The loop asks again until a page
+ *   comes back **empty**, not merely shorter than it asked for: a server that clamps the page
+ *   smaller than the client asked — a proxy, a later version — would otherwise stop the sync
+ *   halfway with nothing said. A cursor the server refuses is a corrupt one: it goes back to zero
+ *   and the sync pulls again.
+ *
+ * Every sync ends by asking again for the files that did not arrive with their rows, because the
+ * server has already moved past those rows and would never offer them a second time.
  *
  * One run at a time, and never on the main thread. Everything that goes wrong is a Greek sentence
  * in the report and a row in `error_logs`; nothing here ever throws at a screen.
@@ -104,7 +112,8 @@ class SyncEngine(
         if (settings.syncUrl.first().isBlank()) return Result.failure(SyncException(HttpSyncClient.NOT_CONFIGURED))
         val tally = Tally()
         push(tally)
-        val changed = pull(tally)
+        var changed = pull(tally)
+        if (repair(tally)) changed = true
         val at = clock()
         settings.setLastSyncAt(at)
         if (changed) onPulled()
@@ -118,8 +127,15 @@ class SyncEngine(
     private class Pending(val at: Long, val row: SyncRow)
 
     private suspend fun push(tally: Tally) {
+        // Read before anything else is asked of the database. Everything the caregiver writes from
+        // here on is stamped later than this, so it stays above whatever mark this run settles on —
+        // the eight table reads below are not one snapshot, and the uploads between them are
+        // seconds each. See the class KDoc.
+        val startedAt = clock()
         val from = settings.syncPushedUpTo.first()
-        var high = from
+        // The newest row the server actually took. Rows read but not sent — a photo that would not
+        // upload, a batch that failed — are not in it.
+        var accepted = from
         // The `updatedAt` of the oldest row that did not make it. The mark stops just below it, so
         // the next sync starts again from there and nothing is silently left behind.
         var blocked = Long.MAX_VALUE
@@ -136,7 +152,6 @@ class SyncEngine(
             }
             for (raw in rows) {
                 val at = Rows.updatedAt(raw)
-                high = maxOf(high, at)
                 val (rewritten, uploads) = MediaRefs.outgoing(spec.name, raw, files)
                 if (!upload(uploads, tally)) {
                     blocked = minOf(blocked, at)
@@ -147,10 +162,12 @@ class SyncEngine(
         }
 
         // Oldest first, so a batch that fails takes only rows at least as new as itself with it.
+        // (This is why the order of `Tables.all` does not survive to the wire — the watermark, not
+        // readability, decides what goes first; there are no foreign keys, so nothing depends on it.)
         pending.sortBy { it.at }
         for (batch in pending.chunked(BATCH)) {
             val left = try {
-                send(batch, tally)
+                send(batch, tally) { accepted = maxOf(accepted, it) }
             } catch (ce: CancellationException) {
                 throw ce
             } catch (e: Throwable) {
@@ -162,37 +179,46 @@ class SyncEngine(
             for (skipped in left) blocked = minOf(blocked, skipped.at)
         }
 
-        // Never past this phone's own present. A row pulled from a phone whose clock runs fast is
-        // stamped in the future, and letting the mark follow it there would skip everything written
-        // here until the clock caught up — words a caregiver typed, gone with nothing said. The
-        // future row is offered again on every sync until then, and the server ignores it as a tie.
-        settings.setSyncPushedUpTo(maxOf(from, minOf(high, blocked - 1, clock())))
+        settings.setSyncPushedUpTo(maxOf(from, minOf(accepted, blocked - 1, startedAt)))
     }
 
-    /** Sends one batch, halving it on a 413. Returns the rows that were too big even alone. */
-    private suspend fun send(batch: List<Pending>, tally: Tally): List<Pending> {
+    /**
+     * Sends one batch, halving it when the server refuses the body whole. Returns the rows it could
+     * not place at all. [took] is told the `updatedAt` of every row the server accepted.
+     *
+     * A 413 is "too many bytes" and a 400 is "I do not understand one of these rows" — the server
+     * validates a push as a whole and stores nothing when one entry is wrong
+     * (`server/store.mjs`), so both are answered the same way: halve, and halve again, until the
+     * offending row is alone. Then it is skipped by name and the queue behind it goes on. Without
+     * that, one row an older server does not recognise would stop this phone pushing anything, ever,
+     * and the only sign would be one Greek line that never changed.
+     */
+    private suspend fun send(batch: List<Pending>, tally: Tally, took: (Long) -> Unit): List<Pending> {
         try {
             client.push(batch.map { it.row })
             tally.pushed += batch.size
+            batch.forEach { took(it.at) }
             return emptyList()
         } catch (e: SyncException) {
-            if (e.status != TOO_LARGE) throw e
+            if (e.status != TOO_LARGE && e.status != BAD_REQUEST) throw e
             // Never the same body twice: the server answered and hung up, and asking again with the
             // same bytes would get the same answer.
             if (batch.size == 1) {
-                tally.fail(ROW_TOO_BIG, "sync push", e)
+                val row = batch.single().row
+                // The table and the id, never the content: a row can hold a caregiver's words.
+                val name = "${row.table}/${Tables.of(row.table)?.idOf(row.row) ?: ";"}"
+                tally.fail(if (e.status == TOO_LARGE) ROW_TOO_BIG else rowRefused(name), "sync push", e)
                 return batch
             }
         }
         val half = batch.size / 2
-        return send(batch.take(half), tally) + send(batch.drop(half), tally)
+        return send(batch.take(half), tally, took) + send(batch.drop(half), tally, took)
     }
 
     /** True when every file for a row is on the server. A file already there is not sent again. */
-    private suspend fun upload(uploads: List<File>, tally: Tally): Boolean {
-        for (file in uploads) {
+    private suspend fun upload(uploads: List<MediaUpload>, tally: Tally): Boolean {
+        for ((sha, file) in uploads) {
             try {
-                val sha = MediaRefs.sha256(file)
                 if (!client.hasMedia(sha)) {
                     client.putMedia(sha, file)
                     tally.mediaUp++
@@ -235,7 +261,13 @@ class SyncEngine(
                 break
             }
             if (page.rows.isEmpty()) break
-            if (apply(page.rows, tally)) changed = true
+            val landed = apply(page.rows, tally)
+            if (landed.changed) changed = true
+            // The cursor is what makes a row un-askable: the server only ever answers with rows
+            // above it. A page this phone could not finish writing — a full disk, a corrupt file, a
+            // row from a newer app version Gson cannot map — must therefore be left in front of the
+            // cursor and asked for again next sync, not walked past with one Greek line.
+            if (!landed.ok) break
             val top = page.rows.maxOf { it.seq }
             // A page that does not move the cursor would be asked for again for ever. It cannot
             // happen against our own server, which only ever answers with rows above `since`.
@@ -246,9 +278,15 @@ class SyncEngine(
         return changed
     }
 
-    private suspend fun apply(rows: List<PulledRow>, tally: Tally): Boolean {
+    /** [changed] — something landed, so the screens must be told. [ok] — all of it landed. */
+    private class Landed(val changed: Boolean, val ok: Boolean)
+
+    private suspend fun apply(rows: List<PulledRow>, tally: Tally): Landed {
         var changed = false
+        var ok = true
         for ((table, pulled) in rows.groupBy { it.table }) {
+            // A table this version does not know is not a failure it can recover from by asking
+            // again: it would stop the cursor for ever. It is left behind deliberately.
             val spec = Tables.of(table) ?: continue
             // Later wins inside a page: the server only ever sends the current version of a row, but
             // nothing here has to depend on that.
@@ -262,6 +300,7 @@ class SyncEngine(
                 throw ce
             } catch (e: Throwable) {
                 tally.fail(READ_FAILED, "sync read $table", e)
+                ok = false
                 continue
             }
 
@@ -289,6 +328,58 @@ class SyncEngine(
                 throw ce
             } catch (e: Throwable) {
                 tally.fail(WRITE_FAILED, "sync write $table", e)
+                ok = false
+            }
+        }
+        return Landed(changed, ok)
+    }
+
+    // ---------------------------------------------------------------- repair
+
+    /**
+     * The files that did not come with their rows, asked for again.
+     *
+     * A row whose photo failed to download is stored holding `media://<sha>`, and the pull cursor
+     * has already gone past it — the server will not offer it a second time, and a later pull of
+     * the same row would be a tie and change nothing. Without this pass the promise the sync screen
+     * makes, «Θα ξαναδοκιμάσω.», would never be kept: the word would show a placeholder for ever
+     * and «Άκου» would fall back to the robot voice on that phone alone, with nothing said.
+     *
+     * Two indexed-free but tiny queries (only rows that hold the scheme), and the same fetch the
+     * pull uses, so a hash already on disk costs nothing.
+     */
+    private suspend fun repair(tally: Tally): Boolean {
+        var changed = false
+        for (spec in Tables.all) {
+            if (spec.mediaFields.isEmpty()) continue
+            val rows = try {
+                store.awaitingMedia(spec.name)
+            } catch (ce: CancellationException) {
+                throw ce
+            } catch (e: Throwable) {
+                tally.fail(READ_FAILED, "sync read ${spec.name}", e)
+                continue
+            }
+            if (rows.isEmpty()) continue
+
+            val fetched = mutableMapOf<String, File?>()
+            val fixed = mutableListOf<Map<String, Any?>>()
+            for (row in rows) {
+                for ((sha, extension) in MediaRefs.needed(spec.name, row)) {
+                    if (!fetched.containsKey(sha)) fetched[sha] = fetch(sha, extension, tally)
+                }
+                val out = MediaRefs.incoming(spec.name, row, files) { sha, _ -> fetched[sha] }
+                if (out != row) fixed += out
+            }
+            if (fixed.isEmpty()) continue
+            try {
+                // Not counted as pulled: nothing arrived, a row this phone already had was mended.
+                store.apply(spec.name, fixed)
+                changed = true
+            } catch (ce: CancellationException) {
+                throw ce
+            } catch (e: Throwable) {
+                tally.fail(WRITE_FAILED, "sync write ${spec.name}", e)
             }
         }
         return changed
@@ -358,7 +449,10 @@ class SyncEngine(
         const val UPLOAD_FAILED = "Δεν ανέβηκε κάποιο αρχείο. Θα ξαναδοκιμάσω."
         const val DOWNLOAD_FAILED = "Δεν κατέβηκε κάποιο αρχείο. Θα ξαναδοκιμάσω."
         const val READ_FAILED = "Δεν μπόρεσα να διαβάσω τη βάση."
-        const val WRITE_FAILED = "Δεν μπόρεσα να γράψω στη βάση."
+        const val WRITE_FAILED = "Δεν μπόρεσα να γράψω στη βάση. Θα ξαναδοκιμάσω."
+
+        /** [name] is `table/id` — enough to find the row, never a word of what is in it. */
+        fun rowRefused(name: String) = "Ο διακομιστής δεν δέχτηκε μία εγγραφή ($name). Την προσπέρασα."
 
         /** The one line a caregiver reads. Greek counts one and many differently. */
         fun line(report: SyncReport, at: Long): String {

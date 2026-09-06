@@ -53,6 +53,12 @@ interface ItemDao {
     @Query("SELECT id, updatedAt FROM items WHERE id IN (:ids)") suspend fun stamps(ids: List<String>): List<RowStamp>
 
     /**
+     * Words whose picture arrived as a content hash the phone could not fetch — a sync on a bad
+     * connection. Every sync asks again for these, which is what makes «Θα ξαναδοκιμάσω.» true.
+     */
+    @Query("SELECT * FROM items WHERE imagePath LIKE 'media://%'") suspend fun awaitingMedia(): List<Item>
+
+    /**
      * Rows exactly as another phone wrote them. Not [upsert]: nothing here may touch `updatedAt`,
      * which is the merge's whole basis — rewriting it would make every pulled row look newer than
      * the copy it came from and the two phones would push it back and forth for ever.
@@ -70,6 +76,9 @@ interface RecordingDao {
 
     @Query("SELECT * FROM recordings WHERE updatedAt > :since ORDER BY updatedAt") suspend fun changedSince(since: Long): List<Recording>
     @Query("SELECT id, updatedAt FROM recordings WHERE id IN (:ids)") suspend fun stamps(ids: List<String>): List<RowStamp>
+
+    /** See [ItemDao.awaitingMedia]: a caregiver's voice that has not landed here yet. */
+    @Query("SELECT * FROM recordings WHERE path LIKE 'media://%'") suspend fun awaitingMedia(): List<Recording>
     @Upsert suspend fun upsertFromSync(rows: List<Recording>)
 }
 

@@ -39,7 +39,11 @@ class SyncEngineTest {
 
     private val client = FakeSyncClient()
 
-    private inner class Phone(private val server: SyncClient = client) {
+    private inner class Phone(
+        private val server: SyncClient = client,
+        /** A chance to make the database misbehave: a full disk, a row this version cannot map. */
+        wrap: (SyncStore) -> SyncStore = { it },
+    ) {
         val items = FakeItemDao()
         val recordings = FakeRecordingDao()
         val attempts = FakeAttemptDao()
@@ -52,9 +56,9 @@ class SyncEngineTest {
         val recorded = mutableListOf<Pair<String, Throwable>>()
         var bumps = 0
 
-        private val store = DaoSyncStore {
-            SyncDaos(items, recordings, attempts, schedules, sessions, errorLogs, scripts)
-        }
+        private val store = wrap(
+            DaoSyncStore { SyncDaos(items, recordings, attempts, schedules, sessions, errorLogs, scripts) }
+        )
 
         fun engine(clock: () -> Long = { AT }) = SyncEngine(
             client = server, store = store, files = files, settings = settings,
@@ -137,7 +141,40 @@ class SyncEngineTest {
         assertTrue(report.errors.toString(), report.ok)
     }
 
-    /** One row the server will not take at any size is skipped — and the mark stays below it. */
+    /**
+     * The window this exists for: eight table reads and a photo upload each take seconds, and a
+     * caregiver saving a word in the middle of them must not fall below the mark.
+     *
+     * `items` is read first; the write lands while the push is in flight, stamped 1500; a row a
+     * later table holds is stamped 2000 and is what the mark would otherwise follow. The clock read
+     * *before* the first query is 1000, so the mark stops there and the word goes next time.
+     */
+    @Test fun `a word saved while the push is in flight is sent on the next sync`() = runBlocking {
+        var now = 1000L
+        phone.attempts.insert(
+            Attempt(id = "a1", itemId = "i0", module = ModuleId.WORDCOACH, startedAt = 1, durationMs = 5, outcome = Outcome.CORRECT, updatedAt = 2000)
+        )
+        client.duringPush = {
+            now = 3000                                     // the sync has been running a while
+            phone.items.upsert(item("late", "ψωμί", 1500))  // …and she saves a word
+            client.duringPush = null
+        }
+
+        val first = phone.engine { now }.syncNow().getOrThrow()
+
+        assertEquals(1, first.pushed)                       // the attempt only
+        assertEquals(1000L, phone.settings.syncPushedUpTo.first())
+        assertTrue(client.rowsOf(Tables.ITEMS).isEmpty())
+
+        val second = phone.sync()
+
+        // Two: the word, and the attempt from above — it sits over the mark as well, so it is
+        // offered once more and the server ignores it as a tie.
+        assertEquals(2, second.pushed)
+        assertEquals("ψωμί", client.rowsOf(Tables.ITEMS).single()["text"])
+    }
+
+    /** One row the server will not take at any size is skipped, and the mark does not move past it. */
     @Test fun `a single row that is too big is skipped and reported`() = runBlocking {
         client.maxRowsPerPush = 0
         phone.items.upsert(item("i1", "ψωμί", 50))
@@ -146,10 +183,41 @@ class SyncEngineTest {
 
         assertEquals(0, report.pushed)
         assertTrue(report.errors.contains(SyncEngine.ROW_TOO_BIG))
-        assertEquals(49L, phone.settings.syncPushedUpTo.first())
+        // Nothing was accepted, so the mark does not move at all and the row is offered again.
+        assertEquals(0L, phone.settings.syncPushedUpTo.first())
     }
 
     /** The mark stops below the row that did not go, so the next sync offers it again. */
+    /**
+     * A row an older server will not take must not stop everything behind it. The batch is halved
+     * until the offender is alone, and then only that row is held back.
+     */
+    @Test fun `a row the server refuses is skipped by name and the rest still goes`() = runBlocking {
+        for (n in 1..4) phone.items.upsert(item("i$n", "λέξη $n", n.toLong()))
+        client.refuses = "items/i3"
+
+        val report = phone.sync()
+
+        assertEquals(3, report.pushed)
+        assertEquals(setOf("i1", "i2", "i4"), client.rowsOf(Tables.ITEMS).map { it["id"] }.toSet())
+        assertEquals(listOf(SyncEngine.rowRefused("items/i3")), report.errors)
+        // The mark stops below the refused row, so a server that learns the table later still gets it.
+        assertEquals(2L, phone.settings.syncPushedUpTo.first())
+    }
+
+    /** The refused row's own words never reach the error log — only where to find it. */
+    @Test fun `a refused row is named, never quoted`() = runBlocking {
+        phone.items.upsert(item("i1", "μυστικό", 10))
+        client.refuses = "items/i1"
+
+        val report = phone.sync()
+
+        assertEquals(1, report.errors.size)
+        assertTrue(report.errors.single(), report.errors.single().contains("items/i1"))
+        assertFalse(report.errors.single(), report.errors.single().contains("μυστικό"))
+        assertFalse(phone.recorded.single().second.stackTraceToString().contains("μυστικό"))
+    }
+
     @Test fun `a push that fails holds the mark below the row it lost`() = runBlocking {
         phone.items.upsert(item("i1", "ψωμί", 50))
         client.failPush = SyncException(HttpSyncClient.OFFLINE)
@@ -157,7 +225,7 @@ class SyncEngineTest {
         val failed = phone.sync()
 
         assertEquals(0, failed.pushed)
-        assertEquals(49L, phone.settings.syncPushedUpTo.first())
+        assertEquals(0L, phone.settings.syncPushedUpTo.first())
         assertTrue(failed.errors.contains(HttpSyncClient.OFFLINE))
         assertEquals(listOf("sync push"), phone.recorded.map { it.first })
 
@@ -261,6 +329,37 @@ class SyncEngineTest {
         assertTrue(report.errors.contains(HttpSyncClient.OFFLINE))
     }
 
+    /**
+     * The cursor is what makes a row un-askable. A page that could not be written must stay in
+     * front of it — a phone whose storage filled up would otherwise lose those words for ever, and
+     * freeing space afterwards would not bring them back.
+     */
+    @Test fun `a page that could not be written is asked for again next sync`() = runBlocking {
+        client.seed(Tables.ITEMS, Rows.of(item("i1", "ψωμί", 10)))
+        var full = true
+        val other = Phone(wrap = { inner ->
+            object : SyncStore by inner {
+                override suspend fun apply(table: String, rows: List<Map<String, Any?>>) {
+                    if (full) throw IllegalStateException("database or disk is full")
+                    inner.apply(table, rows)
+                }
+            }
+        }).apply { configure() }
+
+        val failed = other.sync()
+
+        assertEquals(0, failed.pulled)
+        assertEquals(0L, other.settings.syncCursor.first())
+        assertTrue(failed.errors.contains(SyncEngine.WRITE_FAILED))
+
+        full = false
+        val again = other.sync()
+
+        assertEquals(1, again.pulled)
+        assertEquals("ψωμί", other.items.get("i1")?.text)
+        assertEquals(1L, other.settings.syncCursor.first())
+    }
+
     @Test fun `a cursor the server refuses goes back to zero and pulls again`() = runBlocking {
         phone.settings.setSyncCursor(9_999)
         client.seed(Tables.ITEMS, Rows.of(item("i1", "ψωμί", 10)))
@@ -324,6 +423,57 @@ class SyncEngineTest {
         assertTrue(report.errors.contains(SyncEngine.DOWNLOAD_FAILED))
     }
 
+    /**
+     * «Θα ξαναδοκιμάσω.» kept. The server has moved past the row — the cursor went with it — so
+     * nobody but this phone will ever ask for the file again.
+     */
+    @Test fun `a photo that failed to download is fetched by the repair pass`() = runBlocking {
+        val photo = phone.files.photo("x.jpg", "εικόνα".toByteArray())
+        val sha = MediaRefs.sha256(photo)
+        client.media[sha] = photo.readBytes()
+        client.seed(Tables.ITEMS, Rows.of(item("i1", "ψωμί", 10, image = "media://$sha")))
+        // One refusal, then the connection is back: the pull's fetch fails, the repair pass at the
+        // end of the same run succeeds.
+        client.failDownload = SyncException(HttpSyncClient.OFFLINE)
+
+        val report = phone.sync()
+
+        assertTrue(report.errors.contains(SyncEngine.DOWNLOAD_FAILED))
+        assertEquals("photos/$sha.jpg", phone.items.get("i1")?.imagePath)
+        assertEquals(1, report.mediaDown)
+        assertEquals(1, phone.bumps)
+    }
+
+    /** The same for a voice, and across syncs when the connection stays down for the whole run. */
+    @Test fun `a voice that failed to download is fetched by a later sync`() = runBlocking {
+        val voice = phone.files.recording("v.m4a", "φωνή".toByteArray())
+        val sha = MediaRefs.sha256(voice)
+        client.seed(Tables.RECORDINGS, Rows.of(
+            Recording(id = "r1", itemId = "i1", path = "media://$sha", who = Who.CAREGIVER, durationMs = 900, updatedAt = 10)
+        ))
+
+        val first = phone.sync()                       // the server has no such blob yet: 404
+        assertEquals("media://$sha", phone.recordings.rows["r1"]?.path)
+        assertTrue(first.errors.contains(SyncEngine.DOWNLOAD_FAILED))
+
+        client.media[sha] = voice.readBytes()          // the other phone finished its upload
+        val second = phone.sync()
+
+        assertEquals("recordings/$sha.m4a", phone.recordings.rows["r1"]?.path)
+        assertEquals(1, second.mediaDown)
+        assertEquals(0, second.pulled)                 // nothing arrived; a row here was mended
+        assertTrue(second.errors.toString(), second.ok)
+    }
+
+    /** Nothing to mend, nothing said: the repair pass must be silent on a healthy phone. */
+    @Test fun `the repair pass does nothing when every file is here`() = runBlocking {
+        phone.items.upsert(item("i1", "ψωμί", 10))
+        phone.sync()
+        val settled = phone.sync()
+        assertEquals(0, settled.mediaDown)
+        assertTrue(settled.errors.toString(), settled.ok)
+    }
+
     /** A file whose upload failed holds the mark below its row, so the row is offered again. */
     @Test fun `a failing upload holds the push mark back`() = runBlocking {
         phone.files.photo("x.jpg", "εικόνα".toByteArray())
@@ -333,7 +483,7 @@ class SyncEngineTest {
         val report = phone.sync()
 
         assertEquals(0, report.pushed)
-        assertEquals(49L, phone.settings.syncPushedUpTo.first())
+        assertEquals(0L, phone.settings.syncPushedUpTo.first())
         assertTrue(report.errors.contains(SyncEngine.UPLOAD_FAILED))
     }
 

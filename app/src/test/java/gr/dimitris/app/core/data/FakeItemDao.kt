@@ -28,4 +28,5 @@ class FakeItemDao : ItemDao {
     override suspend fun stamps(ids: List<String>): List<RowStamp> =
         rows.value.values.filter { it.id in ids }.map { RowStamp(it.id, it.updatedAt) }
     override suspend fun upsertFromSync(rows: List<Item>) { rows.forEach { upsert(it) } }
+    override suspend fun awaitingMedia(): List<Item> = rows.value.values.filter { it.imagePath?.startsWith("media://") == true }
 }

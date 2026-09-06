@@ -18,6 +18,9 @@ interface MediaPaths {
     fun resolve(path: String): File
 }
 
+/** One file to put on the server, already hashed: the hash is its name there. */
+data class MediaUpload(val sha: String, val file: File)
+
 /**
  * Photos and voices on the wire.
  *
@@ -61,12 +64,15 @@ object MediaRefs {
      * file that really exists under [MediaPaths.photosDir] or [MediaPaths.recordingsDir] is
      * content-addressed; everything else — a null, a path outside those folders, a file that is
      * gone, a value that is already `media://` — is handed back untouched.
+     *
+     * The hash travels back with the file, because computing it is a full read of a photo or a
+     * twenty-megabyte recording and the caller needs the same number to name the upload.
      */
-    fun outgoing(table: String, row: Map<String, Any?>, files: MediaPaths): Pair<Map<String, Any?>, List<File>> {
+    fun outgoing(table: String, row: Map<String, Any?>, files: MediaPaths): Pair<Map<String, Any?>, List<MediaUpload>> {
         val fields = Tables.of(table)?.mediaFields.orEmpty()
         if (fields.isEmpty()) return row to emptyList()
         var out = row
-        val uploads = mutableListOf<File>()
+        val uploads = mutableListOf<MediaUpload>()
         for (field in fields.keys) {
             val path = out[field] as? String ?: continue
             if (path.startsWith(SCHEME)) continue
@@ -74,7 +80,7 @@ object MediaRefs {
             if (!file.isFile || !isSynced(file, files)) continue
             val sha = runCatching { sha256(file) }.getOrNull() ?: continue
             out = out + (field to SCHEME + sha)
-            uploads += file
+            uploads += MediaUpload(sha, file)
         }
         return out to uploads
     }

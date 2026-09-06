@@ -28,7 +28,9 @@ class MediaRefsTest {
         val (out, uploads) = MediaRefs.outgoing(Tables.ITEMS, row, files)
 
         assertEquals("media://$abcSha", out["imagePath"])
-        assertEquals(listOf(file.canonicalFile), uploads.map { it.canonicalFile })
+        assertEquals(listOf(file.canonicalFile), uploads.map { it.file.canonicalFile })
+        // The hash comes back with the file: the caller must not read a 20 MB recording twice.
+        assertEquals(listOf(abcSha), uploads.map { it.sha })
         assertEquals("ψωμί", out["text"])
     }
 
