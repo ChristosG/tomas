@@ -18,6 +18,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -28,7 +29,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import gr.dimitris.app.LocalAppGraph
-import gr.dimitris.app.caregiver.insights.AdviceSummary
+import gr.dimitris.app.caregiver.insights.journeyReport
 import gr.dimitris.app.core.data.ModuleId
 import gr.dimitris.app.modules.numbers.NumberProgression
 import gr.dimitris.app.modules.sentences.SentenceTemplates
@@ -37,6 +38,8 @@ import gr.dimitris.app.ui.components.BigButton
 import gr.dimitris.app.ui.components.DimitrisScreen
 import gr.dimitris.app.ui.components.QuietButton
 import gr.dimitris.app.ui.theme.Sizes
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.launch
 import java.time.DayOfWeek
 import java.time.Instant
 import java.time.ZoneId
@@ -62,13 +65,12 @@ fun ProgressScreen(onBack: () -> Unit, onAdvice: () -> Unit = {}) {
     val context = LocalContext.current
     val vm: ProgressViewModel = viewModel { ProgressViewModel(graph) }
     val state by vm.state.collectAsStateWithLifecycle()
+    val scope = rememberCoroutineScope()
     val zone = remember { ZoneId.systemDefault() }
     // The module titles as the modules themselves say them, plus the talk board, which is not one.
     val names = remember(graph) {
         graph.modules.associate { it.id to it.titleGreek } + (ModuleId.TALKBOARD to "Μίλα")
     }
-    // One builder for both screens, so the label and the range cannot drift apart between them.
-    val levels = AdviceSummary.levels(state.numbersLevel, state.sentencesLevel, state.traceLevel)
 
     DimitrisScreen(
         title = "Πρόοδος",
@@ -84,17 +86,29 @@ fun ProgressScreen(onBack: () -> Unit, onAdvice: () -> Unit = {}) {
                 icon = Icons.Rounded.AutoAwesome,
             )
             Spacer(Modifier.height(Sizes.gapSmall))
-            QuietButton("Εξαγωγή αναφοράς", icon = Icons.Rounded.Share, onClick = {
-                val p = state.progress ?: return@QuietButton
-                val text = AdviceSummary.build(p, state.insights, levels, names, zone)
-                val send = Intent(Intent.ACTION_SEND).apply {
-                    type = "text/plain"
-                    putExtra(Intent.EXTRA_SUBJECT, "Πρόοδος — Δημήτρης")
-                    putExtra(Intent.EXTRA_TEXT, text)
+            // The same text «Ρώτα τον Claude» sends, so a caregiver forwarding it to a speech
+            // therapist and a caregiver asking Claude are talking about the same thing. Built when
+            // the button is tapped, not on the way to drawing: it reads every attempt ever
+            // recorded, and nobody has asked to share a dashboard they are only looking at.
+            QuietButton("Εξαγωγή αναφοράς", enabled = state.progress != null, icon = Icons.Rounded.Share, onClick = {
+                scope.launch {
+                    val text = try {
+                        journeyReport(graph, zone = zone)
+                    } catch (ce: CancellationException) {
+                        throw ce
+                    } catch (e: Throwable) {
+                        graph.errors.record("progress share", e)
+                        return@launch
+                    }
+                    val send = Intent(Intent.ACTION_SEND).apply {
+                        type = "text/plain"
+                        putExtra(Intent.EXTRA_SUBJECT, "Πορεία — Δημήτρης")
+                        putExtra(Intent.EXTRA_TEXT, text)
+                    }
+                    val chooser = Intent.createChooser(send, "Εξαγωγή αναφοράς").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    runCatching { context.startActivity(chooser) }
+                        .onFailure { graph.errors.record("progress share", it) }
                 }
-                val chooser = Intent.createChooser(send, "Εξαγωγή αναφοράς").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                runCatching { context.startActivity(chooser) }
-                    .onFailure { graph.errors.record("progress share", it) }
             })
         },
     ) {

@@ -18,7 +18,7 @@ object WordCoachModule : Module {
     private val kinds = listOf(ItemKind.WORD, ItemKind.PHRASE)
 
     override suspend fun planFor(graph: AppGraph): List<Item> =
-        SessionBuilder(graph.db.items(), graph.db.schedules()).plan(id, kinds)
+        SessionBuilder(graph.db.items(), graph.db.schedules(), focus = graph.activeFocus()).plan(id, kinds)
 
     override suspend fun practiceFor(graph: AppGraph): List<Item> =
         planFor(graph).ifEmpty { graph.db.items().activeOfKinds(kinds).shuffled().take(8) }

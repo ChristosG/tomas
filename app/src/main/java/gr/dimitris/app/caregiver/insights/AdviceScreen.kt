@@ -1,6 +1,8 @@
 package gr.dimitris.app.caregiver.insights
 
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -14,10 +16,16 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.ExpandLess
 import androidx.compose.material.icons.rounded.ExpandMore
+import androidx.compose.material.icons.rounded.Save
+import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material.icons.rounded.VolumeUp
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.AssistChip
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -29,46 +37,56 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.testTag
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import gr.dimitris.app.AppGraph
 import gr.dimitris.app.LocalAppGraph
-import gr.dimitris.app.caregiver.progress.ProgressStats
-import gr.dimitris.app.core.data.ModuleId
+import gr.dimitris.app.core.data.Note
 import gr.dimitris.app.core.data.now
-import gr.dimitris.app.core.scheduler.LeitnerPolicy
 import gr.dimitris.app.ui.components.BigButton
 import gr.dimitris.app.ui.components.DimitrisScreen
 import gr.dimitris.app.ui.components.QuietButton
+import gr.dimitris.app.ui.theme.LocalFeedback
 import gr.dimitris.app.ui.theme.Sizes
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.time.Instant
+import java.time.ZoneId
+import gr.dimitris.app.core.data.Advice as AdviceRow
 
 data class AdviceState(
     val loading: Boolean = true,
     /** Exactly the text that will be sent, or "" while it is still being built. */
-    val summary: String = "",
+    val report: String = "",
     val hasKey: Boolean = false,
+    val notes: List<Note> = emptyList(),
+    val history: List<AdviceRow> = emptyList(),
+    /** The live focus, filtered to words that still exist. Null when there is none to act on. */
+    val focus: Focus? = null,
+    val noteError: String? = null,
+    val levelsApplied: Boolean = false,
 )
 
 /**
- * Builds the summary. It does **not** own the question: that lives in
+ * Builds the report and owns the notes. It does **not** own the question: that lives in
  * [gr.dimitris.app.AppGraph.adviceSession], on the application scope, so one request runs at a time
  * and an answer is not thrown away because the caregiver pressed back while it was thinking. This
  * class only decides *what* would be sent, and never sends anything by itself.
  *
- * The dashboard's own reader is [gr.dimitris.app.caregiver.progress.ProgressViewModel]; this one
- * repeats the read rather than sharing it, because the advice screen is its own destination and has
- * to stand on its own when it is opened from a restored back stack.
+ * The history and the notes are read as Flows rather than once: an answer is stored the moment it
+ * arrives, so the newest advice — and with it the focus the app is about to act on — appears here
+ * by the same route a synced one from the other phone would.
  */
 class AdviceViewModel(private val graph: AppGraph) : ViewModel() {
     private val _state = MutableStateFlow(AdviceState())
@@ -78,41 +96,77 @@ class AdviceViewModel(private val graph: AppGraph) : ViewModel() {
     val session: StateFlow<AdviceSession.State> = graph.adviceSession.state
 
     init {
-        viewModelScope.launch { load() }
+        // Keyed on the generation: a restored backup is a different database, and a Flow from the
+        // old one never emits again once it is closed.
+        viewModelScope.launch { graph.dbGeneration.collectLatest { load() } }
+        viewModelScope.launch {
+            graph.dbGeneration.collectLatest {
+                graph.db.notes().observeRecent(NOTES_SHOWN).collect { rows -> _state.update { it.copy(notes = rows) } }
+            }
+        }
+        viewModelScope.launch {
+            graph.dbGeneration.collectLatest {
+                graph.db.advice().observeRecent(HISTORY_SHOWN).collect { rows ->
+                    val known = runCatching { graph.db.items().allActive().map { i -> i.text } }.getOrNull()
+                    _state.update { it.copy(history = rows, focus = Focus.active(rows, known, now())) }
+                }
+            }
+        }
     }
 
-    fun ask() = graph.adviceSession.ask(_state.value.summary)
+    fun ask() = graph.adviceSession.ask(_state.value.report)
 
     fun noticeSeen() = graph.adviceSession.noticeSeen()
 
-    private suspend fun load() {
-        val to = now()
-        val from = ProgressStats.from(to)
-        val earlier = ProgressStats.from(to, ProgressStats.DEFAULT_DAYS * 2)
-        val names = graph.modules.associate { it.id to it.titleGreek } + (ModuleId.TALKBOARD to "Μίλα")
-        // The same builder the dashboard uses, so the two screens cannot disagree about the labels.
-        val levels = AdviceSummary.levels(
-            graph.settings.numbersLevel.first(),
-            graph.settings.sentencesLevel.first(),
-            graph.settings.traceLevel.first(),
-        )
-        val summary = try {
-            val db = graph.db
-            val attempts = db.attempts().between(earlier, to)
-            val sessions = db.sessions().between(from, to)
-            val mastered = db.schedules().masteredCount(LeitnerPolicy.MAX_BOX)
-            val items = db.items().allActive().associateBy { it.id }
-            withContext(Dispatchers.Default) {
-                val p = ProgressStats.compute(attempts, sessions, emptyList(), items, from, to, mastered = mastered)
-                AdviceSummary.build(p, InsightRules.generate(p, attempts, items), levels, names)
+    /**
+     * A note is written as it is typed, trimmed and capped, and the report is rebuilt behind it so
+     * that «Τι θα σταλεί» is true again the moment the note is saved. Notes sync like everything
+     * else: what the father noticed on Tuesday reaches Chris' phone, and both reach Claude.
+     */
+    fun saveNote(text: String) {
+        val trimmed = text.trim().take(Note.MAX_TEXT)
+        if (trimmed.isEmpty()) return
+        viewModelScope.launch {
+            _state.update { it.copy(noteError = null) }
+            try {
+                val author = graph.settings.deviceRole.first().name
+                graph.db.notes().upsert(Note(text = trimmed, author = author))
+                refreshReport()
+            } catch (ce: CancellationException) {
+                throw ce
+            } catch (e: Throwable) {
+                graph.errors.record("save note", e)
+                _state.update { it.copy(noteError = NOTE_FAILED) }
             }
-        } catch (ce: CancellationException) {
-            throw ce                           // leaving the screen is not a failure to write down
-        } catch (e: Throwable) {
-            graph.errors.record("advice summary", e)
-            null
         }
+    }
 
+    /**
+     * The one part of an answer that changes the app on a tap, and the reason it is behind a
+     * confirmation: a level decides which exercises Dimitris is handed tomorrow morning, and the
+     * caregivers — not the model, and not this screen — are the ones who get to decide that.
+     *
+     * The word and sound focus needs no button. It is stored with the advice and the session
+     * builder reads it, which is the difference between advice and advice that happens.
+     */
+    fun applyLevels(levels: Map<String, Int>) {
+        if (levels.isEmpty()) return
+        viewModelScope.launch {
+            try {
+                levels[Focus.NUMBERS]?.let { graph.settings.setNumbersLevel(it) }
+                levels[Focus.SENTENCES]?.let { graph.settings.setSentencesLevel(it) }
+                levels[Focus.TRACE]?.let { graph.settings.setTraceLevel(it) }
+                _state.update { it.copy(levelsApplied = true) }
+            } catch (ce: CancellationException) {
+                throw ce
+            } catch (e: Throwable) {
+                graph.errors.record("apply levels", e)
+            }
+        }
+    }
+
+    private suspend fun load() {
+        refreshReport()
         // The encrypted file is opened here, off the main thread, and never on the way to drawing.
         val has = withContext(Dispatchers.IO) {
             try {
@@ -123,14 +177,35 @@ class AdviceViewModel(private val graph: AppGraph) : ViewModel() {
                 false
             }
         }
-        // A summary that could not be read stays empty, which disables the button and makes the
-        // «Τι θα σταλεί» section say [COULD_NOT_READ]. There is nothing to ask with either way.
-        _state.update { it.copy(loading = false, summary = summary.orEmpty(), hasKey = has) }
+        _state.update { it.copy(loading = false, hasKey = has) }
+    }
+
+    /**
+     * A report that could not be read stays empty, which disables the button and makes the «Τι θα
+     * σταλεί» section say [COULD_NOT_READ]. There is nothing to ask with either way.
+     */
+    private suspend fun refreshReport() {
+        val report = try {
+            journeyReport(graph)
+        } catch (ce: CancellationException) {
+            throw ce                           // leaving the screen is not a failure to write down
+        } catch (e: Throwable) {
+            graph.errors.record("journey report", e)
+            null
+        }
+        _state.update { it.copy(report = report.orEmpty()) }
     }
 
     companion object {
         const val COULD_NOT_READ = "Δεν μπόρεσα να διαβάσω την πρόοδο."
         const val SPEECH_FAILED = "Δεν ακούστηκε. Δοκίμασε ξανά."
+        const val NOTE_FAILED = "Η σημείωση δεν αποθηκεύτηκε."
+
+        /** Notes on the screen. The report sends [JourneyReport.MAX_NOTES]; this keeps it readable. */
+        const val NOTES_SHOWN = 5
+
+        /** Previous advices listed at the bottom. */
+        const val HISTORY_SHOWN = 20
     }
 }
 
@@ -138,9 +213,11 @@ class AdviceViewModel(private val graph: AppGraph) : ViewModel() {
  * «Ρώτα τον Claude». The one screen in the app that can send anything anywhere, and it shows what
  * it would send before it sends it.
  *
- * The order on the screen is the order a caregiver thinks in: what is going to be sent, then the
- * button, then the answer — the part for them as text they can read at their own pace, and the part
- * for Dimitris behind a button, because it is meant to be heard by him and not read at him.
+ * The order is the order a caregiver works in: write down what you noticed this week, look at what
+ * is going to be sent, send it, read the answer — the part for them as text they can read at their
+ * own pace, the part for Dimitris behind a button because it is meant to be heard by him and not
+ * read at him, and the focus as chips, which is the app telling them what it is going to do about
+ * it. Everything Claude has ever said is underneath, so «τι είχε πει τον Αύγουστο;» is a scroll.
  */
 @Composable
 fun AdviceScreen(onBack: () -> Unit) {
@@ -149,8 +226,13 @@ fun AdviceScreen(onBack: () -> Unit) {
     val state by vm.state.collectAsStateWithLifecycle()
     val session by vm.session.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
-    var showSummary by remember { mutableStateOf(false) }
+    val feedback = LocalFeedback.current
+    val zone = remember { ZoneId.systemDefault() }
+    var noteDraft by remember { mutableStateOf("") }
+    var showReport by remember { mutableStateOf(false) }
     var speechError by remember { mutableStateOf<String?>(null) }
+    var pendingLevels by remember { mutableStateOf<Map<String, Int>?>(null) }
+    var openAdvice by remember { mutableStateOf<String?>(null) }
 
     DimitrisScreen(
         title = "Ρώτα τον Claude",
@@ -169,7 +251,7 @@ fun AdviceScreen(onBack: () -> Unit) {
                     else -> "Ρώτα ξανά"
                 },
                 onClick = vm::ask,
-                enabled = state.hasKey && state.summary.isNotBlank(),
+                enabled = state.hasKey && state.report.isNotBlank(),
                 icon = Icons.Rounded.AutoAwesome,
                 modifier = Modifier.semantics { testTag = "ask-claude" },
             )
@@ -212,19 +294,89 @@ fun AdviceScreen(onBack: () -> Unit) {
         },
     ) {
         Column(Modifier.verticalScroll(rememberScrollState())) {
-            if (state.loading) {
-                Text("Υπολογίζω…", style = MaterialTheme.typography.bodyLarge)
-                return@Column
+            // ---- What the people around him noticed -------------------------------------------
+            Text("Σημειώσεις", style = MaterialTheme.typography.titleLarge)
+            Spacer(Modifier.height(Sizes.gapSmall))
+            Text(
+                "Ό,τι πρόσεξες και δεν το ξέρουν οι αριθμοί. Πάνε μαζί με την αναφορά.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.height(Sizes.gapSmall))
+            OutlinedTextField(
+                value = noteDraft,
+                onValueChange = { noteDraft = it },
+                label = { Text("Τι πρόσεξες;") },
+                minLines = 3,
+                modifier = Modifier.fillMaxWidth().heightIn(min = Sizes.touchMin)
+                    .semantics { testTag = "note-field" },
+            )
+            Spacer(Modifier.height(Sizes.gapSmall))
+            QuietButton(
+                "Αποθήκευση σημείωσης",
+                enabled = noteDraft.isNotBlank(),
+                icon = Icons.Rounded.Save,
+                onClick = {
+                    vm.saveNote(noteDraft)
+                    noteDraft = ""
+                },
+                modifier = Modifier.semantics { testTag = "save-note" },
+            )
+            state.noteError?.let {
+                Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
+            }
+            if (state.notes.isEmpty()) {
+                Text("Καμία σημείωση ακόμα.", style = MaterialTheme.typography.bodyLarge,
+                    modifier = Modifier.fillMaxWidth().heightIn(min = Sizes.touchMin))
+            }
+            state.notes.forEach { note ->
+                Column(Modifier.fillMaxWidth().heightIn(min = Sizes.touchMin)) {
+                    Text(
+                        "${date(note.at, zone)} · ${JourneyReport.author(note.author)}",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Text(note.text, style = MaterialTheme.typography.bodyLarge)
+                }
             }
 
-            val advice = session.advice
-            if (advice == null) {
+            // ---- What is going to be sent ------------------------------------------------------
+            Spacer(Modifier.height(Sizes.gap))
+            // What is on screen decides what the label can honestly say. With an answer showing,
+            // the text below it is the one that produced it — not the report this screen rebuilt
+            // from newer numbers when it was reopened.
+            val answered = session.advice != null
+            val shown = if (!answered) state.report else session.sent.orEmpty()
+            QuietButton(
+                if (!answered) "Τι θα σταλεί" else "Τι στάλθηκε",
+                onClick = { showReport = !showReport },
+                icon = if (showReport) Icons.Rounded.ExpandLess else Icons.Rounded.ExpandMore,
+                modifier = Modifier.semantics { testTag = "toggle-report" },
+            )
+            Text(
+                if (state.loading) "Υπολογίζω…" else "${shown.length} χαρακτήρες",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.semantics { testTag = "report-size" },
+            )
+            Text(
+                "Στέλνει μόνο λόγια. Ποτέ φωνή, ποτέ φωτογραφίες.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            if (showReport) {
+                Spacer(Modifier.height(Sizes.gapSmall))
                 Text(
-                    "Στέλνει μόνο τα λόγια που βλέπεις πιο κάτω. Ποτέ φωνή, ποτέ φωτογραφίες.",
-                    style = MaterialTheme.typography.bodyLarge,
+                    shown.ifBlank { AdviceViewModel.COULD_NOT_READ },
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.fillMaxWidth().semantics { testTag = "advice-summary" },
                 )
+            }
+
+            // ---- The answer --------------------------------------------------------------------
+            val advice = session.advice
+            if (advice != null) {
                 Spacer(Modifier.height(Sizes.gap))
-            } else {
                 Text("Για τους φροντιστές", style = MaterialTheme.typography.titleLarge)
                 Spacer(Modifier.height(Sizes.gapSmall))
                 Text(advice.caregivers, style = MaterialTheme.typography.bodyLarge)
@@ -264,32 +416,122 @@ fun AdviceScreen(onBack: () -> Unit) {
                         modifier = Modifier.semantics { testTag = "advice-truncated" },
                     )
                 }
-                Spacer(Modifier.height(Sizes.gap))
             }
 
-            // What is on screen decides what the label can honestly say. With an answer showing,
-            // the text below it is the one that produced it — not the summary this screen rebuilt
-            // from newer numbers when it was reopened.
-            val shown = if (advice == null) state.summary else session.sent.orEmpty()
-            QuietButton(
-                if (advice == null) "Τι θα σταλεί" else "Τι στάλθηκε",
-                onClick = { showSummary = !showSummary },
-                icon = if (showSummary) Icons.Rounded.ExpandLess else Icons.Rounded.ExpandMore,
-            )
-            if (showSummary) {
+            // ---- What the app is going to do about it -------------------------------------------
+            state.focus?.let { focus ->
+                Spacer(Modifier.height(Sizes.gap))
+                Text("Εστίαση", style = MaterialTheme.typography.titleLarge)
+                Spacer(Modifier.height(Sizes.gapSmall))
+                if (focus.why.isNotBlank()) {
+                    Text(focus.why, style = MaterialTheme.typography.bodyLarge)
+                    Spacer(Modifier.height(Sizes.gapSmall))
+                }
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.semantics { testTag = "focus-chips" },
+                ) {
+                    focus.items.forEach { FocusChip(it) }
+                    focus.sounds.forEach { FocusChip("ήχος «$it»") }
+                    focus.modules.forEach { m -> FocusChip(AdviceSummary.MODULE_NAMES[m] ?: m.name) }
+                }
                 Spacer(Modifier.height(Sizes.gapSmall))
                 Text(
-                    shown.ifBlank { AdviceViewModel.COULD_NOT_READ },
+                    "Αυτές οι λέξεις μπαίνουν πρώτες στην επόμενη άσκησή του.",
                     style = MaterialTheme.typography.bodyMedium,
-                    modifier = Modifier.fillMaxWidth().semantics { testTag = "advice-summary" },
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+                if (focus.levels.isNotEmpty()) {
+                    Spacer(Modifier.height(Sizes.gapSmall))
+                    Text(levelsLine(focus.levels), style = MaterialTheme.typography.bodyLarge)
+                    Spacer(Modifier.height(Sizes.gapSmall))
+                    QuietButton(
+                        if (state.levelsApplied) "Τα επίπεδα μπήκαν" else "Εφάρμοσε τα επίπεδα",
+                        enabled = !state.levelsApplied,
+                        icon = Icons.Rounded.Tune,
+                        onClick = { pendingLevels = focus.levels },
+                        modifier = Modifier.semantics { testTag = "apply-levels" },
+                    )
+                }
+            }
+
+            // ---- Everything it has ever said ----------------------------------------------------
+            if (state.history.isNotEmpty()) {
+                Spacer(Modifier.height(Sizes.gap))
+                Text("Προηγούμενες συμβουλές", style = MaterialTheme.typography.titleLarge)
+                Spacer(Modifier.height(Sizes.gapSmall))
+                state.history.forEach { row ->
+                    val open = openAdvice == row.id
+                    QuietButton(
+                        "${date(row.at, zone)} · ${firstLine(row.caregivers)}",
+                        icon = if (open) Icons.Rounded.ExpandLess else Icons.Rounded.ExpandMore,
+                        onClick = { openAdvice = if (open) null else row.id },
+                        modifier = Modifier.semantics { testTag = "advice-history" },
+                    )
+                    if (open) {
+                        Spacer(Modifier.height(Sizes.gapSmall))
+                        Text(row.caregivers, style = MaterialTheme.typography.bodyMedium)
+                        if (row.dimitris.isNotBlank()) {
+                            Spacer(Modifier.height(Sizes.gapSmall))
+                            Text(row.dimitris, style = MaterialTheme.typography.bodyMedium)
+                        }
+                    }
+                    Spacer(Modifier.height(Sizes.gapSmall))
+                }
             }
             Spacer(Modifier.height(Sizes.gap))
         }
+    }
+
+    pendingLevels?.let { levels ->
+        AlertDialog(
+            onDismissRequest = { pendingLevels = null },
+            title = { Text("Αλλαγή επιπέδων;") },
+            text = { Text("${levelsLine(levels)}\n\nΑυτό αλλάζει τις ασκήσεις που θα πάρει ο Δημήτρης.") },
+            confirmButton = {
+                TextButton(modifier = Modifier.heightIn(min = Sizes.touchMin), onClick = {
+                    feedback.tap()
+                    vm.applyLevels(levels)
+                    pendingLevels = null
+                }) { Text("Ναι, άλλαξέ τα", style = MaterialTheme.typography.labelLarge) }
+            },
+            dismissButton = {
+                TextButton(modifier = Modifier.heightIn(min = Sizes.touchMin), onClick = {
+                    feedback.tap(); pendingLevels = null
+                }) { Text("Άκυρο", style = MaterialTheme.typography.labelLarge) }
+            },
+        )
     }
 
     // The «Περίμενε» line answers one tap; it is not a state the screen should keep.
     LaunchedEffect(session.notice, session.asking) {
         if (session.notice != null && !session.asking) vm.noticeSeen()
     }
+}
+
+/** A word, a sound or an exercise the focus names. It says something; it does not do anything. */
+@Composable
+private fun FocusChip(label: String) {
+    AssistChip(
+        onClick = {},
+        label = { Text(label, style = MaterialTheme.typography.bodyLarge) },
+        modifier = Modifier.heightIn(min = Sizes.touchMin),
+    )
+}
+
+/** «Αριθμοί 3, Προτάσεις 2, Γράψε 2» — the same three names the dashboard's steppers carry. */
+internal fun levelsLine(levels: Map<String, Int>): String = listOfNotNull(
+    levels[Focus.NUMBERS]?.let { "Αριθμοί $it" },
+    levels[Focus.SENTENCES]?.let { "Προτάσεις $it" },
+    levels[Focus.TRACE]?.let { "Γράψε $it" },
+).joinToString(", ")
+
+/** Enough of an old advice to recognise it by, on one line. */
+internal fun firstLine(text: String): String =
+    text.lineSequence().map { it.trim().trimStart('-', '·', ' ') }.firstOrNull { it.isNotBlank() }
+        ?.take(60).orEmpty().ifBlank { "—" }
+
+private fun date(at: Long, zone: ZoneId): String {
+    val d = Instant.ofEpochMilli(at).atZone(zone).toLocalDate()
+    return "${d.dayOfMonth}/${d.monthValue}/${d.year}"
 }

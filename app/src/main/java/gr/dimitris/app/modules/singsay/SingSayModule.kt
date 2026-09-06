@@ -10,6 +10,7 @@ import gr.dimitris.app.core.data.ItemDao
 import gr.dimitris.app.core.data.ItemKind
 import gr.dimitris.app.core.data.ModuleId
 import gr.dimitris.app.core.data.ScheduleDao
+import gr.dimitris.app.caregiver.insights.Focus
 import gr.dimitris.app.core.scheduler.SessionBuilder
 import gr.dimitris.app.modules.Module
 
@@ -38,15 +39,20 @@ object SingSayModule : Module {
     const val NEW_PER_DAY = 3
 
     override suspend fun planFor(graph: AppGraph): List<Item> =
-        plan(graph.db.items(), graph.db.schedules(), MAX_PER_SESSION)
+        plan(graph.db.items(), graph.db.schedules(), MAX_PER_SESSION, graph.activeFocus())
 
     override suspend fun practiceFor(graph: AppGraph): List<Item> =
-        plan(graph.db.items(), graph.db.schedules(), MAX_PER_PRACTICE)
+        plan(graph.db.items(), graph.db.schedules(), MAX_PER_PRACTICE, graph.activeFocus())
             .ifEmpty { graph.db.items().activeOfKinds(kinds).shuffled().take(MAX_PER_PRACTICE) }
 
     /** The DAOs rather than the graph, so a test can watch the cap hold over fakes. */
-    internal suspend fun plan(items: ItemDao, schedules: ScheduleDao, maxItems: Int): List<Item> =
-        SessionBuilder(items, schedules, newPerDay = NEW_PER_DAY, maxItems = maxItems).plan(id, kinds)
+    internal suspend fun plan(
+        items: ItemDao,
+        schedules: ScheduleDao,
+        maxItems: Int,
+        focus: Focus? = null,
+    ): List<Item> =
+        SessionBuilder(items, schedules, newPerDay = NEW_PER_DAY, maxItems = maxItems, focus = focus).plan(id, kinds)
 
     @Composable
     override fun Screen(items: List<Item>, sessionId: String?, onDone: () -> Unit, onLeave: () -> Unit) =

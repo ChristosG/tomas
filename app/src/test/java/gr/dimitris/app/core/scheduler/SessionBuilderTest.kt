@@ -1,5 +1,6 @@
 package gr.dimitris.app.core.scheduler
 
+import gr.dimitris.app.caregiver.insights.Focus
 import gr.dimitris.app.core.data.FakeItemDao
 import gr.dimitris.app.core.data.FakeScheduleDao
 import gr.dimitris.app.core.data.Item
@@ -110,6 +111,109 @@ class SessionBuilderTest {
 
         assertEquals("three due and all five new, exactly as before", 8, plan.size)
         assertEquals(5, plan.count { it.text.startsWith("new") })
+    }
+
+    // ---- the focus (phase 11) ----------------------------------------------------------------
+
+    private fun focus(items: List<String> = emptyList(), sounds: List<String> = emptyList()) =
+        Focus(items = items, sounds = sounds, at = noon)
+
+    /**
+     * The loop phase 11 closes: Claude reads his whole journey, names a word, and the next sitting
+     * puts it first. Without this the advice was a paragraph a caregiver had to act on by hand.
+     */
+    @Test fun `a focused word is planned first`() = runTest {
+        repeat(4) { i ->
+            val w = word("due$i", createdAt = i.toLong())
+            schedules.upsert(Schedule(w.id, m, box = 1, nextDueAt = noon - 1, createdAt = noon - 10 * LeitnerPolicy.DAY_MS))
+        }
+        val wanted = word("καφές", createdAt = 50)
+        schedules.upsert(Schedule(wanted.id, m, box = 1, nextDueAt = noon - 1, createdAt = noon - 10 * LeitnerPolicy.DAY_MS))
+
+        val plan = SessionBuilder(items, schedules, { noon }, newPerDay = 0, maxItems = 5, focus = focus(listOf("Καφές")))
+            .plan(m, listOf(ItemKind.WORD))
+
+        assertEquals("matched unaccented and case-insensitively", "καφές", plan.first().text)
+        assertEquals("and nothing due was dropped for it", 5, plan.size)
+    }
+
+    /** «Δούλεψε τα «π»» is speech-therapy advice, and it reaches every word that starts with π. */
+    @Test fun `words that start with a focused sound come first too`() = runTest {
+        repeat(4) { i ->
+            val w = word("due$i", createdAt = i.toLong())
+            schedules.upsert(Schedule(w.id, m, box = 1, nextDueAt = noon - 1, createdAt = noon - 10 * LeitnerPolicy.DAY_MS))
+        }
+        val pi = Item(text = "πόρτα", kind = ItemKind.WORD, firstSound = "π", createdAt = 60).also { items.upsert(it) }
+        schedules.upsert(Schedule(pi.id, m, box = 1, nextDueAt = noon - 1, createdAt = noon - 10 * LeitnerPolicy.DAY_MS))
+
+        val plan = SessionBuilder(items, schedules, { noon }, newPerDay = 0, maxItems = 5, focus = focus(sounds = listOf("π")))
+            .plan(m, listOf(ItemKind.WORD))
+
+        assertEquals("πόρτα", plan.first().text)
+    }
+
+    /**
+     * "Work on «καφές»" that waits until καφές comes round again in nine days is not advice anybody
+     * acted on. A focused word that is not due is pulled in — but only into room the due list was
+     * not going to use.
+     */
+    @Test fun `a focused word that is not due is still planned today`() = runTest {
+        val soon = word("αργότερα", createdAt = 1)
+        schedules.upsert(Schedule(soon.id, m, box = 3, nextDueAt = noon + 9 * LeitnerPolicy.DAY_MS, createdAt = noon - 10 * LeitnerPolicy.DAY_MS))
+        val wanted = word("καφές", createdAt = 2)
+        schedules.upsert(Schedule(wanted.id, m, box = 3, nextDueAt = noon + 9 * LeitnerPolicy.DAY_MS, createdAt = noon - 10 * LeitnerPolicy.DAY_MS))
+
+        val plan = SessionBuilder(items, schedules, { noon }, newPerDay = 0, maxItems = 5, focus = focus(listOf("καφές")))
+            .plan(m, listOf(ItemKind.WORD))
+
+        assertEquals(listOf("καφές"), plan.map { it.text })
+    }
+
+    /** The focus orders the sitting; it never shortens the list of words that are actually due. */
+    @Test fun `the focus never removes a due word`() = runTest {
+        val due = (0 until 5).map { i ->
+            word("due$i", createdAt = i.toLong()).also { w ->
+                schedules.upsert(Schedule(w.id, m, box = 1, nextDueAt = noon - 10 + i, createdAt = noon - 10 * LeitnerPolicy.DAY_MS))
+            }
+        }
+        repeat(3) { i -> word("μακρινή$i", createdAt = 100L + i) }   // never scheduled, so "new"
+
+        val builder = { f: Focus? -> SessionBuilder(items, schedules, { noon }, newPerDay = 0, maxItems = 5, focus = f) }
+        val without = builder(null).plan(m, listOf(ItemKind.WORD)).map { it.id }.toSet()
+        val with = builder(focus(listOf("μακρινή0", "μακρινή1", "μακρινή2"))).plan(m, listOf(ItemKind.WORD)).map { it.id }.toSet()
+
+        assertEquals("every due word is still planned", due.map { it.id }.toSet(), without)
+        assertEquals("and still is, with a focus asking for three others", due.map { it.id }.toSet(), with)
+    }
+
+    /** Focus, then the word she typed last night, then everything else. */
+    @Test fun `the order is focus, then her new words, then the rest`() = runTest {
+        val due = word("παλιά", createdAt = 1)
+        schedules.upsert(Schedule(due.id, m, box = 4, nextDueAt = noon - 1, createdAt = noon - 10 * LeitnerPolicy.DAY_MS))
+        val hers = word("χθεσινή", Source.CAREGIVER, createdAt = noon - LeitnerPolicy.DAY_MS)
+        val seed = word("σπόρος", Source.SEED, createdAt = 2)
+        val wanted = word("καφές", createdAt = 3)
+        schedules.upsert(Schedule(wanted.id, m, box = 5, nextDueAt = noon - 1, createdAt = noon - 10 * LeitnerPolicy.DAY_MS))
+
+        val plan = SessionBuilder(items, schedules, { noon }, newPerDay = 4, maxItems = 6, focus = focus(listOf("καφές")))
+            .plan(m, listOf(ItemKind.WORD))
+
+        assertEquals(listOf("καφές", "χθεσινή"), plan.take(2).map { it.text })
+        assertEquals(setOf("παλιά", "σπόρος"), plan.drop(2).map { it.text }.toSet())
+        assertEquals(4, plan.size)
+    }
+
+    /** No focus and no new personal word: the sitting is ordered exactly as it always was. */
+    @Test fun `without a focus nothing about the order changes`() = runTest {
+        val words = (0 until 5).map { i ->
+            word("due$i", createdAt = i.toLong()).also { w ->
+                schedules.upsert(Schedule(w.id, m, box = i, nextDueAt = noon - 10 + i, createdAt = noon - 10 * LeitnerPolicy.DAY_MS))
+            }
+        }
+        val plan = SessionBuilder(items, schedules, { noon }, newPerDay = 0, maxItems = 5).plan(m, listOf(ItemKind.WORD))
+
+        val boxes = words.associate { it.id to words.indexOf(it) }
+        assertEquals(builder.sandwich(plan) { boxes.getValue(it.id) }.map { it.id }, plan.map { it.id })
     }
 
     @Test fun `sandwich puts easy at both ends and hard in the middle`() {

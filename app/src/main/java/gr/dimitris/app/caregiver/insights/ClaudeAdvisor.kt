@@ -12,13 +12,23 @@ import kotlinx.coroutines.withContext
 import java.time.Duration
 
 /**
- * What came back: one section for the people who look after him, one for him.
+ * What came back: one section for the people who look after him, one for him, and one for the app.
+ *
+ * [focusJson] is the `## Εστίαση` object exactly as the model wrote it — raw, not parsed. It is
+ * stored raw too ([gr.dimitris.app.core.data.Advice.focusJson]) and read through
+ * [Focus] against the vocabulary of the day it is read, so a word the model named that a caregiver
+ * only adds next week starts being honoured then instead of having been thrown away tonight.
  *
  * [truncated] means the model ran out of room mid-answer. Not an error — what did arrive is worth
  * reading — but the screen says so under the text, because a caregiver should not have to guess
  * whether a short answer was short on purpose.
  */
-data class Advice(val caregivers: String, val dimitris: String, val truncated: Boolean = false)
+data class Advice(
+    val caregivers: String,
+    val dimitris: String,
+    val focusJson: String = "",
+    val truncated: Boolean = false,
+)
 
 /**
  * A failure the app is willing to write down. Deliberately carries **no cause**: an exception from
@@ -55,9 +65,9 @@ class ClaudeAdvisor(private val secrets: Secrets, private val model: suspend () 
         try {
             client = AnthropicOkHttpClient.builder()
                 .apiKey(key)
-                // Two minutes, not the SDK's ten. A caregiver who has tapped «πίσω» has abandoned
+                // Four minutes, not the SDK's ten. A caregiver who has tapped «πίσω» has abandoned
                 // the answer; the socket, the IO thread and the key in that request's headers must
-                // not outlive their patience by eight minutes.
+                // not outlive their patience by six more.
                 .timeout(Duration.ofSeconds(TIMEOUT_SECONDS))
                 // One retry, not the SDK's two. The timeout is per attempt, so three attempts of a
                 // stalled connection is six minutes of a caregiver watching a spinner — and three
@@ -97,11 +107,23 @@ class ClaudeAdvisor(private val secrets: Secrets, private val model: suspend () 
         const val CAREGIVERS = "## Για τους φροντιστές"
         const val DIMITRIS = "## Για τον Δημήτρη"
 
-        /** Room for the two short sections plus the thinking that leads to them. */
-        const val MAX_TOKENS = 8_000L
+        /** The third section: one JSON object the app itself acts on. See [Focus]. */
+        const val FOCUS = "## Εστίαση"
 
-        /** Long enough for a considered answer, short enough that a stalled one gives up. */
-        const val TIMEOUT_SECONDS = 120L
+        /**
+         * Room for the three sections plus the thinking that leads to them. Doubled in phase 11:
+         * what goes up is now his whole journey rather than a four-week summary, and an answer that
+         * has read a year of history has more to say about it.
+         */
+        const val MAX_TOKENS = 16_000L
+
+        /**
+         * Long enough for a considered answer, short enough that a stalled one gives up. Doubled
+         * with [MAX_TOKENS], for the same reason: a report of tens of thousands of characters is a
+         * longer read and a longer answer, and a caregiver being told «δοκίμασε ξανά» because the
+         * model was still thinking is the worst of both.
+         */
+        const val TIMEOUT_SECONDS = 240L
 
         /** Per attempt, and [TIMEOUT_SECONDS] is per attempt too, so this is the wait a caregiver gets. */
         const val MAX_RETRIES = 1
@@ -131,9 +153,16 @@ class ClaudeAdvisor(private val secrets: Secrets, private val model: suspend () 
         const val TRUNCATED = "Η απάντηση κόπηκε. Ρώτα ξανά."
 
         /**
-         * Who Dimitris is, said once, so the advice is about him and not about a stroke in general.
-         * Fixed in the app rather than editable: it is the one part of the request that a caregiver
-         * must not be able to turn into something the phone then reads out loud to him.
+         * Who Dimitris is and what the answer has to look like, said once, so the advice is about
+         * him and not about a stroke in general. Fixed in the app rather than editable: it is the
+         * one part of the request that a caregiver must not be able to turn into something the
+         * phone then reads out loud to him.
+         *
+         * Version 2, phase 11. What changed is what the model is now *given* — his whole journey
+         * rather than four weeks of totals, the caregivers' own notes, and every advice it gave
+         * before — so what it is asked for changed with it: compare yourself with what you said
+         * last time, be specific enough to be acted on, and end with a focus the app can carry out
+         * on its own ([Focus]).
          */
         val SYSTEM_PROMPT = """
             Είσαι σύμβουλος για την καθημερινή εξάσκηση του Δημήτρη, ενός ενήλικα άνδρα στην Ελλάδα.
@@ -142,16 +171,31 @@ class ClaudeAdvisor(private val secrets: Secrets, private val model: suspend () 
             ακαλκουλία. Η μνήμη, το χιούμορ και το τραγούδι του είναι ακέραια — τραγουδάει λέξεις που
             δεν μπορεί να πει.
 
-            Θα λάβεις μια περίληψη της εξάσκησής του από την εφαρμογή του: λεπτά, ασκήσεις ανά
-            άσκηση, πόση βοήθεια χρειάστηκε, δύσκολες λέξεις, επίπεδα.
+            Συμβουλεύεις ως προπονητής με γνώση λογοθεραπείας, όχι ως γιατρός. Καμία ιατρική
+            διάγνωση, καμία πρόγνωση, καμία φαρμακευτική ή ιατρική οδηγία. Αν κάτι χρειάζεται
+            λογοθεραπευτή ή γιατρό, πες τους απλώς να το συζητήσουν μαζί του.
 
-            Απάντησε στα ελληνικά, με απλά λόγια, σαν ενήλικας προς ενήλικες. Καμία ιατρική διάγνωση,
-            καμία πρόγνωση, τίποτα που να τον υποτιμά. Αν τα στοιχεία είναι λίγα, πες το απλά.
+            Θα λάβεις όλη την πορεία του από την εφαρμογή: το προφίλ του, τις σημειώσεις των
+            φροντιστών, κάθε λέξη που έχει εξασκήσει ποτέ με τα σύνολά της, τις τελευταίες τέσσερις
+            εβδομάδες ανά ημέρα, τις προηγούμενες συμβουλές σου, τα επίπεδα και όσα βλέπει μόνη της
+            η εφαρμογή.
 
-            Γράψε ακριβώς αυτές τις δύο ενότητες, με αυτούς ακριβώς τους τίτλους και με αυτή τη σειρά:
+            Σύγκρινε με τις προηγούμενες συμβουλές σου και πες καθαρά τι άλλαξε από τότε: τι πήγε
+            καλύτερα, τι δεν κουνήθηκε, τι δεν δοκιμάστηκε καθόλου. Αν είναι η πρώτη φορά, πες το.
+
+            Να είσαι συγκεκριμένος. Ονόμασε λέξεις, ονόμασε πρώτους ήχους, ονόμασε ασκήσεις, πες τι
+            να ηχογραφήσουν ή τι να φωτογραφίσουν οι φροντιστές, και πες αν ένα επίπεδο πρέπει να
+            ανέβει ή να κατέβει. Χρησιμοποίησε μόνο λέξεις που υπάρχουν στην αναφορά. Αν τα στοιχεία
+            είναι λίγα, πες το απλά αντί να μαντέψεις.
+
+            Απάντησε στα ελληνικά, με απλά λόγια, σαν ενήλικας προς ενήλικες. Τίποτα που να τον
+            υποτιμά.
+
+            Γράψε ακριβώς αυτές τις τρεις ενότητες, με αυτούς ακριβώς τους τίτλους και με αυτή τη
+            σειρά:
 
             $CAREGIVERS
-            3 έως 6 σύντομες, συγκεκριμένες προτάσεις για το τι να κάνουν οι φροντιστές την επόμενη
+            5 έως 10 σύντομες, συγκεκριμένες προτάσεις για το τι να κάνουν οι φροντιστές την επόμενη
             εβδομάδα.
 
             $DIMITRIS
@@ -159,7 +203,16 @@ class ClaudeAdvisor(private val secrets: Secrets, private val model: suspend () 
             πολύ απλά ελληνικά, χωρίς αριθμούς και χωρίς ποσοστά. Το τηλέφωνο θα τις διαβάσει
             δυνατά, οπότε γράψε τες όπως θα τις έλεγες.
 
-            Οι δύο τίτλοι είναι οι μόνες γραμμές που ξεκινούν με ##. Μην γράψεις τους τίτλους μέσα
+            $FOCUS
+            Μόνο ένα αντικείμενο JSON, σε μία γραμμή, χωρίς σχόλια και χωρίς ``` γύρω του:
+            {"items":["καφές","ψωμί"],"sounds":["π"],"modules":["WORDCOACH"],"levels":{"numbers":3,"sentences":2,"trace":2},"why":"γιατί αυτά"}
+            Οι λέξεις στο items πρέπει να είναι λέξεις που υπάρχουν στην αναφορά, γραμμένες ακριβώς
+            όπως εκεί. Τα sounds είναι πρώτοι ήχοι. Τα modules είναι από: WORDCOACH, NUMBERS,
+            SINGSAY, SCRIPTS, SENTENCES, TRACE, ARCADE, TALKBOARD. Το levels είναι προαιρετικό·
+            βάλε μόνο όσα θέλεις να αλλάξουν. Η εφαρμογή θα βάλει αυτές τις λέξεις πρώτες στην
+            επόμενη άσκησή του, οπότε κράτα τες λίγες: 3 έως 8.
+
+            Οι τρεις τίτλοι είναι οι μόνες γραμμές που ξεκινούν με ##. Μην γράψεις τους τίτλους μέσα
             στο κείμενο. Καθόλου άλλο markdown: χωρίς αστερίσκους για έντονα γράμματα, με παύλες για
             τις λίστες.
         """.trimIndent()
@@ -187,6 +240,7 @@ class ClaudeAdvisor(private val secrets: Secrets, private val model: suspend () 
         /** A heading is a whole line of its own — never a heading named inside a sentence. */
         private val CAREGIVERS_LINE = Regex("^##\\s*Για τους φροντιστές\\s*:?\\s*$", RegexOption.MULTILINE)
         private val DIMITRIS_LINE = Regex("^##\\s*Για τον Δημήτρη\\s*:?\\s*$", RegexOption.MULTILINE)
+        private val FOCUS_LINE = Regex("^##\\s*Εστίαση\\s*:?\\s*$", RegexOption.MULTILINE)
 
         /**
          * Splits the answer on the two headings. A reply that lost them is not thrown away — the
@@ -201,14 +255,41 @@ class ClaudeAdvisor(private val secrets: Secrets, private val model: suspend () 
          * man with expressive aphasia, which is precisely what this function exists to prevent.
          */
         fun parse(text: String): Advice {
-            val c = CAREGIVERS_LINE.findAll(text).lastOrNull()
-            val d = DIMITRIS_LINE.findAll(text).lastOrNull()
-            if (c == null || d == null || d.range.first < c.range.last) return Advice(plain(text), "")
+            // The focus is cut off the end first, before either half is decided. It is machine
+            // text: a JSON object read out loud to a man with expressive aphasia — which is exactly
+            // what would happen if it stayed inside the section that gets spoken — is the same kind
+            // of harm the split below exists to prevent. Cutting it here also means an answer whose
+            // headings are mangled still yields a usable focus, and still says nothing to him.
+            val f = FOCUS_LINE.findAll(text).lastOrNull()
+            val body = if (f == null) text else text.substring(0, f.range.first)
+            val focusJson = if (f == null) "" else jsonObject(text.substring(f.range.last + 1))
+
+            val c = CAREGIVERS_LINE.findAll(body).lastOrNull()
+            val d = DIMITRIS_LINE.findAll(body).lastOrNull()
+            if (c == null || d == null || d.range.first < c.range.last) return Advice(plain(body), "", focusJson)
             return Advice(
-                caregivers = plain(text.substring(c.range.last + 1, d.range.first)),
-                dimitris = forDimitris(text.substring(d.range.last + 1)),
+                caregivers = plain(body.substring(c.range.last + 1, d.range.first)),
+                dimitris = forDimitris(body.substring(d.range.last + 1)),
+                focusJson = focusJson,
             )
         }
+
+        /**
+         * The one JSON object in what follows the «## Εστίαση» heading, on one line.
+         *
+         * Braces to braces rather than a parse: the parsing is [Focus]'s job and it is deliberately
+         * forgiving, so all this has to do is find the object and refuse to invent one. A model that
+         * wrapped it in ``` or wrote a sentence around it still gets read; a model that wrote
+         * nothing at all gives "" and the app simply plans the next session as it always did.
+         */
+        internal fun jsonObject(raw: String): String {
+            val start = raw.indexOf('{')
+            val end = raw.lastIndexOf('}')
+            if (start < 0 || end <= start) return ""
+            return raw.substring(start, end + 1).replace(NEWLINES, " ").trim()
+        }
+
+        private val NEWLINES = Regex("\\s*\\R\\s*")
 
         /**
          * The model's markdown, taken off before either half reaches a screen or the speaker. The

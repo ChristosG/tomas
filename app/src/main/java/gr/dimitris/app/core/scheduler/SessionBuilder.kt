@@ -1,5 +1,6 @@
 package gr.dimitris.app.core.scheduler
 
+import gr.dimitris.app.caregiver.insights.Focus
 import gr.dimitris.app.core.data.Item
 import gr.dimitris.app.core.data.ItemDao
 import gr.dimitris.app.core.data.ItemKind
@@ -19,6 +20,12 @@ fun startOfDay(epochMs: Long, zone: ZoneId = ZoneId.systemDefault()): Long =
  * introduced per day, capped at [maxItems], ordered easy–hard–easy.
  *
  * A couple of the places are held for words he has never seen — see [NEW_SLOTS].
+ *
+ * When Claude has been asked for advice and named a [focus], that focus goes first. It is the only
+ * thing in the app that reorders his morning from outside, and it does exactly that and no more:
+ * it **orders**, it never removes. A word that is due is still planned; the focus decides what he
+ * meets first, which is what matters once [gr.dimitris.app.today.SessionBudget] has divided the
+ * sitting between the modules and cut each list to what fits.
  */
 class SessionBuilder(
     private val items: ItemDao,
@@ -26,6 +33,8 @@ class SessionBuilder(
     private val clock: () -> Long = ::now,
     private val newPerDay: Int = 8,
     private val maxItems: Int = 12,
+    /** The live advice's focus, or null — which is the app as it was before phase 11. */
+    private val focus: Focus? = null,
 ) {
     suspend fun plan(module: ModuleId, kinds: List<ItemKind>): List<Item> {
         val t = clock()
@@ -44,8 +53,37 @@ class SessionBuilder(
         // Due first, but never *all* the way: a couple of places are held back for a word he has
         // never seen, whenever there is one to hold them for.
         val reserved = minOf(NEW_SLOTS, fresh.size)
-        val chosen = (due.take((maxItems - reserved).coerceAtLeast(0)) + fresh).take(maxItems)
-        return sandwich(chosen) { boxOf[it.id] ?: 0 }
+        val core = due.take((maxItems - reserved).coerceAtLeast(0))
+
+        // A focused word that is neither due nor new is still worth today: "work on «καφές»" that
+        // waits until καφές comes round again in nine days is not advice anybody acted on. It takes
+        // only room the due list was not going to use and never the reserved new places, so a due
+        // word is never dropped to make space for a focused one.
+        val already = (core + fresh).mapTo(mutableSetOf()) { it.id }
+        val wanted = focus?.let { f -> pool.filter { it.id !in already && f.matches(it) } }.orEmpty()
+        val room = (maxItems - core.size - reserved).coerceAtLeast(0)
+
+        val chosen = (core + wanted.take(room) + fresh).take(maxItems)
+        val freshIds = fresh.mapTo(mutableSetOf()) { it.id }
+        // Easy–hard–easy first, then the three tiers over it. `sortedBy` is stable, so inside each
+        // tier the sandwich survives intact and a session with no focus and no new personal word is
+        // ordered exactly as it was before any of this existed.
+        return sandwich(chosen) { boxOf[it.id] ?: 0 }.sortedBy { tier(it, freshIds) }
+    }
+
+    /**
+     * The order of the sitting: what Claude asked for, then the word a caregiver has just written,
+     * then everything else.
+     *
+     * The middle tier is the other half of «Δοκίμασέ το» in the editor and of
+     * [NEWEST_OF_HERS_FIRST]: a word somebody sat down and typed is almost always about something
+     * happening now, and being third in a list of twelve that a short sitting cuts to five is the
+     * same as not being there.
+     */
+    private fun tier(item: Item, freshIds: Set<String>): Int = when {
+        focus?.matches(item) == true -> 0
+        item.id in freshIds && item.source == Source.CAREGIVER -> 1
+        else -> 2
     }
 
     companion object {

@@ -55,9 +55,15 @@ class SessionFlowTest {
     @Test fun backArrowEndsTheSessionWithAnHonestCount() {
         compose.onNodeWithText("Ξεκίνα").performClick()
         compose.waitUntil(15_000) { compose.onAllNodes(hasText("Το είπα!")).fetchSemanticsNodes().isNotEmpty() }
+        val before = runBlocking { graph.db.attempts().since(0).size }
         compose.onNodeWithText("Το είπα!").performClick()
         // The attempt is written off the screen's scope; the count is only honest once it has landed.
-        compose.waitUntil(15_000) { runBlocking { graph.db.attempts().since(0).any { it.itemId == seededId } } }
+        //
+        // *An* attempt, not the seeded word's. Which word the word coach hands him first is the
+        // session builder's business and it has changed twice — phase 11 puts a live focus and then
+        // the caregiver's newest words at the front — and this test is about what «Πίσω» does at the
+        // end of a sitting, not about the order of the sitting. `SessionBuilderTest` owns that.
+        compose.waitUntil(15_000) { runBlocking { graph.db.attempts().since(0).size } > before }
         compose.onNodeWithContentDescription("Πίσω").performClick()
         compose.waitUntil(15_000) {
             compose.onAllNodes(hasText("Έκανες 1 άσκηση σήμερα: Λέξεις.")).fetchSemanticsNodes().isNotEmpty()

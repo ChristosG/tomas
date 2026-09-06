@@ -1,6 +1,7 @@
 package gr.dimitris.app.caregiver.insights
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -148,8 +149,92 @@ class ClaudeAdvisorParseTest {
     }
 
     /** The prompt has to keep asking for the exact headings the parser looks for. */
-    @Test fun `the system prompt names both headings`() {
+    @Test fun `the system prompt names all three headings`() {
         assertTrue(ClaudeAdvisor.SYSTEM_PROMPT.contains(ClaudeAdvisor.CAREGIVERS))
         assertTrue(ClaudeAdvisor.SYSTEM_PROMPT.contains(ClaudeAdvisor.DIMITRIS))
+        assertTrue(ClaudeAdvisor.SYSTEM_PROMPT.contains(ClaudeAdvisor.FOCUS))
+    }
+
+    /** Phase 11's prompt: an SLT-informed coach, a comparison with last time, and a focus. */
+    @Test fun `the system prompt asks for what phase 11 needs`() {
+        val p = ClaudeAdvisor.SYSTEM_PROMPT
+        assertTrue("not a doctor", p.contains("όχι ως γιατρός"))
+        assertTrue("compare with the previous advices", p.contains("προηγούμενες συμβουλές"))
+        assertTrue("one JSON object on one line", p.contains("σε μία γραμμή"))
+    }
+
+    // ---- the third section ---------------------------------------------------------------------
+
+    private fun answer3(caregivers: String, dimitris: String, focus: String) =
+        "${ClaudeAdvisor.CAREGIVERS}\n$caregivers\n\n${ClaudeAdvisor.DIMITRIS}\n$dimitris\n\n" +
+            "${ClaudeAdvisor.FOCUS}\n$focus\n"
+
+    private val json = """{"items":["καφές"],"sounds":["π"],"modules":["WORDCOACH"],"levels":{"numbers":3},"why":"τα ψώνια"}"""
+
+    @Test fun `all three sections land in their own halves`() {
+        val advice = ClaudeAdvisor.parse(answer3("- Δούλεψε τα ψώνια.", "Πάει καλά.", json))
+
+        assertEquals("- Δούλεψε τα ψώνια.", advice.caregivers)
+        assertEquals("Πάει καλά.", advice.dimitris)
+        assertEquals(json, advice.focusJson)
+    }
+
+    /**
+     * The whole reason the focus is cut off first. A JSON object read out loud at 0.8× to a man
+     * with expressive aphasia is exactly the kind of harm the split exists to prevent, and before
+     * the third heading existed the object would have been the tail of his own section.
+     */
+    @Test fun `the focus is never part of what is read to him`() {
+        val advice = ClaudeAdvisor.parse(answer3("- Ένα.", "Πάει καλά. Συνέχισε.", json))
+
+        assertEquals("Πάει καλά. Συνέχισε.", advice.dimitris)
+        assertFalse(advice.dimitris, advice.dimitris.contains("{"))
+        assertFalse(advice.caregivers, advice.caregivers.contains("{"))
+    }
+
+    @Test fun `a missing focus section is an empty focus, not a broken answer`() {
+        val advice = ClaudeAdvisor.parse(answer("- Ένα.", "Μπράβο."))
+
+        assertEquals("- Ένα.", advice.caregivers)
+        assertEquals("Μπράβο.", advice.dimitris)
+        assertEquals("", advice.focusJson)
+    }
+
+    @Test fun `a focus heading with no object under it is empty rather than nonsense`() {
+        val advice = ClaudeAdvisor.parse(answer3("- Ένα.", "Μπράβο.", "Δεν έχω κάτι συγκεκριμένα."))
+        assertEquals("", advice.focusJson)
+        assertEquals("Μπράβο.", advice.dimitris)
+    }
+
+    /** Models fence their JSON and models wrap it. Neither is a reason to lose it. */
+    @Test fun `a fenced or wrapped object is still found, on one line`() {
+        val fenced = ClaudeAdvisor.parse(answer3("- Ένα.", "Μπράβο.", "```json\n{\n  \"items\": [\"καφές\"]\n}\n```"))
+        assertEquals("""{ "items": ["καφές"] }""", fenced.focusJson)
+    }
+
+    /** An answer whose two headings are mangled still gives a focus, and still says nothing to him. */
+    @Test fun `a focus survives an answer that lost its other headings`() {
+        val advice = ClaudeAdvisor.parse("Μια απάντηση χωρίς τίτλους.\n\n${ClaudeAdvisor.FOCUS}\n$json")
+
+        assertEquals("Μια απάντηση χωρίς τίτλους.", advice.caregivers)
+        assertEquals("", advice.dimitris)
+        assertEquals(json, advice.focusJson)
+    }
+
+    /** Out of order is a mangled answer: nothing is read to him, whatever the focus says. */
+    @Test fun `a focus written before his section does not split the answer`() {
+        val text = "${ClaudeAdvisor.CAREGIVERS}\n- Ένα.\n\n${ClaudeAdvisor.FOCUS}\n$json\n\n" +
+            "${ClaudeAdvisor.DIMITRIS}\nΜπράβο."
+        val advice = ClaudeAdvisor.parse(text)
+
+        assertEquals("", advice.dimitris)
+        assertEquals(json, advice.focusJson)
+    }
+
+    /** The room and the wait both went up with the report; a stalled request still gives up. */
+    @Test fun `the budget matches the size of what is now sent`() {
+        assertEquals(16_000L, ClaudeAdvisor.MAX_TOKENS)
+        assertEquals(240L, ClaudeAdvisor.TIMEOUT_SECONDS)
+        assertEquals(1, ClaudeAdvisor.MAX_RETRIES)
     }
 }

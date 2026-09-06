@@ -5,6 +5,7 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.room.withTransaction
 import gr.dimitris.app.caregiver.insights.AdviceSession
 import gr.dimitris.app.caregiver.insights.ClaudeAdvisor
+import gr.dimitris.app.caregiver.insights.Focus
 import gr.dimitris.app.core.audio.ImageStore
 import gr.dimitris.app.core.audio.MediaFiles
 import gr.dimitris.app.core.audio.Player
@@ -12,8 +13,10 @@ import gr.dimitris.app.core.audio.Recorder
 import gr.dimitris.app.core.audio.ToneSynth
 import gr.dimitris.app.core.audio.Voice
 import gr.dimitris.app.core.data.AppDatabase
+import gr.dimitris.app.core.data.Advice as AdviceRow
 import gr.dimitris.app.core.data.ItemRepository
 import gr.dimitris.app.core.data.ScriptRepository
+import gr.dimitris.app.core.data.now as systemNow
 import gr.dimitris.app.core.log.ErrorReporter
 import gr.dimitris.app.core.scheduler.Scheduler
 import gr.dimitris.app.core.secrets.SecretStore
@@ -36,6 +39,7 @@ import gr.dimitris.app.modules.singsay.SingSayModule
 import gr.dimitris.app.modules.trace.TraceModule
 import gr.dimitris.app.modules.wordcoach.WordCoachModule
 import gr.dimitris.app.ui.theme.Feedback
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -92,7 +96,24 @@ class AppGraph(context: Context) {
      * view model: a request that costs money must not be started twice or thrown away because a
      * caregiver pressed back while it was thinking.
      */
-    val adviceSession = AdviceSession(scope, advisor::ask) { where, e -> errors.record(where, e) }
+    val adviceSession = AdviceSession(
+        scope = scope,
+        send = advisor::ask,
+        record = { where, e -> errors.record(where, e) },
+        // Read through `db` on the call, never captured: a backup import swaps the database
+        // underneath everything, and an advice must land in the one that is open now.
+        store = { report, advice ->
+            db.advice().upsert(
+                AdviceRow(
+                    model = settings.claudeModel.first(),
+                    report = report,
+                    caregivers = advice.caregivers,
+                    dimitris = advice.dimitris,
+                    focusJson = advice.focusJson,
+                )
+            )
+        },
+    )
 
     /** Always built from the current db, so it survives a backup import. */
     val items: ItemRepository get() = ItemRepository(db.items(), db.recordings(), files::relativize)
@@ -109,6 +130,26 @@ class AppGraph(context: Context) {
 
     /** Always built from the current db, so it survives a backup import. */
     val scheduler: Scheduler get() = Scheduler(db.schedules())
+
+    /**
+     * What Claude last asked the app to work on, if it is still fresh. Null is the ordinary state —
+     * nobody has asked for advice, or the last one is more than a week old — and null plans his
+     * sitting exactly as every phase before this one planned it.
+     *
+     * Read on every plan rather than cached: a caregiver can ask for advice in the middle of the
+     * day, and the next module he opens should already know about it. It is one indexed row.
+     *
+     * A failure here is recorded and swallowed. The daily session is the thing Dimitris can do
+     * alone; it must not fail to open because an optional advisory table could not be read.
+     */
+    suspend fun activeFocus(): Focus? = try {
+        Focus.active(listOfNotNull(db.advice().newest()), known = null, now = systemNow())
+    } catch (ce: CancellationException) {
+        throw ce
+    } catch (e: Throwable) {
+        errors.record("active focus", e)
+        null
+    }
 
     /**
      * The one sync, held for the life of the app rather than built per use: it owns the guard that
