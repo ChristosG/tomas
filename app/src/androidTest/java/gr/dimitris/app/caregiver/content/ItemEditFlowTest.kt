@@ -2,11 +2,11 @@ package gr.dimitris.app.caregiver.content
 
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
-import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isEnabled
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -18,10 +18,12 @@ import gr.dimitris.app.DimitrisApp
 import gr.dimitris.app.MainActivity
 import gr.dimitris.app.core.data.Category
 import gr.dimitris.app.core.data.Item
+import gr.dimitris.app.core.data.ItemKind
 import gr.dimitris.app.today.CAREGIVER_HOLD_MS
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.After
+import org.junit.Assert.assertEquals
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -49,11 +51,16 @@ class ItemEditFlowTest {
         word = graph.items.save(Item(text = WORD, category = Category.FOOD))
     }
 
-    /** The word and the setting were ours, not his. */
+    /** The words and the setting were ours, not his — the one the draft case wrote included. */
     @After fun removeSeed() = runBlocking<Unit> {
         graph.items.delete(word.id)
+        drafts().forEach { graph.items.delete(it.id) }
         graph.settings.setCaregiverLock(lockBefore)
     }
+
+    /** Whatever the new-draft case left behind, found by its text: the id is never handed back. */
+    private suspend fun drafts(): List<Item> =
+        graph.db.items().activeOfKinds(listOf(ItemKind.WORD, ItemKind.PHRASE)).filter { it.text == DRAFT_WORD }
 
     /**
      * The whole answer in one run: the button is live on a word that is saved, it opens the word
@@ -79,15 +86,32 @@ class ItemEditFlowTest {
     }
 
     /**
-     * A draft that has never been saved has no row for the word coach to open, so the button is on
-     * the screen — it is part of what the editor offers — and dead until the first save.
+     * The path a caregiver actually takes: she types a word she has never saved and wants to see it
+     * work. The save happens under the button and the editor stays open — the header is still «Νέα
+     * λέξη», she never left the form — the word runs, and back lands on that same form with what
+     * she typed still in it. A second «Αποθήκευση» from here updates that row rather than writing a
+     * second copy of the word.
      */
-    @Test fun anUnsavedDraftHasNothingToRunYet() {
+    @Test fun aWordSheHasOnlyJustTypedRunsWithoutLeavingTheForm() {
         openTheWordList()
         compose.onNodeWithText(NEW_WORD).performClick()
+        compose.waitUntil(TIMEOUT_MS) { shown(TRY_IT) }
+        // The word field: the first of the three the form has.
+        compose.onAllNodes(hasSetTextAction()).onFirst().performTextInput(DRAFT_WORD)
+
+        compose.onNodeWithText(TRY_IT).assertIsEnabled().performClick()
+
+        compose.waitUntil(TIMEOUT_MS) { shown(ONE_WORD_SITTING) }
+        repeat(4) { if (enabled(HELP)) compose.onNodeWithText(HELP).performClick() }
+        compose.waitUntil(TIMEOUT_MS) { shown(DRAFT_WORD) }
+
+        compose.onNodeWithContentDescription(BACK).performClick()
 
         compose.waitUntil(TIMEOUT_MS) { shown(TRY_IT) }
-        compose.onNodeWithText(TRY_IT).assertIsNotEnabled()
+        compose.onNodeWithText(DRAFT_WORD).assertIsDisplayed()
+        compose.onNodeWithText(NEW_WORD).assertIsDisplayed()   // the header did not change under her
+        // Exactly one row, however many times the word was saved on the way.
+        assertEquals(1, runBlocking { drafts() }.size)
     }
 
     /** Hold the name, say yes, open the words — the way a caregiver gets here. */
@@ -123,6 +147,9 @@ class ItemEditFlowTest {
 
         /** A fragment of it that the search field itself will not then be mistaken for. */
         const val SEARCH = "δοκιμής επεξ"
+
+        /** Typed into a brand-new form by the draft case, and taken back out afterwards. */
+        const val DRAFT_WORD = "παγωτό δοκιμής προχείρου"
 
         const val TRY_IT = "Δοκίμασέ το"
         const val NEW_WORD = "Νέα λέξη"

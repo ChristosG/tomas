@@ -108,7 +108,10 @@ fun ItemEditScreen(itemId: String?, onClose: () -> Unit, onTry: (String) -> Unit
     DisposableEffect(Unit) { onDispose { graph.voice.quiet() } }
 
     DimitrisScreen(
-        title = if (s.isNew) "Νέα λέξη" else "Επεξεργασία",
+        // From the route she opened, not from whether the row exists yet. «Δοκίμασέ το» saves a
+        // draft under her thumb so the word coach has something to run, and a header that changed
+        // to «Επεξεργασία» while she was still filling the form in would read as a different screen.
+        title = if (itemId == null) "Νέα λέξη" else "Επεξεργασία",
         onBack = onClose,
         bottom = {
             // Beside the button that was refused, not at the far end of a long scrolling form: a save

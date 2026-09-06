@@ -52,10 +52,15 @@ data class ScriptEditState(
     val isNew: Boolean get() = id == null && !notFound
 
     /**
-     * «Παίξ' το» needs a dialogue that exists. A draft that has never been saved has no id to hand
-     * the module, and the microphone being open is not the moment to leave the screen.
+     * Whether «Παίξ' το» can be pressed.
+     *
+     * A dialogue she has only just typed is not excluded: the save it needs happens under the
+     * button, without closing the editor. A missing title or a dialogue with no turn of his own is
+     * refused by [ScriptEditViewModel.save] in Greek beside the button, as «Αποθήκευση» refuses it.
+     * A dialogue that is not there any more has nothing to play, and the microphone being open is
+     * not the moment to leave the screen.
      */
-    val canTry: Boolean get() = id != null && !notFound && !loading && !saving && recordingIndex == null
+    val canTry: Boolean get() = !notFound && !loading && !saving && recordingIndex == null
 }
 
 /**
@@ -197,11 +202,18 @@ class ScriptEditViewModel(private val graph: AppGraph, private val scriptId: Str
      * conversation she has just written is the one she needs to hear, not whichever one the boxes
      * would have picked. Anything unsaved goes down first, because the module reads the rows and
      * not this form; a save that is refused stops here with its own line and nothing opens.
+     *
+     * A dialogue she has only just typed is saved here too — [save] does not close the editor, only
+     * «Αποθήκευση» does — so she stays on the form, hears the conversation, and back lands on the
+     * same form with every turn still in it. A later «Αποθήκευση» updates that same dialogue.
      */
     fun tryIt(onReady: (String) -> Unit) {
         val s = _state.value
         if (!s.canTry) return
-        if (s.dirty) save(onReady) else s.id?.let(onReady)
+        // A never-saved draft always goes through save, even an empty one: that is the path that
+        // says «Γράψε πρώτα έναν τίτλο» instead of doing nothing at all.
+        val id = s.id
+        if (s.dirty || id == null) save(onReady) else onReady(id)
     }
 
     fun save(onSaved: (String) -> Unit) {

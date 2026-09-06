@@ -76,7 +76,9 @@ fun ScriptEditScreen(scriptId: String?, onClose: () -> Unit, onTry: (String) -> 
     DisposableEffect(Unit) { onDispose { graph.voice.quiet() } }
 
     DimitrisScreen(
-        title = if (s.isNew) "Νέος διάλογος" else "Επεξεργασία",
+        // From the route she opened, not from whether the rows exist yet: «Παίξ' το» saves a draft
+        // under her thumb, and the header must not change under her while she is still typing.
+        title = if (scriptId == null) "Νέος διάλογος" else "Επεξεργασία",
         onBack = onClose,
         bottom = {
             // Beside the button that was refused, not at the far end of a long scrolling form.

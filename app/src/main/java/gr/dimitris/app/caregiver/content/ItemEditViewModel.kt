@@ -59,11 +59,19 @@ data class ItemEditState(
     val isNew: Boolean get() = id == null
 
     /**
-     * «Δοκίμασέ το» needs a row to run. A draft that has never been saved has no id to hand the
-     * word coach, so the button is there — it is part of what the screen offers — but dead until
-     * the first save has given the word an identity.
+     * Whether «Δοκίμασέ το» can be pressed.
+     *
+     * A word that has never been saved is *not* excluded: she types it and runs it, and the save
+     * that has to happen first happens under the button without closing the editor. Blank text and
+     * a half-typed price are refused by [ItemEditViewModel.save] in Greek, beside the button, the
+     * same way «Αποθήκευση» refuses them — a dead button explains nothing.
+     *
+     * An open microphone does stop it, exactly as it stops the dialogue editor's «Παίξ' το».
+     * Leaving the screen with the recorder running would have the practice screen cancel the take
+     * on its way out while this form still believed it was recording: «Στοπ» would then be showing
+     * for a take that no longer exists, and pressing it would fail.
      */
-    val canTry: Boolean get() = id != null && !saving
+    val canTry: Boolean get() = !saving && !isRecording && !isRecordingSung
 }
 
 class ItemEditViewModel(private val graph: AppGraph, private val itemId: String?) : ViewModel() {
@@ -191,11 +199,19 @@ class ItemEditViewModel(private val graph: AppGraph, private val itemId: String?
      * reads the row and not this form; with nothing to save it goes straight through and the row is
      * left exactly as it is. A save that is refused (no text, a half-typed price) stops here with
      * its own red line, and nothing opens.
+     *
+     * A word she has only just typed is saved here too — [save] does not close the editor, only
+     * «Αποθήκευση» does — so she stays on the form she was filling in, the word runs, and back
+     * lands on the same form with everything she had typed still in it. A second «Αποθήκευση»
+     * afterwards updates that same row rather than writing a second copy: the id is in state now.
      */
     fun tryIt(onReady: (String) -> Unit) {
         val s = _state.value
         if (!s.canTry) return
-        if (s.dirty) save(onReady) else s.id?.let(onReady)
+        // A never-saved draft always goes through save, even when nothing has been typed into it:
+        // that is the path that says «Γράψε τη λέξη πρώτα» instead of doing nothing at all.
+        val id = s.id
+        if (s.dirty || id == null) save(onReady) else onReady(id)
     }
 
     fun save(onSaved: (String) -> Unit) {
