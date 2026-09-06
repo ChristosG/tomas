@@ -50,10 +50,24 @@ class SecretStore(context: Context) : Secrets {
     override fun claudeKey(): String? = getClaudeKey()
 
     /** Saves the key, or removes it when [key] is null or blank. Throws if the store cannot be written. */
-    fun setClaudeKey(key: String?) {
-        val trimmed = key?.trim()?.takeIf { it.isNotEmpty() }
+    fun setClaudeKey(key: String?) = put(CLAUDE_KEY, key)
+
+    /**
+     * The shared secret both caregiver phones send to the sync server, or null when sync has not
+     * been set up. It lives here rather than in the settings for the same reason the Claude key
+     * does: whoever holds it can read and write everything on the server, and the backup zip is
+     * handed to other machines. It is never logged and never put in `error_logs`.
+     */
+    fun getSyncToken(): String? = runCatching { prefs().getString(SYNC_TOKEN, null) }
+        .getOrNull()?.trim()?.takeIf { it.isNotEmpty() }
+
+    /** Saves the token, or removes it when [token] is null or blank. Throws if the store cannot be written. */
+    fun setSyncToken(token: String?) = put(SYNC_TOKEN, token)
+
+    private fun put(name: String, value: String?) {
+        val trimmed = value?.trim()?.takeIf { it.isNotEmpty() }
         val editor = prefs().edit()
-        if (trimmed == null) editor.remove(CLAUDE_KEY) else editor.putString(CLAUDE_KEY, trimmed)
+        if (trimmed == null) editor.remove(name) else editor.putString(name, trimmed)
         // commit, not apply: the caregiver taps «Αποθήκευση κλειδιού» and then asks Claude, and a
         // write still in flight would look like a key that did not save.
         editor.commit()
@@ -105,6 +119,7 @@ class SecretStore(context: Context) : Secrets {
         /** The name of the encrypted file. Kept out of the backup on purpose — see the class KDoc. */
         const val FILE = "secrets"
         private const val CLAUDE_KEY = "claude_api_key"
+        private const val SYNC_TOKEN = "sync_token"
 
         /** What a key looks like on a screen: enough to recognise it, not enough to use it. */
         fun mask(key: String?): String {

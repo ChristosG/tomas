@@ -31,4 +31,13 @@ class FakeAttemptDao : AttemptDao {
         active().filter { it.outcome != skipped }
             .groupBy { it.module }
             .map { (module, rows) -> ModuleUse(module, rows.maxOf { it.startedAt }) }
+
+    override suspend fun changedSince(since: Long): List<Attempt> =
+        rows.value.filter { it.updatedAt > since }.sortedBy { it.updatedAt }
+
+    /** Append-only, like the real `@Insert(IGNORE)`: an id already here keeps the row it has. */
+    override suspend fun upsertFromSync(rows: List<Attempt>) {
+        val known = this.rows.value.mapTo(mutableSetOf()) { it.id }
+        this.rows.value = this.rows.value + rows.filter { known.add(it.id) }
+    }
 }

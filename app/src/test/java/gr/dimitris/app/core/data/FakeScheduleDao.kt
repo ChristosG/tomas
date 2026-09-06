@@ -9,4 +9,10 @@ class FakeScheduleDao : ScheduleDao {
     override suspend fun all(module: ModuleId): List<Schedule> = rows.values.filter { it.module == module && !it.deleted }
     override suspend fun masteredCount(topBox: Int): Int =
         rows.values.filter { !it.deleted && it.box >= topBox }.map { it.itemId }.distinct().size
+
+    override suspend fun changedSince(since: Long): List<Schedule> =
+        rows.values.filter { it.updatedAt > since }.sortedBy { it.updatedAt }
+    override suspend fun stamps(ids: List<String>): List<RowStamp> =
+        rows.values.map { RowStamp("${it.itemId}:${it.module}", it.updatedAt) }.filter { it.id in ids }
+    override suspend fun upsertFromSync(rows: List<Schedule>) { rows.forEach { upsert(it) } }
 }

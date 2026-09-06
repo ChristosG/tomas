@@ -2,11 +2,19 @@ package gr.dimitris.app.core.data
 
 import androidx.room.Dao
 import androidx.room.Insert
+import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Upsert
 import kotlinx.coroutines.flow.Flow
 
 data class ItemCount(val itemId: String, val n: Int)
+
+/**
+ * A row's sync id and how new it is — everything the merge needs to decide whether an arriving row
+ * wins, without reading whole rows the phone is going to throw away. See
+ * [gr.dimitris.app.core.sync.Merge].
+ */
+data class RowStamp(val id: String, val updatedAt: Long)
 
 /**
  * When a module was last practised: the newest attempt row it wrote. It is what the daily session
@@ -38,6 +46,18 @@ interface ItemDao {
     @Query("SELECT * FROM items WHERE deleted = 0 AND pinned = 1 ORDER BY text") fun observePinned(): Flow<List<Item>>
     @Query("SELECT * FROM items WHERE deleted = 0 AND id IN (:ids)") suspend fun byIds(ids: List<String>): List<Item>
     @Query("SELECT * FROM items WHERE deleted = 0 AND priceCents IS NOT NULL") suspend fun withPrices(): List<Item>
+
+    // Sync (phase 10). Deleted rows are included on purpose: a word the caregiver removed here has
+    // to be removed on the other phones too, and a soft delete is an ordinary row change.
+    @Query("SELECT * FROM items WHERE updatedAt > :since ORDER BY updatedAt") suspend fun changedSince(since: Long): List<Item>
+    @Query("SELECT id, updatedAt FROM items WHERE id IN (:ids)") suspend fun stamps(ids: List<String>): List<RowStamp>
+
+    /**
+     * Rows exactly as another phone wrote them. Not [upsert]: nothing here may touch `updatedAt`,
+     * which is the merge's whole basis — rewriting it would make every pulled row look newer than
+     * the copy it came from and the two phones would push it back and forth for ever.
+     */
+    @Upsert suspend fun upsertFromSync(rows: List<Item>)
 }
 
 @Dao
@@ -47,6 +67,10 @@ interface RecordingDao {
     @Query("SELECT * FROM recordings WHERE itemId = :itemId AND who = :who AND style = :style AND deleted = 0 ORDER BY recordedAt DESC LIMIT 1")
     suspend fun latestFor(itemId: String, who: Who, style: RecordingStyle): Recording?
     @Query("UPDATE recordings SET deleted = 1, updatedAt = :now WHERE id = :id") suspend fun softDelete(id: String, now: Long)
+
+    @Query("SELECT * FROM recordings WHERE updatedAt > :since ORDER BY updatedAt") suspend fun changedSince(since: Long): List<Recording>
+    @Query("SELECT id, updatedAt FROM recordings WHERE id IN (:ids)") suspend fun stamps(ids: List<String>): List<RowStamp>
+    @Upsert suspend fun upsertFromSync(rows: List<Recording>)
 }
 
 @Dao
@@ -74,6 +98,14 @@ interface AttemptDao {
      */
     @Query("SELECT module, MAX(startedAt) AS lastAt FROM attempts WHERE deleted = 0 AND outcome != :skipped GROUP BY module")
     suspend fun lastUsePerModule(skipped: Outcome): List<ModuleUse>
+
+    @Query("SELECT * FROM attempts WHERE updatedAt > :since ORDER BY updatedAt") suspend fun changedSince(since: Long): List<Attempt>
+
+    /**
+     * Append-only, so the database enforces the merge rule the server also holds: the first row
+     * stored for an id wins and a second one is dropped. An attempt is something that happened.
+     */
+    @Insert(onConflict = OnConflictStrategy.IGNORE) suspend fun upsertFromSync(rows: List<Attempt>)
 }
 
 @Dao
@@ -100,6 +132,14 @@ interface ScheduleDao {
             "WHERE s.deleted = 0 AND i.deleted = 0 AND s.box >= :topBox AND i.kind IN ('WORD', 'PHRASE')"
     )
     suspend fun masteredCount(topBox: Int): Int
+
+    @Query("SELECT * FROM schedules WHERE updatedAt > :since ORDER BY updatedAt") suspend fun changedSince(since: Long): List<Schedule>
+
+    /** A schedule has no id column: (itemId, module) is the key, and `"$itemId:$module"` is its sync id. */
+    @Query("SELECT itemId || ':' || module AS id, updatedAt FROM schedules WHERE itemId || ':' || module IN (:ids)")
+    suspend fun stamps(ids: List<String>): List<RowStamp>
+
+    @Upsert suspend fun upsertFromSync(rows: List<Schedule>)
 }
 
 @Dao
@@ -111,6 +151,10 @@ interface SessionDao {
     /** Sittings that *began* in the window: a session is counted on the day he sat down. */
     @Query("SELECT * FROM sessions WHERE deleted = 0 AND startedAt BETWEEN :from AND :to ORDER BY startedAt")
     suspend fun between(from: Long, to: Long): List<Session>
+
+    @Query("SELECT * FROM sessions WHERE updatedAt > :since ORDER BY updatedAt") suspend fun changedSince(since: Long): List<Session>
+    @Query("SELECT id, updatedAt FROM sessions WHERE id IN (:ids)") suspend fun stamps(ids: List<String>): List<RowStamp>
+    @Upsert suspend fun upsertFromSync(rows: List<Session>)
 }
 
 @Dao
@@ -139,6 +183,16 @@ interface ScriptDao {
 
     @Query("UPDATE scripts SET deleted = 1, updatedAt = :now WHERE id = :id") suspend fun softDeleteScript(id: String, now: Long)
     @Query("UPDATE script_lines SET deleted = 1, updatedAt = :now WHERE scriptId = :scriptId AND deleted = 0") suspend fun softDeleteLinesOf(scriptId: String, now: Long)
+
+    @Query("SELECT * FROM scripts WHERE updatedAt > :since ORDER BY updatedAt") suspend fun scriptsChangedSince(since: Long): List<Script>
+    @Query("SELECT id, updatedAt FROM scripts WHERE id IN (:ids)") suspend fun scriptStamps(ids: List<String>): List<RowStamp>
+    @Upsert suspend fun upsertScriptsFromSync(rows: List<Script>)
+
+    // Not append-only: phase 5 re-saves a dialogue by soft-deleting its lines and writing new ones,
+    // so a line's `deleted` flips and its `updatedAt` moves. Last-write-wins, like every other table.
+    @Query("SELECT * FROM script_lines WHERE updatedAt > :since ORDER BY updatedAt") suspend fun linesChangedSince(since: Long): List<ScriptLine>
+    @Query("SELECT id, updatedAt FROM script_lines WHERE id IN (:ids)") suspend fun lineStamps(ids: List<String>): List<RowStamp>
+    @Upsert suspend fun upsertLinesFromSync(rows: List<ScriptLine>)
 }
 
 @Dao
@@ -147,4 +201,9 @@ interface ErrorLogDao {
     @Query("SELECT * FROM error_logs WHERE deleted = 0 ORDER BY at DESC LIMIT :limit") fun observeRecent(limit: Int): Flow<List<ErrorLog>>
     @Query("SELECT * FROM error_logs WHERE deleted = 0 ORDER BY at DESC") suspend fun all(): List<ErrorLog>
     @Query("UPDATE error_logs SET deleted = 1, updatedAt = :now WHERE deleted = 0") suspend fun clearAll(now: Long)
+
+    @Query("SELECT * FROM error_logs WHERE updatedAt > :since ORDER BY updatedAt") suspend fun changedSince(since: Long): List<ErrorLog>
+
+    /** Append-only, like [AttemptDao.upsertFromSync]: a logged error is a fact, not a value. */
+    @Insert(onConflict = OnConflictStrategy.IGNORE) suspend fun upsertFromSync(rows: List<ErrorLog>)
 }

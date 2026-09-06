@@ -15,6 +15,15 @@ open class FakeErrorLogDao : ErrorLogDao {
     override fun observeRecent(limit: Int): Flow<List<ErrorLog>> = flowOf(rows.take(limit))
     override suspend fun all(): List<ErrorLog> = rows
     override suspend fun clearAll(now: Long) { rows.clear() }
+
+    override suspend fun changedSince(since: Long): List<ErrorLog> =
+        rows.filter { it.updatedAt > since }.sortedBy { it.updatedAt }
+
+    /** Append-only, like the real `@Insert(IGNORE)`. */
+    override suspend fun upsertFromSync(rows: List<ErrorLog>) {
+        val known = this.rows.mapTo(mutableSetOf()) { it.id }
+        this.rows += rows.filter { known.add(it.id) }
+    }
 }
 
 class CrashHandlerTest {

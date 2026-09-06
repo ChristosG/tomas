@@ -7,6 +7,7 @@ import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.intPreferencesKey
+import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
@@ -17,6 +18,23 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
 private val Context.settingsStore: DataStore<Preferences> by preferencesDataStore(name = "settings")
+
+/**
+ * Whose phone this is. Asked once, on the very first launch, and changeable afterwards in the
+ * caregiver settings.
+ *
+ * It decides where the app opens — Dimitris lands on «Δημήτρης» and a caregiver on «Φροντιστής» —
+ * and nothing else. Sync itself does not care: his phone syncs too, or his practice would never
+ * reach the people looking after him.
+ */
+enum class DeviceRole { DIMITRIS, CAREGIVER }
+
+/** The answer to "whose phone is this?", including "nobody has been asked yet". */
+@JvmInline
+value class RolePick(val role: DeviceRole?) {
+    val chosen: Boolean get() = role != null
+    val effective: DeviceRole get() = role ?: DeviceRole.DIMITRIS
+}
 
 class Settings(private val store: DataStore<Preferences>) {
     constructor(context: Context) : this(context.applicationContext.settingsStore)
@@ -100,6 +118,59 @@ class Settings(private val store: DataStore<Preferences>) {
     }
 
     /**
+     * Where the sync server lives, e.g. `https://sync.example.com`. Empty until a caregiver types
+     * it in, and empty means the app never touches the network by itself.
+     *
+     * The token that goes with it is **not** here: it lives in
+     * [gr.dimitris.app.core.secrets.SecretStore], encrypted, and never travels in a backup.
+     */
+    val syncUrl: Flow<String> = store.data.map { it[SYNC_URL]?.trim().orEmpty() }
+    suspend fun setSyncUrl(url: String) {
+        store.edit { p ->
+            val trimmed = url.trim().trimEnd('/')
+            if (trimmed.isEmpty()) p.remove(SYNC_URL) else p[SYNC_URL] = trimmed
+        }
+    }
+
+    /** Null until the first-run question is answered; see [RolePick]. */
+    val rolePick: Flow<RolePick> = store.data.map { p ->
+        RolePick(p[DEVICE_ROLE]?.let { name -> runCatching { DeviceRole.valueOf(name) }.getOrNull() })
+    }
+
+    /** What the app should behave as. An unanswered question reads as Dimitris' phone. */
+    val deviceRole: Flow<DeviceRole> = rolePick.map { it.effective }
+    suspend fun setDeviceRole(role: DeviceRole) { store.edit { it[DEVICE_ROLE] = role.name } }
+
+    /**
+     * How far this phone has read the server's log: the highest sequence number it has taken in.
+     * Advanced to the highest `seq` **received**, never to the number the server reports as its
+     * own top — a capped page would otherwise leave rows behind that nothing would ever ask for
+     * again.
+     */
+    val syncCursor: Flow<Long> = store.data.map { it[SYNC_CURSOR] ?: 0L }
+    suspend fun setSyncCursor(seq: Long) { store.edit { it[SYNC_CURSOR] = seq.coerceAtLeast(0L) } }
+
+    /** The `updatedAt` of the newest row this phone has pushed. Everything above it goes next time. */
+    val syncPushedUpTo: Flow<Long> = store.data.map { it[SYNC_PUSHED_UP_TO] ?: 0L }
+    suspend fun setSyncPushedUpTo(at: Long) { store.edit { it[SYNC_PUSHED_UP_TO] = at.coerceAtLeast(0L) } }
+
+    /** When the last sync finished, for the one line the caregiver reads. 0 = never. */
+    val lastSyncAt: Flow<Long> = store.data.map { it[LAST_SYNC_AT] ?: 0L }
+    suspend fun setLastSyncAt(at: Long) { store.edit { it[LAST_SYNC_AT] = at } }
+
+    /**
+     * Both cursors back to the beginning. Called after a backup is restored: the database that
+     * arrived is not the one the cursors were counted against, so the only honest position is the
+     * start. It costs one long pull, and last-write-wins sorts out what comes back.
+     */
+    suspend fun resetSyncCursors() {
+        store.edit { p ->
+            p[SYNC_CURSOR] = 0L
+            p[SYNC_PUSHED_UP_TO] = 0L
+        }
+    }
+
+    /**
      * Which modules Dimitris gets. Everything is on unless a caregiver switched it off, except the
      * few in [DEFAULT_OFF], which are on only once someone deliberately asks for them.
      *
@@ -149,6 +220,11 @@ class Settings(private val store: DataStore<Preferences>) {
         private val TRACE_LEVEL = intPreferencesKey("trace_level")
         private val TRACE_HAND = stringPreferencesKey("trace_hand")
         private val CLAUDE_MODEL = stringPreferencesKey("claude_model")
+        private val SYNC_URL = stringPreferencesKey("sync_url")
+        private val DEVICE_ROLE = stringPreferencesKey("device_role")
+        private val SYNC_CURSOR = longPreferencesKey("sync_cursor")
+        private val SYNC_PUSHED_UP_TO = longPreferencesKey("sync_pushed_up_to")
+        private val LAST_SYNC_AT = longPreferencesKey("last_sync_at")
 
         /** One target size per game: `arcade_target_dp_tap` and its three siblings. */
         private fun arcadeKey(game: ArcadeGame) = floatPreferencesKey("arcade_target_dp_${game.id}")

@@ -17,4 +17,16 @@ class FakeScriptDao : ScriptDao {
     override suspend fun lineOfItem(itemId: String): ScriptLine? = lines.values.filter { it.itemId == itemId && !it.deleted }.maxByOrNull { it.updatedAt }
     override suspend fun softDeleteScript(id: String, now: Long) { scripts.value[id]?.let { upsertScript(it.copy(deleted = true, updatedAt = now)) } }
     override suspend fun softDeleteLinesOf(scriptId: String, now: Long) { lines.values.filter { it.scriptId == scriptId }.forEach { lines[it.id] = it.copy(deleted = true, updatedAt = now) } }
+
+    override suspend fun scriptsChangedSince(since: Long): List<Script> =
+        scripts.value.values.filter { it.updatedAt > since }.sortedBy { it.updatedAt }
+    override suspend fun scriptStamps(ids: List<String>): List<RowStamp> =
+        scripts.value.values.filter { it.id in ids }.map { RowStamp(it.id, it.updatedAt) }
+    override suspend fun upsertScriptsFromSync(rows: List<Script>) { rows.forEach { upsertScript(it) } }
+
+    override suspend fun linesChangedSince(since: Long): List<ScriptLine> =
+        lines.values.filter { it.updatedAt > since }.sortedBy { it.updatedAt }
+    override suspend fun lineStamps(ids: List<String>): List<RowStamp> =
+        lines.values.filter { it.id in ids }.map { RowStamp(it.id, it.updatedAt) }
+    override suspend fun upsertLinesFromSync(rows: List<ScriptLine>) { rows.forEach { lines[it.id] = it } }
 }

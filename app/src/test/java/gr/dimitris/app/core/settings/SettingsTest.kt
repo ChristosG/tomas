@@ -178,4 +178,59 @@ class SettingsTest {
         s.setTraceHand("BOTH")
         assertEquals(Settings.HAND_LEFT, s.traceHand.first())
     }
+
+    /** Empty means the app never touches the network by itself; a trailing slash is not a difference. */
+    @Test fun `the sync url is empty until someone types one`() = runBlocking {
+        val s = newSettings()
+        assertEquals("", s.syncUrl.first())
+        s.setSyncUrl("  https://sync.example.com/  ")
+        assertEquals("https://sync.example.com", s.syncUrl.first())
+        s.setSyncUrl("   ")
+        assertEquals("", s.syncUrl.first())
+    }
+
+    /** Nobody has been asked yet, and until they are the phone behaves as his. */
+    @Test fun `the device role is unanswered first and Dimitris in the meantime`() = runBlocking {
+        val s = newSettings()
+        assertEquals(false, s.rolePick.first().chosen)
+        assertEquals(DeviceRole.DIMITRIS, s.deviceRole.first())
+
+        s.setDeviceRole(DeviceRole.CAREGIVER)
+        assertEquals(true, s.rolePick.first().chosen)
+        assertEquals(DeviceRole.CAREGIVER, s.deviceRole.first())
+        assertEquals(DeviceRole.CAREGIVER, s.rolePick.first().role)
+    }
+
+    @Test fun `both sync cursors start at zero and persist`() = runBlocking {
+        val s = newSettings()
+        assertEquals(0L, s.syncCursor.first())
+        assertEquals(0L, s.syncPushedUpTo.first())
+        assertEquals(0L, s.lastSyncAt.first())
+
+        s.setSyncCursor(42)
+        s.setSyncPushedUpTo(1_757_000_000_000)
+        s.setLastSyncAt(1_757_000_000_500)
+        assertEquals(42L, s.syncCursor.first())
+        assertEquals(1_757_000_000_000L, s.syncPushedUpTo.first())
+        assertEquals(1_757_000_000_500L, s.lastSyncAt.first())
+    }
+
+    /**
+     * After a backup is restored the database is not the one the cursors were counted against, so
+     * the only honest position is the start. Everything else the caregiver set stays where it was.
+     */
+    @Test fun `restoring a backup resets both cursors and nothing else`() = runBlocking {
+        val s = newSettings()
+        s.setSyncCursor(42)
+        s.setSyncPushedUpTo(1_757_000_000_000)
+        s.setSyncUrl("https://sync.example.com")
+        s.setDeviceRole(DeviceRole.CAREGIVER)
+
+        s.resetSyncCursors()
+
+        assertEquals(0L, s.syncCursor.first())
+        assertEquals(0L, s.syncPushedUpTo.first())
+        assertEquals("https://sync.example.com", s.syncUrl.first())
+        assertEquals(DeviceRole.CAREGIVER, s.deviceRole.first())
+    }
 }
