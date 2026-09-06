@@ -2,6 +2,7 @@ package gr.dimitris.app.core.settings
 
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import gr.dimitris.app.core.data.ModuleId
+import gr.dimitris.app.modules.arcade.Adaptive
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -108,6 +109,21 @@ class SettingsTest {
         s.setTraceLevel(0); assertEquals(1, s.traceLevel.first())
         s.setTraceLevel(4); assertEquals(4, s.traceLevel.first())
         assertEquals(1, s.sentencesLevel.first())
+    }
+
+    /**
+     * The arcade's difficulty, and the only thing it remembers between sittings. A stored size out
+     * of range — an old backup, a version that moved the range — is pulled back to something he can
+     * still touch rather than handed to the games as it is.
+     */
+    @Test fun `the arcade target starts at 96 dp and is clamped to 40__130`() = runBlocking {
+        val s = newSettings()
+        assertEquals(Adaptive.START, s.arcadeTargetDp.first())
+        s.setArcadeTargetDp(9f); assertEquals(Adaptive.MIN, s.arcadeTargetDp.first())
+        s.setArcadeTargetDp(900f); assertEquals(Adaptive.MAX, s.arcadeTargetDp.first())
+        s.setArcadeTargetDp(72f); assertEquals(72f, s.arcadeTargetDp.first())
+        // Its own key: the writing levels are not the arcade's difficulty.
+        assertEquals(1, s.traceLevel.first())
     }
 
     /**
