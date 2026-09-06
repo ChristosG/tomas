@@ -279,8 +279,15 @@ To restore, put `data/` back and start the server. To start over, stop the serve
 
 - **Per-device levels are not synced.** The difficulty levels (numbers, sentences, tracing)
   live on each phone and stay there on purpose, so the father can adjust Dimitris' phone
-  without changing his own. Everything else — words, photos, recordings, schedules, scripts,
-  attempts, sessions, errors — is shared.
+  without changing his own. Words, photos, recordings, scripts and errors are shared from every
+  phone.
+- **Practice done on a caregiver's phone stays there.** A phone whose role is Φροντιστή never
+  sends its attempts, its sittings or its Leitner boxes — trying an exercise to see what it looks
+  like is not Dimitris practising, and sent, it would land in his weekly counts, in
+  «Μαθημένες λέξεις» and in the advice summary, and the boxes would change which words he is
+  handed next. Caregiver phones still *receive* his, which is the point of the progress screen.
+  Changing a phone's role later does not send the practice it already did: those rows are behind
+  the push mark for good.
 - One shared token, no user accounts. Anyone with the token can read and write everything, so
   keep it off group chats and rotate it (restart with a new `SYNC_TOKEN`, then update both
   phones) if a phone is lost.
@@ -295,10 +302,10 @@ To restore, put `data/` back and start the server. To start over, stop the serve
   the list on one phone leaves those rows on the other two and on the server. There is no way to
   clear them everywhere short of deleting `rows.jsonl`.
 - **`rows.jsonl` only grows.** Every accepted edit appends a line and nothing compacts it, and the
-  whole file is read back into memory on start. At a few hundred thousand rows that is a second and
-  a couple of hundred megabytes; a log that ever grew past about half a gigabyte would stop the
-  server from starting at all. For three phones that is decades away, but if it ever matters: stop
-  the server, keep only the newest line per `table` + `row.id`, and start it again.
+  whole file is read back into memory on start — as a buffer, decoded one line at a time, so the
+  cost is the file's own size and nothing more. At a few hundred thousand rows that is about a
+  second and a couple of hundred megabytes. For three phones that is decades away, but if it ever
+  matters: stop the server, keep only the newest line per `table` + `row.id`, and start it again.
 - **Sync does not ask whether the phone is on mobile data.** A phone that has just been set up
   sends its whole vocabulary and about 180 pictograms, and every launch afterwards syncs whatever
   has changed. That is a few hundred megabytes once and very little after that, so the app does not
@@ -314,9 +321,12 @@ Five things, once, and then nobody has to think about this again.
    phone: Φροντιστής → Συγχρονισμός → Κλειδί, with the address (`https://sync.example.com`) in
    the field above it. Three phones, one address, one token. Send it in a way you would send a
    house key, not in a group chat.
-3. **Set up Dimitris' phone too.** It is the one whose practice everyone else wants to see. Hold
-   his name on the first screen for two seconds, say Ναι, and the same two fields are there. His
-   own screens never mention any of this.
+3. **Set up Dimitris' phone too, and answer the role question honestly on each one.** His is the
+   phone whose practice everyone else wants to see — hold his name on the first screen for two
+   seconds, say Ναι, and the same two fields are there; his own screens never mention any of this.
+   The answer matters beyond which screen the app opens on: a phone set to Φροντιστή keeps its
+   own practice to itself (chapter 7), so a caregiver can try an exercise without it turning up as
+   his.
 4. **Leave automatic date & time on in all three phones** — see chapter 5. It is what makes "the
    newest edit wins" mean what it says.
 5. **Back up `data/`.** Chapter 6. That directory is the whole of it: copy it, and you have
@@ -325,7 +335,8 @@ Five things, once, and then nobody has to think about this again.
 What to expect the first time: each phone sends its whole vocabulary up (a few hundred rows and
 about 180 pictograms) and takes back whatever the others added. The screen says so in one line —
 «Έστειλα … πήρα …» — and the second sync is quiet. The bundled words and dialogues carry the same
-ids on every phone, so they merge into one copy rather than three.
+ids and the same timestamps on every phone, so they merge into one copy rather than three, and a
+phone set up later cannot undo what the first one already did to them.
 
 ---
 
@@ -374,8 +385,14 @@ curl -s https://sync.example.com/v1/health
 
 **Τι ΔΕΝ συγχρονίζεται:** τα επίπεδα δυσκολίας (αριθμοί, προτάσεις, γραφή) μένουν στο κάθε
 κινητό ξεχωριστά. Έτσι μπορείτε να αλλάξετε το επίπεδο στο κινητό του Δημήτρη χωρίς να
-επηρεαστεί το δικό σας. Όλα τα υπόλοιπα (λέξεις, φωτογραφίες, ηχογραφήσεις, προγράμματα,
-προσπάθειες, σφάλματα) συγχρονίζονται κανονικά.
+επηρεαστεί το δικό σας. Οι λέξεις, οι φωτογραφίες, οι ηχογραφήσεις, οι διάλογοι και τα σφάλματα
+συγχρονίζονται από όλα τα κινητά.
+
+**Η εξάσκηση στο δικό σας κινητό μένει στο δικό σας κινητό:** αν δοκιμάσετε μια άσκηση στο κινητό
+σας (που είναι «Φροντιστή»), δεν στέλνεται πουθενά. Δεν είναι δική του εξάσκηση, και αν στελνόταν
+θα έμπαινε στα δικά του νούμερα, στις «Μαθημένες λέξεις» και στο τι θα του δώσει η εφαρμογή την
+επόμενη φορά. Τη δική του εξάσκηση τη βλέπετε κανονικά — γι' αυτό υπάρχει η οθόνη «Πρόοδος». Αν
+αργότερα αλλάξετε τον ρόλο του κινητού, όσα έγιναν πριν δεν στέλνονται αναδρομικά.
 
 **Η ώρα των τηλεφώνων:** αφήστε την **αυτόματη ημερομηνία και ώρα** ανοιχτή και στα τρία
 κινητά (Ρυθμίσεις Android → Σύστημα → Ημερομηνία και ώρα). Όταν δύο άνθρωποι αλλάξουν την ίδια
