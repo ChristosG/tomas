@@ -38,21 +38,23 @@ class ArcadeFlowTest {
 
     private val graph get() = ApplicationProvider.getApplicationContext<DimitrisApp>().graph
     private var wasEnabled = false
-    private var sizeBefore = Adaptive.START
+    private var sizesBefore = emptyMap<ArcadeGame, Float>()
     private var since = 0L
 
     /** The arcade is off until a physio says otherwise. A test that switches it on puts it back. */
     @Before fun switchTheArcadeOn() = runBlocking<Unit> {
         wasEnabled = ModuleId.ARCADE in graph.settings.enabledModules.first()
-        sizeBefore = graph.settings.arcadeTargetDp.first()
+        sizesBefore = ArcadeGame.entries.associateWith { graph.settings.arcadeTargetDp(it).first() }
         graph.settings.setModuleEnabled(ModuleId.ARCADE, true)
         since = System.currentTimeMillis()
     }
 
     @After fun putItBack() = runBlocking<Unit> {
         graph.settings.setModuleEnabled(ModuleId.ARCADE, wasEnabled)
-        graph.settings.setArcadeTargetDp(sizeBefore)
+        sizesBefore.forEach { (game, size) -> graph.settings.setArcadeTargetDp(game, size) }
     }
+
+    private fun sizeOf(game: ArcadeGame): Float = runBlocking { graph.settings.arcadeTargetDp(game).first() }
 
     @Test fun twelveTargetsCaughtIsARoundOfTheTapGame() {
         openPractice()
@@ -67,8 +69,12 @@ class ArcadeFlowTest {
         assertTrue("the size he ended at is not on the row: ${row.detail}", row.detail.contains("sizeDp"))
         // The whole point of the module: a hand that keeps catching them gets a smaller target, and
         // the smaller target is still there tomorrow.
-        val after = runBlocking { graph.settings.arcadeTargetDp.first() }
+        val after = sizeOf(ArcadeGame.TAP)
         assertTrue("the target did not shrink: $after", after < Adaptive.START)
+        // And it is the tap game's own difficulty. Pressing a circle is the movement he keeps
+        // longest; pinching is the one he loses first, and a good round of tapping must not drag the
+        // photo down to the floor with it.
+        assertEquals("a round of tapping moved another game's size", sizesBefore[ArcadeGame.PINCH], sizeOf(ArcadeGame.PINCH))
     }
 
     /** Passing on a game is evidence too. It is never silently nothing. */
@@ -79,7 +85,7 @@ class ArcadeFlowTest {
         compose.waitUntil(TIMEOUT_MS) { attempts().any { it.itemId == "arcade:tap" } }
         assertEquals(Outcome.SKIPPED, attempts().first { it.itemId == "arcade:tap" }.outcome)
         // Skipped is not failed: the size he plays at is left exactly where it was.
-        assertEquals(sizeBefore, runBlocking { graph.settings.arcadeTargetDp.first() }, 0.001f)
+        assertEquals(sizesBefore[ArcadeGame.TAP]!!, sizeOf(ArcadeGame.TAP), 0.001f)
         // And the sitting goes on to the next game rather than ending.
         compose.onNodeWithText(ArcadeGame.TRACE.prompt).assertIsDisplayed()
     }

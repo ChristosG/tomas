@@ -1,8 +1,11 @@
 package gr.dimitris.app.core.settings
 
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
+import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.floatPreferencesKey
 import gr.dimitris.app.core.data.ModuleId
 import gr.dimitris.app.modules.arcade.Adaptive
+import gr.dimitris.app.modules.arcade.ArcadeGame
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -118,12 +121,49 @@ class SettingsTest {
      */
     @Test fun `the arcade target starts at 96 dp and is clamped to 40__130`() = runBlocking {
         val s = newSettings()
-        assertEquals(Adaptive.START, s.arcadeTargetDp.first())
-        s.setArcadeTargetDp(9f); assertEquals(Adaptive.MIN, s.arcadeTargetDp.first())
-        s.setArcadeTargetDp(900f); assertEquals(Adaptive.MAX, s.arcadeTargetDp.first())
-        s.setArcadeTargetDp(72f); assertEquals(72f, s.arcadeTargetDp.first())
+        val tap = ArcadeGame.TAP
+        assertEquals(Adaptive.START, s.arcadeTargetDp(tap).first())
+        s.setArcadeTargetDp(tap, 9f); assertEquals(Adaptive.MIN, s.arcadeTargetDp(tap).first())
+        s.setArcadeTargetDp(tap, 900f); assertEquals(Adaptive.MAX, s.arcadeTargetDp(tap).first())
+        s.setArcadeTargetDp(tap, 72f); assertEquals(72f, s.arcadeTargetDp(tap).first())
         // Its own key: the writing levels are not the arcade's difficulty.
         assertEquals(1, s.traceLevel.first())
+    }
+
+    /**
+     * Four games, four difficulties. Pressing a circle is the movement he keeps longest and pinching
+     * is the one he loses first, so a good round of tapping must not drag the photo down to the
+     * floor with it.
+     */
+    @Test fun `each arcade game keeps its own target size`() = runBlocking {
+        val s = newSettings()
+        s.setArcadeTargetDp(ArcadeGame.TAP, 44f)
+        s.setArcadeTargetDp(ArcadeGame.PINCH, 128f)
+        assertEquals(44f, s.arcadeTargetDp(ArcadeGame.TAP).first())
+        assertEquals(128f, s.arcadeTargetDp(ArcadeGame.PINCH).first())
+        // The two nobody has played are still at the start.
+        assertEquals(Adaptive.START, s.arcadeTargetDp(ArcadeGame.TRACE).first())
+        assertEquals(Adaptive.START, s.arcadeTargetDp(ArcadeGame.DRAG).first())
+    }
+
+    /**
+     * A device that played the arcade before the games had their own keys: whatever he had worked
+     * down to is where each of them starts, and the first game he plays afterwards moves only its
+     * own.
+     */
+    @Test fun `the one size the arcade used to keep is handed to every game`() = runBlocking {
+        val dir = createTempDirectory("settings").toFile()
+        val store = PreferenceDataStoreFactory.create(
+            scope = CoroutineScope(Dispatchers.IO + SupervisorJob()),
+            produceFile = { File(dir, "settings.preferences_pb") },
+        )
+        store.edit { it[floatPreferencesKey("arcade_target_dp")] = 58f }
+        val s = Settings(store)
+        for (game in ArcadeGame.entries) assertEquals(58f, s.arcadeTargetDp(game).first())
+
+        s.setArcadeTargetDp(ArcadeGame.DRAG, 70f)
+        assertEquals(70f, s.arcadeTargetDp(ArcadeGame.DRAG).first())
+        assertEquals(58f, s.arcadeTargetDp(ArcadeGame.TAP).first())
     }
 
     /**

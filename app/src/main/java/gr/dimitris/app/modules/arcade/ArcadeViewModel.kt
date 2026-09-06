@@ -22,7 +22,7 @@ data class ArcadeState(
     val index: Int = 0,
     val total: Int = ArcadeModule.GAMES.size,
     val game: ArcadeGame = ArcadeGame.TAP,
-    /** How big the target is right now, in dp. It is his difficulty; see [Adaptive]. */
+    /** How big this game's target is right now, in dp. It is his difficulty; see [Adaptive]. */
     val sizeDp: Float = Adaptive.START,
     /** False while the stored size and the photos are read. No game is started before they land. */
     val ready: Boolean = false,
@@ -60,6 +60,12 @@ class ArcadeViewModel(
     private val gson = Gson()
     private var startedAt = now()
 
+    /**
+     * Each game's own target size, read once at the start of the sitting. The four ask his hand for
+     * four different things, so they do not share a difficulty; see [Settings.arcadeTargetDp].
+     */
+    private val sizes = mutableMapOf<ArcadeGame, Float>()
+
     /** The settings and photo read. Cancelled on the way out, so nothing lands on the next screen. */
     private var loadJob: Job? = null
 
@@ -80,12 +86,14 @@ class ArcadeViewModel(
 
     private fun load() {
         loadJob = viewModelScope.launch {
-            val size = runCatching { graph.settings.arcadeTargetDp.first() }
-                .getOrElse { graph.errors.record("arcade size read", it); Adaptive.START }
+            for (game in games) {
+                sizes[game] = runCatching { graph.settings.arcadeTargetDp(game).first() }
+                    .getOrElse { graph.errors.record("arcade size read", it); Adaptive.START }
+            }
             val photos = photos()
             // Not before the reads: their wait is not his playing time.
             startedAt = now()
-            _state.update { it.copy(sizeDp = size, photos = photos, ready = true) }
+            _state.update { it.copy(sizeDp = sizeOf(games.first()), photos = photos, ready = true) }
             say(games.first())
         }
     }
@@ -115,6 +123,7 @@ class ArcadeViewModel(
         finishing = true
         val size = Adaptive.clamp(newSizeDp)
         graph.feedback.success()
+        sizes[_state.value.game] = size
         _state.update { it.copy(sizeDp = size) }
         record(hits, misses, size, skipped = false)
         advance()
@@ -136,9 +145,12 @@ class ArcadeViewModel(
         if (i >= games.size) { finishSitting(); return }
         val game = games[i]
         startedAt = now()
-        _state.update { it.copy(index = i, game = game) }
+        // Its own size, not the one the game before it left behind.
+        _state.update { it.copy(index = i, game = game, sizeDp = sizeOf(game)) }
         say(game)
     }
+
+    private fun sizeOf(game: ArcadeGame): Float = sizes[game] ?: Adaptive.START
 
     private fun finishSitting() {
         if (ending) return
@@ -197,7 +209,7 @@ class ArcadeViewModel(
             // The size is his difficulty and the only thing carried to tomorrow; a skipped game
             // leaves it exactly as it was.
             if (!skipped) {
-                runCatching { graph.settings.setArcadeTargetDp(size) }
+                runCatching { graph.settings.setArcadeTargetDp(game, size) }
                     .onFailure { graph.errors.record("arcade size write", it) }
             }
             runCatching {

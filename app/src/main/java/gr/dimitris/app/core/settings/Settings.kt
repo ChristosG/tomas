@@ -12,6 +12,7 @@ import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import gr.dimitris.app.core.data.ModuleId
 import gr.dimitris.app.modules.arcade.Adaptive
+import gr.dimitris.app.modules.arcade.ArcadeGame
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
@@ -60,15 +61,27 @@ class Settings(private val store: DataStore<Preferences>) {
     suspend fun setTraceHand(hand: String) { store.edit { it[TRACE_HAND] = if (hand in HANDS) hand else HAND_LEFT } }
 
     /**
-     * How big the arcade's targets are, in dp. It is his difficulty and the arcade's whole memory:
-     * every hit takes a little off it and every miss gives more back, and it is kept between
+     * How big one arcade game's targets are, in dp. It is his difficulty and the arcade's whole
+     * memory: every hit takes a little off it and every miss gives more back, and it is kept between
      * sittings so the size he worked down to is where he starts tomorrow.
      *
+     * One key per game, because the four ask his hand for four different things. Pressing a circle
+     * is the movement he keeps longest and pinching is the one he loses first, so a good round of
+     * tapping used to drag the pinch game down to the floor with it — and then the photo he could
+     * not open was the app's idea, not his hand's.
+     *
      * Clamped on the way out as well as in, because a value from a restored backup — or from a
-     * version that moved the range — must never leave him with a target too small to touch.
+     * version that moved the range — must never leave him with a target too small to touch. A device
+     * that stored the single pre-per-game size hands it to every game that has not been played since
+     * ([LEGACY_ARCADE_TARGET_DP]): whatever he had worked down to is where each of them starts.
      */
-    val arcadeTargetDp: Flow<Float> = store.data.map { Adaptive.clamp(it[ARCADE_TARGET_DP] ?: Adaptive.START) }
-    suspend fun setArcadeTargetDp(dp: Float) { store.edit { it[ARCADE_TARGET_DP] = Adaptive.clamp(dp) } }
+    fun arcadeTargetDp(game: ArcadeGame): Flow<Float> = store.data.map { p ->
+        Adaptive.clamp(p[arcadeKey(game)] ?: p[LEGACY_ARCADE_TARGET_DP] ?: Adaptive.START)
+    }
+
+    suspend fun setArcadeTargetDp(game: ArcadeGame, dp: Float) {
+        store.edit { it[arcadeKey(game)] = Adaptive.clamp(dp) }
+    }
 
     /**
      * Which modules Dimitris gets. Everything is on unless a caregiver switched it off, except the
@@ -116,7 +129,15 @@ class Settings(private val store: DataStore<Preferences>) {
         private val SENTENCES_LEVEL = intPreferencesKey("sentences_level")
         private val TRACE_LEVEL = intPreferencesKey("trace_level")
         private val TRACE_HAND = stringPreferencesKey("trace_hand")
-        private val ARCADE_TARGET_DP = floatPreferencesKey("arcade_target_dp")
+
+        /** One target size per game: `arcade_target_dp_tap` and its three siblings. */
+        private fun arcadeKey(game: ArcadeGame) = floatPreferencesKey("arcade_target_dp_${game.id}")
+
+        /**
+         * The one size the arcade had before each game kept its own. Read as the starting point for
+         * a game that has not been played since, never written again.
+         */
+        private val LEGACY_ARCADE_TARGET_DP = floatPreferencesKey("arcade_target_dp")
         private val DISABLED_MODULES = stringSetPreferencesKey("disabled_modules")
 
         /** The [DEFAULT_OFF] ones someone has switched on. Meaningless for every other module. */
