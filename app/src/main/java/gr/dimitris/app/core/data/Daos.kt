@@ -36,9 +36,11 @@ interface ItemDao {
     @Query("SELECT * FROM items WHERE deleted = 0") suspend fun allActive(): List<Item>
 
     /**
-     * Every row, deleted ones included. Only the seed importer wants this: a word the caregiver
-     * removed has to keep counting as "already on this device", or the next version bump hands it
-     * back to her and she has to delete it again.
+     * Every row, deleted ones included. Two callers want this, and for the same reason — a word the
+     * caregiver removed is still a word this device has had. The seed importer: it has to keep
+     * counting as "already on this device", or the next version bump hands it back to her and she
+     * has to delete it again. And the journey report: his attempts on it were still attempts on a
+     * word, and must not be counted as exercises with no vocabulary behind them.
      */
     @Query("SELECT * FROM items") suspend fun all(): List<Item>
     @Query("SELECT COUNT(*) FROM items WHERE deleted = 0") suspend fun countActive(): Int

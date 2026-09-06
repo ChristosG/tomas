@@ -1,6 +1,7 @@
 package gr.dimitris.app.core.data
 
 import com.google.gson.Gson
+import com.google.gson.JsonElement
 import kotlin.math.roundToInt
 
 /**
@@ -122,19 +123,33 @@ object Adapt {
 
         /**
          * The same guarantee [put] gives every other number, for the shapes [kept] lets through: no
-         * NaN and no infinity reaches the row, wherever in a list or a map it is hiding.
+         * NaN and no infinity reaches the row, wherever it is hiding.
          *
          * Gson throws on a non-finite float, and that exception would come out of the builder
          * itself — before the `runCatching` that wraps the write — and take the attempt with it. The
          * callers' arithmetic is careful today; the type that owns the guarantee should not be
-         * relying on that. A structure with one bad number in it is dropped whole: an array of
-         * per-letter marks missing one letter would be read as a word with fewer letters.
+         * relying on that.
+         *
+         * The question is answered by Gson rather than by a hand-written walk over the types this
+         * file happens to know about: the value is serialised to a [com.google.gson.JsonElement] —
+         * exactly what [json] will do to it later — and every number in the tree is checked. So an
+         * object's fields, an array, a list of maps of lists, and anything a future caller invents
+         * are all covered by construction; the previous version knew only about maps and iterables,
+         * and its one non-collection caller (the numbers module's exercise) was precisely the shape
+         * it could not see into. If the serialisation itself fails — Gson refuses a non-finite
+         * number as it writes it — the value is dropped for the same reason, because [json] would
+         * have thrown on it too.
+         *
+         * A structure with one bad number in it is dropped whole: an array of per-letter marks
+         * missing one letter would be read as a word with fewer letters.
          */
-        private fun finite(v: Any?): Boolean = when (v) {
-            is Float -> v.isFinite()
-            is Double -> v.isFinite()
-            is Map<*, *> -> v.values.all { finite(it) }
-            is Iterable<*> -> v.all { finite(it) }
+        private fun finite(v: Any?): Boolean =
+            runCatching { allFinite(gson.toJsonTree(v)) }.getOrDefault(false)
+
+        private fun allFinite(e: JsonElement): Boolean = when {
+            e.isJsonPrimitive -> !e.asJsonPrimitive.isNumber || e.asJsonPrimitive.asDouble.isFinite()
+            e.isJsonArray -> e.asJsonArray.all { allFinite(it) }
+            e.isJsonObject -> e.asJsonObject.entrySet().all { allFinite(it.value) }
             else -> true
         }
 
