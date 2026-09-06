@@ -19,6 +19,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -44,7 +45,6 @@ import gr.dimitris.app.ui.components.QuietButton
 import gr.dimitris.app.ui.theme.Sizes
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -58,15 +58,13 @@ data class AdviceState(
     /** Exactly the text that will be sent, or "" while it is still being built. */
     val summary: String = "",
     val hasKey: Boolean = false,
-    val asking: Boolean = false,
-    val advice: Advice? = null,
-    /** Greek, always. Shown under the button; never carries anything from a request. */
-    val error: String? = null,
 )
 
 /**
- * Builds the summary and, if the caregiver asks for it, sends it. Nothing leaves the phone until
- * [ask] is called, and [ask] is only reachable from a button that is disabled without a key.
+ * Builds the summary. It does **not** own the question: that lives in
+ * [gr.dimitris.app.AppGraph.adviceSession], on the application scope, so one request runs at a time
+ * and an answer is not thrown away because the caregiver pressed back while it was thinking. This
+ * class only decides *what* would be sent, and never sends anything by itself.
  *
  * The dashboard's own reader is [gr.dimitris.app.caregiver.progress.ProgressViewModel]; this one
  * repeats the read rather than sharing it, because the advice screen is its own destination and has
@@ -76,43 +74,16 @@ class AdviceViewModel(private val graph: AppGraph) : ViewModel() {
     private val _state = MutableStateFlow(AdviceState())
     val state: StateFlow<AdviceState> = _state.asStateFlow()
 
-    private var job: Job? = null
+    /** The question and the answer, outliving this screen. */
+    val session: StateFlow<AdviceSession.State> = graph.adviceSession.state
 
     init {
         viewModelScope.launch { load() }
     }
 
-    /** Cancels a request in flight. Back does this; it is the whole of the "cancel" this screen has. */
-    fun cancel() {
-        job?.cancel()
-        job = null
-        _state.update { it.copy(asking = false) }
-    }
+    fun ask() = graph.adviceSession.ask(_state.value.summary)
 
-    fun ask() {
-        // A job that is still alive, not just the flag: a cancelled ask leaves the flag down while
-        // the abandoned request may still be in flight, and a second tap would start — and bill —
-        // a second one alongside it.
-        if (job?.isActive == true) return
-        val summary = _state.value.summary
-        if (summary.isBlank()) return
-        _state.update { it.copy(asking = true, error = null, advice = null) }
-        job = viewModelScope.launch {
-            val result = graph.advisor.ask(summary)
-            job = null
-            result.fold(
-                onSuccess = { advice -> _state.update { it.copy(asking = false, advice = advice, error = null) } },
-                onFailure = { e ->
-                    // The advisor hands back an AdviceException carrying a Greek sentence and no
-                    // cause, so nothing from the request — least of all the key — reaches error_logs.
-                    // "No key" is not a fault to log: it is a state the disabled button already
-                    // prevents, and a caregiver reading the error list should not find it there.
-                    if (e.message != ClaudeAdvisor.NO_KEY) graph.errors.record("claude advice", e)
-                    _state.update { it.copy(asking = false, error = e.message ?: ClaudeAdvisor.FAILED) }
-                },
-            )
-        }
-    }
+    fun noticeSeen() = graph.adviceSession.noticeSeen()
 
     private suspend fun load() {
         val to = now()
@@ -152,14 +123,9 @@ class AdviceViewModel(private val graph: AppGraph) : ViewModel() {
                 false
             }
         }
-        _state.update {
-            it.copy(
-                loading = false,
-                summary = summary.orEmpty(),
-                hasKey = has,
-                error = if (summary == null) COULD_NOT_READ else it.error,
-            )
-        }
+        // A summary that could not be read stays empty, which disables the button and makes the
+        // «Τι θα σταλεί» section say [COULD_NOT_READ]. There is nothing to ask with either way.
+        _state.update { it.copy(loading = false, summary = summary.orEmpty(), hasKey = has) }
     }
 
     companion object {
@@ -181,54 +147,67 @@ fun AdviceScreen(onBack: () -> Unit) {
     val graph = LocalAppGraph.current
     val vm: AdviceViewModel = viewModel { AdviceViewModel(graph) }
     val state by vm.state.collectAsStateWithLifecycle()
+    val session by vm.session.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
     var showSummary by remember { mutableStateOf(false) }
     var speechError by remember { mutableStateOf<String?>(null) }
 
     DimitrisScreen(
         title = "Ρώτα τον Claude",
-        // Back while it is thinking cancels the question instead of leaving: there is no timer on
-        // this screen, so this is the only way out of a request that has stalled. The gesture and
-        // the arrow are the same back, because DimitrisScreen routes both through here.
-        onBack = { if (state.asking) vm.cancel() else onBack() },
+        // Back just leaves. A question already asked is not cancelled — the SDK's call is a
+        // blocking one and cancelling the coroutine would abandon the request rather than stop it —
+        // so it finishes on the application scope and its answer is here when the caregiver
+        // comes back.
+        onBack = onBack,
         bottom = {
-            if (state.asking) {
+            // The button is always here, so a caregiver can see what the screen is for while it
+            // thinks; it simply refuses a second question until the first one is answered.
+            BigButton(
+                when {
+                    session.asking -> "Ρωτάω τον Claude…"
+                    session.advice == null -> "Ρώτα τον Claude"
+                    else -> "Ρώτα ξανά"
+                },
+                onClick = vm::ask,
+                enabled = state.hasKey && state.summary.isNotBlank(),
+                icon = Icons.Rounded.AutoAwesome,
+                modifier = Modifier.semantics { testTag = "ask-claude" },
+            )
+            if (session.asking) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier.fillMaxWidth().heightIn(min = Sizes.touchMin),
                 ) {
                     CircularProgressIndicator(Modifier.size(Sizes.icon))
                     Spacer(Modifier.width(Sizes.gap))
-                    Text("Ρωτάω τον Claude…", style = MaterialTheme.typography.bodyLarge)
-                }
-                Text(
-                    "Πάτησε πίσω για ακύρωση.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            } else {
-                BigButton(
-                    if (state.advice == null) "Ρώτα τον Claude" else "Ρώτα ξανά",
-                    onClick = vm::ask,
-                    enabled = state.hasKey && state.summary.isNotBlank(),
-                    icon = Icons.Rounded.AutoAwesome,
-                    modifier = Modifier.semantics { testTag = "ask-claude" },
-                )
-                if (!state.hasKey) {
                     Text(
-                        "Βάλε κλειδί στις ρυθμίσεις",
+                        "Μπορείς να φύγεις· η απάντηση θα σε περιμένει.",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
-                state.error?.let { message ->
-                    Text(
-                        message,
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.error,
-                        modifier = Modifier.semantics { testTag = "advice-error" },
-                    )
-                }
+            }
+            if (!state.hasKey) {
+                Text(
+                    "Βάλε κλειδί στις ρυθμίσεις",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            session.notice?.let { message ->
+                Text(
+                    message,
+                    style = MaterialTheme.typography.bodyLarge,
+                    modifier = Modifier.semantics { testTag = "advice-notice" },
+                )
+            }
+            session.error?.let { message ->
+                Text(
+                    message,
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.semantics { testTag = "advice-error" },
+                )
             }
         },
     ) {
@@ -238,7 +217,7 @@ fun AdviceScreen(onBack: () -> Unit) {
                 return@Column
             }
 
-            val advice = state.advice
+            val advice = session.advice
             if (advice == null) {
                 Text(
                     "Στέλνει μόνο τα λόγια που βλέπεις πιο κάτω. Ποτέ φωνή, ποτέ φωτογραφίες.",
@@ -303,5 +282,10 @@ fun AdviceScreen(onBack: () -> Unit) {
             }
             Spacer(Modifier.height(Sizes.gap))
         }
+    }
+
+    // The «Περίμενε» line answers one tap; it is not a state the screen should keep.
+    LaunchedEffect(session.notice, session.asking) {
+        if (session.notice != null && !session.asking) vm.noticeSeen()
     }
 }

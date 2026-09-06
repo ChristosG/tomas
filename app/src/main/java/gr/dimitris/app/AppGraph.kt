@@ -3,6 +3,7 @@ package gr.dimitris.app
 import android.content.Context
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.room.withTransaction
+import gr.dimitris.app.caregiver.insights.AdviceSession
 import gr.dimitris.app.caregiver.insights.ClaudeAdvisor
 import gr.dimitris.app.core.audio.ImageStore
 import gr.dimitris.app.core.audio.MediaFiles
@@ -76,6 +77,13 @@ class AppGraph(context: Context) {
      * anything outside the phone, and only when someone taps the button on the advice screen.
      */
     val advisor = ClaudeAdvisor(secrets) { settings.claudeModel.first() }
+
+    /**
+     * The one question in flight and the last answer, held here rather than in the advice screen's
+     * view model: a request that costs money must not be started twice or thrown away because a
+     * caregiver pressed back while it was thinking.
+     */
+    val adviceSession = AdviceSession(scope, advisor::ask) { where, e -> errors.record(where, e) }
 
     /** Always built from the current db, so it survives a backup import. */
     val items: ItemRepository get() = ItemRepository(db.items(), db.recordings(), files::relativize)
