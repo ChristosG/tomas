@@ -112,14 +112,38 @@
 
 ---
 
-### Task 7: Housekeeping
+### Task 7: Record everything that could adapt later
 
-- [ ] `.github/workflows/*.yml`: `actions/setup-java` to the v5 major (pinned SHA); `docs/HANDOVER.md` updated for phase 11 (settings, advisor v2, what to test on the phone).
-- [ ] Commit `chore(phase11): setup-java v5, handover notes`.
+Chris's principle: keep the data now, wherever adaptation could help him later, so tempo, difficulty and timing can be tuned from his own behaviour instead of guessed.
+
+**Files:**
+- Create: `core/data/Telemetry.kt` (one `Adapt` helper that every module uses to fill `Attempt.detail`), `docs/ADAPTATION.md` (per module: what is recorded, which knob it could drive, the rule we would try first)
+- Modify: every module ViewModel's attempt writer (`modules/*/…ViewModel.kt`), `today/SessionViewModel.kt` (session detail), `core/data/Entities.kt` (no schema change: `detail` is JSON; `Session` gains nothing — its own timings go into an `attempts` row with `itemId = "session:<id>"`? No: keep `Session` as is and add the timing to `detail` of a final synthetic attempt `itemId = "session:summary"`, `module` = the last module, `sessionId` set)
+- Test: `TelemetryTest` (every module's detail parses back and carries the keys listed below), `ProgressStats` unchanged
+
+**What each module records in `detail` (all keys optional, all numbers plain, no text beyond what is already there):**
+- Every module: `ms` (time from the item being shown to its outcome), `retries`, the parameters in force at the time (`strictness`, `tempo`, `key`, `sizeDp`, `level`, `sttOn`, `sttWaitMs`).
+- Word coach / dialogues: `cueLevel` (already), `listened` (count of «Άκου»), `hintMsFirst` (time to the first hint), `sttHeard` (the recogniser's best text, only when on), `sttMatched`, `takeMs` (recording length), `peak` (amplitude).
+- Sing-then-say: `stage` reached (already), `repsPerStage` [n1..n5], `msPerStage`, `tempo`, `key`, `sung` (sung model present).
+- Numbers: `type`, `answer`, `chosen` (the wrong option when wrong: the distance tells how far off he was), `optionCount`, `ms`.
+- Sentences: `tiles`, `chosen`, `firstTry` (already), `undo` count, `ms`.
+- Trace: `coverage`, `precision`, `strokes`, `ms`, `strictness`, `hand` (already), `templateHeightPx`.
+- Arcade: `hits`, `misses`, `sizeDp` (already), `msPerTarget` (median), `missDistanceDp` (median distance of misses from the target centre).
+- Session summary row: `plannedModules`, `plannedCount`, `completed`, `leftEarly`, `ms`, `msPerModule`.
+
+- [ ] Write `docs/ADAPTATION.md` first (the table above plus, per knob, the first adaptation rule to try: e.g. melody tempo → slow down when `repsPerStage[2] > 3` on two consecutive sittings; STT wait → grow by 2 s when `sttHeard` is empty on ≥ 3 of the last 5 takes; trace strictness → suggest Χαλαρό when precision < 0.6 across a sitting, Αυστηρό when > 0.95 for a week; numbers/sentences/trace levels → already adaptive; arcade size → already adaptive but per-game `missDistanceDp` should set the growth factor).
+- [ ] Implement `Adapt` and the keys; keep every existing `detail` key; tests; commit `feat(phase11): every exercise records what could adapt it`.
 
 ---
 
-### Task 8: Verification
+### Task 8: Housekeeping
+
+- [ ] `.github/workflows/*.yml`: `actions/setup-java` to the v5 major (pinned SHA); `docs/HANDOVER.md` updated for phase 11 (settings, advisor v2, adaptation data, what to test on the phone); `README.md` gains the phase 11 row and a link to `docs/ADAPTATION.md`.
+- [ ] Commit `chore(phase11): setup-java v5, handover and README`.
+
+---
+
+### Task 9: Verification
 
 - [ ] Full suites green (JVM, connected after `pm clear`, server); tag `v0.2.0` and confirm the Release; append verification notes; commit `docs(phase11): verification notes`.
 - [ ] On Chris's phone (Chris): Γράψε with the wrong letter at Κανονικό → «Ξανά»; the right letter → pass; «Άκου» on a dialogue line before any hint; recognition waiting ≥ 8 s; a silent take → «Δεν σε άκουσα»; melody at Αργό/Χαμηλό; «Δοκίμασέ το» after adding a word; a real Claude consultation with the notes filled in, then a session showing the focus words first.
