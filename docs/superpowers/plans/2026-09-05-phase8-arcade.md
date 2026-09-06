@@ -131,3 +131,30 @@ slot change scales the box by one factor and his ink no longer drifts sideways o
 line are a programmer's guesses. So is the pinch game's "open to twice and back": it is the hardest
 thing in the app for that hand, and the physio may want it out of the rotation entirely. The module
 stays off until she says otherwise.
+
+## Execution record (controller rulings, 2026-09-06)
+
+Copied from the SDD ledger at phase close. Combined task + final review: 0 Critical / 2 Important / 9 Minor, all fixed or ruled; fix-wave re-review clean. Also carried in this phase: a daily session takes at most four modules (word coach always, three others rotating by least-recent use, skips not counted as use); per-game adaptive size keys; the three phase-7 residuals.
+
+## Pre-flight conflict scan (2026-09-05)
+
+| Tasks | Shared surface | Produces vs consumes | Finding |
+|---|---|---|---|
+| 1 / 2 | Adaptive (96 → ×0.92 min 40 / ×1.15 max 130), TargetPlacer | games consume | consistent |
+| 2 / phase 7 | TraceScorer reuse for the trace-path game | produced by phase 7 Task 1 | consistent |
+| 2 / phase 0 | Settings.enabledModules DEFAULT_OFF = setOf(ARCADE) already exists; settings row text | the row exists; Task 2 adds the physio note | consistent |
+| 2 / phase 2+3 | Screen(items, …): four games in sequence; planFor sizing | Ruling: planFor returns 4 transient items (one per game); in a session the screen runs min(items.size, 4) games in the fixed order tap → trace → drag → pinch; free practice all four |
+| 2 / phase 3 | end screen | auto-onDone in sessions (no level here) | Ruling: same rule; free practice shows «Εντάξει» |
+| 2 / phase 4 | Voice.quiet on leave; feedback sounds | consistent |
+| 2 alone | pinch game needs a photo: use his own item photos (caregiver photos in MediaFiles.photosDir) else seed pictograms | Ruling: prefer CAREGIVER-source items with a photo, fall back to any item image |
+| 2 alone | drag/pinch gestures inside a scrolling host | Ruling: the game area is a fixed-size Box that consumes the gesture (as phase 7's canvas) |
+| all | Greek-only, "Δεξί χέρι" always visible, no timers, 72dp for buttons (targets may be smaller: they are the exercise, not navigation) | Ruling: targets below 72dp are allowed by the spec; navigation buttons stay 72dp |
+
+Scan result: four rulings carried into dispatches.
+
+## Task log
+Tasks 1+2: dispatched as one batch — BASE 0d2ecb3, model opus (first commit: the session-module cap fix(phase2); in parallel with the phase-7 scoped re-review, read-only; residuals fold into this task's fix round)
+Tasks 1+2: implementer DONE (e57829c session cap, 3ff7d7f, 47804e6; JVM 286, connected 67). Deviations accepted pending review (no onSkip in games, awaitEachGesture pinch, prompts spoken, no second enabled key). Ruling: the adaptive size is per game (arcadeTargetDp keyed by game) so a flawless tap round does not shrink the drag/pinch targets — into the fix wave. Combined task + final review dispatched (opus).
+Review DONE (0 Critical / 2 Important / 9 Minor; all ✅). Fix wave — BASE 47804e6, resuming implementer a88a79b101098d1f6: I1 live home radius, I2 puck placement never inside the ring, per-game adaptive keys, minors (stray touch = miss only inside the board, clipped target, pinch miss after success, SKIPPED not counted as practised in the rotation, rotation wiring test, KDoc, icon on per-target success), plus the three phase-7 residuals (hide clears strokes, paper floor, uniform rescale) and Task 3 verification notes.
+Fix wave DONE (3709f67, 22cfb6b, 85b63f6, 58fbd8d + 8cd577f phase-7 residuals, 3ae2561; JVM 298, connected 67). Scoped re-review dispatched (sonnet) covering the phase-7 residuals too.
+Fix-wave re-review: clean. Phase 8 closed — execution record commit deferred until the phase-9 implementer reports (no concurrent git writes).
