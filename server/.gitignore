@@ -1,0 +1,4 @@
+# Runtime data (rows.jsonl + media/) - back this up, never commit it.
+data/
+# Temp DATA_DIRs made by the tests.
+.tmp-test-*/

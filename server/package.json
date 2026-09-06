@@ -1,0 +1,15 @@
+{
+  "name": "dimitris-sync-server",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Self-hosted sync server for Dimitris' App (rows + media, no dependencies)",
+  "type": "module",
+  "main": "server.mjs",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "start": "node server.mjs",
+    "test": "node --test"
+  }
+}

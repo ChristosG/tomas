@@ -1,0 +1,7 @@
+data/
+.tmp-test-*/
+*.test.mjs
+.env
+README.md
+compose.yaml
+Dockerfile

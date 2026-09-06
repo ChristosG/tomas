@@ -1,0 +1,30 @@
+# docker compose up -d --build
+#
+# Put SYNC_TOKEN in a .env file next to this one (never commit it):
+#   SYNC_TOKEN=<the output of: openssl rand -hex 32>
+#
+# The port is published on 127.0.0.1 only: nginx/caddy on the same host
+# terminates TLS and proxies to it. See README.md.
+
+services:
+  sync:
+    build: .
+    image: dimitris-sync-server
+    container_name: dimitris-sync
+    restart: unless-stopped
+    environment:
+      SYNC_TOKEN: ${SYNC_TOKEN:?set SYNC_TOKEN in server/.env}
+      PORT: "8787"
+      DATA_DIR: /data
+    ports:
+      - "127.0.0.1:8787:8787"
+    volumes:
+      - sync-data:/data
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  sync-data:
