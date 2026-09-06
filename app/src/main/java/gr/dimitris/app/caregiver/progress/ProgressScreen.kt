@@ -43,6 +43,9 @@ import java.time.ZoneId
 import kotlin.math.roundToInt
 
 private const val WEEK = 7
+
+/** What every section below «Αυτή την εβδομάδα» actually covers. */
+private const val WINDOW = "Τελευταίες 4 εβδομάδες"
 private val stepperWidth = 96.dp
 
 /** What a section says when there is nothing in it yet. Never a scolding, never a zero. */
@@ -64,11 +67,8 @@ fun ProgressScreen(onBack: () -> Unit, onAdvice: () -> Unit = {}) {
     val names = remember(graph) {
         graph.modules.associate { it.id to it.titleGreek } + (ModuleId.TALKBOARD to "Μίλα")
     }
-    val levels = linkedMapOf(
-        "Αριθμοί (${NumberProgression.MIN_LEVEL}–${NumberProgression.MAX_LEVEL})" to state.numbersLevel,
-        "Προτάσεις (${SentenceTemplates.MIN_LEVEL}–${SentenceTemplates.MAX_LEVEL})" to state.sentencesLevel,
-        "Γράψε (${TraceViewModel.MIN_LEVEL}–${TraceViewModel.MAX_LEVEL})" to state.traceLevel,
-    )
+    // One builder for both screens, so the label and the range cannot drift apart between them.
+    val levels = AdviceSummary.levels(state.numbersLevel, state.sentencesLevel, state.traceLevel)
 
     DimitrisScreen(
         title = "Πρόοδος",
@@ -92,7 +92,8 @@ fun ProgressScreen(onBack: () -> Unit, onAdvice: () -> Unit = {}) {
                     putExtra(Intent.EXTRA_SUBJECT, "Πρόοδος — Δημήτρης")
                     putExtra(Intent.EXTRA_TEXT, text)
                 }
-                runCatching { context.startActivity(Intent.createChooser(send, "Εξαγωγή αναφοράς")) }
+                val chooser = Intent.createChooser(send, "Εξαγωγή αναφοράς").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                runCatching { context.startActivity(chooser) }
                     .onFailure { graph.errors.record("progress share", it) }
             })
         },
@@ -116,6 +117,9 @@ fun ProgressScreen(onBack: () -> Unit, onAdvice: () -> Unit = {}) {
             Text(streakLine(p.streakDays), style = MaterialTheme.typography.bodyLarge)
 
             Section("Ανά άσκηση")
+            // Everything from here down is the whole window, not the seven days charted above. The
+            // caption is the difference between "he did sixty word exercises this week" and the truth.
+            Caption(WINDOW)
             if (p.modules.isEmpty()) Text(NOTHING, style = MaterialTheme.typography.bodyLarge)
             p.modules.forEach { m ->
                 Row(
@@ -125,8 +129,11 @@ fun ProgressScreen(onBack: () -> Unit, onAdvice: () -> Unit = {}) {
                     Text(names[m.module] ?: m.module.name, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
                     Column(horizontalAlignment = Alignment.End) {
                         Text(attemptsLine(m.attempts), style = MaterialTheme.typography.bodyMedium)
+                        // No percentage for the talk board: every tap on it is written as CORRECT
+                        // because it is him talking, so «100% σωστά» would be a count of taps read as
+                        // a therapy score — next to «Λέξεις 62% σωστά» that is a false comparison.
                         Text(
-                            "${(m.accuracy * 100).roundToInt()}% σωστά",
+                            if (m.module in ProgressStats.GRADED_MODULES) "${(m.accuracy * 100).roundToInt()}% σωστά" else "πίνακας",
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -159,8 +166,9 @@ fun ProgressScreen(onBack: () -> Unit, onAdvice: () -> Unit = {}) {
             WordList(p.mostUsedTalk.take(5))
 
             Section("Τι βλέπω")
+            Caption(WINDOW)
             if (state.insights.isEmpty()) {
-                Text("Τίποτα ιδιαίτερο αυτή την εβδομάδα.", style = MaterialTheme.typography.bodyLarge)
+                Text("Τίποτα ιδιαίτερο αυτές τις 4 εβδομάδες.", style = MaterialTheme.typography.bodyLarge)
             }
             state.insights.forEach { line ->
                 Text(
@@ -177,6 +185,13 @@ fun ProgressScreen(onBack: () -> Unit, onAdvice: () -> Unit = {}) {
             Spacer(Modifier.height(Sizes.gap))
         }
     }
+}
+
+/** The one line that says which period the numbers under it cover. */
+@Composable
+private fun Caption(text: String) {
+    Text(text, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    Spacer(Modifier.height(Sizes.gapSmall))
 }
 
 @Composable

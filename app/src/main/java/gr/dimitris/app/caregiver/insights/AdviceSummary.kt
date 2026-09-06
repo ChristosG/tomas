@@ -1,11 +1,15 @@
 package gr.dimitris.app.caregiver.insights
 
 import gr.dimitris.app.caregiver.progress.Progress
+import gr.dimitris.app.caregiver.progress.ProgressStats
 import gr.dimitris.app.caregiver.progress.attemptsLine
 import gr.dimitris.app.caregiver.progress.minutesLine
 import gr.dimitris.app.caregiver.progress.streakLine
 import gr.dimitris.app.caregiver.progress.timesLine
 import gr.dimitris.app.core.data.ModuleId
+import gr.dimitris.app.modules.numbers.NumberProgression
+import gr.dimitris.app.modules.sentences.SentenceTemplates
+import gr.dimitris.app.modules.trace.TraceViewModel
 import java.time.Instant
 import java.time.ZoneId
 import java.util.Locale
@@ -29,6 +33,9 @@ object AdviceSummary {
 
     /** How much of one word is worth sending. A "word" longer than this is a caregiver's paragraph. */
     const val MAX_WORD = 80
+
+    /** How much of one insight line is worth sending. Four words' worth: they are one-liners. */
+    const val MAX_LINE = MAX_WORD * 4
 
     private const val CUT = "\n… (η περίληψη κόπηκε)"
     private const val NOTHING = "Τίποτα ακόμα."
@@ -71,10 +78,16 @@ object AdviceSummary {
             appendLine("Ανά άσκηση")
             if (p.modules.isEmpty()) appendLine("- $NOTHING")
             p.modules.forEach { m ->
+                val name = names[m.module] ?: m.module.name
+                // The talk board has no accuracy to report: every tap on it is written as CORRECT
+                // because it is him speaking, so «100% σωστά» there would be a count of taps.
                 appendLine(
-                    "- ${names[m.module] ?: m.module.name}: ${attemptsLine(m.attempts)}, " +
-                        "${(m.accuracy * 100).roundToInt()}% σωστά " +
-                        "(σωστά ${m.correct}, με βοήθεια ${m.assisted}, προσπέρασε ${m.skipped})"
+                    if (m.module in ProgressStats.GRADED_MODULES) {
+                        "- $name: ${attemptsLine(m.attempts)}, ${(m.accuracy * 100).roundToInt()}% σωστά " +
+                            "(σωστά ${m.correct}, με βοήθεια ${m.assisted}, προσπέρασε ${m.skipped})"
+                    } else {
+                        "- $name: ${attemptsLine(m.attempts)} (πίνακας επικοινωνίας, χωρίς σωστό και λάθος)"
+                    }
                 )
             }
             appendLine()
@@ -101,10 +114,32 @@ object AdviceSummary {
 
             appendLine("Τι βλέπω")
             if (insights.isEmpty()) appendLine("- $NOTHING")
-            insights.forEach { appendLine("- ${it.oneLine()}") }
+            insights.forEach { appendLine("- ${it.oneLine().take(MAX_LINE)}") }
         }
-        return if (text.length <= MAX_CHARS) text else text.take(MAX_CHARS - CUT.length) + CUT
+        return if (text.length <= MAX_CHARS) text else cut(text)
     }
+
+    /**
+     * The ceiling, honoured at a line boundary. Every section above the last one is bounded by
+     * construction, so today the blind cut could only ever land in the final list — but "today" is
+     * not a guarantee, and half a heading would tell the reader something false about what was sent.
+     */
+    private fun cut(text: String): String {
+        val room = MAX_CHARS - CUT.length
+        val lastLine = text.lastIndexOf('\n', room - 1)
+        return text.take(if (lastLine > 0) lastLine else room) + CUT
+    }
+
+    /**
+     * The three levels as the summary and the share text name them, with their ranges, built in one
+     * place so the dashboard and the advice screen cannot drift apart on either the label or the
+     * range. Ordered, because the reader reads them in this order on the screen too.
+     */
+    fun levels(numbers: Int, sentences: Int, trace: Int): Map<String, Int> = linkedMapOf(
+        "Αριθμοί (${NumberProgression.MIN_LEVEL}–${NumberProgression.MAX_LEVEL})" to numbers,
+        "Προτάσεις (${SentenceTemplates.MIN_LEVEL}–${SentenceTemplates.MAX_LEVEL})" to sentences,
+        "Γράψε (${TraceViewModel.MIN_LEVEL}–${TraceViewModel.MAX_LEVEL})" to trace,
+    )
 
     private fun StringBuilder.words(list: List<Pair<String, Int>>) {
         if (list.isEmpty()) {

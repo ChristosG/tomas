@@ -58,6 +58,32 @@ class MigrationTest {
         }
     }
 
+    /**
+     * Phase 9 only adds an index on `sessions.startedAt` — the column the progress dashboard reads a
+     * window of sittings by. Nothing about a session changes, so every row must come through as it
+     * was, and the index must actually be there afterwards.
+     */
+    @Test fun migrate5To6IndexesSessionStartedAtAndKeepsTheSittings() {
+        val name = "migration-test-6.db"
+        helper.createDatabase(name, 5).use { db ->
+            db.execSQL(
+                "INSERT INTO sessions (id, startedAt, endedAt, plannedModules, plannedItemCount, completedItemCount, createdAt, updatedAt, deleted) " +
+                    "VALUES ('s', 1000, 2000, 'WORDCOACH', 4, 3, 1, 1, 0)"
+            )
+        }
+        helper.runMigrationsAndValidate(name, 6, true).use { db ->
+            db.query("SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='sessions' AND name LIKE '%startedAt%'").use { c ->
+                assertEquals("sessions.startedAt should be indexed after 5 to 6", 1, c.count)
+            }
+            db.query("SELECT startedAt, endedAt, completedItemCount FROM sessions WHERE id = 's'").use { c ->
+                c.moveToFirst()
+                assertEquals(1000, c.getLong(0))
+                assertEquals(2000, c.getLong(1))
+                assertEquals("a finished sitting must stay finished", 3, c.getInt(2))
+            }
+        }
+    }
+
     /** Phase 5 only adds tables, so the rows a caregiver already has must come through untouched. */
     @Test fun migrate4To5CreatesScriptTablesAndKeepsTheOldRows() {
         val name = "migration-test-5.db"

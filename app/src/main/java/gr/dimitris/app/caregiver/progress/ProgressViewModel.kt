@@ -4,10 +4,15 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import gr.dimitris.app.AppGraph
 import gr.dimitris.app.caregiver.insights.InsightRules
-import gr.dimitris.app.core.data.now
+import gr.dimitris.app.core.data.Attempt
+import gr.dimitris.app.core.data.Item
+import gr.dimitris.app.core.data.Session
+import gr.dimitris.app.core.data.now as systemClock
+import gr.dimitris.app.core.scheduler.LeitnerPolicy
 import gr.dimitris.app.modules.numbers.NumberProgression
 import gr.dimitris.app.modules.sentences.SentenceTemplates
 import gr.dimitris.app.modules.trace.TraceViewModel
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -35,7 +40,11 @@ data class ProgressState(
  * the one of the same length before it. Everything narrower than that is cut by
  * [ProgressStats.compute] itself, so the dashboard's own numbers are still four weeks.
  */
-class ProgressViewModel(private val graph: AppGraph) : ViewModel() {
+class ProgressViewModel(
+    private val graph: AppGraph,
+    /** The clock, so a test can hand in a fixed day instead of whichever one it runs on. */
+    private val now: () -> Long = ::systemClock,
+) : ViewModel() {
     private val _state = MutableStateFlow(ProgressState())
     val state: StateFlow<ProgressState> = _state.asStateFlow()
 
@@ -48,50 +57,80 @@ class ProgressViewModel(private val graph: AppGraph) : ViewModel() {
         viewModelScope.launch { graph.settings.traceLevel.collectLatest { v -> _state.update { it.copy(traceLevel = v) } } }
     }
 
-    /** Both ends clamped here as well as in [gr.dimitris.app.core.settings.Settings]: a stepper is a hand. */
-    fun setNumbersLevel(level: Int) = write("numbers level") {
-        graph.settings.setNumbersLevel(level.coerceIn(NumberProgression.MIN_LEVEL, NumberProgression.MAX_LEVEL))
+    /**
+     * Both ends clamped here as well as in [gr.dimitris.app.core.settings.Settings]: a stepper is a
+     * hand. The state moves first and the write follows, because the screen computes the next level
+     * from the state: a second tap that arrives before DataStore has echoed the first one would
+     * otherwise be computed from the old number and silently write the same level twice — the
+     * caregiver taps `+` twice, and the exercises Dimitris is handed move one step, not two.
+     */
+    fun setNumbersLevel(level: Int) {
+        val clamped = level.coerceIn(NumberProgression.MIN_LEVEL, NumberProgression.MAX_LEVEL)
+        _state.update { it.copy(numbersLevel = clamped) }
+        write("numbers level") { graph.settings.setNumbersLevel(clamped) }
     }
 
-    fun setSentencesLevel(level: Int) = write("sentences level") {
-        graph.settings.setSentencesLevel(level.coerceIn(SentenceTemplates.MIN_LEVEL, SentenceTemplates.MAX_LEVEL))
+    fun setSentencesLevel(level: Int) {
+        val clamped = level.coerceIn(SentenceTemplates.MIN_LEVEL, SentenceTemplates.MAX_LEVEL)
+        _state.update { it.copy(sentencesLevel = clamped) }
+        write("sentences level") { graph.settings.setSentencesLevel(clamped) }
     }
 
-    fun setTraceLevel(level: Int) = write("trace level") {
-        graph.settings.setTraceLevel(level.coerceIn(TraceViewModel.MIN_LEVEL, TraceViewModel.MAX_LEVEL))
-    }
-
-    fun refresh() {
-        viewModelScope.launch { load() }
+    fun setTraceLevel(level: Int) {
+        val clamped = level.coerceIn(TraceViewModel.MIN_LEVEL, TraceViewModel.MAX_LEVEL)
+        _state.update { it.copy(traceLevel = clamped) }
+        write("trace level") { graph.settings.setTraceLevel(clamped) }
     }
 
     private fun write(where: String, block: suspend () -> Unit) {
-        viewModelScope.launch { runCatching { block() }.onFailure { graph.errors.record(where, it) } }
+        viewModelScope.launch {
+            try {
+                block()
+            } catch (ce: CancellationException) {
+                throw ce                       // leaving the screen is not a failure to write down
+            } catch (e: Throwable) {
+                graph.errors.record(where, e)
+            }
+        }
     }
 
     private suspend fun load() {
         val to = now()
         val from = ProgressStats.from(to)
         val earlier = ProgressStats.from(to, ProgressStats.DEFAULT_DAYS * 2)
-        val read = runCatching {
+        val read = try {
             val db = graph.db
-            Triple(
-                db.attempts().between(earlier, to),
-                db.sessions().between(from, to),
-                db.schedules().allActive(),
-            ) to db.items().allActive().associateBy { it.id }
-        }.onFailure { graph.errors.record("progress read", it) }.getOrNull()
+            Read(
+                attempts = db.attempts().between(earlier, to),
+                sessions = db.sessions().between(from, to),
+                mastered = db.schedules().masteredCount(LeitnerPolicy.MAX_BOX),
+                items = db.items().allActive().associateBy { it.id },
+            )
+        } catch (ce: CancellationException) {
+            throw ce                           // the screen is gone; there is nobody to tell
+        } catch (e: Throwable) {
+            graph.errors.record("progress read", e)
+            null
+        }
 
         if (read == null) {
             _state.update { it.copy(loading = false) }
             return
         }
-        val (rows, items) = read
-        val (attempts, sessions, schedules) = rows
         val computed = withContext(Dispatchers.Default) {
-            val p = ProgressStats.compute(attempts, sessions, schedules, items, from, to)
-            p to InsightRules.generate(p, attempts, items)
+            // No schedules: the mastered count came from SQLite, which is the only thing they were for.
+            val p = ProgressStats.compute(
+                read.attempts, read.sessions, emptyList(), read.items, from, to, mastered = read.mastered,
+            )
+            p to InsightRules.generate(p, read.attempts, read.items)
         }
         _state.update { it.copy(loading = false, progress = computed.first, insights = computed.second) }
     }
+
+    private class Read(
+        val attempts: List<Attempt>,
+        val sessions: List<Session>,
+        val mastered: Int,
+        val items: Map<String, Item>,
+    )
 }

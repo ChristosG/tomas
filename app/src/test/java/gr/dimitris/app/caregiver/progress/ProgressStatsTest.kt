@@ -210,4 +210,83 @@ class ProgressStatsTest {
         val now = at("2026-09-05", 21, 30)
         assertEquals(startOf("2026-08-30"), ProgressStats.from(now, days = 7, zone = zone))
     }
+
+    /**
+     * A sitting that runs past midnight belongs, whole, to the day he sat down. Splitting it across
+     * two days would give him two half-days on the chart for one evening's work, and a streak he
+     * did not earn.
+     */
+    @Test fun `a session that runs past midnight counts on the day he sat down`() {
+        val start = at("2026-09-02", 23, 40)
+        val session = Session(
+            startedAt = start, endedAt = start + 40 * 60_000,          // 20 minutes into the 3rd
+            plannedModules = "WORDCOACH", plannedItemCount = 4,
+        )
+        val p = compute(sessions = listOf(session))
+
+        assertEquals(40, p.days[2].minutes)                             // 2026-09-02
+        assertEquals(0, p.days[3].minutes)                              // 2026-09-03
+    }
+
+    /**
+     * The Sunday Greece goes onto winter time has 25 hours. Day arithmetic that added 86 400 000 ms
+     * would land inside that Sunday twice and drop a day off the end of the window; going through
+     * `LocalDate` cannot. Same test for the 23-hour spring day, which is the one that loses a day.
+     */
+    @Test fun `a clock change neither adds nor loses a day`() {
+        val autumn = ProgressStats.compute(
+            attempts = emptyList(), sessions = emptyList(), schedules = emptyList(), items = items,
+            from = LocalDate.parse("2026-10-24").atStartOfDay(zone).toInstant().toEpochMilli(),
+            to = LocalDateTime.of(LocalDate.parse("2026-10-27"), java.time.LocalTime.of(23, 0)).atZone(zone).toInstant().toEpochMilli(),
+            zone = zone,
+        )
+        assertEquals(4, autumn.days.size)
+        assertEquals(
+            listOf("2026-10-24", "2026-10-25", "2026-10-26", "2026-10-27").map { startOf(it) },
+            autumn.days.map { it.day },
+        )
+
+        val spring = ProgressStats.compute(
+            attempts = emptyList(), sessions = emptyList(), schedules = emptyList(), items = items,
+            from = LocalDate.parse("2026-03-28").atStartOfDay(zone).toInstant().toEpochMilli(),
+            to = LocalDateTime.of(LocalDate.parse("2026-03-30"), java.time.LocalTime.of(23, 0)).atZone(zone).toInstant().toEpochMilli(),
+            zone = zone,
+        )
+        assertEquals(3, spring.days.size)
+        assertEquals(
+            listOf("2026-03-28", "2026-03-29", "2026-03-30").map { startOf(it) },
+            spring.days.map { it.day },
+        )
+    }
+
+    /**
+     * The zone is an argument, not the machine's. A caregiver reading the dashboard in Athens and a
+     * developer running the tests in Reykjavík must see the same attempt on the same day, and an
+     * attempt at 00:30 Athens time is the previous day in UTC — so the two zones must disagree here,
+     * which is exactly what proves the parameter is really being used.
+     */
+    @Test fun `the zone argument decides the day, not the machine`() {
+        val justAfterMidnightInAthens = at("2026-09-03", 0, 30)
+        val rows = listOf(
+            Attempt(itemId = "i1", module = ModuleId.WORDCOACH, startedAt = justAfterMidnightInAthens,
+                durationMs = 1000, outcome = Outcome.CORRECT),
+        )
+        val window = startOf("2026-08-31") to at("2026-09-05", 23, 59)
+
+        val athens = ProgressStats.compute(rows, emptyList(), emptyList(), items, window.first, window.second, zone)
+        val utc = ProgressStats.compute(rows, emptyList(), emptyList(), items, window.first, window.second, ZoneId.of("UTC"))
+
+        assertEquals(1, athens.days.single { it.day == startOf("2026-09-03") }.attempts)
+        assertEquals(0, utc.days.count { it.attempts > 0 && it.day == startOf("2026-09-03") })
+        assertEquals(1, utc.days.sumOf { it.attempts })                 // still counted, on 2 September
+    }
+
+    /** The dashboard hands in the count SQLite made; the schedules it was made from are not read. */
+    @Test fun `a counted mastered total wins over the schedules`() {
+        val p = ProgressStats.compute(
+            attempts = emptyList(), sessions = emptyList(), schedules = emptyList(), items = items,
+            from = startOf("2026-08-31"), to = at("2026-09-05", 23, 59), zone = zone, mastered = 7,
+        )
+        assertEquals(7, p.mastered)
+    }
 }

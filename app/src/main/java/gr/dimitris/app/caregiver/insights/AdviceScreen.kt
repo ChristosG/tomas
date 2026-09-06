@@ -37,13 +37,12 @@ import gr.dimitris.app.LocalAppGraph
 import gr.dimitris.app.caregiver.progress.ProgressStats
 import gr.dimitris.app.core.data.ModuleId
 import gr.dimitris.app.core.data.now
-import gr.dimitris.app.modules.numbers.NumberProgression
-import gr.dimitris.app.modules.sentences.SentenceTemplates
-import gr.dimitris.app.modules.trace.TraceViewModel
+import gr.dimitris.app.core.scheduler.LeitnerPolicy
 import gr.dimitris.app.ui.components.BigButton
 import gr.dimitris.app.ui.components.DimitrisScreen
 import gr.dimitris.app.ui.components.QuietButton
 import gr.dimitris.app.ui.theme.Sizes
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -91,7 +90,10 @@ class AdviceViewModel(private val graph: AppGraph) : ViewModel() {
     }
 
     fun ask() {
-        if (_state.value.asking) return
+        // A job that is still alive, not just the flag: a cancelled ask leaves the flag down while
+        // the abandoned request may still be in flight, and a second tap would start — and bill —
+        // a second one alongside it.
+        if (job?.isActive == true) return
         val summary = _state.value.summary
         if (summary.isBlank()) return
         _state.update { it.copy(asking = true, error = null, advice = null) }
@@ -103,7 +105,9 @@ class AdviceViewModel(private val graph: AppGraph) : ViewModel() {
                 onFailure = { e ->
                     // The advisor hands back an AdviceException carrying a Greek sentence and no
                     // cause, so nothing from the request — least of all the key — reaches error_logs.
-                    graph.errors.record("claude advice", e)
+                    // "No key" is not a fault to log: it is a state the disabled button already
+                    // prevents, and a caregiver reading the error list should not find it there.
+                    if (e.message != ClaudeAdvisor.NO_KEY) graph.errors.record("claude advice", e)
                     _state.update { it.copy(asking = false, error = e.message ?: ClaudeAdvisor.FAILED) }
                 },
             )
@@ -115,25 +119,39 @@ class AdviceViewModel(private val graph: AppGraph) : ViewModel() {
         val from = ProgressStats.from(to)
         val earlier = ProgressStats.from(to, ProgressStats.DEFAULT_DAYS * 2)
         val names = graph.modules.associate { it.id to it.titleGreek } + (ModuleId.TALKBOARD to "Μίλα")
-        val levels = linkedMapOf(
-            "Αριθμοί (1–${NumberProgression.MAX_LEVEL})" to graph.settings.numbersLevel.first(),
-            "Προτάσεις (1–${SentenceTemplates.MAX_LEVEL})" to graph.settings.sentencesLevel.first(),
-            "Γράψε (1–${TraceViewModel.MAX_LEVEL})" to graph.settings.traceLevel.first(),
+        // The same builder the dashboard uses, so the two screens cannot disagree about the labels.
+        val levels = AdviceSummary.levels(
+            graph.settings.numbersLevel.first(),
+            graph.settings.sentencesLevel.first(),
+            graph.settings.traceLevel.first(),
         )
-        val summary = runCatching {
+        val summary = try {
             val db = graph.db
             val attempts = db.attempts().between(earlier, to)
             val sessions = db.sessions().between(from, to)
-            val schedules = db.schedules().allActive()
+            val mastered = db.schedules().masteredCount(LeitnerPolicy.MAX_BOX)
             val items = db.items().allActive().associateBy { it.id }
             withContext(Dispatchers.Default) {
-                val p = ProgressStats.compute(attempts, sessions, schedules, items, from, to)
+                val p = ProgressStats.compute(attempts, sessions, emptyList(), items, from, to, mastered = mastered)
                 AdviceSummary.build(p, InsightRules.generate(p, attempts, items), levels, names)
             }
-        }.onFailure { graph.errors.record("advice summary", it) }.getOrNull()
+        } catch (ce: CancellationException) {
+            throw ce                           // leaving the screen is not a failure to write down
+        } catch (e: Throwable) {
+            graph.errors.record("advice summary", e)
+            null
+        }
 
         // The encrypted file is opened here, off the main thread, and never on the way to drawing.
-        val has = withContext(Dispatchers.IO) { runCatching { graph.advisor.hasKey }.getOrDefault(false) }
+        val has = withContext(Dispatchers.IO) {
+            try {
+                graph.advisor.hasKey
+            } catch (ce: CancellationException) {
+                throw ce
+            } catch (_: Throwable) {
+                false
+            }
+        }
         _state.update {
             it.copy(
                 loading = false,
@@ -238,6 +256,7 @@ fun AdviceScreen(onBack: () -> Unit) {
                     Spacer(Modifier.height(Sizes.gapSmall))
                     Text(advice.dimitris, style = MaterialTheme.typography.bodyLarge)
                     Spacer(Modifier.height(Sizes.gapSmall))
+
                     BigButton(
                         "Πες το στον Δημήτρη",
                         onClick = {
@@ -256,6 +275,15 @@ fun AdviceScreen(onBack: () -> Unit) {
                     speechError?.let {
                         Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
                     }
+                }
+                if (advice.truncated) {
+                    Spacer(Modifier.height(Sizes.gapSmall))
+                    Text(
+                        ClaudeAdvisor.TRUNCATED,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.semantics { testTag = "advice-truncated" },
+                    )
                 }
                 Spacer(Modifier.height(Sizes.gap))
             }

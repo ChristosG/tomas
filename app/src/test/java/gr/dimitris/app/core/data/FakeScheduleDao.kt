@@ -7,5 +7,6 @@ class FakeScheduleDao : ScheduleDao {
     override suspend fun due(module: ModuleId, now: Long): List<Schedule> =
         rows.values.filter { it.module == module && !it.deleted && it.nextDueAt <= now }.sortedBy { it.nextDueAt }
     override suspend fun all(module: ModuleId): List<Schedule> = rows.values.filter { it.module == module && !it.deleted }
-    override suspend fun allActive(): List<Schedule> = rows.values.filter { !it.deleted }
+    override suspend fun masteredCount(topBox: Int): Int =
+        rows.values.filter { !it.deleted && it.box >= topBox }.map { it.itemId }.distinct().size
 }

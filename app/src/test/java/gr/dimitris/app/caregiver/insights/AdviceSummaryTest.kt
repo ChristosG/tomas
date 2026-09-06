@@ -33,7 +33,8 @@ class AdviceSummaryTest {
     private fun at(date: String, hour: Int = 9): Long =
         LocalDateTime.of(LocalDate.parse(date), LocalTime.of(hour, 0)).atZone(zone).toInstant().toEpochMilli()
 
-    private val levels = linkedMapOf("Αριθμοί (1–7)" to 3, "Προτάσεις (1–4)" to 2, "Γράψε (1–5)" to 1)
+    /** The same builder both screens use, so a changed range changes this test too. */
+    private val levels = AdviceSummary.levels(numbers = 3, sentences = 2, trace = 1)
 
     /**
      * Items that carry exactly the things the summary must not leak: a photo on disk and a model
@@ -81,11 +82,26 @@ class AdviceSummaryTest {
         assertTrue(text, text.contains("Σερί: 3 μέρες"))
         assertTrue(text, text.contains("Μαθημένες λέξεις: 1"))
         assertTrue(text, text.contains("- Λέξεις: 3 ασκήσεις, 67% σωστά (σωστά 2, με βοήθεια 0, προσπέρασε 1)"))
-        assertTrue(text, text.contains("- Μίλα: 2 ασκήσεις, 100% σωστά"))
+        // The talk board is counted but never scored — see `the talk board is counted, not graded`.
+        assertTrue(text, text.contains("- Μίλα: 2 ασκήσεις (πίνακας επικοινωνίας, χωρίς σωστό και λάθος)"))
         assertTrue(text, text.contains("- ψωμί: 1 φορά"))
         assertTrue(text, text.contains("- νερό: 2 φορές"))
         assertTrue(text, text.contains("- Αριθμοί (1–7): 3"))
         assertTrue(text, text.contains("- Σερί 3 ημερών. Συνέχισε έτσι!"))
+    }
+
+    /**
+     * Every tap on the talk board is written as CORRECT, because it is him speaking rather than him
+     * being marked. «100% σωστά» next to «Λέξεις: 67% σωστά» would read as his best therapy score
+     * and it is a count of button presses, so the board gets a count and no percentage at all.
+     */
+    @Test fun `the talk board is counted, not graded`() {
+        val text = AdviceSummary.build(progress(), emptyList(), levels, zone = zone)
+
+        assertTrue(text, text.contains("- Μίλα: 2 ασκήσεις (πίνακας επικοινωνίας, χωρίς σωστό και λάθος)"))
+        assertFalse(text, text.contains("Μίλα: 2 ασκήσεις, 100%"))
+        // The graded modules still carry theirs.
+        assertTrue(text, text.contains("% σωστά (σωστά "))
     }
 
     @Test fun `the summary never carries a photo, a recording or a path`() {
@@ -146,11 +162,17 @@ class AdviceSummaryTest {
             mostSkipped = (1..10).map { "$long $it" to it },
             mostUsedTalk = (1..10).map { "$long $it" to it },
         )
-        val text = AdviceSummary.build(huge, List(6) { long }, levels, zone = zone)
+        // More insight lines than the rules can ever emit: `build` must hold the ceiling on its own,
+        // whatever it is handed, because the ceiling is what the request is allowed to cost.
+        val text = AdviceSummary.build(huge, List(40) { long }, levels, zone = zone)
 
         assertTrue("${text.length}", text.length <= AdviceSummary.MAX_CHARS)
         assertTrue(text, text.endsWith("… (η περίληψη κόπηκε)"))
+        // Cut on a line boundary, so the reader never sees half a heading or half a word.
+        assertTrue(text, text.removeSuffix("… (η περίληψη κόπηκε)").endsWith("\n"))
         // Each word is one line: the newlines a caregiver typed cannot break the headings apart.
         assertTrue(text, text.contains("- ${"λ".repeat(AdviceSummary.MAX_WORD)}: 1 φορά"))
+        // And an insight line is capped too, so one runaway line cannot eat the whole ceiling.
+        assertTrue(text, text.lines().none { it.length > AdviceSummary.MAX_LINE + 2 })
     }
 }

@@ -114,7 +114,9 @@ data class Schedule(
     val deleted: Boolean = false,
 )
 
-@Entity(tableName = "sessions", indices = [Index("updatedAt")])
+// startedAt is indexed because the progress dashboard reads a window of sittings by it
+// (SessionDao.between); without it every dashboard open scans the table.
+@Entity(tableName = "sessions", indices = [Index("startedAt"), Index("updatedAt")])
 data class Session(
     @PrimaryKey val id: String = newId(),
     val startedAt: Long,

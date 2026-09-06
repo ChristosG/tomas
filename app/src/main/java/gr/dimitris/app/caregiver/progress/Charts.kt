@@ -26,7 +26,12 @@ import gr.dimitris.app.ui.theme.Sizes
  *
  * Bars are drawn against the tallest value in the list, so the shape of a week is visible whether
  * he practised for four minutes a day or forty. A zero keeps its slot and draws nothing: the gap is
- * the point.
+ * the point. There is no axis and no number on a bar, deliberately — the real figure is the line of
+ * text under the chart, and a scale a caregiver has to read off a picture is a scale they will read
+ * wrong. Which also means a bar at full height is "the best of these days", never "a lot".
+ *
+ * Sized for a handful of values: every label gets an equal share of the width, so past a dozen or so
+ * they stop being readable. The two callers pass 7 and ≤ 5. Thin the labels before passing more.
  */
 @Composable
 fun BarChart(

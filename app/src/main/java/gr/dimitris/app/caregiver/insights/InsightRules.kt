@@ -2,6 +2,7 @@ package gr.dimitris.app.caregiver.insights
 
 import gr.dimitris.app.caregiver.progress.ModuleStat
 import gr.dimitris.app.caregiver.progress.Progress
+import gr.dimitris.app.caregiver.progress.ProgressStats
 import gr.dimitris.app.core.data.Attempt
 import gr.dimitris.app.core.data.Item
 import gr.dimitris.app.core.data.ModuleId
@@ -74,9 +75,15 @@ object InsightRules {
 
     fun percent(accuracy: Float): Int = (accuracy * 100).roundToInt()
 
-    /** The busiest of the modules that are going well: one line, about the one he has really done. */
+    /**
+     * The busiest of the modules that are going well: one line, about the one he has really done.
+     *
+     * Graded modules only, for the same reason the first-sound rule skips the board: every tap there
+     * is written as CORRECT, so the talk board is always 100% and usually the busiest thing he does — it
+     * would own this line for ever and push the module he actually worked at off the screen.
+     */
     private fun bestModule(p: Progress): ModuleStat? =
-        p.modules.filter { it.attempts >= MODULE_ATTEMPTS && it.accuracy >= MODULE_ACCURACY }
+        p.modules.filter { it.module in ProgressStats.GRADED_MODULES && it.attempts >= MODULE_ATTEMPTS && it.accuracy >= MODULE_ACCURACY }
             // Ties go to the module listed first, so the same week always names the same one.
             .maxWithOrNull(compareBy<ModuleStat> { it.attempts }.thenByDescending { it.module.ordinal })
 
@@ -93,7 +100,12 @@ object InsightRules {
      */
     private fun improvedSound(p: Progress, attempts: List<Attempt>, items: Map<String, Item>): String? {
         val span = (p.to - p.from).coerceAtLeast(1)
-        val live = attempts.filter { !it.deleted && items[it.itemId]?.firstSound?.isNotBlank() == true }
+        // Graded modules only. Every talk-board tap is written as CORRECT because it is him
+        // speaking, so counting the board here would let "he used the board more this month" arrive
+        // on the dashboard as "the «π» words got better" — the one thing this rule must never say.
+        val live = attempts.filter {
+            !it.deleted && it.module in ProgressStats.GRADED_MODULES && items[it.itemId]?.firstSound?.isNotBlank() == true
+        }
         val now = live.filter { it.startedAt in p.from..p.to }.groupBy { items.getValue(it.itemId).firstSound }
         val before = live.filter { it.startedAt >= p.from - span && it.startedAt < p.from }
             .groupBy { items.getValue(it.itemId).firstSound }

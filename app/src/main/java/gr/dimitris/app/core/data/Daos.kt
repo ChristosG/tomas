@@ -83,8 +83,13 @@ interface ScheduleDao {
     @Query("SELECT * FROM schedules WHERE module = :module AND deleted = 0 AND nextDueAt <= :now ORDER BY nextDueAt") suspend fun due(module: ModuleId, now: Long): List<Schedule>
     @Query("SELECT * FROM schedules WHERE module = :module AND deleted = 0") suspend fun all(module: ModuleId): List<Schedule>
 
-    /** Every live row, every module: what the dashboard counts the mastered words from. */
-    @Query("SELECT * FROM schedules WHERE deleted = 0") suspend fun allActive(): List<Schedule>
+    /**
+     * How many distinct words have reached the last Leitner box: what the dashboard shows as
+     * «Μαθημένες λέξεις». Counted by SQLite rather than by reading items × modules rows into memory
+     * only to count them. Distinct *items*, not rows — a word learned in three modules is one word.
+     */
+    @Query("SELECT COUNT(DISTINCT itemId) FROM schedules WHERE deleted = 0 AND box >= :topBox")
+    suspend fun masteredCount(topBox: Int): Int
 }
 
 @Dao

@@ -62,6 +62,15 @@ object ProgressStats {
     /** The three modules that run a cue ladder. In all of them a lower level means less help. */
     val CUE_MODULES = setOf(ModuleId.WORDCOACH, ModuleId.SCRIPTS, ModuleId.SINGSAY)
 
+    /**
+     * The modules whose outcome is a judgement about how he did. The talk board is not one of them:
+     * every tap on it is written as [Outcome.CORRECT] because it is him speaking, not him being
+     * marked, so an accuracy taken over the board is a count of button presses wearing a percentage
+     * sign. Anything that says "how well" — the accuracy line, the first-sound insight — asks here
+     * first; anything that says "how much" counts every module.
+     */
+    val GRADED_MODULES: Set<ModuleId> = ModuleId.entries.toSet() - ModuleId.TALKBOARD
+
     /** Midnight [days] days back, counting today as one of them. */
     fun from(now: Long, days: Int = DEFAULT_DAYS, zone: ZoneId = ZoneId.systemDefault()): Long =
         Instant.ofEpochMilli(startOfDay(now, zone)).atZone(zone).toLocalDate()
@@ -75,6 +84,14 @@ object ProgressStats {
         from: Long,
         to: Long,
         zone: ZoneId = ZoneId.systemDefault(),
+        /**
+         * How many distinct words are in the last box. Counted here from [schedules] when it is
+         * null, which is what the tests do; the dashboard passes
+         * [gr.dimitris.app.core.data.ScheduleDao.masteredCount] instead and hands in no schedules at
+         * all, because reading items × modules rows into memory to count them is work SQLite does
+         * better. The rule is the same either way: distinct items, not rows.
+         */
+        mastered: Int? = null,
     ): Progress {
         val window = attempts.filter { !it.deleted && it.startedAt in from..to }
         val sat = sessions.filter { !it.deleted && it.startedAt in from..to }
@@ -117,7 +134,8 @@ object ProgressStats {
             modules = modules,
             cueTrend = cueTrend,
             // One word learned is one word, even when it is learned in three modules.
-            mastered = schedules.filter { !it.deleted && it.box >= LeitnerPolicy.MAX_BOX }.map { it.itemId }.distinct().size,
+            mastered = mastered
+                ?: schedules.filter { !it.deleted && it.box >= LeitnerPolicy.MAX_BOX }.map { it.itemId }.distinct().size,
             mostSkipped = byText(window.filter { it.outcome == Outcome.SKIPPED }, items),
             mostUsedTalk = byText(window.filter { it.module == ModuleId.TALKBOARD }, items),
         )
