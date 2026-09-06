@@ -138,8 +138,8 @@ Same keys as the word coach, plus `scriptId` and `position` (which dialogue, and
 | `tries` | how many goes at this letter or word |
 | `coverage`, `precision` | the two numbers the marking is made of, 0..1; absent on a skip |
 | `meanDistance` | how far his ink ran from the letter, in canvas pixels |
-| `letters` | the same marks letter by letter: `[{c, coverage, precision}, …]` |
-| `inkRatio` | how much line he drew against how long the letter is |
+| `letters` | the same marks letter by letter: `[{c, coverage, precision, ink}, …]`, where `ink` is that letter's own share of the line against how long the letter is |
+| `inkRatio` | how much line he drew against how long the whole word is |
 | `strictness` | `LOOSE` / `NORMAL` / `STRICT`, as a caregiver had it set |
 | `strokes` | how many separate strokes the *marked* try took |
 | `templateHeightPx` | how tall the letter came out, in the same pixels as `meanDistance` |
@@ -154,6 +154,12 @@ Same keys as the word coach, plus `scriptId` and `position` (which dialogue, and
   sittings running goes on a practice list. That is one letter, not the word it was in.
 - **Form, not tolerance.** A high `strokes` count against a low `coverage` is a letter he is drawing
   in the wrong pieces; loosening the tolerance would only hide it. Show the stroke order instead.
+- **The ink budget** (`TraceScorer.INK_BUDGET`, 2.5 times a letter's own length) is the one number
+  here that was set from synthetic traces. `letters[].ink` is what a real hand actually uses, so the
+  rows can settle it: every row is a try that *passed* the budget — a trace that fails it is refused
+  with «Πολύ μελάνι», which is a nudge and another go, and nothing is written until a letter is
+  passed or passed on. So read these as margins. If they crowd 2.5, the budget is too tight for the
+  hand writing them; if the largest of a month sits near 1, it could come down.
 - **`templateHeightPx` adapts nothing by itself** and is here because without it none of the
   distances above can be compared between his phone and a tablet.
 

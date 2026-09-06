@@ -49,9 +49,20 @@ internal fun traceDetail(s: TraceState, score: TraceScore?, ms: Long): String = 
     put("strictness", s.strictness)
     // Letter by letter, because that is how it was marked and how it will be read: a
     // word he passes with one weak letter is a letter to practise, not a word.
-    kept("letters", score?.letters?.map { mapOf("c" to it.text, "coverage" to it.coverage, "precision" to it.precision) })
-    // How much line he drew against how long the letter is. Kept on every row so the
-    // budget that refuses colouring-in can be set from real hands instead of guesses.
+    //
+    // `ink` is how much line he drew on that letter against how long the letter is —
+    // the number the per-letter budget is applied to. It is here so the budget can be
+    // set from his own hand instead of from synthetic traces: what these rows show is
+    // the *margin* a real trace leaves, since a trace that fails the budget is refused
+    // and, by design, writes no row at all (a refusal is a nudge and another go, and
+    // nothing is recorded until a letter is passed or passed on). If the margins here
+    // ever crowd 2.5, the budget is too tight for the hand writing them.
+    kept(
+        "letters",
+        score?.letters?.map { mapOf("c" to it.text, "coverage" to it.coverage, "precision" to it.precision, "ink" to it.ink) },
+    )
+    // The same for the whole word. Kept on every row so the budget that refuses
+    // colouring-in can be set from real hands instead of guesses.
     kept("inkRatio", score?.inkRatio?.takeIf { it > 0f })
     put("ms", ms)
     // The strokes of the try that was marked, not of everything still on the paper: a «Δ» drawn in

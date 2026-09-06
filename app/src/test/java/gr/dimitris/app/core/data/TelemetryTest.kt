@@ -100,6 +100,33 @@ class TelemetryTest {
         )
     }
 
+    /**
+     * And the guard sees inside an *object*, which is the shape it used to be blind to — the one
+     * non-collection thing anything keeps today is the numbers module's exercise, a data class.
+     *
+     * The question is put to Gson rather than to a list of types this file happens to know about:
+     * the value is serialised exactly as the row will serialise it, and every number in the tree is
+     * checked. A field, a field of a field, an array, a list of objects — all of them, by
+     * construction rather than by a walk somebody has to remember to extend.
+     */
+    @Test fun `a kept object hiding a number that is not a number is dropped whole`() {
+        assertEquals("{}", Adapt.detail { kept("reading", Reading("η", Float.NaN, listOf(1f))) })
+        assertEquals("{}", Adapt.detail { kept("reading", Reading("η", 1f, listOf(1f, Float.POSITIVE_INFINITY))) })
+        // Two levels down, inside an object inside a list inside an object.
+        assertEquals("{}", Adapt.detail { kept("page", mapOf("rows" to listOf(Reading("η", Double.NaN.toFloat(), emptyList())))) })
+        // A primitive array is not an Iterable either, and it is covered too.
+        assertEquals("{}", Adapt.detail { kept("parts", floatArrayOf(1f, Float.NaN)) })
+
+        // And the sound one goes in whole, fields and all.
+        assertEquals(
+            """{"reading":{"name":"η","value":1.5,"parts":[0.25]}}""",
+            Adapt.detail { kept("reading", Reading("η", 1.5f, listOf(0.25f))) },
+        )
+    }
+
+    /** A shape like the numbers module's exercise: an object with numbers in its fields. */
+    private data class Reading(val name: String, val value: Float, val parts: List<Float>)
+
     @Test fun `text is cut to a length nobody can keep notes in`() {
         val long = "α".repeat(Adapt.MAX_TEXT * 2)
         assertEquals(Adapt.MAX_TEXT, parse(Adapt.detail { put("heard", long) })["heard"].asString.length)
@@ -221,7 +248,7 @@ class TelemetryTest {
         )
         val score = TraceScore(
             coverage = 0.9f, precision = 0.8f, meanDistance = 6f, passed = true,
-            letters = listOf(LetterScore("Δ", 0.9f, 0.8f, true)), inkRatio = 1.2f,
+            letters = listOf(LetterScore("Δ", 0.9f, 0.8f, true, ink = 1.4f)), inkRatio = 1.2f,
         )
         val json = traceDetail(s, score, ms = 9_000)
         assertTrue("the old prefix moved: $json", json.startsWith("""{"text":"Δ","level":3,"tries":2,"hand":"RIGHT""""))
@@ -232,6 +259,11 @@ class TelemetryTest {
         assertEquals(2, o["strokes"].asInt)
         assertEquals(240f, o["templateHeightPx"].asFloat, 0.001f)
         assertTrue("the per-letter marks are still whole: $o", o["letters"].isJsonArray)
+        // Every letter carries the ink it took, which is what the budget is applied to and the only
+        // way it can ever be set from his own hand: see docs/ADAPTATION.md.
+        val letter = o["letters"].asJsonArray.single().asJsonObject
+        assertEquals("Δ", letter["c"].asString)
+        assertEquals(1.4f, letter["ink"].asFloat, 0.001f)
     }
 
     @Test fun `a letter he passed on has no marks at all, only the ones about the paper`() {

@@ -273,7 +273,7 @@ class TraceScorerTest {
         // And the refusal knows which letter it was, so «Πολύ μελάνι» can name it.
         assertTrue("the letter he wrote by hand was blamed for the scribble: $s", s.letters[0].passed)
         assertFalse("the letter he coloured in was not the one blamed: $s", s.letters[1].passed)
-        assertTrue("the scribbled letter's own ratio ${s.letters[1].ink} is not over the budget", s.letters[1].ink > TraceScorer.INK_BUDGET)
+        assertTrue("the scribbled letter's own ratio ${s.letters[1].ink} is inside the budget", s.letters[1].ink > TraceScorer.INK_BUDGET)
         assertTrue("writing a letter by hand used ${s.letters[0].ink} of its own length", s.letters[0].ink < TraceScorer.INK_BUDGET)
     }
 
