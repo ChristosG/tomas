@@ -153,7 +153,8 @@ class WordCoachFlowTest {
         val detail = written(before).detail
         assertTrue("what it heard belongs in the row: $detail", detail.contains("\"sttHeard\":\"νερό\""))
         assertTrue("and that it agreed: $detail", detail.contains("\"sttMatched\":true"))
-        assertTrue("and how many goes it took: $detail", detail.contains("\"sttTries\":1"))
+        // Zero, not one: a try is a window the phone *disagreed* with him on, and it agreed.
+        assertTrue("agreeing with him cost him no try: $detail", detail.contains("\"sttTries\":0"))
         compose.runOnUiThread { vm.leave {} }
     }
 
@@ -269,25 +270,50 @@ class WordCoachFlowTest {
         compose.runOnUiThread { vm.leave {} }
     }
 
+    /**
+     * A window that heard nothing costs him nothing at all: no try, no nudge, the cue where it was.
+     *
+     * The wait itself is where silence is answered — the session is restarted rather than scored —
+     * so by the time one of these comes back the phone has been listening for as long as it can,
+     * and it has learned nothing about whether he spoke.
+     */
+    @Test fun aWindowThatHeardNothingCostsHimNothing() {
+        withRecognition().willHearNothing()
+        val before = attempts()
+        val vm = viewModel()
+
+        compose.runOnUiThread { vm.listen() }
+
+        compose.waitUntil(TIMEOUT_MS) { !vm.state.value.listening }
+        assertEquals("no try was spent on a phone that did not hear him", 0, vm.state.value.sttTries)
+        assertEquals("and he is not nudged for it", false, vm.state.value.nudge)
+        assertEquals("the cue has not moved", 0, vm.state.value.level)
+        assertEquals("«Βοήθεια» is still on offer", true, vm.state.value.canHint)
+        assertEquals("nothing was written", before.size, attempts().size)
+        compose.runOnUiThread { vm.leave {} }
+    }
+
     /** The model may not be spoken into a window he has open: the phone would hear itself. */
     @Test fun theModelCannotBeSpokenIntoAnOpenWindow() {
         val stt = withRecognition()
         stt.holdsOpen = true
-        stt.willHearNothing()
+        stt.willHear("ψωμί")
         val before = attempts()
         val vm = viewModel()
 
         compose.runOnUiThread { vm.listen() }
         compose.waitUntil(TIMEOUT_MS) { vm.state.value.listening }
-        compose.runOnUiThread { vm.listenModel(); vm.playComparison() }
+        // «Βοήθεια» too: at cue level 3 it says the whole word, which is the same door.
+        compose.runOnUiThread { vm.listenModel(); vm.playComparison(); vm.hint() }
 
         assertEquals("nothing was said over the open microphone", false, vm.state.value.modelPlaying)
+        assertEquals("and the ladder did not move under him either", 0, vm.state.value.level)
         compose.runOnUiThread { vm.stopListening() }
         compose.waitUntil(TIMEOUT_MS) { !vm.state.value.listening }
 
         // The refused «Άκου» must not have been counted either: the row would claim help he never got.
         stt.holdsOpen = false
-        stt.willHearNothing()
+        stt.willHear("γάλα")
         compose.runOnUiThread { vm.listen() }
         compose.waitUntil(TIMEOUT_MS) { vm.state.value.canConfirm }
         compose.runOnUiThread { vm.confirm() }

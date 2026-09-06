@@ -119,7 +119,7 @@ class SingSayFlowTest {
     @Test fun thePhraseCannotBeSungIntoAnOpenWindow() {
         val stt = withRecognition()
         stt.holdsOpen = true
-        stt.willHearNothing()
+        stt.willHear("καλημέρα")
         val item = runBlocking { graph.items.save(Item(text = "Θέλω έναν καφέ", category = Category.FOOD)) }
         phrase = item
         val before = attempts()
@@ -137,7 +137,7 @@ class SingSayFlowTest {
         compose.waitUntil(TIMEOUT_MS) { !vm.state.value.listening }
 
         stt.holdsOpen = false
-        stt.willHearNothing()
+        stt.willHear("πάμε σπίτι")
         compose.runOnUiThread { vm.listen() }
         compose.waitUntil(TIMEOUT_MS) { vm.state.value.canConfirm }
         compose.runOnUiThread { vm.didIt() }

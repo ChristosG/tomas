@@ -31,8 +31,24 @@ class GentleCheck {
 
         /** Missed again. Stop asking: «Το είπα!» is his to press. */
         OPEN,
+
+        /**
+         * The window came back with no words at all — silence, a sound that matched nothing, a
+         * session that hung to its bound, or his own «Στοπ» before he had started.
+         *
+         * It costs him **nothing**: no try, no nudge counted against him, the cue where it was.
+         * A phone that did not hear him has said nothing about whether he spoke, and it may not be
+         * allowed to decide anything on that basis.
+         */
+        NOTHING,
     }
 
+    /**
+     * How many times the phone heard him say something *else*. Only that: a window that heard
+     * nothing is not a try, and neither is one the phone could not open. This is the number the
+     * caregiver reads in the row and the number the confirm is gated on, and both of them must mean
+     * "the check disagreed with him", never "the microphone had a bad moment".
+     */
     var tries: Int = 0
         private set
 
@@ -49,15 +65,17 @@ class GentleCheck {
     /** Whether «Το είπα!» is his to press: after a match, or after he has been asked twice. */
     val canConfirm: Boolean get() = matched || tries >= TRIES_BEFORE_CONFIRM
 
+    /**
+     * What one window came back with. [text] is null when nothing was heard at all.
+     */
     fun record(text: String?, isMatch: Boolean): Verdict {
-        tries++
         heard = text
         matched = isMatch
-        return when {
-            isMatch -> Verdict.MATCHED
-            tries < TRIES_BEFORE_CONFIRM -> Verdict.NUDGE
-            else -> Verdict.OPEN
-        }
+        if (text == null) return Verdict.NOTHING
+        if (isMatch) return Verdict.MATCHED
+        // A real mismatch, and the only thing that counts as one.
+        tries++
+        return if (tries < TRIES_BEFORE_CONFIRM) Verdict.NUDGE else Verdict.OPEN
     }
 
     /** Which green button the bottom of the screen is showing. */

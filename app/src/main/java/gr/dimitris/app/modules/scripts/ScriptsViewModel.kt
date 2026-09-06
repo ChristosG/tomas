@@ -305,7 +305,10 @@ class ScriptsViewModel(
     /** One more prop. Levels 1–2 are spoken by TTS; 3–4 use the model voice, exactly as the word coach. */
     fun hint() {
         val l = ladder ?: return
-        if (_state.value.phase != ScriptPhase.WAITING_FOR_DIMITRIS || !l.canHint) return
+        // A level 3-4 cue says the whole line out loud, so this is the same door «Άκου» is: never
+        // into an open recogniser. «Βοήθεια» is not composed while listening either, but the guard
+        // belongs here — the view model is the layer that cannot be got round.
+        if (_state.value.phase != ScriptPhase.WAITING_FOR_DIMITRIS || !l.canHint || _state.value.listening) return
         l.hint()
         publishLadder(l)
         speakCue()
@@ -345,6 +348,7 @@ class ScriptsViewModel(
 
     private fun speakCue() {
         val l = ladder ?: return
+        if (_state.value.listening) return
         val item = lines.getOrNull(_state.value.index)?.second ?: return
         val level = l.level
         val text = l.cueText()
@@ -529,7 +533,9 @@ class ScriptsViewModel(
             judge(null)
             return
         }
-        graph.errors.record("scripts listen", e)
+        // Once per run, not once per window: «Μίλα» stays on the screen after the latch, and an
+        // offline phone would otherwise fill the caregiver's Σφάλματα with the same row every tap.
+        if (!recogniserBroke) graph.errors.record("scripts listen", e)
         recogniserBroke = true
         _state.update {
             it.copy(

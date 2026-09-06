@@ -48,26 +48,78 @@ class RecognitionTest {
     /** A code from a newer Android than this one is not assumed to be his fault. */
     @Test fun `an unknown code is the phone failing`() = assertFalse(Recognition.heardNothing(9_999))
 
+    // What his own «Στοπ» does to a code. It outranks all of them.
+
+    /**
+     * Some implementations answer `stopListening()` with `ERROR_CLIENT` rather than
+     * `ERROR_NO_MATCH`. Telling him the recogniser is broken because he closed the window himself
+     * would be the app blaming him for its own convention.
+     */
+    @Test fun `a client error after his stop is just the end of the window`() =
+        assertEquals(
+            Recognition.ErrorOutcome.STOPPED,
+            Recognition.outcomeOfError(SpeechRecognizer.ERROR_CLIENT, stopped = true),
+        )
+
+    @Test fun `and so is anything else after his stop`() {
+        for (code in listOf(SpeechRecognizer.ERROR_NETWORK, SpeechRecognizer.ERROR_SERVER, SpeechRecognizer.ERROR_NO_MATCH, 9_999)) {
+            assertEquals(
+                "«Στοπ» outranks code $code",
+                Recognition.ErrorOutcome.STOPPED,
+                Recognition.outcomeOfError(code, stopped = true),
+            )
+        }
+    }
+
+    @Test fun `without a stop the code still decides`() {
+        assertEquals(
+            Recognition.ErrorOutcome.HEARD_NOTHING,
+            Recognition.outcomeOfError(SpeechRecognizer.ERROR_NO_MATCH, stopped = false),
+        )
+        assertEquals(
+            Recognition.ErrorOutcome.NOT_WORKING,
+            Recognition.outcomeOfError(SpeechRecognizer.ERROR_CLIENT, stopped = false),
+        )
+    }
+
     // The silent restart: the whole of "it stops listening too soon".
 
-    @Test fun `a session that gave up at once is started again`() =
-        assertTrue(Recognition.restartsAfterSilence(elapsedMs = 1_500, stopped = false))
+    @Test fun `a session that waited and heard nothing is started again`() =
+        assertTrue(Recognition.restartsAfterSilence(elapsedMs = 1_500, stopped = false, restarts = 0, sessionMs = 1_500))
 
     @Test fun `and again, most of the way through the wait`() =
-        assertTrue(Recognition.restartsAfterSilence(elapsedMs = 19_999, stopped = false))
+        assertTrue(Recognition.restartsAfterSilence(elapsedMs = 19_999, stopped = false, restarts = 2, sessionMs = 4_000))
 
     @Test fun `but not once the wait is over`() =
-        assertFalse(Recognition.restartsAfterSilence(elapsedMs = Recognition.RESTART_WITHIN_MS, stopped = false))
+        assertFalse(Recognition.restartsAfterSilence(Recognition.RESTART_WITHIN_MS, stopped = false, restarts = 0, sessionMs = 4_000))
 
     @Test fun `nor long after it`() =
-        assertFalse(Recognition.restartsAfterSilence(elapsedMs = 30_000, stopped = false))
+        assertFalse(Recognition.restartsAfterSilence(elapsedMs = 30_000, stopped = false, restarts = 0, sessionMs = 4_000))
 
     /** «Στοπ» always wins: he said he was finished, and nothing may reopen the microphone. */
     @Test fun `his stop ends it however early`() =
-        assertFalse(Recognition.restartsAfterSilence(elapsedMs = 200, stopped = true))
+        assertFalse(Recognition.restartsAfterSilence(elapsedMs = 200, stopped = true, restarts = 0, sessionMs = 4_000))
 
-    @Test fun `the wait is twenty seconds, and the words for a phone that cannot listen`() {
+    /**
+     * A session that came back in under a second refused rather than listened. Restarting it would
+     * spin the recognition service instead of waiting for him, so the wait ends there.
+     */
+    @Test fun `a session that answered instantly is not started again`() =
+        assertFalse(Recognition.restartsAfterSilence(elapsedMs = 900, stopped = false, restarts = 0, sessionMs = 900))
+
+    @Test fun `a second is long enough to count as having listened`() =
+        assertTrue(Recognition.restartsAfterSilence(elapsedMs = 1_000, stopped = false, restarts = 0, sessionMs = Recognition.INSTANT_SESSION_MS))
+
+    /** And the ordinary case is capped, so the wait is a few long sessions and not a stream. */
+    @Test fun `the third restart is the last`() {
+        assertTrue(Recognition.restartsAfterSilence(elapsedMs = 8_000, stopped = false, restarts = 2, sessionMs = 3_000))
+        assertFalse(Recognition.restartsAfterSilence(elapsedMs = 8_000, stopped = false, restarts = Recognition.MAX_RESTARTS, sessionMs = 3_000))
+    }
+
+    @Test fun `the wait, its floors, and the words for a phone that cannot listen`() {
         assertEquals(20_000L, Recognition.RESTART_WITHIN_MS)
+        assertEquals(1_000L, Recognition.INSTANT_SESSION_MS)
+        assertEquals(3, Recognition.MAX_RESTARTS)
         assertEquals("Η αναγνώριση δεν λειτούργησε. Δες τις ρυθμίσεις.", Recognition.NOT_WORKING)
     }
 

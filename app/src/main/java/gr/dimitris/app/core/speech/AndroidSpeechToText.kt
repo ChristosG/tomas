@@ -62,12 +62,20 @@ class AndroidSpeechToText(private val context: Context) : SpeechToText {
             val startedAt = SystemClock.elapsedRealtime()
             try {
                 var outcome: Result<Transcript>
+                var restarts = 0
                 while (true) {
+                    val sessionStartedAt = SystemClock.elapsedRealtime()
                     outcome = oneSession()
-                    val why = outcome.exceptionOrNull()
-                    if (why !is SpeechFailure.HeardNothing) break
-                    val elapsed = SystemClock.elapsedRealtime() - startedAt
-                    if (!Recognition.restartsAfterSilence(elapsed, stopped)) break
+                    val now = SystemClock.elapsedRealtime()
+                    if (outcome.exceptionOrNull() !is SpeechFailure.HeardNothing) break
+                    val goOn = Recognition.restartsAfterSilence(
+                        elapsedMs = now - startedAt,
+                        stopped = stopped,
+                        restarts = restarts,
+                        sessionMs = now - sessionStartedAt,
+                    )
+                    if (!goOn) break
+                    restarts++
                 }
                 outcome
             } finally {
@@ -120,14 +128,23 @@ class AndroidSpeechToText(private val context: Context) : SpeechToText {
                         else Result.success(Transcript(best, scores?.firstOrNull() ?: 0f))
                     )
                 }
-                /** Silence and a sound that matched nothing are not failures of his. */
+                /**
+                 * Silence and a sound that matched nothing are not failures of his.
+                 *
+                 * Nor is anything at all once he has pressed «Στοπ»: some implementations answer
+                 * `stopListening()` with `ERROR_CLIENT` rather than `ERROR_NO_MATCH`, and telling
+                 * him the recogniser is broken because he closed the window himself would be the
+                 * app blaming him for its own convention. After a stop, whatever comes back is
+                 * simply what was heard — nothing.
+                 */
                 override fun onError(error: Int) {
                     if (!cont.isActive) return
                     cont.resume(
-                        Result.failure(
-                            if (Recognition.heardNothing(error)) SpeechFailure.HeardNothing()
-                            else SpeechFailure.NotWorking(error)
-                        )
+                        when (Recognition.outcomeOfError(error, stopped)) {
+                            Recognition.ErrorOutcome.STOPPED -> Result.success(Transcript("", 0f))
+                            Recognition.ErrorOutcome.HEARD_NOTHING -> Result.failure(SpeechFailure.HeardNothing())
+                            Recognition.ErrorOutcome.NOT_WORKING -> Result.failure(SpeechFailure.NotWorking(error))
+                        }
                     )
                 }
                 override fun onReadyForSpeech(params: Bundle?) { _level.value = 0f }
@@ -154,8 +171,6 @@ class AndroidSpeechToText(private val context: Context) : SpeechToText {
         }
 
     companion object {
-        const val HEARD_NOTHING = "Δεν άκουσα τίποτα"
-
         /** Not one of Android's codes: this device has no recognition service at all. */
         const val NO_RECOGNIZER = -1
 

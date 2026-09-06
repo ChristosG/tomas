@@ -97,23 +97,30 @@ fun SingSayScreen(items: List<Item>, sessionId: String?, onDone: () -> Unit, onL
             } else {
                 // The tap pad: the biggest thing on the screen, at the bottom where his left thumb
                 // lives. At the last stage it is the confirm — or, with recognition on, «Μίλα»
-                // until the phone has agreed with him or has asked him twice.
-                val speakNow = s.stage == SingStage.SPEAK && s.sttOn && !s.canConfirm
+                // until the phone has agreed with him or has asked him twice. The four stages
+                // before it are tapping, which recognition has nothing to do with.
+                val last = s.stage == SingStage.SPEAK
+                val primary = GentleCheck.primaryFor(s.sttResolved, s.sttOn, s.canConfirm)
+                val speakNow = last && primary == GentleCheck.Primary.SPEAK
+                // One DataStore read long, on the first phrase only, and only on the stage the
+                // recogniser has a say in: the button must not change what it does under his thumb.
+                val waitingToKnow = last && primary == GentleCheck.Primary.WAITING
                 BigButton(
-                    if (speakNow) SPEAK else if (s.stage == SingStage.SPEAK) "Το είπα!" else "Χτύπα",
+                    if (speakNow) SPEAK else if (last) "Το είπα!" else "Χτύπα",
                     onClick = {
                         when {
                             speakNow -> askListen.launch(Manifest.permission.RECORD_AUDIO)
-                            s.stage == SingStage.SPEAK -> vm.didIt()
+                            last -> vm.didIt()
                             else -> vm.tap()
                         }
                     },
                     icon = if (speakNow) Icons.Rounded.Mic else null,
-                    tone = if (s.stage == SingStage.SPEAK) ButtonTone.Success else ButtonTone.Secondary,
-                    modifier = Modifier.height(110.dp), enabled = !s.playing && !s.isRecording,
+                    tone = if (last) ButtonTone.Success else ButtonTone.Secondary,
+                    modifier = Modifier.height(110.dp),
+                    enabled = !s.playing && !s.isRecording && !waitingToKnow,
                 )
                 // Still on offer once «Το είπα!» is back: another go is his to take, never asked of him.
-                if (s.stage == SingStage.SPEAK && s.sttOn && s.canConfirm) {
+                if (last && s.sttOn && primary == GentleCheck.Primary.CONFIRM) {
                     Spacer(Modifier.height(Sizes.gapSmall))
                     QuietButton(SPEAK, onClick = { askListen.launch(Manifest.permission.RECORD_AUDIO) }, icon = Icons.Rounded.Mic, enabled = !s.playing && !s.isRecording)
                 }

@@ -24,6 +24,32 @@ object Recognition {
      * that points at the settings, it is logged once for the caregiver, and it costs him nothing:
      * a phone that cannot listen must never be able to spend his two tries for him.
      */
+    /** What one `onError` means to him, once his own «Στοπ» is taken into account. */
+    enum class ErrorOutcome {
+        /** He closed the window himself. Whatever the code says, this is simply what was heard. */
+        STOPPED,
+
+        /** Silence, or a sound that matched no word. His, and answered gently. */
+        HEARD_NOTHING,
+
+        /** The phone could not listen at all. Never his, and it costs him no try. */
+        NOT_WORKING,
+    }
+
+    /**
+     * The classifier the recogniser actually uses.
+     *
+     * [stopped] comes first because it outranks the code: some implementations answer
+     * `stopListening()` with `ERROR_CLIENT` rather than `ERROR_NO_MATCH`, and telling him the
+     * recogniser is broken because he closed the window himself would be the app blaming him for
+     * its own convention.
+     */
+    fun outcomeOfError(errorCode: Int, stopped: Boolean): ErrorOutcome = when {
+        stopped -> ErrorOutcome.STOPPED
+        heardNothing(errorCode) -> ErrorOutcome.HEARD_NOTHING
+        else -> ErrorOutcome.NOT_WORKING
+    }
+
     fun heardNothing(errorCode: Int): Boolean =
         errorCode == SpeechRecognizer.ERROR_SPEECH_TIMEOUT || errorCode == SpeechRecognizer.ERROR_NO_MATCH
 
@@ -39,9 +65,20 @@ object Recognition {
      *
      * [stopped] is his «Στοπ», and it always wins: nothing is ever restarted after he has said he
      * is finished.
+     *
+     * Two floors keep this from becoming a treadmill on a device that behaves differently from
+     * Chris'. A session that came back in under [INSTANT_SESSION_MS] never really listened — the
+     * service refused rather than waited — and restarting it would bind and unbind the recognition
+     * service hundreds of times over the twenty seconds without ever giving him a window. And
+     * [MAX_RESTARTS] caps the ordinary case, so the wait is a handful of long sessions rather than
+     * an unbounded stream of short ones. When either floor stops the loop the wait simply ends as
+     * having heard nothing, which costs him nothing at all.
      */
-    fun restartsAfterSilence(elapsedMs: Long, stopped: Boolean): Boolean =
-        !stopped && elapsedMs < RESTART_WITHIN_MS
+    fun restartsAfterSilence(elapsedMs: Long, stopped: Boolean, restarts: Int, sessionMs: Long): Boolean =
+        !stopped &&
+            elapsedMs < RESTART_WITHIN_MS &&
+            restarts < MAX_RESTARTS &&
+            sessionMs >= INSTANT_SESSION_MS
 
     /**
      * How long the app keeps listening for him across restarts, measured from «Μίλα».
@@ -51,6 +88,15 @@ object Recognition {
      * is no countdown on the screen and nothing tells him to hurry.
      */
     const val RESTART_WITHIN_MS = 20_000L
+
+    /**
+     * A session that answered faster than this did not listen — it refused. Restarting it would
+     * spin the recognition service rather than wait for him, so the wait ends instead.
+     */
+    const val INSTANT_SESSION_MS = 1_000L
+
+    /** At most this many further sessions in one wait, however much of the twenty seconds is left. */
+    const val MAX_RESTARTS = 3
 
     /**
      * Said when the phone could not listen at all. It points at the settings because that is where

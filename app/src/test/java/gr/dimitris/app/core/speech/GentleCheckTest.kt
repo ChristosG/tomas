@@ -27,6 +27,7 @@ class GentleCheckTest {
     @Test fun `a match confirms for him at once`() {
         assertEquals(Verdict.MATCHED, check.record("καφές", isMatch = true))
         assertTrue(check.matched)
+        assertEquals("agreeing with him is not a try against him", 0, check.tries)
         assertTrue("he said it: the button is his", check.canConfirm)
         assertFalse("a match is never nudged", check.nudging)
         assertEquals("καφές", check.heard)
@@ -48,15 +49,37 @@ class GentleCheckTest {
     }
 
     /**
-     * The wall this whole task exists to remove, pointing the other way: two windows that heard
-     * nothing at all must open the confirm just as two mismatches do. Otherwise a recogniser having
-     * a bad morning leaves a man who *did* say the word with no way to say he had.
+     * A window that heard nothing costs him nothing at all.
+     *
+     * The phone did not disagree with him — it did not hear him — and it may not decide anything on
+     * that basis: no try spent, no nudge counted, the cue exactly where it was. The wait itself is
+     * where silence is answered, by restarting the session rather than by scoring him.
      */
-    @Test fun `two windows that heard nothing still give him the confirm`() {
-        assertEquals(Verdict.NUDGE, check.record(null, isMatch = false))
-        assertEquals(Verdict.OPEN, check.record(null, isMatch = false))
+    @Test fun `a window that heard nothing is not a try`() {
+        assertEquals(Verdict.NOTHING, check.record(null, isMatch = false))
+        assertEquals("nothing was heard, so nothing was counted", 0, check.tries)
+        assertFalse("and he is not nudged for the phone's deafness", check.nudging)
+        assertNull("nothing is quoted back at him", check.heard)
+
+        assertEquals(Verdict.NOTHING, check.record(null, isMatch = false))
+        assertEquals(0, check.tries)
+    }
+
+    /** Nor does one wipe out a mismatch he had already been nudged for. */
+    @Test fun `a silent window leaves an earlier mismatch standing`() {
+        check.record("νερό", isMatch = false)
+        assertEquals(Verdict.NOTHING, check.record(null, isMatch = false))
+        assertEquals("the mismatch is still the only try", 1, check.tries)
+        assertTrue("and the nudge it earned is still on the screen", check.nudging)
+    }
+
+    /** And once the confirm is his, a silent window never takes it back. */
+    @Test fun `a silent window does not close the confirm again`() {
+        check.record("νερό", isMatch = false)
+        check.record("ψωμί", isMatch = false)
         assertTrue(check.canConfirm)
-        assertNull("nothing was heard, so nothing is quoted back at him", check.heard)
+        check.record(null, isMatch = false)
+        assertTrue("«Το είπα!» does not come and go", check.canConfirm)
     }
 
     /** A match after a miss is still a match: the phone agrees with him and the turn is done. */

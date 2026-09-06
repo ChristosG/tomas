@@ -462,7 +462,9 @@ class SingSayViewModel(private val graph: AppGraph, private val items: List<Item
             judge(null)
             return
         }
-        graph.errors.record("singsay listen", e)
+        // Once per run, not once per window: «Μίλα» stays on the screen after the latch, and an
+        // offline phone would otherwise fill the caregiver's Σφάλματα with the same row every tap.
+        if (!recogniserBroke) graph.errors.record("singsay listen", e)
         recogniserBroke = true
         _state.update {
             it.copy(

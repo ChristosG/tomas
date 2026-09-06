@@ -145,7 +145,10 @@ class WordCoachViewModel(private val graph: AppGraph, private val items: List<It
 
     /** One more hint. Levels 1–2 are spoken by TTS; 3–4 use the model voice. */
     fun hint() {
-        if (!ladder.canHint) return
+        // A level 3-4 cue says the whole word out loud, so this is the same door «Άκου» is: never
+        // into an open recogniser. «Βοήθεια» is not composed while listening either, but the guard
+        // belongs here — the view model is the layer that cannot be got round.
+        if (!ladder.canHint || _state.value.listening) return
         ladder.hint()
         publishLadder()
         speakCue()
@@ -176,6 +179,7 @@ class WordCoachViewModel(private val graph: AppGraph, private val items: List<It
 
     private fun speakCue() {
         val s = _state.value
+        if (s.listening) return
         speaking {
             when (s.level) {
                 1, 2 -> ladder.cueText()?.let { report(graph.speaker.speakText(it)) }
@@ -343,7 +347,9 @@ class WordCoachViewModel(private val graph: AppGraph, private val items: List<It
             judge(null)
             return
         }
-        graph.errors.record("wordcoach listen", e)
+        // Once per run, not once per window: «Μίλα» stays on the screen after the latch, and an
+        // offline phone would otherwise fill the caregiver's Σφάλματα with the same row every tap.
+        if (!recogniserBroke) graph.errors.record("wordcoach listen", e)
         recogniserBroke = true
         _state.update {
             it.copy(

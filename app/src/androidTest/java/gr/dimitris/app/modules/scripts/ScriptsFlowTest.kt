@@ -246,7 +246,7 @@ class ScriptsFlowTest {
 
     /** A miss is a nudge and never a wall: one «Δοκίμασε ξανά», then «Το είπα!» confirms as always. */
     @Test fun twoMissesOnATurnLeaveHimTheConfirm() {
-        withRecognition().willHear("καλημέρα").willHearNothing()
+        withRecognition().willHear("καλημέρα").willHear("πάμε σπίτι")
         val script = dialogue(Speaker.DIMITRIS to "Θέλω έναν καφέ.")
         val before = attempts()
         val vm = viewModel(script)
@@ -258,7 +258,6 @@ class ScriptsFlowTest {
         assertEquals("the cue has not moved", 0, vm.state.value.level)
         assertEquals("nothing has been written", before.size, attempts().size)
 
-        // The second window hears nothing at all — a bad moment for the recogniser, not for him.
         compose.runOnUiThread { vm.listen() }
         compose.waitUntil(TIMEOUT_MS) { vm.state.value.sttTries == 2 }
         assertEquals("the phone stops asking", true, vm.state.value.canConfirm)
@@ -303,21 +302,23 @@ class ScriptsFlowTest {
     @Test fun theDialogueCannotSpeakIntoAnOpenWindow() {
         val stt = withRecognition()
         stt.holdsOpen = true
-        stt.willHearNothing()
+        stt.willHear("καλημέρα")
         val script = dialogue(Speaker.OTHER to "Τι θα πάρετε;", Speaker.DIMITRIS to "Θέλω έναν καφέ.")
         val before = attempts()
         val vm = viewModel(script)
 
         compose.runOnUiThread { vm.listen() }
         compose.waitUntil(TIMEOUT_MS) { vm.state.value.listening }
-        compose.runOnUiThread { vm.listenModel(); vm.replay(0); vm.playComparison() }
+        // «Βοήθεια» too: at cue level 3 it says the whole line, which is the same door.
+        compose.runOnUiThread { vm.listenModel(); vm.replay(0); vm.playComparison(); vm.hint() }
 
         assertEquals("nothing was said over the open microphone", false, vm.state.value.modelPlaying)
+        assertEquals("and the ladder did not move under him either", 0, vm.state.value.level)
         compose.runOnUiThread { vm.stopListening() }
         compose.waitUntil(TIMEOUT_MS) { !vm.state.value.listening }
 
         stt.holdsOpen = false
-        stt.willHearNothing()
+        stt.willHear("πάμε σπίτι")
         compose.runOnUiThread { vm.listen() }
         compose.waitUntil(TIMEOUT_MS) { vm.state.value.canConfirm }
         compose.runOnUiThread { vm.confirm() }
