@@ -132,7 +132,11 @@ class DaoSyncStore(private val daos: () -> SyncDaos) : SyncStore {
         val unmappable = mutableListOf<String>()
         val entities = mutableListOf<Any>()
         for (row in rows) {
-            val entity = runCatching { entityOf(table, row) }.getOrNull()
+            // Checked before Gson, not after. Gson is happy to leave a column out and hand back an
+            // entity with a null where a non-null Kotlin property should be; it is the generated
+            // Room code that then throws, and by then it is a database failure rather than a bad
+            // row. `README.md` §4's own `curl` example pushes exactly such a row.
+            val entity = if (spec.missing(row).isEmpty()) runCatching { entityOf(table, row) }.getOrNull() else null
             if (entity == null) unmappable += spec.idOf(row) ?: "?" else entities += entity
         }
         if (entities.isNotEmpty()) write(table, entities)

@@ -363,15 +363,15 @@ class SyncEngine(
         } catch (ce: CancellationException) {
             throw ce
         } catch (e: Throwable) {
-            if (keep.size == 1) {
+            // A full disk answers the same way for every row, so there is nothing to learn from
+            // asking again five hundred times — and nothing about it is any row's fault.
+            if (storageFailure(e)) {
                 tally.fail(WRITE_FAILED, "sync write $table", e)
                 return Written(0, false)
             }
-            tally.fail(WRITE_FAILED, "sync write $table", e)
         }
 
         var applied = 0
-        val refused = mutableListOf<Map<String, Any?>>()
         for (row in keep) {
             try {
                 val unreadable = store.apply(table, listOf(row))
@@ -380,19 +380,43 @@ class SyncEngine(
             } catch (ce: CancellationException) {
                 throw ce
             } catch (e: Throwable) {
-                refused += row
+                if (storageFailure(e)) {
+                    tally.fail(WRITE_FAILED, "sync write $table", e)
+                    tally.pulled += applied
+                    return Written(applied, false)
+                }
+                // On its own and still refused: that is this row, not the database.
+                skipped(table, Tables.of(table)?.idOf(row) ?: "?", tally)
             }
         }
         tally.pulled += applied
-        // Nothing at all went in: the database, not the rows. Leave the page in front of the cursor.
-        if (applied == 0) return Written(0, false)
-        for (row in refused) skipped(table, Tables.of(table)?.idOf(row) ?: "?", tally)
         return Written(applied, true)
     }
 
     private fun skipped(table: String, id: String, tally: Tally) {
         val line = rowSkipped("$table/$id")
         tally.fail(line, "sync write $table", SyncException(line))
+    }
+
+    /**
+     * True when a failure says something about the database rather than about the row that happened
+     * to be in flight when it surfaced — a full disk, an IO error, a file the phone can no longer
+     * open. Those come back on the very next row too, so skipping rows one at a time would walk a
+     * whole page into the void; the page is left in front of the cursor instead and asked for again
+     * when there is somewhere to put it.
+     *
+     * Everything else — a row Room refuses on its own — is that row's problem, and it is passed
+     * over by name so the rest of the page, and every page after it, can still land.
+     */
+    private fun storageFailure(e: Throwable): Boolean {
+        var at: Throwable? = e
+        while (at != null) {
+            val here = at
+            if (here is java.io.IOException) return true
+            if (STORAGE_FAILURES.any { here.javaClass.simpleName.startsWith(it) }) return true
+            at = here.cause.takeIf { it !== here }
+        }
+        return false
     }
 
     // ---------------------------------------------------------------- repair
@@ -509,6 +533,15 @@ class SyncEngine(
          * That is the intent — it was never his.
          */
         val PRACTICE_TABLES = setOf(Tables.ATTEMPTS, Tables.SESSIONS, Tables.SCHEDULES)
+
+        /**
+         * The SQLite failures that are about the storage and not about the row: a full disk, an IO
+         * error, a database file that cannot be opened or has been corrupted. Matched by name so
+         * this stays readable off-device, where those classes are stubs.
+         */
+        private val STORAGE_FAILURES = listOf(
+            "SQLiteFull", "SQLiteDiskIO", "SQLiteDatabaseCorrupt", "SQLiteCantOpenDatabase", "SQLiteOutOfMemory",
+        )
 
         private const val BAD_REQUEST = 400
         private const val TOO_LARGE = 413

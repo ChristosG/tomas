@@ -396,7 +396,7 @@ class SyncEngineTest {
         val other = Phone(wrap = { inner ->
             object : SyncStore by inner {
                 override suspend fun apply(table: String, rows: List<Map<String, Any?>>): List<String> {
-                    if (full) throw IllegalStateException("database or disk is full")
+                    if (full) throw java.io.IOException("no space left on device")
                     return inner.apply(table, rows)
                 }
             }
@@ -440,6 +440,64 @@ class SyncEngineTest {
         assertTrue(report.errors.toString(), report.errors.contains(SyncEngine.rowSkipped("items/i2")))
         // The cursor moved past the page, so the two good words are not asked for again.
         assertEquals(3L, other.settings.syncCursor.first())
+    }
+
+    /**
+     * The README's own setup check produces this row. §4 tells the reader to `curl` a push of
+     * `{"id":"i1","updatedAt":…,"deleted":false,"text":"ψωμί"}` — four of `items`' fifteen columns —
+     * and the server takes it, because it validates `table`, `id` and `updatedAt` and nothing else.
+     * The father does that against his fresh server to check it works and then types the address
+     * into the phones; if that one row could hold the cursor, no phone would ever pull anything.
+     */
+    @Test fun `the README's own curl row is passed over and the cursor still moves`() = runBlocking {
+        client.seed(Tables.ITEMS, mapOf(
+            "id" to "i1", "updatedAt" to 1_757_000_000_000L, "deleted" to false, "text" to "ψωμί",
+        ))
+
+        val report = phone.sync()
+
+        assertEquals(0, report.pulled)
+        assertNull(phone.items.get("i1"))
+        assertEquals(listOf(SyncEngine.rowSkipped("items/i1")), report.errors)
+        assertEquals(1L, phone.settings.syncCursor.first())
+
+        // And it stays moved on, which is the whole point.
+        val again = phone.sync()
+        assertTrue(again.errors.toString(), again.ok)
+        assertEquals(1L, phone.settings.syncCursor.first())
+    }
+
+    /** The same for a row a later app version would write and this one cannot complete. */
+    @Test fun `a row missing a column this version needs is passed over, not handed to Room`() {
+        val spec = Tables.of(Tables.ITEMS)!!
+        val whole = Rows.of(item("i1", "ψωμί", 10))
+
+        assertTrue(spec.missing(whole).isEmpty())
+        assertEquals(listOf("kind"), spec.missing(whole - "kind"))
+        // Nullable columns are not required: a word with no photo is a whole row.
+        assertTrue(spec.missing(whole - "imagePath" - "priceCents").isEmpty())
+        assertTrue(spec.required.containsAll(listOf("id", "text", "kind", "category", "source", "updatedAt", "deleted")))
+    }
+
+    /**
+     * A row the database refuses on its own is that row's problem, even when it is the only row of
+     * its table in the page — and even when it is the only row in the page at all. Holding the
+     * cursor for it would be the wedge all over again.
+     */
+    @Test fun `a lone row the database refuses is skipped and the cursor still moves`() = runBlocking {
+        client.seed(Tables.ITEMS, Rows.of(item("i1", "ψωμί", 10)))
+        val other = Phone(wrap = { inner ->
+            object : SyncStore by inner {
+                override suspend fun apply(table: String, rows: List<Map<String, Any?>>): List<String> =
+                    throw IllegalStateException("UNIQUE constraint failed")
+            }
+        }).apply { configure() }
+
+        val report = other.sync()
+
+        assertEquals(0, report.pulled)
+        assertEquals(listOf(SyncEngine.rowSkipped("items/i1")), report.errors)
+        assertEquals(1L, other.settings.syncCursor.first())
     }
 
     /** A row this version cannot read at all is not a database failure and must not hold the page. */

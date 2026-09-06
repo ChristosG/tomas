@@ -10,11 +10,15 @@ import com.google.gson.JsonPrimitive
 import gr.dimitris.app.core.data.Attempt
 import gr.dimitris.app.core.data.ErrorLog
 import gr.dimitris.app.core.data.Item
+import gr.dimitris.app.core.data.ModuleId
+import gr.dimitris.app.core.data.Outcome
 import gr.dimitris.app.core.data.Recording
 import gr.dimitris.app.core.data.Schedule
 import gr.dimitris.app.core.data.Script
 import gr.dimitris.app.core.data.ScriptLine
 import gr.dimitris.app.core.data.Session
+import gr.dimitris.app.core.data.Speaker
+import gr.dimitris.app.core.data.Who
 
 /** One row on the wire: the server's table name and the row as plain JSON values. */
 data class SyncRow(val table: String, val row: Map<String, Any?>)
@@ -41,7 +45,31 @@ data class TableSpec(
     val idOf: (Map<String, Any?>) -> String?,
     /** The row as the server must see it: [idOf] added where the table has no `id` column of its own. */
     val withId: (Map<String, Any?>) -> Map<String, Any?> = { it },
-)
+    /**
+     * A throwaway instance of [type], built only to be turned into a row and read for its shape.
+     * Adding a column to an entity therefore updates [required] on its own — there is no second
+     * list to keep in step with the first.
+     */
+    val sample: () -> Any,
+) {
+    /**
+     * The columns a row must carry to be worth handing to Room: every one that is non-null on a
+     * freshly built entity.
+     *
+     * Gson does not complain about a field that is absent — [Rows] says so itself — it leaves a JVM
+     * zero, so a partial row becomes an entity with `null` where a non-null Kotlin property should
+     * be, and the *generated* Room code then dereferences it and throws. The server does not check
+     * either: it validates `table`, `id` and `updatedAt` and nothing else, and `README.md` §4 shows
+     * a `curl` push of four of `items`' fifteen columns. That row has to be recognised and passed
+     * over here, before Room ever sees it.
+     */
+    val required: Set<String> by lazy {
+        Rows.of(sample()).filterValues { it != null }.keys
+    }
+
+    /** The required columns this row does not carry, or an empty list when it is whole. */
+    fun missing(row: Map<String, Any?>): List<String> = required.filter { row[it] == null }
+}
 
 /**
  * The eight tables that sync. Listed with items before the rows that point at them, which is how
@@ -67,18 +95,26 @@ object Tables {
     const val RECORDING_EXT = "m4a"
 
     val all: List<TableSpec> = listOf(
-        TableSpec(ITEMS, Item::class.java, appendOnly = false, mediaFields = mapOf("imagePath" to PHOTO_EXT), idOf = ::plainId),
-        TableSpec(SCRIPTS, Script::class.java, appendOnly = false, idOf = ::plainId),
-        TableSpec(SCRIPT_LINES, ScriptLine::class.java, appendOnly = false, idOf = ::plainId),
-        TableSpec(RECORDINGS, Recording::class.java, appendOnly = false, mediaFields = mapOf("path" to RECORDING_EXT), idOf = ::plainId),
-        TableSpec(SESSIONS, Session::class.java, appendOnly = false, idOf = ::plainId),
+        TableSpec(ITEMS, Item::class.java, appendOnly = false, mediaFields = mapOf("imagePath" to PHOTO_EXT),
+            idOf = ::plainId, sample = { Item(text = "") }),
+        TableSpec(SCRIPTS, Script::class.java, appendOnly = false,
+            idOf = ::plainId, sample = { Script(title = "") }),
+        TableSpec(SCRIPT_LINES, ScriptLine::class.java, appendOnly = false,
+            idOf = ::plainId, sample = { ScriptLine(scriptId = "", position = 0, speaker = Speaker.OTHER, itemId = "") }),
+        TableSpec(RECORDINGS, Recording::class.java, appendOnly = false, mediaFields = mapOf("path" to RECORDING_EXT),
+            idOf = ::plainId, sample = { Recording(itemId = "", path = "", who = Who.CAREGIVER, durationMs = 0) }),
+        TableSpec(SESSIONS, Session::class.java, appendOnly = false,
+            idOf = ::plainId, sample = { Session(startedAt = 0, plannedModules = "", plannedItemCount = 0) }),
         TableSpec(
             SCHEDULES, Schedule::class.java, appendOnly = false,
             idOf = { row -> scheduleId(row) },
             withId = { row -> scheduleId(row)?.let { row + ("id" to it) } ?: row },
+            sample = { Schedule(itemId = "", module = ModuleId.WORDCOACH, nextDueAt = 0) },
         ),
-        TableSpec(ATTEMPTS, Attempt::class.java, appendOnly = true, idOf = ::plainId),
-        TableSpec(ERROR_LOGS, ErrorLog::class.java, appendOnly = true, idOf = ::plainId),
+        TableSpec(ATTEMPTS, Attempt::class.java, appendOnly = true, idOf = ::plainId,
+            sample = { Attempt(itemId = "", module = ModuleId.WORDCOACH, startedAt = 0, durationMs = 0, outcome = Outcome.CORRECT) }),
+        TableSpec(ERROR_LOGS, ErrorLog::class.java, appendOnly = true, idOf = ::plainId,
+            sample = { ErrorLog(where_ = "", message = "", stack = "") }),
     )
 
     private val byName: Map<String, TableSpec> = all.associateBy { it.name }
