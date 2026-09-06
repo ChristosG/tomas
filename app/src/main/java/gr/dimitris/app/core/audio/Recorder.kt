@@ -26,9 +26,10 @@ data class Recorded(val file: File, val durationMs: Long, val peakAmplitude: Int
         /**
          * Below this, nobody spoke.
          *
-         * Calibration: the emulator's microphone is dead silent and reports a peak of 0 — see
-         * `RecorderTest`. A voice at arm's length on a real phone reads roughly 3 000–20 000 on this
-         * scale, and room noise well under 1 000, so the line sits at 1 500: far enough above a
+         * Calibration: the emulator's microphone is dead silent and a take of over a second reads a
+         * peak of about 8 — the codec's own noise floor, measured by `RecorderTest`, not zero. A
+         * voice at arm's length on a real phone reads roughly 3 000–20 000 on this scale, and room
+         * noise well under 1 000, so the line sits at 1 500: far enough above a
          * quiet room that a rustle is not a word, far enough below a quiet voice that his is never
          * thrown away. Every take's real peak rides along in the attempt's detail as `peak`, so the
          * number can be moved on evidence from his phone instead of on a guess.

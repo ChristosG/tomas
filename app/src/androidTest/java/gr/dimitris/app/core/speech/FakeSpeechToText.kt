@@ -35,8 +35,11 @@ class FakeSpeechToText : SpeechToText {
 
     fun willHear(text: String) = apply { answers += Result.success(Transcript(text, 1f)) }
 
-    /** A window that came back with nothing: a bad moment, a dead service, a man who said nothing. */
-    fun willHearNothing() = apply { answers += Result.failure(IllegalStateException(AndroidSpeechToText.HEARD_NOTHING)) }
+    /** A window that came back with nothing: silence, or a sound that matched no word. His. */
+    fun willHearNothing() = apply { answers += Result.failure(SpeechFailure.HeardNothing()) }
+
+    /** A window the phone could not open at all: no network, a wedged service. Never his. */
+    fun willFail(code: Int) = apply { answers += Result.failure(SpeechFailure.NotWorking(code)) }
 
     /** Moves the bar, the way a voice would. */
     fun loudness(value: Float) { _level.value = value }
@@ -49,7 +52,7 @@ class FakeSpeechToText : SpeechToText {
             gate.await()
             open = null
         }
-        return answers.removeFirstOrNull() ?: Result.failure(IllegalStateException(AndroidSpeechToText.HEARD_NOTHING))
+        return answers.removeFirstOrNull() ?: Result.failure(SpeechFailure.HeardNothing())
     }
 
     override fun stop() {

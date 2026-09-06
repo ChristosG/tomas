@@ -10,6 +10,8 @@ import gr.dimitris.app.core.data.Who
 import gr.dimitris.app.core.data.now
 import gr.dimitris.app.core.audio.Recorded
 import gr.dimitris.app.core.speech.GentleCheck
+import gr.dimitris.app.core.speech.Recognition
+import gr.dimitris.app.core.speech.SpeechFailure
 import gr.dimitris.app.core.speech.SpeechMatch
 import gr.dimitris.app.modules.wordcoach.CueLadder
 import kotlinx.coroutines.CancellationException
@@ -42,6 +44,12 @@ data class SingSayState(
     val selfRecordingPath: String? = null,
     /** Recognition is on and this device has it: the last stage is checked, gently. */
     val sttOn: Boolean = false,
+    /**
+     * False until the settings read has landed. Until then the green primary is drawn but greyed:
+     * a button that changes what it does under the thumb of a man with a right hemiparesis is worse
+     * than a button he has to wait a beat for.
+     */
+    val sttResolved: Boolean = false,
     val listening: Boolean = false,
     /** How loud he is, 0..1, while the window is open. Drawn by the listening indicator. */
     val listenLevel: Float = 0f,
@@ -120,8 +128,18 @@ class SingSayViewModel(private val graph: AppGraph, private val items: List<Item
     /** The open recognition window, so leaving or moving on can close it. */
     private var listenJob: Job? = null
 
+    /**
+     * True once a window failed because the phone could not listen. It only ever opens the confirm,
+     * never closes it: a recogniser that broke once must not be able to take «Το είπα!» away again
+     * on the next go.
+     */
+    private var recogniserBroke = false
+
     /** Recognition, resolved once for the run: the settings and the device are asked, not the phrase. */
     private var sttOn = false
+
+    /** Whether that read has landed. Only the first phrase of a run can ever wait for it. */
+    private var sttResolved = false
 
     /**
      * How fast, and in which key, the melody sings — a caregiver setting, resolved once for the
@@ -137,8 +155,9 @@ class SingSayViewModel(private val graph: AppGraph, private val items: List<Item
             // isAvailable asks the package manager across a binder: not on the thread drawing the phrase.
             val on = graph.settings.sttEnabled.first() && withContext(Dispatchers.Default) { graph.stt.isAvailable }
             sttOn = on
+            sttResolved = true
             // With recognition off nothing about this screen changes, «Το είπα!» included.
-            _state.update { it.copy(sttOn = on, canConfirm = !on || check.canConfirm) }
+            _state.update { it.copy(sttOn = on, sttResolved = true, canConfirm = !on || check.canConfirm) }
         }
         viewModelScope.launch {
             tempo = graph.settings.melodyTempo.first()
@@ -166,7 +185,8 @@ class SingSayViewModel(private val graph: AppGraph, private val items: List<Item
         // the gap would belong to the phrase he has just left.
         _state.value = SingSayState(
             index = i, total = items.size, item = item, notes = Melody.forPhrase(item.text), playing = true,
-            sttOn = sttOn, canConfirm = !sttOn,
+            // A recogniser that broke stays broken: the confirm it opened is not taken back.
+            sttOn = sttOn, sttResolved = sttResolved, canConfirm = !sttOn || recogniserBroke,
         )
         loadJob = viewModelScope.launch {
             val sung = try {
@@ -232,7 +252,10 @@ class SingSayViewModel(private val graph: AppGraph, private val items: List<Item
      */
     fun listenModel() {
         val s = _state.value
-        if (s.isRecording || s.playing) return
+        // [s.listening] is the recogniser holding the microphone open. Singing the phrase into it
+        // would have the phone hear its own model, match it, and congratulate him for a phrase he
+        // never said — the same dishonesty this button exists to remove, pointing the other way.
+        if (s.isRecording || s.playing || s.listening) return
         listens++
         // Where his pass had got to. The melody lights the syllables as it plays, but this is a
         // listen in the middle of a stage, not a stage boundary: a man three syllables into a
@@ -392,7 +415,7 @@ class SingSayViewModel(private val graph: AppGraph, private val items: List<Item
         listenJob = viewModelScope.launch {
             graph.stt.listen().fold(
                 onSuccess = { t -> judge(t.text.takeIf { it.isNotBlank() }) },
-                onFailure = { e -> graph.errors.record("singsay listen", e); judge(null) },
+                onFailure = { e -> recogniserFailed(e) },
             )
         }
     }
@@ -418,11 +441,35 @@ class SingSayViewModel(private val graph: AppGraph, private val items: List<Item
         _state.update {
             it.copy(
                 listening = false, listenLevel = 0f, heard = text, heardMatched = matched,
-                sttTries = check.tries, nudge = check.nudging, canConfirm = check.canConfirm,
+                sttTries = check.tries, nudge = check.nudging, canConfirm = check.canConfirm || recogniserBroke,
                 error = if (text == null) HEARD_NOTHING else null,
             )
         }
         if (verdict == GentleCheck.Verdict.MATCHED) didIt() else graph.feedback.nudge()
+    }
+
+    /**
+     * A window that came back with no words at all.
+     *
+     * Silence is his, and is answered gently: the line and another go. But a phone that could not
+     * listen — no network, a wedged service, the microphone taken by something else — is the
+     * *phone's* failure, and Chris' whole report was about the app putting its own trouble on him.
+     * So it costs him nothing: no try is spent, the confirm opens at once and stays open, and the
+     * caregiver gets one line that points at the settings rather than a red word about his voice.
+     */
+    private fun recogniserFailed(e: Throwable) {
+        if (e !is SpeechFailure.NotWorking) {
+            judge(null)
+            return
+        }
+        graph.errors.record("singsay listen", e)
+        recogniserBroke = true
+        _state.update {
+            it.copy(
+                listening = false, listenLevel = 0f, heard = null, heardMatched = false,
+                nudge = false, canConfirm = true, error = Recognition.NOT_WORKING,
+            )
+        }
     }
 
     /** Closes any open window and stops claiming to be listening. */
@@ -482,6 +529,8 @@ class SingSayViewModel(private val graph: AppGraph, private val items: List<Item
      * the comparison would stop before his own voice was ever reached.
      */
     fun playComparison() {
+        // The model half of the comparison is the phrase itself: never into an open window.
+        if (_state.value.listening) return
         val path = _state.value.selfRecordingPath ?: return
         val token = claimPlayback()
         playJob = viewModelScope.launch {

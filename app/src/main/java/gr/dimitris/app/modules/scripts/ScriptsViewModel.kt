@@ -13,6 +13,8 @@ import gr.dimitris.app.core.data.Who
 import gr.dimitris.app.core.data.now
 import gr.dimitris.app.core.audio.Recorded
 import gr.dimitris.app.core.speech.GentleCheck
+import gr.dimitris.app.core.speech.Recognition
+import gr.dimitris.app.core.speech.SpeechFailure
 import gr.dimitris.app.core.speech.SpeechMatch
 import gr.dimitris.app.modules.wordcoach.CueLadder
 import kotlinx.coroutines.CancellationException
@@ -50,6 +52,12 @@ data class ScriptsState(
     val selfRecordingPath: String? = null,
     /** Recognition is on and this device has it: his turns are checked, gently. */
     val sttOn: Boolean = false,
+    /**
+     * False until the settings read has landed. Until then the green primary is drawn but greyed:
+     * a button that changes what it does under the thumb of a man with a right hemiparesis is worse
+     * than a button he has to wait a beat for.
+     */
+    val sttResolved: Boolean = false,
     val listening: Boolean = false,
     /** How loud he is, 0..1, while the window is open. Drawn by the listening indicator. */
     val listenLevel: Float = 0f,
@@ -169,13 +177,20 @@ class ScriptsViewModel(
     /** The open recognition window, so leaving or moving on can close it. */
     private var listenJob: Job? = null
 
+    /**
+     * True once a window failed because the phone could not listen. It only ever opens the confirm,
+     * never closes it: a recogniser that broke once must not be able to take «Το είπα!» away again
+     * on the next go.
+     */
+    private var recogniserBroke = false
+
     init {
         load()
         viewModelScope.launch {
             // isAvailable asks the package manager across a binder: not on the thread drawing the turn.
             val on = graph.settings.sttEnabled.first() && withContext(Dispatchers.Default) { graph.stt.isAvailable }
             // With recognition off nothing about this screen changes, «Το είπα!» included.
-            _state.update { it.copy(sttOn = on, canConfirm = !on || check.canConfirm) }
+            _state.update { it.copy(sttOn = on, sttResolved = true, canConfirm = !on || check.canConfirm) }
         }
         // Only while a window is open: the bar belongs to the microphone, and nothing else draws it.
         viewModelScope.launch {
@@ -224,7 +239,9 @@ class ScriptsViewModel(
                 it.copy(
                     index = i, phase = ScriptPhase.OTHER_SPEAKING, level = 0, cueText = null, showsWord = false,
                     canHint = false, isRecording = false, modelPlaying = false, selfRecordingPath = null,
-                    heard = null, heardMatched = false, sttTries = 0, nudge = false, canConfirm = !it.sttOn,
+                    heard = null, heardMatched = false, sttTries = 0, nudge = false,
+                    // A recogniser that broke stays broken: the confirm it opened is not taken back.
+                    canConfirm = !it.sttOn || recogniserBroke,
                 )
             }
             if (onScreen) speakOther(i)
@@ -237,7 +254,9 @@ class ScriptsViewModel(
                     index = i, phase = ScriptPhase.WAITING_FOR_DIMITRIS,
                     level = next.level, cueText = next.cueText(), showsWord = next.showsWord, canHint = next.canHint,
                     isRecording = false, modelPlaying = false, selfRecordingPath = null,
-                    heard = null, heardMatched = false, sttTries = 0, nudge = false, canConfirm = !it.sttOn,
+                    heard = null, heardMatched = false, sttTries = 0, nudge = false,
+                    // A recogniser that broke stays broken: the confirm it opened is not taken back.
+                    canConfirm = !it.sttOn || recogniserBroke,
                 )
             }
         }
@@ -305,7 +324,10 @@ class ScriptsViewModel(
     fun listenModel() {
         val l = ladder ?: return
         val s = _state.value
-        if (s.phase != ScriptPhase.WAITING_FOR_DIMITRIS || s.isRecording || s.modelPlaying) return
+        // [s.listening] is the recogniser holding the microphone open. Speaking the line into it
+        // would have the phone hear its own model, match it, and congratulate him for a turn he
+        // never took — the same dishonesty this button exists to remove, pointing the other way.
+        if (s.phase != ScriptPhase.WAITING_FOR_DIMITRIS || s.isRecording || s.modelPlaying || s.listening) return
         val item = lines.getOrNull(s.index)?.second ?: return
         listens++
         l.listened()
@@ -314,7 +336,9 @@ class ScriptsViewModel(
 
     /** A line already said, tapped again: what did they ask me? A dialogue he cannot re-hear is a trap. */
     fun replay(index: Int) {
-        if (_state.value.phase != ScriptPhase.WAITING_FOR_DIMITRIS) return
+        // Never into a live recogniser: the other person's line is a line, and the phone would
+        // happily hear itself say it.
+        if (_state.value.phase != ScriptPhase.WAITING_FOR_DIMITRIS || _state.value.listening) return
         val item = lines.getOrNull(index)?.second ?: return
         cue { report(graph.speaker.speak(item)) }
     }
@@ -432,7 +456,8 @@ class ScriptsViewModel(
 
     /** The model line, then his own take, back to back. */
     fun playComparison() {
-        if (_state.value.phase != ScriptPhase.WAITING_FOR_DIMITRIS) return
+        // The model half of the comparison is his own line, said aloud: never into an open window.
+        if (_state.value.phase != ScriptPhase.WAITING_FOR_DIMITRIS || _state.value.listening) return
         val path = _state.value.selfRecordingPath ?: return
         val item = lines.getOrNull(_state.value.index)?.second ?: return
         cue {
@@ -456,7 +481,7 @@ class ScriptsViewModel(
         listenJob = viewModelScope.launch {
             graph.stt.listen().fold(
                 onSuccess = { t -> judge(t.text.takeIf { it.isNotBlank() }) },
-                onFailure = { e -> graph.errors.record("scripts listen", e); judge(null) },
+                onFailure = { e -> recogniserFailed(e) },
             )
         }
     }
@@ -483,11 +508,35 @@ class ScriptsViewModel(
         _state.update {
             it.copy(
                 listening = false, listenLevel = 0f, heard = text, heardMatched = matched,
-                sttTries = check.tries, nudge = check.nudging, canConfirm = check.canConfirm,
+                sttTries = check.tries, nudge = check.nudging, canConfirm = check.canConfirm || recogniserBroke,
                 error = if (text == null) HEARD_NOTHING else null,
             )
         }
         if (verdict == GentleCheck.Verdict.MATCHED) confirm() else graph.feedback.nudge()
+    }
+
+    /**
+     * A window that came back with no words at all.
+     *
+     * Silence is his, and is answered gently: the line and another go. But a phone that could not
+     * listen — no network, a wedged service, the microphone taken by something else — is the
+     * *phone's* failure, and Chris' whole report was about the app putting its own trouble on him.
+     * So it costs him nothing: no try is spent, the confirm opens at once and stays open, and the
+     * caregiver gets one line that points at the settings rather than a red word about his voice.
+     */
+    private fun recogniserFailed(e: Throwable) {
+        if (e !is SpeechFailure.NotWorking) {
+            judge(null)
+            return
+        }
+        graph.errors.record("scripts listen", e)
+        recogniserBroke = true
+        _state.update {
+            it.copy(
+                listening = false, listenLevel = 0f, heard = null, heardMatched = false,
+                nudge = false, canConfirm = true, error = Recognition.NOT_WORKING,
+            )
+        }
     }
 
     /** Closes any open window and stops claiming to be listening. */

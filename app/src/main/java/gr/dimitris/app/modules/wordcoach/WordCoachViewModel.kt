@@ -10,6 +10,8 @@ import gr.dimitris.app.core.data.Who
 import gr.dimitris.app.core.data.now
 import gr.dimitris.app.core.audio.Recorded
 import gr.dimitris.app.core.speech.GentleCheck
+import gr.dimitris.app.core.speech.Recognition
+import gr.dimitris.app.core.speech.SpeechFailure
 import gr.dimitris.app.core.speech.SpeechMatch
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Deferred
@@ -37,6 +39,12 @@ data class WordCoachState(
     val modelPlaying: Boolean = false,
     val selfRecordingPath: String? = null,
     val sttOn: Boolean = false,
+    /**
+     * False until the settings read has landed. Until then the green primary is drawn but greyed:
+     * a button that changes what it does under the thumb of a man with a right hemiparesis is worse
+     * than a button he has to wait a beat for.
+     */
+    val sttResolved: Boolean = false,
     val listening: Boolean = false,
     /** How loud he is, 0..1, while the window is open. Drawn by the listening indicator. */
     val listenLevel: Float = 0f,
@@ -108,6 +116,13 @@ class WordCoachViewModel(private val graph: AppGraph, private val items: List<It
     /** The open recognition window, so leaving or moving on can close it. */
     private var listenJob: Job? = null
 
+    /**
+     * True once a window failed because the phone could not listen. It only ever opens the confirm,
+     * never closes it: a recogniser that broke once must not be able to take «Το είπα!» away again
+     * on the next go.
+     */
+    private var recogniserBroke = false
+
     private val _state = MutableStateFlow(WordCoachState(total = items.size, item = items.first()))
     val state: StateFlow<WordCoachState> = _state.asStateFlow()
 
@@ -116,7 +131,7 @@ class WordCoachViewModel(private val graph: AppGraph, private val items: List<It
             // isAvailable asks the package manager across a binder: not on the thread drawing the word.
             val on = graph.settings.sttEnabled.first() && withContext(Dispatchers.Default) { graph.stt.isAvailable }
             // With recognition off nothing about this screen changes, «Το είπα!» included.
-            _state.update { it.copy(sttOn = on, canConfirm = !on || check.canConfirm) }
+            _state.update { it.copy(sttOn = on, sttResolved = true, canConfirm = !on || check.canConfirm) }
         }
         // Only while a window is open: the bar belongs to the microphone, and nothing else draws it.
         viewModelScope.launch {
@@ -257,6 +272,9 @@ class WordCoachViewModel(private val graph: AppGraph, private val items: List<It
 
     /** Model voice, then his own recording. */
     fun playComparison() {
+        // Never into a live recogniser: the phone would hear its own model, match it, and
+        // congratulate him for a word he never said.
+        if (_state.value.listening) return
         val path = _state.value.selfRecordingPath ?: return
         speaking {
             report(graph.speaker.speak(_state.value.item))
@@ -278,7 +296,7 @@ class WordCoachViewModel(private val graph: AppGraph, private val items: List<It
         listenJob = viewModelScope.launch {
             graph.stt.listen().fold(
                 onSuccess = { t -> judge(t.text.takeIf { it.isNotBlank() }) },
-                onFailure = { e -> graph.errors.record("wordcoach listen", e); judge(null) },
+                onFailure = { e -> recogniserFailed(e) },
             )
         }
     }
@@ -304,11 +322,35 @@ class WordCoachViewModel(private val graph: AppGraph, private val items: List<It
         _state.update {
             it.copy(
                 listening = false, listenLevel = 0f, heard = text, heardMatched = matched,
-                sttTries = check.tries, nudge = check.nudging, canConfirm = check.canConfirm,
+                sttTries = check.tries, nudge = check.nudging, canConfirm = check.canConfirm || recogniserBroke,
                 error = if (text == null) HEARD_NOTHING else null,
             )
         }
         if (verdict == GentleCheck.Verdict.MATCHED) confirm() else graph.feedback.nudge()
+    }
+
+    /**
+     * A window that came back with no words at all.
+     *
+     * Silence is his, and is answered gently: the line and another go. But a phone that could not
+     * listen — no network, a wedged service, the microphone taken by something else — is the
+     * *phone's* failure, and Chris' whole report was about the app putting its own trouble on him.
+     * So it costs him nothing: no try is spent, the confirm opens at once and stays open, and the
+     * caregiver gets one line that points at the settings rather than a red word about his voice.
+     */
+    private fun recogniserFailed(e: Throwable) {
+        if (e !is SpeechFailure.NotWorking) {
+            judge(null)
+            return
+        }
+        graph.errors.record("wordcoach listen", e)
+        recogniserBroke = true
+        _state.update {
+            it.copy(
+                listening = false, listenLevel = 0f, heard = null, heardMatched = false,
+                nudge = false, canConfirm = true, error = Recognition.NOT_WORKING,
+            )
+        }
     }
 
     /** Closes any open window and stops claiming to be listening. */
@@ -397,7 +439,11 @@ class WordCoachViewModel(private val graph: AppGraph, private val items: List<It
         lastPeak = null
         check = GentleCheck()
         val on = _state.value.sttOn
-        _state.value = WordCoachState(index = i, total = items.size, item = items[i], sttOn = on, canConfirm = !on)
+        // Resolved once per run, not once per word: only the first word can ever wait for it.
+        _state.value = WordCoachState(
+            index = i, total = items.size, item = items[i],
+            sttOn = on, sttResolved = _state.value.sttResolved, canConfirm = !on || recogniserBroke,
+        )
     }
 
     /**

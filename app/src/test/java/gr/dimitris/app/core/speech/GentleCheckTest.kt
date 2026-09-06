@@ -81,4 +81,37 @@ class GentleCheckTest {
         assertEquals("Δοκίμασε ξανά", GentleCheck.TRY_AGAIN)
         assertEquals("Μίλα", GentleCheck.SPEAK)
     }
+
+    // Which green button is on the screen. A button that changes what it does under the thumb of a
+    // man with a right hemiparesis is the one interaction bug he cannot recover from himself.
+
+    /**
+     * The first word of a run draws the confirm greyed for one DataStore read. Before this existed
+     * the screen showed a live «Το είπα!» and swapped it for «Μίλα» a beat later: a tap landing in
+     * that gap either confirmed with no check at all or opened the microphone when he meant to say
+     * he had finished.
+     */
+    @Test fun `nothing is live until the settings have been read`() {
+        assertEquals(GentleCheck.Primary.WAITING, GentleCheck.primaryFor(resolved = false, sttOn = false, canConfirm = true))
+        assertEquals(GentleCheck.Primary.WAITING, GentleCheck.primaryFor(resolved = false, sttOn = true, canConfirm = false))
+        assertEquals(GentleCheck.Primary.WAITING, GentleCheck.primaryFor(resolved = false, sttOn = true, canConfirm = true))
+    }
+
+    @Test fun `with recognition off the confirm is the button, as it always was`() =
+        assertEquals(GentleCheck.Primary.CONFIRM, GentleCheck.primaryFor(resolved = true, sttOn = false, canConfirm = true))
+
+    @Test fun `with recognition on the phone asks first`() =
+        assertEquals(GentleCheck.Primary.SPEAK, GentleCheck.primaryFor(resolved = true, sttOn = true, canConfirm = false))
+
+    @Test fun `and once it has asked, the confirm is his`() =
+        assertEquals(GentleCheck.Primary.CONFIRM, GentleCheck.primaryFor(resolved = true, sttOn = true, canConfirm = true))
+
+    /** The check drives the button end to end: two misses and «Το είπα!» is back. */
+    @Test fun `the button follows the check through a whole word`() {
+        assertEquals(GentleCheck.Primary.SPEAK, GentleCheck.primaryFor(true, sttOn = true, canConfirm = check.canConfirm))
+        check.record("νερό", isMatch = false)
+        assertEquals(GentleCheck.Primary.SPEAK, GentleCheck.primaryFor(true, sttOn = true, canConfirm = check.canConfirm))
+        check.record("ψωμί", isMatch = false)
+        assertEquals(GentleCheck.Primary.CONFIRM, GentleCheck.primaryFor(true, sttOn = true, canConfirm = check.canConfirm))
+    }
 }

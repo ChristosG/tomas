@@ -290,6 +290,44 @@ class ScriptsFlowTest {
         compose.runOnUiThread { vm.leave {} }
     }
 
+    /**
+     * The dialogue may not speak into a window he has open.
+     *
+     * This is the one way the app could have congratulated him for work he never did: he taps
+     * «Μίλα», then «Σύγκριση» or the other person's bubble, the phone says the line into its own
+     * live microphone, the recogniser hears the phone, and the turn is auto-confirmed as CORRECT
+     * with `"sttMatched":true`. Every door that plays the line is shut for as long as the window is
+     * open — and the refused «Άκου» must not be counted either, or the row would claim help he
+     * never got.
+     */
+    @Test fun theDialogueCannotSpeakIntoAnOpenWindow() {
+        val stt = withRecognition()
+        stt.holdsOpen = true
+        stt.willHearNothing()
+        val script = dialogue(Speaker.OTHER to "Τι θα πάρετε;", Speaker.DIMITRIS to "Θέλω έναν καφέ.")
+        val before = attempts()
+        val vm = viewModel(script)
+
+        compose.runOnUiThread { vm.listen() }
+        compose.waitUntil(TIMEOUT_MS) { vm.state.value.listening }
+        compose.runOnUiThread { vm.listenModel(); vm.replay(0); vm.playComparison() }
+
+        assertEquals("nothing was said over the open microphone", false, vm.state.value.modelPlaying)
+        compose.runOnUiThread { vm.stopListening() }
+        compose.waitUntil(TIMEOUT_MS) { !vm.state.value.listening }
+
+        stt.holdsOpen = false
+        stt.willHearNothing()
+        compose.runOnUiThread { vm.listen() }
+        compose.waitUntil(TIMEOUT_MS) { vm.state.value.canConfirm }
+        compose.runOnUiThread { vm.confirm() }
+        compose.waitUntil(TIMEOUT_MS) { attempts().size == before.size + 1 }
+        val row = (attempts() - before.toSet()).single()
+        assertTrue("the refused listen was not counted: ${row.detail}", row.detail.contains("\"listened\":0"))
+        assertTrue("and the phone never agreed with him: ${row.detail}", row.detail.contains("\"sttMatched\":false"))
+        compose.runOnUiThread { vm.leave {} }
+    }
+
     /** Waits for the dialogue to be loaded, his turn to be on screen, and recognition to be settled. */
     private fun viewModel(script: ScriptWithLines): ScriptsViewModel {
         val seed = hisTurns(script).first().id

@@ -94,13 +94,20 @@ fun WordCoachScreen(items: List<Item>, sessionId: String?, onDone: () -> Unit, o
                 // him or has asked him twice — a take that checked nothing is what Chris found in
                 // the field. After that «Το είπα!» is back and confirms exactly as it always did,
                 // with «Μίλα» still beside it for a man who wants another go.
-                if (s.sttOn && !s.canConfirm) {
-                    BigButton(SPEAK, onClick = { askListen.launch(Manifest.permission.RECORD_AUDIO) }, icon = Icons.Rounded.Mic, tone = ButtonTone.Success)
-                } else {
-                    BigButton("Το είπα!", onClick = vm::confirm, tone = ButtonTone.Success)
-                    if (s.sttOn) {
-                        Spacer(Modifier.height(Sizes.gapSmall))
-                        QuietButton(SPEAK, onClick = { askListen.launch(Manifest.permission.RECORD_AUDIO) }, icon = Icons.Rounded.Mic)
+                when (GentleCheck.primaryFor(s.sttResolved, s.sttOn, s.canConfirm)) {
+                    // One DataStore read long, on the first word only: the button is already the
+                    // right size and in the right place, it simply cannot be pressed into the
+                    // wrong mode yet.
+                    GentleCheck.Primary.WAITING ->
+                        BigButton("Το είπα!", onClick = {}, tone = ButtonTone.Success, enabled = false)
+                    GentleCheck.Primary.SPEAK ->
+                        BigButton(SPEAK, onClick = { askListen.launch(Manifest.permission.RECORD_AUDIO) }, icon = Icons.Rounded.Mic, tone = ButtonTone.Success)
+                    GentleCheck.Primary.CONFIRM -> {
+                        BigButton("Το είπα!", onClick = vm::confirm, tone = ButtonTone.Success)
+                        if (s.sttOn) {
+                            Spacer(Modifier.height(Sizes.gapSmall))
+                            QuietButton(SPEAK, onClick = { askListen.launch(Manifest.permission.RECORD_AUDIO) }, icon = Icons.Rounded.Mic)
+                        }
                     }
                 }
                 Spacer(Modifier.height(Sizes.gapSmall))

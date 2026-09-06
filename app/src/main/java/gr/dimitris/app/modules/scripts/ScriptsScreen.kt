@@ -132,13 +132,19 @@ fun ScriptsScreen(items: List<Item>, sessionId: String?, onDone: () -> Unit, onL
                     // With recognition on, the green button is «Μίλα» until the phone has agreed
                     // with him or has asked him twice. After that «Το είπα!» is back and confirms
                     // exactly as it always did, with «Μίλα» still beside it for another go.
-                    if (s.sttOn && !s.canConfirm) {
-                        BigButton(SPEAK, onClick = { askListen.launch(Manifest.permission.RECORD_AUDIO) }, icon = Icons.Rounded.Mic, tone = ButtonTone.Success)
-                    } else {
-                        BigButton("Το είπα!", onClick = vm::confirm, tone = ButtonTone.Success)
-                        if (s.sttOn) {
-                            Spacer(Modifier.height(Sizes.gapSmall))
-                            QuietButton(SPEAK, onClick = { askListen.launch(Manifest.permission.RECORD_AUDIO) }, icon = Icons.Rounded.Mic)
+                    when (GentleCheck.primaryFor(s.sttResolved, s.sttOn, s.canConfirm)) {
+                        // One DataStore read long, on the first turn only: the button cannot be
+                        // pressed into the wrong mode before the settings have been read.
+                        GentleCheck.Primary.WAITING ->
+                            BigButton("Το είπα!", onClick = {}, tone = ButtonTone.Success, enabled = false)
+                        GentleCheck.Primary.SPEAK ->
+                            BigButton(SPEAK, onClick = { askListen.launch(Manifest.permission.RECORD_AUDIO) }, icon = Icons.Rounded.Mic, tone = ButtonTone.Success)
+                        GentleCheck.Primary.CONFIRM -> {
+                            BigButton("Το είπα!", onClick = vm::confirm, tone = ButtonTone.Success)
+                            if (s.sttOn) {
+                                Spacer(Modifier.height(Sizes.gapSmall))
+                                QuietButton(SPEAK, onClick = { askListen.launch(Manifest.permission.RECORD_AUDIO) }, icon = Icons.Rounded.Mic)
+                            }
                         }
                     }
                     Spacer(Modifier.height(Sizes.gapSmall))
@@ -185,8 +191,9 @@ fun ScriptsScreen(items: List<Item>, sessionId: String?, onDone: () -> Unit, onL
                         mine = line.speaker == Speaker.DIMITRIS,
                         skipped = i in s.skippedLines,
                         // Tapping what was said plays it again: "what did they ask me?" must have an
-                        // answer, and it may not interrupt the person still talking.
-                        onClick = if (line.speaker == Speaker.OTHER && s.phase == ScriptPhase.WAITING_FOR_DIMITRIS) {
+                        // answer, and it may not interrupt the person still talking — nor speak
+                        // into a recogniser he has open, which would be the phone answering itself.
+                        onClick = if (line.speaker == Speaker.OTHER && s.phase == ScriptPhase.WAITING_FOR_DIMITRIS && !s.listening) {
                             { vm.replay(i) }
                         } else {
                             null
@@ -314,8 +321,9 @@ private fun TurnCard(
                     // while the recogniser has the microphone: two mouths on one microphone.
                     enabled = recording || (!modelPlaying && !listening),
                 )
-                // Only once there is something of his to compare the model against.
-                if (hasTake && !recording) {
+                // Only once there is something of his to compare the model against, and never
+                // while the recogniser is open: the comparison starts by saying his own line.
+                if (hasTake && !recording && !listening) {
                     Spacer(Modifier.height(Sizes.gapSmall))
                     QuietButton("Σύγκριση", onClick = onCompare, icon = Icons.Rounded.Compare)
                 }

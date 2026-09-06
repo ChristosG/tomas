@@ -35,8 +35,9 @@ object RecognizerIntents {
     const val POSSIBLY_COMPLETE_SILENCE_MS = 3_000L
 
     /**
-     * The only hard bound, and it is on the recognition service rather than on him: if it never
-     * calls back, the screen must not sit on «Σε ακούω…» for ever.
+     * The bound on one session, and it is on the recognition service rather than on him: if it
+     * never calls back at all, that session must not hang for ever. How long the *wait* lasts —
+     * across as many sessions as the service throws away — is [Recognition.RESTART_WITHIN_MS].
      */
     const val BOUND_MS = 20_000L
 

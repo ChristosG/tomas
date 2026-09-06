@@ -191,7 +191,8 @@ fun SingSayScreen(items: List<Item>, sessionId: String?, onDone: () -> Unit, onL
                 // «Στοπ» is always reachable.
                 enabled = !s.playing && !s.listening,
             )
-            if (s.selfRecordingPath != null && !s.isRecording) {
+            // Never while the recogniser is open: the comparison starts by saying the phrase.
+            if (s.selfRecordingPath != null && !s.isRecording && !s.listening) {
                 Spacer(Modifier.height(Sizes.gapSmall))
                 QuietButton("Σύγκριση", onClick = vm::playComparison, icon = Icons.Rounded.Compare)
             }

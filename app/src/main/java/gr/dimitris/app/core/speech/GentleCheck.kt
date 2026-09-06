@@ -60,7 +60,35 @@ class GentleCheck {
         }
     }
 
+    /** Which green button the bottom of the screen is showing. */
+    enum class Primary {
+        /**
+         * The settings have not been read yet. «Το είπα!» is drawn, greyed: the layout must not
+         * jump, and a tap landing in this instant must not confirm a word the recogniser was about
+         * to be asked about — nor open a window when he meant to confirm. It lasts one DataStore
+         * read, on the first item of a run only.
+         */
+        WAITING,
+
+        /** «Μίλα»: the recogniser has not had its go yet. */
+        SPEAK,
+
+        /** «Το είπα!», and it confirms exactly as it did before recognition existed. */
+        CONFIRM,
+    }
+
     companion object {
+        /**
+         * Which green primary belongs on the screen. A pure function because it is the one place
+         * where a button changes what it does under his thumb, and because the same three lines
+         * would otherwise be written out in three screens.
+         */
+        fun primaryFor(resolved: Boolean, sttOn: Boolean, canConfirm: Boolean): Primary = when {
+            !resolved -> Primary.WAITING
+            sttOn && !canConfirm -> Primary.SPEAK
+            else -> Primary.CONFIRM
+        }
+
         /**
          * One nudge, and no more. Two goes is what a therapist gives before moving on; a third would
          * be the phone insisting, and insisting is what makes a man stop trying.

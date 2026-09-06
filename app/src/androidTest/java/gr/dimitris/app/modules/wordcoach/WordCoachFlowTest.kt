@@ -1,6 +1,7 @@
 package gr.dimitris.app.modules.wordcoach
 
 import android.Manifest
+import android.speech.SpeechRecognizer
 import androidx.activity.compose.setContent
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.test.assertIsEnabled
@@ -22,6 +23,7 @@ import gr.dimitris.app.core.data.Item
 import gr.dimitris.app.core.data.ModuleId
 import gr.dimitris.app.core.data.Outcome
 import gr.dimitris.app.core.speech.FakeSpeechToText
+import gr.dimitris.app.core.speech.Recognition
 import gr.dimitris.app.core.speech.SpeechToText
 import gr.dimitris.app.ui.components.LISTEN_TAG
 import gr.dimitris.app.ui.theme.DimitrisTheme
@@ -229,6 +231,70 @@ class WordCoachFlowTest {
         compose.waitUntil(TIMEOUT_MS) { attempts().size == before.size + 1 }
         assertEquals("«Στοπ» closed the window he had open, and only that one", 1, stt.stops)
         assertEquals("and the word he got out still counted", true, vm.state.value.confirmed)
+        compose.runOnUiThread { vm.leave {} }
+    }
+
+    /**
+     * The phone could not listen at all — offline, no Greek model. That is the *phone's* failure,
+     * and Chris' whole report was about the app putting its own trouble on him: before this, every
+     * word cost two dead «Μίλα» taps and two red lines about *his* voice before «Το είπα!» came
+     * back. Now it costs him nothing: no try is spent, the confirm opens at once, and the line
+     * points at the settings.
+     */
+    @Test fun aPhoneThatCannotListenCostsHimNothing() {
+        val stt = withRecognition()
+        stt.willFail(SpeechRecognizer.ERROR_NETWORK)
+        val before = attempts()
+        val vm = viewModel()
+
+        compose.runOnUiThread { vm.listen() }
+
+        compose.waitUntil(TIMEOUT_MS) { !vm.state.value.listening }
+        assertEquals("the line is about the phone, not about his voice", Recognition.NOT_WORKING, vm.state.value.error)
+        assertEquals("no try was spent on the phone's bad morning", 0, vm.state.value.sttTries)
+        assertEquals("and he is not nudged for it", false, vm.state.value.nudge)
+        assertEquals("«Το είπα!» is his at once", true, vm.state.value.canConfirm)
+        assertEquals("nothing was written", before.size, attempts().size)
+
+        // And a second failure does not take the confirm away again.
+        stt.willFail(SpeechRecognizer.ERROR_SERVER)
+        compose.runOnUiThread { vm.listen() }
+        compose.waitUntil(TIMEOUT_MS) { !vm.state.value.listening }
+        assertEquals("the confirm a broken recogniser opened is not taken back", true, vm.state.value.canConfirm)
+        assertEquals(0, vm.state.value.sttTries)
+
+        compose.runOnUiThread { vm.confirm() }
+        compose.waitUntil(TIMEOUT_MS) { attempts().size == before.size + 1 }
+        assertEquals("the word was still his to say", Outcome.CORRECT, written(before).outcome)
+        compose.runOnUiThread { vm.leave {} }
+    }
+
+    /** The model may not be spoken into a window he has open: the phone would hear itself. */
+    @Test fun theModelCannotBeSpokenIntoAnOpenWindow() {
+        val stt = withRecognition()
+        stt.holdsOpen = true
+        stt.willHearNothing()
+        val before = attempts()
+        val vm = viewModel()
+
+        compose.runOnUiThread { vm.listen() }
+        compose.waitUntil(TIMEOUT_MS) { vm.state.value.listening }
+        compose.runOnUiThread { vm.listenModel(); vm.playComparison() }
+
+        assertEquals("nothing was said over the open microphone", false, vm.state.value.modelPlaying)
+        compose.runOnUiThread { vm.stopListening() }
+        compose.waitUntil(TIMEOUT_MS) { !vm.state.value.listening }
+
+        // The refused «Άκου» must not have been counted either: the row would claim help he never got.
+        stt.holdsOpen = false
+        stt.willHearNothing()
+        compose.runOnUiThread { vm.listen() }
+        compose.waitUntil(TIMEOUT_MS) { vm.state.value.canConfirm }
+        compose.runOnUiThread { vm.confirm() }
+        compose.waitUntil(TIMEOUT_MS) { attempts().size == before.size + 1 }
+        val row = written(before)
+        assertTrue("the refused listen was not counted: ${row.detail}", row.detail.contains("\"listened\":0"))
+        assertTrue("and the phone never agreed with him: ${row.detail}", row.detail.contains("\"sttMatched\":false"))
         compose.runOnUiThread { vm.leave {} }
     }
 

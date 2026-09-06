@@ -108,6 +108,46 @@ class SingSayFlowTest {
         compose.runOnUiThread { vm.leave {} }
     }
 
+    /**
+     * The phrase may not be sung into a window he has open.
+     *
+     * The last stage is the one where the phone checks him, and it is also the one where «Άκου» and
+     * «Σύγκριση» will happily say the phrase aloud. Into a live recogniser that is the phone hearing
+     * itself, matching, and congratulating him for a phrase he never said. Both doors are shut while
+     * the window is open, and the refused «Άκου» is not counted against the row either.
+     */
+    @Test fun thePhraseCannotBeSungIntoAnOpenWindow() {
+        val stt = withRecognition()
+        stt.holdsOpen = true
+        stt.willHearNothing()
+        val item = runBlocking { graph.items.save(Item(text = "Θέλω έναν καφέ", category = Category.FOOD)) }
+        phrase = item
+        val before = attempts()
+        lateinit var vm: SingSayViewModel
+        compose.runOnUiThread { vm = SingSayViewModel(graph, listOf(item), null) }
+        compose.waitUntil(TIMEOUT_MS) { vm.state.value.sttOn }
+        tapToLastStage(vm)
+
+        compose.runOnUiThread { vm.listen() }
+        compose.waitUntil(TIMEOUT_MS) { vm.state.value.listening }
+        compose.runOnUiThread { vm.listenModel(); vm.playComparison() }
+
+        assertEquals("nothing was sung over the open microphone", false, vm.state.value.playing)
+        compose.runOnUiThread { vm.stopListening() }
+        compose.waitUntil(TIMEOUT_MS) { !vm.state.value.listening }
+
+        stt.holdsOpen = false
+        stt.willHearNothing()
+        compose.runOnUiThread { vm.listen() }
+        compose.waitUntil(TIMEOUT_MS) { vm.state.value.canConfirm }
+        compose.runOnUiThread { vm.didIt() }
+        compose.waitUntil(TIMEOUT_MS) { attempts().size == before.size + 1 }
+        val row = (attempts() - before.toSet()).single()
+        assertTrue("the refused listen was not counted: ${row.detail}", row.detail.contains("\"listened\":0"))
+        assertEquals("a phrase said alone at the last stage is still his own", Outcome.CORRECT, row.outcome)
+        compose.runOnUiThread { vm.leave {} }
+    }
+
     /** Recognition on, with a recogniser that hears whatever the case says it hears. */
     private fun withRecognition(): FakeSpeechToText {
         realStt = graph.stt

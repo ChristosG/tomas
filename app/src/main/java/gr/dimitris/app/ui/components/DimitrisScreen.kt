@@ -59,7 +59,9 @@ fun DimitrisScreen(
                 if (talkButton && openTalk != null) {
                     if (title == null) Spacer(Modifier.weight(1f))
                     IconButton(onClick = { feedback.tap(); openTalk() }, modifier = Modifier.size(Sizes.touchMin)) {
-                        Icon(Icons.Rounded.Forum, contentDescription = "Μίλα", modifier = Modifier.size(Sizes.icon),
+                        // Not «Μίλα»: that is now the green button that opens the recogniser on
+                        // three screens, and a screen reader must not read two controls the same.
+                        Icon(Icons.Rounded.Forum, contentDescription = "Πίνακας επικοινωνίας", modifier = Modifier.size(Sizes.icon),
                             tint = MaterialTheme.colorScheme.secondary)
                     }
                 }

@@ -67,7 +67,8 @@ fun ListeningIndicator(level: Float, onStop: () -> Unit, modifier: Modifier = Mo
     ) {
         Icon(
             Icons.Rounded.Mic,
-            contentDescription = LISTENING_NOW,
+            // The line below says it: a screen reader must not read it twice.
+            contentDescription = null,
             tint = MaterialTheme.colorScheme.secondary,
             modifier = Modifier.size(MIC).graphicsLayer { scaleX = scale; scaleY = scale },
         )

@@ -5,7 +5,6 @@ import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.rule.GrantPermissionRule
 import org.junit.After
-import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -42,11 +41,11 @@ class RecorderTest {
         try {
             assertTrue("a take should still be a file", recorded.file.length() > 0)
             assertTrue("no duration measured", recorded.durationMs > 0)
-            // The sampling really ran: a recorder that was never polled and one that heard a room
-            // full of noise both read as 0, and only one of those is what this proves.
+            // Strictly above zero: a peak of 0 is what a recorder that was never polled at all
+            // reports, and this has to fail in that case rather than pass for the wrong reason.
             assertTrue(
-                "the emulator's microphone hears next to nothing: ${recorded.peakAmplitude}",
-                recorded.peakAmplitude < FLOOR,
+                "the sampler ran and the microphone heard next to nothing: ${recorded.peakAmplitude}",
+                recorded.peakAmplitude in 1 until FLOOR,
             )
             assertTrue("and so the take is silence, and must not be kept as his voice", recorded.isSilent)
         } finally {
@@ -65,7 +64,7 @@ class RecorderTest {
         Thread.sleep(TAKE_MS)
         val second = recorder.stop()
         try {
-            assertTrue("the second take measured itself: ${second.peakAmplitude}", second.peakAmplitude < FLOOR)
+            assertTrue("the second take measured itself: ${second.peakAmplitude}", second.peakAmplitude in 1 until FLOOR)
             assertTrue(second.isSilent)
         } finally {
             second.file.delete()
