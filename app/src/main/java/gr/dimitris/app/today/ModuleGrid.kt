@@ -30,7 +30,7 @@ import gr.dimitris.app.ui.theme.Sizes
 const val MODULE_GRID_TAG = "module-grid"
 
 /**
- * The practice tiles on Today: two columns, and small enough that the modules there are now — five,
+ * The practice tiles on Today: two columns, and small enough that the modules there are now — six,
  * eight before long — fit on a phone screen under the greeting.
  *
  * Where they still do not fit (a short screen, a large font scale, the "missing Greek voice" card
