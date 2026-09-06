@@ -114,8 +114,29 @@ object Adapt {
          * detail — the trace module's per-letter marks, the numbers module's exercise, the item id a
          * dialogue line belongs to — and it exists so that no reader written against those rows has
          * to be changed. Nothing new goes through here.
+         *
+         * It keeps the value as it is, but not at any price: a non-finite number anywhere inside it
+         * drops the whole value, exactly as [put] drops one of its own. See [finite].
          */
-        fun kept(key: String, v: Any?) { if (v != null) values[key] = v }
+        fun kept(key: String, v: Any?) { if (v != null && finite(v)) values[key] = v }
+
+        /**
+         * The same guarantee [put] gives every other number, for the shapes [kept] lets through: no
+         * NaN and no infinity reaches the row, wherever in a list or a map it is hiding.
+         *
+         * Gson throws on a non-finite float, and that exception would come out of the builder
+         * itself — before the `runCatching` that wraps the write — and take the attempt with it. The
+         * callers' arithmetic is careful today; the type that owns the guarantee should not be
+         * relying on that. A structure with one bad number in it is dropped whole: an array of
+         * per-letter marks missing one letter would be read as a word with fewer letters.
+         */
+        private fun finite(v: Any?): Boolean = when (v) {
+            is Float -> v.isFinite()
+            is Double -> v.isFinite()
+            is Map<*, *> -> v.values.all { finite(it) }
+            is Iterable<*> -> v.all { finite(it) }
+            else -> true
+        }
 
         internal fun json(): String = gson.toJson(values)
 

@@ -210,7 +210,14 @@ class SessionViewModel(private val graph: AppGraph) : ViewModel() {
             val ended = now()
             runCatching { graph.db.sessions().upsert(s.copy(endedAt = ended, completedItemCount = done.count, updatedAt = ended)) }
                 .onFailure { graph.errors.record("session end", it) }
-            writeSummary(s, rows, done, ended)
+            // A sitting nobody did anything in is not a sitting. Opening Today and backing out —
+            // one plausible tap with a right hemiparesis — reaches here as soon as a module screen
+            // has loaded, and a `session:summary` row for it reads exactly like an attempt he
+            // struggled through and left: `completed=0, leftEarly=true`. Every rule in
+            // `docs/ADAPTATION.md` that shortens his sitting when he keeps leaving early would then
+            // be shortened by his stray taps. A row is written only where there is a row to be
+            // about: one attempt, a skip included, is enough.
+            if (rows.isNotEmpty()) writeSummary(s, rows, done, ended)
         }
         return done
     }
@@ -223,6 +230,8 @@ class SessionViewModel(private val graph: AppGraph) : ViewModel() {
      * rule `numbers:level:3` and `arcade:tap` already live by — the caregiver's word lists find it
      * absent from the vocabulary and leave it out. Its module is the last one that was planned,
      * because a row has to have one; see the note in `docs/ADAPTATION.md` about what that costs.
+     *
+     * Only for a sitting that has at least one attempt row of its own — see the caller.
      */
     private suspend fun writeSummary(s: Session, rows: List<Attempt>, done: Done, ended: Long) {
         val last = plans.lastOrNull()?.first?.id ?: return

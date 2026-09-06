@@ -80,6 +80,26 @@ class TelemetryTest {
         assertEquals("{}", o.toString())
     }
 
+    /**
+     * The same rule for the values that are kept whole. Gson throws on a non-finite float, and that
+     * exception would come out of the builder — before the write is wrapped — and take the attempt
+     * with it. A structure with one bad number in it is dropped whole rather than in part: an array
+     * of per-letter marks one letter short would be read as a word one letter short.
+     */
+    @Test fun `a kept value with a number that is not a number is not written either`() {
+        assertEquals("{}", Adapt.detail { kept("dp", Float.NaN) })
+        assertEquals("{}", Adapt.detail { kept("dp", Double.NEGATIVE_INFINITY) })
+        assertEquals(
+            "{}",
+            Adapt.detail { kept("letters", listOf(mapOf("c" to "η", "coverage" to 1f, "precision" to Float.NaN))) },
+        )
+        // And a sound one is kept exactly as it was handed over.
+        assertEquals(
+            """{"letters":[{"c":"η","coverage":0.5,"precision":0.25}]}""",
+            Adapt.detail { kept("letters", listOf(mapOf("c" to "η", "coverage" to 0.5f, "precision" to 0.25f))) },
+        )
+    }
+
     @Test fun `text is cut to a length nobody can keep notes in`() {
         val long = "α".repeat(Adapt.MAX_TEXT * 2)
         assertEquals(Adapt.MAX_TEXT, parse(Adapt.detail { put("heard", long) })["heard"].asString.length)
@@ -215,8 +235,13 @@ class TelemetryTest {
     }
 
     @Test fun `a letter he passed on has no marks at all, only the ones about the paper`() {
-        val o = parse(traceDetail(TraceState(text = "Α", templateHeight = 200f), score = null, ms = 400))
-        listOf("coverage", "precision", "meanDistance", "letters", "inkRatio").forEach {
+        val skipped = TraceState(
+            text = "Α", templateHeight = 200f,
+            // Ink he had drawn and never handed in: it belongs to no try that was ever marked.
+            strokes = listOf(listOf(Pt(0f, 0f)), listOf(Pt(1f, 1f))),
+        )
+        val o = parse(traceDetail(skipped, score = null, ms = 400))
+        listOf("coverage", "precision", "meanDistance", "letters", "inkRatio", "strokes").forEach {
             assertFalse("$it cannot exist without a score: $o", o.has(it))
         }
         assertNumber(o, "ms")

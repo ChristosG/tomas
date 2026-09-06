@@ -55,8 +55,11 @@ internal fun traceDetail(s: TraceState, score: TraceScore?, ms: Long): String = 
     kept("inkRatio", score?.inkRatio?.takeIf { it > 0f })
     put("ms", ms)
     // The strokes of the try that was marked, not of everything still on the paper: a «Δ» drawn in
-    // one stroke and a «Δ» drawn in five are different hands, and only this tells them apart.
-    put("strokes", s.fresh.size)
+    // one stroke and a «Δ» drawn in five are different hands, and only this tells them apart. A
+    // letter he passed on was never marked, so there is no such try: the count of whatever ink he
+    // had left on the paper would read as the shape of a letter nobody looked at, next to a
+    // coverage and a precision that are correctly absent.
+    put("strokes", s.fresh.size.takeIf { score != null })
     // How tall the letter came out on this phone. Every distance above is in these pixels, so
     // without it none of them can be compared between a tablet and a phone.
     put("templateHeightPx", s.templateHeight)

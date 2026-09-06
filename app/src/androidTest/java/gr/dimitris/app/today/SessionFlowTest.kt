@@ -15,6 +15,7 @@ import gr.dimitris.app.core.data.ModuleId
 import gr.dimitris.app.core.data.Schedule
 import kotlinx.coroutines.runBlocking
 import org.junit.After
+import org.junit.Assert.assertEquals
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -46,6 +47,30 @@ class SessionFlowTest {
         compose.onNodeWithText("Βοήθεια").assertIsDisplayed()
         compose.onNodeWithText("Το είπα!").performClick()
         compose.onNodeWithText("Επόμενο").assertIsDisplayed()
+    }
+
+    /**
+     * A sitting nobody did anything in writes no row about itself.
+     *
+     * Opening Today and backing straight out is one plausible tap with a right hemiparesis, and it
+     * reaches the end of the session as soon as a module screen has loaded. A `session:summary` row
+     * for it reads exactly like a sitting he struggled through and abandoned — `completed=0`,
+     * `leftEarly=true` — and every rule in `docs/ADAPTATION.md` that shortens his sitting when he
+     * keeps leaving early would be moved by his stray taps.
+     */
+    @Test fun aSittingWithNoAttemptsWritesNoSummaryRow() {
+        val before = runBlocking { graph.db.attempts().since(0) }.count { it.itemId == SessionViewModel.SESSION_SUMMARY }
+        compose.onNodeWithText("Ξεκίνα").performClick()
+        compose.waitUntil(15_000) { compose.onAllNodes(hasText("Το είπα!")).fetchSemanticsNodes().isNotEmpty() }
+
+        compose.onNodeWithContentDescription("Πίσω").performClick()
+        // The summary screen is only shown once the row has been written or not written: the
+        // session finalises before it publishes the state the screen draws.
+        compose.waitUntil(15_000) {
+            compose.onAllNodes(hasText(SessionWording.NOTHING_DONE)).fetchSemanticsNodes().isNotEmpty()
+        }
+        val after = runBlocking { graph.db.attempts().since(0) }.count { it.itemId == SessionViewModel.SESSION_SUMMARY }
+        assertEquals("a sitting with nothing in it wrote a row about itself", before, after)
     }
 
     /**
