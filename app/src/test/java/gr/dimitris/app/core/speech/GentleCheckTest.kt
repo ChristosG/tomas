@@ -18,6 +18,7 @@ class GentleCheckTest {
 
     @Test fun `before he speaks the phone has not asked anything of him`() {
         assertEquals(0, check.tries)
+        assertEquals(0, check.windows)
         assertNull(check.heard)
         assertFalse("nothing has been heard, so nothing matched", check.matched)
         assertFalse("there is nothing to nudge about yet", check.nudging)
@@ -49,7 +50,7 @@ class GentleCheckTest {
     }
 
     /**
-     * A window that heard nothing costs him nothing at all.
+     * A window that heard nothing costs him no try.
      *
      * The phone did not disagree with him — it did not hear him — and it may not decide anything on
      * that basis: no try spent, no nudge counted, the cue exactly where it was. The wait itself is
@@ -65,12 +66,32 @@ class GentleCheckTest {
         assertEquals(0, check.tries)
     }
 
+    /**
+     * The soft wall, and the reason the confirm counts windows rather than tries.
+     *
+     * A recogniser that answers "no match" to everything — which is what effortful, dysarthric
+     * speech gets from Google's service — spends no tries at all. With the confirm gated on tries,
+     * «Μίλα» stayed on the screen for ever and a man who *had* said the word could never record
+     * that he had. Two goes that came to nothing are still two goes: the phone stops asking.
+     */
+    @Test fun `two windows that heard nothing still give him the confirm back`() {
+        check.record(null, isMatch = false)
+        assertFalse("one dead window is not two", check.canConfirm)
+        check.record(null, isMatch = false)
+        assertTrue("a deaf recogniser kept «Το είπα!» from him", check.canConfirm)
+        assertEquals("silence was counted against him in the row", 0, check.tries)
+        assertEquals(2, check.windows)
+        assertEquals(GentleCheck.Primary.CONFIRM, GentleCheck.primaryFor(true, sttOn = true, canConfirm = check.canConfirm))
+    }
+
     /** Nor does one wipe out a mismatch he had already been nudged for. */
     @Test fun `a silent window leaves an earlier mismatch standing`() {
         check.record("νερό", isMatch = false)
         assertEquals(Verdict.NOTHING, check.record(null, isMatch = false))
         assertEquals("the mismatch is still the only try", 1, check.tries)
         assertTrue("and the nudge it earned is still on the screen", check.nudging)
+        // One mismatch and one dead window are two goes, so the confirm is his either way.
+        assertTrue("two goes that came to nothing left him nothing to press", check.canConfirm)
     }
 
     /** And once the confirm is his, a silent window never takes it back. */
@@ -99,8 +120,16 @@ class GentleCheckTest {
         assertEquals(3, check.tries)
     }
 
+    /** A match is agreement, not a go he has used: it never counts against the two. */
+    @Test fun `a match is not one of his two goes`() {
+        check.record("καφές", isMatch = true)
+        assertEquals(0, check.windows)
+        assertEquals(0, check.tries)
+    }
+
     @Test fun `one nudge, and the words of it are an invitation`() {
         assertEquals(2, GentleCheck.TRIES_BEFORE_CONFIRM)
+        assertEquals(2, GentleCheck.WINDOWS_BEFORE_CONFIRM)
         assertEquals("Δοκίμασε ξανά", GentleCheck.TRY_AGAIN)
         assertEquals("Μίλα", GentleCheck.SPEAK)
     }

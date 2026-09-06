@@ -95,8 +95,17 @@ object Recognition {
      */
     const val INSTANT_SESSION_MS = 1_000L
 
-    /** At most this many further sessions in one wait, however much of the twenty seconds is left. */
-    const val MAX_RESTARTS = 3
+    /**
+     * At most this many further sessions in one wait — a backstop, not the bound.
+     *
+     * [RESTART_WITHIN_MS] is what ends the wait; this only stops a service that answers in about a
+     * second from being rebound without end. Chris described a recogniser that gives up after one
+     * to two seconds, and at three restarts that made the whole wait some eight seconds rather than
+     * the twenty he was promised — the safety net cutting him off instead of the rule. Six sessions
+     * of a second and a half still reach the twenty, and the [INSTANT_SESSION_MS] floor below is
+     * what actually catches a service that refuses rather than listens.
+     */
+    const val MAX_RESTARTS = 6
 
     /**
      * Said when the phone could not listen at all. It points at the settings because that is where

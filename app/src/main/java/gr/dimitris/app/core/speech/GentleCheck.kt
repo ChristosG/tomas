@@ -13,9 +13,10 @@ package gr.dimitris.app.core.speech
  * - it did not, again: nothing more is asked of him. «Το είπα!» comes back and confirms exactly as
  *   it did before recognition existed.
  *
- * A window that heard nothing at all counts as one of those tries. It has to: two dead windows in a
- * row would otherwise leave a man who *had* said the word with no way to say he had — which is the
- * wall this whole task exists to remove.
+ * A window that heard nothing at all costs him no *try* — the phone did not disagree with him, it
+ * did not hear him — but it is still one of his two goes. Two dead windows in a row would otherwise
+ * leave a man who *had* said the word with no way to say he had, which is the wall this whole task
+ * exists to remove. So the confirm opens on windows and the row counts mismatches.
  *
  * Held apart from the three view models because it is the same machine in all of them, and because
  * a state machine that decides whether he may confirm his own work should be provable in a plain
@@ -36,9 +37,10 @@ class GentleCheck {
          * The window came back with no words at all — silence, a sound that matched nothing, a
          * session that hung to its bound, or his own «Στοπ» before he had started.
          *
-         * It costs him **nothing**: no try, no nudge counted against him, the cue where it was.
-         * A phone that did not hear him has said nothing about whether he spoke, and it may not be
-         * allowed to decide anything on that basis.
+         * It costs him no try and no nudge, and leaves the cue where it was: a phone that did not
+         * hear him has said nothing about whether he spoke, and it may not be allowed to decide
+         * anything on that basis. It is still one of his two goes — see [windows] — so a deaf
+         * recogniser can never keep «Το είπα!» from him.
          */
         NOTHING,
     }
@@ -52,6 +54,20 @@ class GentleCheck {
     var tries: Int = 0
         private set
 
+    /**
+     * How many windows have come back without agreeing with him — a mismatch **or** a window that
+     * heard nothing. This, and not [tries], is what opens «Το είπα!».
+     *
+     * The difference is the soft wall Chris found at the other end of the gentle check: a
+     * recogniser that answers `ERROR_NO_MATCH` to every window — a likely outcome for effortful,
+     * dysarthric speech — spends no tries at all, and with the confirm gated on tries the green
+     * primary stayed «Μίλα» for ever and he could never say he had said the word. Counting windows
+     * lets the phone stop asking after two goes whatever the reason, while [tries] goes on meaning
+     * exactly "the check disagreed with him" for the caregiver reading the row.
+     */
+    var windows: Int = 0
+        private set
+
     /** The best text of the last window, or null when nothing was heard. */
     var heard: String? = null
         private set
@@ -62,8 +78,8 @@ class GentleCheck {
     /** «Δοκίμασε ξανά» is on the screen: one miss, and nothing else has changed. */
     val nudging: Boolean get() = !matched && tries in 1 until TRIES_BEFORE_CONFIRM
 
-    /** Whether «Το είπα!» is his to press: after a match, or after he has been asked twice. */
-    val canConfirm: Boolean get() = matched || tries >= TRIES_BEFORE_CONFIRM
+    /** Whether «Το είπα!» is his to press: after a match, or after two goes that came to nothing. */
+    val canConfirm: Boolean get() = matched || windows >= WINDOWS_BEFORE_CONFIRM
 
     /**
      * What one window came back with. [text] is null when nothing was heard at all.
@@ -71,6 +87,9 @@ class GentleCheck {
     fun record(text: String?, isMatch: Boolean): Verdict {
         heard = text
         matched = isMatch
+        // Any window that did not agree with him is a go he has had: the wrong word, or nothing at
+        // all. Only a match leaves this where it was.
+        if (!isMatch || text == null) windows++
         if (text == null) return Verdict.NOTHING
         if (isMatch) return Verdict.MATCHED
         // A real mismatch, and the only thing that counts as one.
@@ -112,6 +131,13 @@ class GentleCheck {
          * be the phone insisting, and insisting is what makes a man stop trying.
          */
         const val TRIES_BEFORE_CONFIRM = 2
+
+        /**
+         * How many windows may come back without a match before «Το είπα!» is his again. The same
+         * two goes, counted so that a phone which never hears him cannot hold the button shut: see
+         * [windows].
+         */
+        const val WINDOWS_BEFORE_CONFIRM = 2
 
         /** The nudge itself. Not «λάθος», not «όχι»: the invitation is what is being repeated. */
         const val TRY_AGAIN = "Δοκίμασε ξανά"
