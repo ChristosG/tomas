@@ -229,9 +229,15 @@ the server has to decide which copy wins:
 | Tables | Rule |
 | --- | --- |
 | `attempts`, `error_logs` | **Append-only.** The first row stored for an id wins; later rows with the same id are ignored. These are immutable facts (a practice attempt, a logged error). |
-| `items`, `recordings`, `schedules`, `sessions`, `scripts`, `script_lines` | **Last-write-wins on `updatedAt`.** A pushed row replaces the stored one only if its `updatedAt` is strictly greater; a tie keeps the row already stored. Deletes are soft — `deleted: true` with a newer `updatedAt`. |
+| `items`, `recordings`, `schedules`, `sessions`, `scripts`, `script_lines`, `advice`, `notes` | **Last-write-wins on `updatedAt`.** A pushed row replaces the stored one only if its `updatedAt` is strictly greater; a tie keeps the row already stored. Deletes are soft — `deleted: true` with a newer `updatedAt`. |
 
-Those eight names are the complete list; a row for any other table is rejected with `400`.
+`advice` is an answer from Claude kept whole (the report that went out, both halves of what came
+back, and the focus it chose) and `notes` is something a caregiver wrote down. Both are things
+people wrote rather than facts about Dimitris, so both are last-write-wins: a person may correct
+what they wrote. The notes are the reason they sync at all — the father sees half of his week and
+Chris the other half, and Claude has to read both.
+
+Those ten names are the complete list; a row for any other table is rejected with `400`.
 (Adding a table later means adding its name to `TABLES` in `store.mjs` and redeploying.)
 
 `schedules` rows are keyed on `(itemId, module)`, which the app sends as the id

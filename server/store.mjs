@@ -37,6 +37,8 @@ export const TABLES = Object.freeze([
   'error_logs',
   'scripts',
   'script_lines',
+  'advice',
+  'notes',
 ]);
 
 /**

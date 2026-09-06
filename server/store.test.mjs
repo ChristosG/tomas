@@ -41,8 +41,48 @@ test('the table registry matches the sync contract', () => {
     'error_logs',
     'scripts',
     'script_lines',
+    'advice',
+    'notes',
   ]);
   assert.deepEqual([...APPEND_ONLY_TABLES], ['attempts', 'error_logs']);
+});
+
+/**
+ * Phase 11's two tables. Both are things people wrote — an answer from Claude and a caregiver's
+ * own note — so both are last-write-wins: a person may correct what they wrote. Without them here
+ * the server rejects the whole push batch, the phone's watermark can never advance past the first
+ * note, and the notes are exactly what the father's half of the week reaches Chris by.
+ */
+test('advice and notes are stored, merged last-write-wins, and pulled back', (t) => {
+  const store = new Store(tempDir(t));
+
+  const advice = {
+    id: 'ad1',
+    at: 1_757_000_000_000,
+    model: 'claude-opus-5',
+    report: 'Προφίλ…',
+    caregivers: '- Δούλεψε τα «π».',
+    dimitris: 'Πάει καλά.',
+    focusJson: '{"items":["καφές"],"sounds":["π"]}',
+    updatedAt: 100,
+    deleted: false,
+  };
+  assert.equal(store.apply('advice', advice).accepted, true);
+  assert.equal(store.apply('advice', { ...advice, caregivers: 'διορθωμένο', updatedAt: 200 }).accepted, true);
+  assert.equal(store.apply('advice', { ...advice, caregivers: 'παλιό', updatedAt: 150 }).accepted, false);
+  assert.equal(store.apply('advice', { ...advice, caregivers: 'ισοπαλία', updatedAt: 200 }).accepted, false);
+
+  const note = { id: 'n1', at: 5, text: 'Είπε «καλημέρα» μόνος του.', author: 'CAREGIVER', updatedAt: 10, deleted: false };
+  assert.equal(store.apply('notes', note).accepted, true);
+  assert.equal(store.apply('notes', { ...note, deleted: true, updatedAt: 11 }).accepted, true);
+
+  const rows = store.since(0).rows;
+  const stored = new Map(rows.map((r) => [r.table, r.row]));
+  assert.equal(stored.get('advice').caregivers, 'διορθωμένο');
+  assert.equal(stored.get('advice').focusJson, '{"items":["καφές"],"sounds":["π"]}');
+  assert.equal(stored.get('notes').deleted, true);
+  assert.equal(store.isAppendOnly('advice'), false);
+  assert.equal(store.isAppendOnly('notes'), false);
 });
 
 test('last-write-wins keeps the newer updatedAt and ignores the older one', (t) => {

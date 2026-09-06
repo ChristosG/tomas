@@ -177,6 +177,37 @@ test('push then pull round trip', async (t) => {
   assert.deepEqual(await again.json(), { ok: true, seq: 2, accepted: 0, ignored: 1 });
 });
 
+/**
+ * The batch a phase-11 phone really sends. Before `advice` and `notes` were registered the whole
+ * batch came back 400 and the phone's push watermark could never advance past the first note.
+ */
+test('a batch carrying an advice and a note is accepted whole', async (t) => {
+  const { base } = await start(t);
+
+  const pushed = await json(base, '/v1/push', {
+    method: 'POST',
+    headers: AUTH,
+    body: JSON.stringify({
+      rows: [
+        { table: 'items', row: { ...row('i1', 100), greek: 'ψωμί' } },
+        { table: 'notes', row: { id: 'n1', at: 90, text: 'Είπε «καλημέρα» μόνος του.', author: 'CAREGIVER', updatedAt: 101, deleted: false } },
+        { table: 'advice', row: { id: 'ad1', at: 95, model: 'claude-opus-5', report: 'Προφίλ…', caregivers: '- Ένα.', dimitris: 'Πάει καλά.', focusJson: '{"sounds":["π"]}', updatedAt: 102, deleted: false } },
+      ],
+    }),
+  });
+  assert.equal(pushed.status, 200);
+  assert.deepEqual(await pushed.json(), { ok: true, seq: 3, accepted: 3, ignored: 0 });
+
+  const pulled = await (await fetch(`${base}/v1/pull?since=0`, { headers: AUTH })).json();
+  assert.deepEqual(pulled.rows.map((r) => [r.table, r.row.id]), [
+    ['items', 'i1'],
+    ['notes', 'n1'],
+    ['advice', 'ad1'],
+  ]);
+  assert.equal(pulled.rows[1].row.text, 'Είπε «καλημέρα» μόνος του.');
+  assert.equal(pulled.rows[2].row.focusJson, '{"sounds":["π"]}');
+});
+
 test('pull honours since and clamps limit', async (t) => {
   const { base } = await start(t);
   const rows = [];
