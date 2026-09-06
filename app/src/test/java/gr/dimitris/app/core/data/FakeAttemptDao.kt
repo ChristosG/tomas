@@ -30,8 +30,8 @@ class FakeAttemptDao : AttemptDao {
             .take(limit)
     }
 
-    override suspend fun lastUsePerModule(skipped: Outcome): List<ModuleUse> =
-        active().filter { it.outcome != skipped }
+    override suspend fun lastUsePerModule(skipped: Outcome, summary: String): List<ModuleUse> =
+        active().filter { it.outcome != skipped && it.itemId != summary }
             .groupBy { it.module }
             .map { (module, rows) -> ModuleUse(module, rows.maxOf { it.startedAt }) }
 

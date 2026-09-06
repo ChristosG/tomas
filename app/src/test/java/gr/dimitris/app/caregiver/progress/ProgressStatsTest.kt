@@ -447,6 +447,116 @@ class ProgressStatsTest {
         assertTrue("a caregiver's recording is a voice too", voiced.hasVoice)
     }
 
+    /**
+     * Phase 11 writes one row per sitting whose item id is `session:summary` — it carries the whole
+     * sitting's length and an outcome that is a placeholder. Counting it would add a phantom
+     * exercise to his day, to one module's row and to that module's mean duration, and the module
+     * it names is simply whichever one happened to be planned last.
+     */
+    @Test fun `the sitting's own summary row is not an exercise`() {
+        val rows = listOf(
+            attempt("2026-09-03"),
+            Attempt(itemId = ProgressStats.SUMMARY_ITEM, module = ModuleId.TRACE, sessionId = "s1",
+                startedAt = at("2026-09-03", 10), durationMs = 900_000, outcome = Outcome.CORRECT),
+        )
+        val p = compute(rows)
+
+        assertEquals("one exercise, not two", 1, p.days.sumOf { it.attempts })
+        assertEquals("and only the module he really did", listOf(ModuleId.WORDCOACH), p.modules.map { it.module })
+        assertTrue(ProgressStats.lifetime(rows, emptyList(), items).all { it.text == "καφές" })
+        assertEquals(1, ProgressStats.moduleHistory(rows, zone = zone).single().attempts)
+        assertTrue(ProgressStats.recentByDay(rows, items, startOf("2026-09-01"), at("2026-09-05", 23, 59), zone).size == 1)
+    }
+
+    // ---- every module, including the ones that have no words ----------------------------------
+
+    /**
+     * Αριθμοί, Προτάσεις, Γράψε and Δεξί χέρι write synthetic item ids, so they appear in no list of
+     * words at all — and three of them are the modules Claude is asked whether to move a level on.
+     * This is the only place in the file that counts a synthetic id on purpose.
+     */
+    @Test fun `a module with no words still has a whole history`() {
+        val rows = listOf(
+            Attempt(itemId = "numbers:level:2", module = ModuleId.NUMBERS, startedAt = at("2026-09-01"),
+                durationMs = 6_000, outcome = Outcome.CORRECT, detail = """{"level":2}"""),
+            Attempt(itemId = "numbers:level:2", module = ModuleId.NUMBERS, startedAt = at("2026-09-02"),
+                durationMs = 10_000, outcome = Outcome.SKIPPED, detail = """{"level":3}"""),
+            Attempt(itemId = "numbers:level:4", module = ModuleId.NUMBERS, startedAt = at("2026-09-14"),
+                durationMs = 8_000, outcome = Outcome.CORRECT, detail = """{"level":4}"""),
+        )
+        val h = ProgressStats.moduleHistory(rows, zone = zone).single()
+
+        assertEquals(ModuleId.NUMBERS, h.module)
+        assertEquals(3, h.attempts)
+        assertEquals(2, h.correct)
+        assertEquals(1, h.skipped)
+        assertEquals(8_000L, h.meanMs)
+        assertEquals(at("2026-09-01"), h.firstAt)
+        assertEquals(
+            "two ISO weeks, each averaged",
+            listOf(startOf("2026-08-31") to 2.5f, startOf("2026-09-14") to 4f),
+            h.levels.map { it.weekStart to it.level },
+        )
+    }
+
+    @Test fun `a module that writes no level says nothing about levels`() {
+        val rows = listOf(attempt("2026-09-01", module = ModuleId.ARCADE, itemId = "arcade:tap"))
+        assertTrue(ProgressStats.moduleHistory(rows, zone = zone).single().levels.isEmpty())
+    }
+
+    @Test fun `only the newest weeks of level history are kept`() {
+        val rows = (0 until 30).map { w ->
+            Attempt(itemId = "numbers:level:1", module = ModuleId.NUMBERS,
+                startedAt = at("2026-09-01") - w * 7L * 24 * 60 * 60 * 1000,
+                durationMs = 1_000, outcome = Outcome.CORRECT, detail = """{"level":${w % 7 + 1}}""")
+        }
+        assertEquals(ProgressStats.LEVEL_WEEKS, ProgressStats.moduleHistory(rows, zone = zone).single().levels.size)
+    }
+
+    /** A word he gave up *tracing* is a statement about his right hand, not about his aphasia. */
+    @Test fun `tracing is counted on a word, but never as a word he could not say`() {
+        val rows = listOf(
+            attempt("2026-09-01", cue = 1),
+            attempt("2026-09-02", module = ModuleId.TRACE, outcome = Outcome.SKIPPED),
+            attempt("2026-09-03", module = ModuleId.TRACE, outcome = Outcome.CORRECT),
+        )
+        val h = ProgressStats.lifetime(rows, emptyList(), items).single()
+
+        assertEquals("how much he did with the word counts everything", 3, h.attempts)
+        assertEquals(1, h.correct)
+        assertEquals("the traced skip is not a word he skipped", 0, h.skipped)
+        assertEquals(2, h.traced)
+        assertTrue("and «Γράψε» is not in the difficulty list either", compute(rows).mostSkipped.isEmpty())
+    }
+
+    @Test fun `the cue trend never counts tracing`() {
+        val rows = listOf(
+            attempt("2026-09-01", cue = 0),
+            // Only levels 4-5 write a real item id at all, and none of them writes a cue level;
+            // this row is the pathological case where one somehow did.
+            attempt("2026-09-02", module = ModuleId.TRACE, cue = 4),
+        )
+        val trend = compute(rows).cueTrend
+        assertEquals(1, trend.size)
+        assertEquals(0f, trend.single().meanCue, 0.001f)
+    }
+
+    // ---- the day totals that do not add up ----------------------------------------------------
+
+    @Test fun `the exercises with no word behind them are counted by day and by module`() {
+        val rows = listOf(
+            attempt("2026-09-03"),
+            attempt("2026-09-03", module = ModuleId.NUMBERS, itemId = "numbers:level:3"),
+            attempt("2026-09-03", module = ModuleId.NUMBERS, itemId = "numbers:level:3"),
+            attempt("2026-09-03", module = ModuleId.ARCADE, itemId = "arcade:tap"),
+            attempt("2026-09-04", itemId = "i2"),
+        )
+        val out = ProgressStats.wordlessByDay(rows, items, startOf("2026-09-01"), at("2026-09-05", 23, 59), zone)
+
+        assertEquals(mapOf(ModuleId.NUMBERS to 2, ModuleId.ARCADE to 1), out.getValue(startOf("2026-09-03")))
+        assertTrue("a day whose exercises were all words is absent", startOf("2026-09-04") !in out)
+    }
+
     // ---- the month, day by day ----------------------------------------------------------------
 
     @Test fun `the days are walked forwards and each one's busiest word comes first`() {

@@ -1,5 +1,6 @@
 package gr.dimitris.app.caregiver.progress
 
+import com.google.gson.JsonParser
 import gr.dimitris.app.core.data.Attempt
 import gr.dimitris.app.core.data.Category
 import gr.dimitris.app.core.data.Item
@@ -10,6 +11,7 @@ import gr.dimitris.app.core.data.Schedule
 import gr.dimitris.app.core.data.Session
 import gr.dimitris.app.core.scheduler.LeitnerPolicy
 import gr.dimitris.app.core.scheduler.startOfDay
+import gr.dimitris.app.today.SessionViewModel
 import java.time.Instant
 import java.time.ZoneId
 import kotlin.math.roundToInt
@@ -51,6 +53,8 @@ data class ItemHistory(
     val correct: Int,
     val assisted: Int,
     val skipped: Int,
+    /** How often he wrote this word in «Γράψε». His right hand, kept apart from his words. */
+    val traced: Int,
     val meanCue: Float?,
     /** The highest Leitner box this word has reached in any module; 0 when it is not scheduled. */
     val box: Int,
@@ -70,6 +74,32 @@ data class DayItemStat(
     val skipped: Int,
     val meanCue: Float?,
 )
+
+/**
+ * One module over the whole journey. The coarse view the per-word table cannot give: Αριθμοί,
+ * Προτάσεις, Γράψε and Δεξί χέρι write synthetic item ids («numbers:level:3», «arcade:tap»), so
+ * they are invisible to every list of words — and those are three of the four modules Claude is
+ * asked whether to move a level on.
+ *
+ * [meanMs] is how long one exercise took him, which is the one thing in here that a level change
+ * shows up in first. [levels] is the level he was actually working at, week by week, read from
+ * `detail.level`, so "he has been at level 2 since June" is a fact rather than an inference.
+ */
+data class ModuleHistory(
+    val module: ModuleId,
+    val attempts: Int,
+    val correct: Int,
+    val assisted: Int,
+    val skipped: Int,
+    val meanMs: Long,
+    val meanCue: Float?,
+    val firstAt: Long,
+    val lastAt: Long,
+    val levels: List<WeekLevel>,
+)
+
+/** The level a module was worked at in one ISO week, averaged over that week's rows. */
+data class WeekLevel(val weekStart: Long, val level: Float)
 
 data class Progress(
     val from: Long,
@@ -120,10 +150,38 @@ object ProgressStats {
     val GRADED_MODULES: Set<ModuleId> = ModuleId.entries.toSet() - ModuleId.TALKBOARD
 
     /**
+     * What a *word* is judged on. [GRADED_MODULES] minus «Γράψε», because handwriting is not
+     * vocabulary recall.
+     *
+     * From level 4 the tracing module writes real item ids, so a word he gave up *tracing* with a
+     * hemiparetic right hand used to land in that word's «παράλειψη» beside his word-finding, and a
+     * reader — a therapist or Claude — would take his hand for his aphasia and put the word in a
+     * speech focus. [gr.dimitris.app.caregiver.insights.InsightRules] already refuses to make that
+     * claim; the per-word lines now refuse it too, and «Γράψε» is reported whole in the report's own
+     * per-module section instead, where it says something true.
+     */
+    val SPEECH_MODULES: Set<ModuleId> = GRADED_MODULES - ModuleId.TRACE
+
+    /**
+     * The one attempt row per sitting that is about the sitting rather than about an exercise
+     * ([gr.dimitris.app.today.SessionViewModel.SESSION_SUMMARY]). Its `durationMs` is the whole
+     * sitting and its outcome is a placeholder, so counting it would add a phantom exercise to his
+     * day, to one module's row and to that module's mean duration. Nothing here counts it.
+     */
+    const val SUMMARY_ITEM = SessionViewModel.SESSION_SUMMARY
+
+    /** Every row that is a real exercise: not the sitting's own summary row. */
+    fun exercises(attempts: List<Attempt>): List<Attempt> =
+        attempts.filter { !it.deleted && it.itemId != SUMMARY_ITEM }
+
+    /**
      * What «Μαθημένες λέξεις» is allowed to count. A dialogue line is an item too, but it is a line
      * of a script, not a word he now has.
      */
     val WORD_KINDS = setOf(ItemKind.WORD, ItemKind.PHRASE)
+
+    /** How many weeks of level history one module's line carries. A season, not a life. */
+    const val LEVEL_WEEKS = 12
 
     /** Two attempts further apart than this are two sittings, not one with a pause in it. */
     const val SITTING_GAP_MS = 5L * 60 * 1000
@@ -153,7 +211,7 @@ object ProgressStats {
          */
         mastered: Int? = null,
     ): Progress {
-        val window = attempts.filter { !it.deleted && it.startedAt in from..to }
+        val window = exercises(attempts).filter { it.startedAt in from..to }
         val sat = sessions.filter { !it.deleted && it.startedAt in from..to }
 
         val dayKeys = calendarDays(from, to, zone)
@@ -234,11 +292,12 @@ object ProgressStats {
     ): List<ItemHistory> {
         val topBox = schedules.filter { !it.deleted }
             .groupBy { it.itemId }.mapValues { (_, rows) -> rows.maxOf { it.box } }
-        return attempts.filter { !it.deleted && items[it.itemId] != null }
+        return exercises(attempts).filter { items[it.itemId] != null }
             .groupBy { it.itemId }
             .mapNotNull { (id, rows) ->
                 val item = items[id] ?: return@mapNotNull null
-                val graded = rows.filter { it.module in GRADED_MODULES }
+                // Speech only: «Γράψε» is his right hand, and it is counted on its own below.
+                val graded = rows.filter { it.module in SPEECH_MODULES }
                 val cued = rows.mapNotNull { it.cueLevel }
                 ItemHistory(
                     text = item.text,
@@ -249,6 +308,7 @@ object ProgressStats {
                     correct = graded.count { it.outcome == Outcome.CORRECT },
                     assisted = graded.count { it.outcome == Outcome.ASSISTED },
                     skipped = graded.count { it.outcome == Outcome.SKIPPED },
+                    traced = rows.count { it.module == ModuleId.TRACE },
                     meanCue = if (cued.isEmpty()) null else cued.sum().toFloat() / cued.size,
                     box = topBox[id] ?: 0,
                     firstAt = rows.minOf { it.startedAt },
@@ -281,10 +341,13 @@ object ProgressStats {
         to: Long,
         zone: ZoneId = ZoneId.systemDefault(),
     ): List<DayItemStat> =
-        attempts.filter { !it.deleted && it.startedAt in from..to && items[it.itemId] != null }
+        exercises(attempts).filter { it.startedAt in from..to && items[it.itemId] != null }
+            // Grouped by *text*: two live items spelled the same are one word to everybody who
+            // reads this, and a day that listed «καφές» twice would read as a bug rather than as
+            // two rows in the vocabulary.
             .groupBy { startOfDay(it.startedAt, zone) to items.getValue(it.itemId).text }
             .map { (key, rows) ->
-                val graded = rows.filter { it.module in GRADED_MODULES }
+                val graded = rows.filter { it.module in SPEECH_MODULES }
                 val cued = rows.mapNotNull { it.cueLevel }
                 DayItemStat(
                     day = key.first,
@@ -297,6 +360,72 @@ object ProgressStats {
                 )
             }
             .sortedWith(compareBy<DayItemStat> { it.day }.thenByDescending { it.attempts }.thenBy { it.text })
+
+    /**
+     * Every module over the whole journey, in the enum's own order so two reports line up.
+     *
+     * Unlike everything else in this file it counts **synthetic ids too** — `numbers:level:3`,
+     * `arcade:tap`, the sentence builder's own rows — because that is the whole point: Αριθμοί,
+     * Προτάσεις, Γράψε and Δεξί χέρι never appear in a list of words, and three of them are the
+     * modules whose level Claude is asked to move. Only the sitting's own summary row is left out;
+     * it is not an exercise.
+     *
+     * [ModuleHistory.levels] is read out of `detail.level`, which the three levelled modules write
+     * (phase 11, `docs/ADAPTATION.md`). It is a mean over the week rather than the last value: a
+     * week that straddles a level change should read as the half-step it was.
+     */
+    fun moduleHistory(attempts: List<Attempt>, weeks: Int = LEVEL_WEEKS, zone: ZoneId = ZoneId.systemDefault()): List<ModuleHistory> {
+        val rows = exercises(attempts)
+        if (rows.isEmpty()) return emptyList()
+        val byModule = rows.groupBy { it.module }
+        return ModuleId.entries.mapNotNull { id ->
+            val mine = byModule[id] ?: return@mapNotNull null
+            val graded = if (id in GRADED_MODULES) mine else emptyList()
+            val cued = mine.mapNotNull { it.cueLevel }
+            val levels = mine.mapNotNull { row -> levelOf(row)?.let { weekStart(row.startedAt, zone) to it } }
+                .groupBy({ it.first }, { it.second })
+                .map { (week, values) -> WeekLevel(week, values.sum().toFloat() / values.size) }
+                .sortedBy { it.weekStart }
+                .takeLast(weeks.coerceAtLeast(0))
+            ModuleHistory(
+                module = id,
+                attempts = mine.size,
+                correct = graded.count { it.outcome == Outcome.CORRECT },
+                assisted = graded.count { it.outcome == Outcome.ASSISTED },
+                skipped = graded.count { it.outcome == Outcome.SKIPPED },
+                meanMs = mine.sumOf { it.durationMs } / mine.size,
+                meanCue = if (cued.isEmpty()) null else cued.sum().toFloat() / cued.size,
+                firstAt = mine.minOf { it.startedAt },
+                lastAt = mine.maxOf { it.startedAt },
+                levels = levels,
+            )
+        }
+    }
+
+    /**
+     * How many of a day's exercises had no word behind them, and which modules they were.
+     *
+     * Without this the day header does not add up to the lines under it — «12 ασκήσεις» over five
+     * word lines totalling five — and a reader who decides a table is unreliable stops using it.
+     * The modules are read from the rows rather than listed as a constant, because which of them
+     * writes a word depends on the level he is at that day.
+     */
+    fun wordlessByDay(
+        attempts: List<Attempt>,
+        items: Map<String, Item>,
+        from: Long,
+        to: Long,
+        zone: ZoneId = ZoneId.systemDefault(),
+    ): Map<Long, Map<ModuleId, Int>> =
+        exercises(attempts).filter { it.startedAt in from..to && items[it.itemId] == null }
+            .groupBy { startOfDay(it.startedAt, zone) }
+            .mapValues { (_, rows) -> rows.groupingBy { it.module }.eachCount().toSortedMap(compareBy { it.ordinal }) }
+
+    /** `detail.level` as a number, or null when this module does not write one. */
+    private fun levelOf(row: Attempt): Int? = runCatching {
+        JsonParser.parseString(row.detail).takeIf { it.isJsonObject }?.asJsonObject
+            ?.get("level")?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isNumber }?.asInt
+    }.getOrNull()
 
     /**
      * Minutes he practised without a session row, per day.

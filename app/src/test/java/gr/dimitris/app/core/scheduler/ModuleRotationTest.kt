@@ -5,8 +5,11 @@ import gr.dimitris.app.core.data.FakeAttemptDao
 import gr.dimitris.app.core.data.ModuleId
 import gr.dimitris.app.core.data.Outcome
 import gr.dimitris.app.today.SessionBudget
+import gr.dimitris.app.today.SessionViewModel
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -124,4 +127,67 @@ class ModuleRotationTest {
     private fun row(module: ModuleId, at: Long, outcome: Outcome = Outcome.CORRECT) = Attempt(
         itemId = "x", module = module, startedAt = at, durationMs = 1, outcome = outcome,
     )
+
+    // ---- what a live advice asks for (phase 11) -----------------------------------------------
+
+    /**
+     * «Δούλεψε τους Αριθμούς» is worth nothing if the Αριθμοί are four days down the rotation. The
+     * modules a live focus named take their turn today — after the word coach, which is in every
+     * session, and before the least-recent-use queue.
+     */
+    @Test fun `the modules a focus named get their turn today`() {
+        val all = listOf(ModuleId.WORDCOACH, ModuleId.NUMBERS, ModuleId.SINGSAY, ModuleId.SCRIPTS,
+            ModuleId.SENTENCES, ModuleId.TRACE)
+        // Everything but the numbers was done long ago; the numbers this morning, so they would
+        // ordinarily be last in the queue.
+        val lastUsed = mapOf(
+            ModuleId.NUMBERS to 1_000_000L, ModuleId.SINGSAY to 10L, ModuleId.SCRIPTS to 20L,
+            ModuleId.SENTENCES to 30L, ModuleId.TRACE to 40L,
+        )
+
+        val without = ModuleRotation.choose(all, lastUsed)
+        val with = ModuleRotation.choose(all, lastUsed, preferred = setOf(ModuleId.NUMBERS))
+
+        assertFalse("the numbers were done this morning: not their turn", without.contains(ModuleId.NUMBERS))
+        assertTrue("but the advice asked for them: $with", with.contains(ModuleId.NUMBERS))
+        assertTrue("and the word coach is still in every session", with.contains(ModuleId.WORDCOACH))
+        assertEquals(ModuleRotation.MAX_MODULES, with.size)
+    }
+
+    /**
+     * It changes *which* modules the day is made of, never the order he does them in: a man who
+     * cannot ask what happens next is owed a session that starts the way yesterday's did.
+     */
+    @Test fun `a focus does not reorder the day, only fills it`() {
+        val all = listOf(ModuleId.WORDCOACH, ModuleId.NUMBERS, ModuleId.SINGSAY, ModuleId.SCRIPTS, ModuleId.TRACE)
+        val chosen = ModuleRotation.choose(all, emptyMap(), preferred = setOf(ModuleId.TRACE))
+        assertEquals("Today order, whatever the focus said", chosen, all.filter { it in chosen })
+        assertEquals(ModuleId.WORDCOACH, chosen.first())
+    }
+
+    /** A focus naming more modules than a sitting holds cannot push the word coach out. */
+    @Test fun `a greedy focus never costs him the word coach`() {
+        val all = ModuleId.entries.toList()
+        val chosen = ModuleRotation.choose(all, emptyMap(), preferred = all.toSet() - ModuleId.WORDCOACH)
+        assertTrue(chosen.contains(ModuleId.WORDCOACH))
+        assertEquals(ModuleRotation.MAX_MODULES, chosen.size)
+    }
+
+    /**
+     * Phase 11 writes one attempt row per sitting against whichever module was planned last. It is
+     * CORRECT, so without the filter every sitting would mark that module as practised whether or
+     * not he did a single exercise in it — and the rotation would quietly stop offering it.
+     */
+    @Test fun `the sitting's summary row is not practice`() = runTest {
+        val dao = FakeAttemptDao()
+        dao.insert(Attempt(itemId = "i1", module = ModuleId.WORDCOACH, startedAt = 100, durationMs = 1_000,
+            outcome = Outcome.CORRECT))
+        dao.insert(Attempt(itemId = SessionViewModel.SESSION_SUMMARY, module = ModuleId.TRACE, sessionId = "s1",
+            startedAt = 200, durationMs = 900_000, outcome = Outcome.CORRECT))
+
+        val lastUsed = ModuleRotation.lastUsedAt(dao)
+
+        assertEquals(mapOf(ModuleId.WORDCOACH to 100L), lastUsed)
+        assertTrue("«Γράψε» has still never been practised", ModuleId.TRACE !in lastUsed)
+    }
 }

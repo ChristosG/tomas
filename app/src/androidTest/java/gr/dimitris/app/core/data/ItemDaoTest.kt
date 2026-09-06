@@ -1,6 +1,10 @@
 package gr.dimitris.app.core.data
 
 import androidx.test.core.app.ApplicationProvider
+import gr.dimitris.app.core.sync.DaoSyncStore
+import gr.dimitris.app.core.sync.Rows
+import gr.dimitris.app.core.sync.SyncDaos
+import gr.dimitris.app.core.sync.Tables
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.After
@@ -64,5 +68,82 @@ class ItemDaoTest {
         db.scripts().upsertScript(deleted)
         assertEquals(setOf("Στην καφετέρια", "Με έναν φίλο"), db.scripts().allScripts().map { it.title }.toSet())
         assertEquals(listOf("Στην καφετέρια"), db.scripts().activeScripts().map { it.title })
+    }
+
+    /**
+     * «φωνή ναι/όχι» in the journey report means "a caregiver has recorded this word", never "he
+     * has practised it". The word coach saves a row for every take *he* makes, so without the
+     * `who` filter almost every word he had practised reported «φωνή ναι» after a fortnight — and
+     * the prompt asks Claude which words the caregivers should record next.
+     */
+    @Test fun itemsWithVoiceCountsOnlyTheCaregiversTakes() = runTest {
+        val hers = Item(text = "καφές", category = Category.FOOD)
+        val his = Item(text = "ψωμί", category = Category.FOOD)
+        val gone = Item(text = "νερό", category = Category.FOOD)
+        db.items().upsertAll(listOf(hers, his, gone))
+        db.recordings().upsert(Recording(itemId = hers.id, path = "recordings/a.m4a", who = Who.CAREGIVER, durationMs = 500))
+        db.recordings().upsert(Recording(itemId = his.id, path = "recordings/b.m4a", who = Who.DIMITRIS, durationMs = 500))
+        val removed = Recording(itemId = gone.id, path = "recordings/c.m4a", who = Who.CAREGIVER, durationMs = 500)
+        db.recordings().upsert(removed)
+        db.recordings().softDelete(removed.id, now())
+
+        assertEquals(listOf(hers.id), db.recordings().itemsWithVoice(Who.CAREGIVER))
+        assertEquals(listOf(his.id), db.recordings().itemsWithVoice(Who.DIMITRIS))
+    }
+
+    /**
+     * The rotation reads "when was this module last really practised" out of the attempt rows. The
+     * one row per sitting that is about the sitting is written CORRECT against whichever module was
+     * planned last, so counting it would mark that module practised on days he never touched it.
+     */
+    @Test fun lastUsePerModuleIgnoresTheSittingsOwnSummaryRow() = runTest {
+        db.attempts().insert(Attempt(itemId = "i1", module = ModuleId.WORDCOACH, startedAt = 100,
+            durationMs = 1_000, outcome = Outcome.CORRECT))
+        db.attempts().insert(Attempt(itemId = "session:summary", module = ModuleId.TRACE, sessionId = "s1",
+            startedAt = 200, durationMs = 900_000, outcome = Outcome.CORRECT))
+        db.attempts().insert(Attempt(itemId = "i1", module = ModuleId.SINGSAY, startedAt = 300,
+            durationMs = 1_000, outcome = Outcome.SKIPPED))
+
+        val used = db.attempts().lastUsePerModule(Outcome.SKIPPED, "session:summary")
+
+        assertEquals(listOf(ModuleId.WORDCOACH to 100L), used.map { it.module to it.lastAt })
+    }
+
+    /** The two tables phase 11 added, through the real database rather than a fake. */
+    @Test fun adviceAndNotesRoundTripAndSortNewestFirst() = runTest {
+        db.notes().upsert(Note(id = "n1", at = 100, text = "Παλιά", author = "CAREGIVER"))
+        db.notes().upsert(Note(id = "n2", at = 200, text = "Νέα", author = "DIMITRIS"))
+        db.notes().softDelete("n1", now())
+        assertEquals(listOf("Νέα"), db.notes().recent(10).map { it.text })
+
+        db.advice().upsert(Advice(id = "a1", at = 100, model = "m", report = "r1", caregivers = "c1", dimitris = "d1"))
+        db.advice().upsert(Advice(id = "a2", at = 200, model = "m", report = "r2", caregivers = "c2", dimitris = "d2",
+            focusJson = """{"sounds":["π"]}"""))
+        assertEquals("a2", db.advice().newest()?.id)
+        assertEquals(listOf("a2", "a1"), db.advice().recent(10).map { it.id })
+        assertEquals("""{"sounds":["π"]}""", db.advice().newest()?.focusJson)
+    }
+
+    /**
+     * A pulled row, through the same path the sync uses, into the real database.
+     *
+     * The fakes cannot see this: `DaoSyncStore.apply` converts with Gson and then hands the result
+     * to generated Room code, and only a device runs that. A row it cannot store comes back as
+     * "skipped" and the caregiver gets a Greek line about it for ever.
+     */
+    @Test fun aPulledNoteAndAdviceRowAreStoredByTheRealSyncPath() = runTest {
+        val store = DaoSyncStore { SyncDaos.of(db) }
+
+        val note = Note(id = "n9", at = 5, text = "Είπε «καλημέρα» μόνος του.", author = "CAREGIVER")
+        val advice = Advice(id = "a9", at = 5, model = "claude-opus-5", report = "Προφίλ…",
+            caregivers = "- Ένα.", dimitris = "Πάει καλά.", focusJson = """{"sounds":["π"]}""")
+
+        assertEquals(emptyList<String>(), store.apply(Tables.NOTES, listOf(Rows.of(note))))
+        assertEquals(emptyList<String>(), store.apply(Tables.ADVICE, listOf(Rows.of(advice))))
+
+        assertEquals(note, db.notes().recent(10).single())
+        assertEquals(advice, db.advice().recent(10).single())
+        assertEquals(mapOf("n9" to note.updatedAt), store.stamps(Tables.NOTES, listOf("n9")))
+        assertEquals(listOf(Rows.of(advice)), store.changedSince(Tables.ADVICE, 0))
     }
 }

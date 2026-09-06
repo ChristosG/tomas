@@ -3,6 +3,7 @@ package gr.dimitris.app.core.scheduler
 import gr.dimitris.app.core.data.AttemptDao
 import gr.dimitris.app.core.data.ModuleId
 import gr.dimitris.app.core.data.Outcome
+import gr.dimitris.app.today.SessionViewModel
 
 /**
  * Which modules one day's session is made of.
@@ -47,6 +48,7 @@ object ModuleRotation {
         lastUsedAt: Map<ModuleId, Long>,
         max: Int = MAX_MODULES,
         always: ModuleId = ALWAYS,
+        preferred: Set<ModuleId> = emptySet(),
     ): List<ModuleId> {
         if (max <= 0) return emptyList()
         val ordered = candidates.distinct()
@@ -55,9 +57,19 @@ object ModuleRotation {
 
         val kept = LinkedHashSet<ModuleId>()
         if (always in ordered) kept += always
+        // The modules a live focus named come next: an advice that says «δούλεψε τους Αριθμούς» is
+        // worth nothing if the Αριθμοί then wait four days for their turn. It decides *which*
+        // modules the day is made of, never the order they are done in — the day still opens with
+        // the same module it always did, because a man who cannot ask what happens next is owed
+        // that. Among themselves the preferred ones keep the least-recent-use rule.
+        val turn = compareBy<ModuleId>({ lastUsedAt[it] ?: Long.MIN_VALUE }, { it.ordinal })
+        for (id in ordered.filter { it != always && it in preferred }.sortedWith(turn)) {
+            if (kept.size >= max) break
+            kept += id
+        }
         // Never practised first, then longest ago. The enum's own order breaks a tie, so two modules
         // he has never touched do not swap places between one reading of this and the next.
-        for (id in ordered.filter { it != always }.sortedWith(compareBy({ lastUsedAt[it] ?: Long.MIN_VALUE }, { it.ordinal }))) {
+        for (id in ordered.filter { it != always }.sortedWith(turn)) {
             if (kept.size >= max) break
             kept += id
         }
@@ -70,5 +82,6 @@ object ModuleRotation {
      * has not done, and it stays near the front of the queue until he does it.
      */
     suspend fun lastUsedAt(attempts: AttemptDao): Map<ModuleId, Long> =
-        attempts.lastUsePerModule(Outcome.SKIPPED).associate { it.module to it.lastAt }
+        attempts.lastUsePerModule(Outcome.SKIPPED, SessionViewModel.SESSION_SUMMARY)
+            .associate { it.module to it.lastAt }
 }

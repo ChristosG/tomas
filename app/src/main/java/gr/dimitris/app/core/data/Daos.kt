@@ -75,11 +75,17 @@ interface RecordingDao {
     @Query("UPDATE recordings SET deleted = 1, updatedAt = :now WHERE id = :id") suspend fun softDelete(id: String, now: Long)
 
     /**
-     * The words that have a voice on them, whosever it is. The journey report says «φωνή ναι/όχι»
-     * per word so a caregiver can be told which words are still silent, and that is the whole use:
+     * The words a **caregiver** has put a voice on. The journey report says «φωνή ναι/όχι» per word
+     * so the people around him can be told which words are still silent, and that is the whole use:
      * ids of items, never paths.
+     *
+     * `who = CAREGIVER` is the point of it. The word coach saves a row for every take *Dimitris*
+     * makes, so without the filter almost every word he has practised reported «φωνή ναι» after a
+     * fortnight — and the prompt asks Claude to say which words the caregivers should record. His
+     * own takes are him practising; a model voice is something to practise against.
      */
-    @Query("SELECT DISTINCT itemId FROM recordings WHERE deleted = 0") suspend fun itemsWithVoice(): List<String>
+    @Query("SELECT DISTINCT itemId FROM recordings WHERE deleted = 0 AND who = :who")
+    suspend fun itemsWithVoice(who: Who): List<String>
 
     @Query("SELECT * FROM recordings WHERE updatedAt > :since ORDER BY updatedAt") suspend fun changedSince(since: Long): List<Recording>
     @Query("SELECT id, updatedAt FROM recordings WHERE id IN (:ids)") suspend fun stamps(ids: List<String>): List<RowStamp>
@@ -124,9 +130,18 @@ interface AttemptDao {
      * [skipped] rows are left out, and the caller passes [Outcome.SKIPPED]: a module he opened and
      * passed straight through is a module he did not do, and counting it would send it to the back
      * of the queue for as long as one he had worked at.
+     *
+     * So is the sitting's own summary row ([summary] =
+     * [gr.dimitris.app.today.SessionViewModel.SESSION_SUMMARY]). It is written as CORRECT against
+     * whichever module happened to be planned last, so without this every session would mark that
+     * module as practised whether or not he did a single exercise in it — and the rotation would
+     * quietly stop offering it.
      */
-    @Query("SELECT module, MAX(startedAt) AS lastAt FROM attempts WHERE deleted = 0 AND outcome != :skipped GROUP BY module")
-    suspend fun lastUsePerModule(skipped: Outcome): List<ModuleUse>
+    @Query(
+        "SELECT module, MAX(startedAt) AS lastAt FROM attempts " +
+            "WHERE deleted = 0 AND outcome != :skipped AND itemId != :summary GROUP BY module"
+    )
+    suspend fun lastUsePerModule(skipped: Outcome, summary: String): List<ModuleUse>
 
     @Query("SELECT * FROM attempts WHERE updatedAt > :since ORDER BY updatedAt") suspend fun changedSince(since: Long): List<Attempt>
     @Query("SELECT id, updatedAt FROM attempts WHERE id IN (:ids)") suspend fun stamps(ids: List<String>): List<RowStamp>
@@ -138,7 +153,14 @@ interface AttemptDao {
     @Insert(onConflict = OnConflictStrategy.IGNORE) suspend fun upsertFromSync(rows: List<Attempt>)
 
     companion object {
-        /** See [all]. Decades of daily practice, and a ceiling a phone can hold. */
+        /**
+         * See [all]. Decades of daily practice, and a ceiling a phone can hold.
+         *
+         * Past it the journey report's «πρώτη φορά» would quietly stop meaning "the first time
+         * ever" and start meaning "the first time within the last hundred thousand exercises". At
+         * a dozen a day that is twenty-odd years away; if it is ever close, the fix is to do the
+         * aggregation in SQL rather than to lower this.
+         */
         const val LIFETIME_LIMIT = 100_000
     }
 }

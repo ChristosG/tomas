@@ -36,8 +36,14 @@ import java.util.concurrent.atomic.AtomicBoolean
 internal fun planToday(
     wanted: List<Pair<Module, List<Item>>>,
     lastUsedAt: Map<ModuleId, Long>,
+    /**
+     * The modules a live advice asked for. They get their turn today rather than waiting for the
+     * rotation to come round to them — «δούλεψε τους Αριθμούς» is worth nothing if the Αριθμοί are
+     * four days away. It changes which modules are in the day, never the order he does them in.
+     */
+    preferred: Set<ModuleId> = emptySet(),
 ): List<Pair<Module, List<Item>>> {
-    val chosen = ModuleRotation.choose(wanted.map { it.first.id }, lastUsedAt).toSet()
+    val chosen = ModuleRotation.choose(wanted.map { it.first.id }, lastUsedAt, preferred = preferred).toSet()
     val today = wanted.filter { it.first.id in chosen }
     // One sitting, shared out evenly between the modules that are really in it — except in a module
     // that runs as one unit, which keeps its whole list so the session's planned count is the number
@@ -125,7 +131,11 @@ class SessionViewModel(private val graph: AppGraph) : ViewModel() {
             }
             val lastUsed = runCatching { ModuleRotation.lastUsedAt(graph.db.attempts()) }
                 .getOrElse { graph.errors.record("session rotation", it); emptyMap() }
-            plans = planToday(wanted, lastUsed)
+            // The live advice, if there is one. Its words were already honoured while each module
+            // planned for itself ([gr.dimitris.app.core.scheduler.SessionBuilder]); its modules are
+            // honoured here, which is the only place that knows which modules the day is made of.
+            val focus = graph.activeFocus()
+            plans = planToday(wanted, lastUsed, focus?.modules?.toSet().orEmpty())
             val s = Session(startedAt = now(), plannedModules = plans.joinToString(",") { it.first.id.name }, plannedItemCount = plans.sumOf { it.second.size })
             runCatching { graph.db.sessions().upsert(s) }.onFailure { graph.errors.record("session start", it) }
             session = s

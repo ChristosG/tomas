@@ -28,6 +28,13 @@ data class Advice(
     val dimitris: String,
     val focusJson: String = "",
     val truncated: Boolean = false,
+    /**
+     * The model that actually answered — resolved here, not read again by the caller. The settings
+     * value can be blank or stale and [ClaudeAdvisor.ask] falls back to [ClaudeAdvisor.FALLBACK_MODEL]
+     * without telling anyone, so a stored row that named the setting could name a model that was
+     * never asked. `advice.model` is the one field of that row nobody can check afterwards.
+     */
+    val model: String = "",
 )
 
 /**
@@ -89,7 +96,7 @@ class ClaudeAdvisor(private val secrets: Secrets, private val model: suspend () 
             // the honest answer is «κόπηκε» sends them retrying the same wall.
             val cut = truncated(response)
             if (text.isEmpty()) return@withContext Result.failure(AdviceException(if (cut) TRUNCATED else EMPTY))
-            Result.success(parse(text).copy(truncated = cut))
+            Result.success(parse(text).copy(truncated = cut, model = chosen))
         } catch (ce: CancellationException) {
             throw ce
         } catch (e: AnthropicServiceException) {
@@ -176,9 +183,22 @@ class ClaudeAdvisor(private val secrets: Secrets, private val model: suspend () 
             λογοθεραπευτή ή γιατρό, πες τους απλώς να το συζητήσουν μαζί του.
 
             Θα λάβεις όλη την πορεία του από την εφαρμογή: το προφίλ του, τις σημειώσεις των
-            φροντιστών, κάθε λέξη που έχει εξασκήσει ποτέ με τα σύνολά της, τις τελευταίες τέσσερις
-            εβδομάδες ανά ημέρα, τις προηγούμενες συμβουλές σου, τα επίπεδα και όσα βλέπει μόνη της
-            η εφαρμογή.
+            φροντιστών, κάθε άσκηση με τα σύνολά της, κάθε λέξη που έχει εξασκήσει ποτέ, τις
+            τελευταίες τέσσερις εβδομάδες ανά ημέρα, τις προηγούμενες συμβουλές σου, τα επίπεδα και
+            όσα βλέπει μόνη της η εφαρμογή. Η ενότητα «Προφίλ» εξηγεί τις κλίμακες· διάβασέ την πριν
+            βγάλεις συμπέρασμα από αριθμό.
+
+            Δύο πράγματα που παρεξηγούνται εύκολα:
+
+            Η βοήθεια είναι 0–4 (0 = το είπε μόνος του με την εικόνα, 1 πρώτος ήχος, 2 πρώτη
+            συλλαβή, 3 άκουσε τη λέξη, 4 άκουσε και είδε τη λέξη). Το κουμπί «Άκου» είναι πάντα
+            διαθέσιμο, τον ενθαρρύνουμε να το πατάει (μάθηση χωρίς λάθη) και κάθε πάτημα γράφει
+            βοήθεια τουλάχιστον 3. Άρα υψηλή μέση βοήθεια δεν είναι από μόνη της οπισθοδρόμηση —
+            μπορεί να σημαίνει ότι διάλεξε να ακούσει. Μην προτείνεις ποτέ να του στερήσουν το
+            «Άκου».
+
+            Το «κουτί» είναι επανάληψη με κενά, 1–5 (1 καινούργια λέξη, 5 μαθημένη). Παύλα σημαίνει
+            ότι δεν έχει κουτί, όχι ότι ξέχασε τη λέξη.
 
             Σύγκρινε με τις προηγούμενες συμβουλές σου και πες καθαρά τι άλλαξε από τότε: τι πήγε
             καλύτερα, τι δεν κουνήθηκε, τι δεν δοκιμάστηκε καθόλου. Αν είναι η πρώτη φορά, πες το.
@@ -207,10 +227,13 @@ class ClaudeAdvisor(private val secrets: Secrets, private val model: suspend () 
             Μόνο ένα αντικείμενο JSON, σε μία γραμμή, χωρίς σχόλια και χωρίς ``` γύρω του:
             {"items":["καφές","ψωμί"],"sounds":["π"],"modules":["WORDCOACH"],"levels":{"numbers":3,"sentences":2,"trace":2},"why":"γιατί αυτά"}
             Οι λέξεις στο items πρέπει να είναι λέξεις που υπάρχουν στην αναφορά, γραμμένες ακριβώς
-            όπως εκεί. Τα sounds είναι πρώτοι ήχοι. Τα modules είναι από: WORDCOACH, NUMBERS,
-            SINGSAY, SCRIPTS, SENTENCES, TRACE, ARCADE, TALKBOARD. Το levels είναι προαιρετικό·
-            βάλε μόνο όσα θέλεις να αλλάξουν. Η εφαρμογή θα βάλει αυτές τις λέξεις πρώτες στην
-            επόμενη άσκησή του, οπότε κράτα τες λίγες: 3 έως 8.
+            όπως εκεί. Τα sounds είναι πρώτοι ήχοι. Τα modules γράφονται με τον κωδικό τους, όχι με
+            το ελληνικό όνομα: Λέξεις = WORDCOACH, Αριθμοί = NUMBERS, Τραγούδα και πες το = SINGSAY,
+            Διάλογοι = SCRIPTS, Προτάσεις = SENTENCES, Γράψε = TRACE, Δεξί χέρι = ARCADE,
+            Μίλα = TALKBOARD. Το levels είναι προαιρετικό και δέχεται μόνο numbers, sentences και
+            trace· βάλε μόνο όσα θέλεις να αλλάξουν. Η εφαρμογή κρατάει θέσεις για αυτές τις λέξεις
+            στην επόμενη άσκησή του και δίνει σειρά σε αυτά τα modules, οπότε κράτα τες λίγες:
+            3 έως 8 λέξεις και το πολύ δύο modules.
 
             Οι τρεις τίτλοι είναι οι μόνες γραμμές που ξεκινούν με ##. Μην γράψεις τους τίτλους μέσα
             στο κείμενο. Καθόλου άλλο markdown: χωρίς αστερίσκους για έντονα γράμματα, με παύλες για

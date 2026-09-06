@@ -12,6 +12,9 @@ import org.junit.Test
  */
 class ClaudeAdvisorParseTest {
 
+    /** One line, so an assertion is about the words and not about where the wrapping fell. */
+    private fun flowing(text: String) = text.replace(Regex("\\s+"), " ")
+
     private fun answer(caregivers: String, dimitris: String) =
         "${ClaudeAdvisor.CAREGIVERS}\n$caregivers\n\n${ClaudeAdvisor.DIMITRIS}\n$dimitris\n"
 
@@ -157,10 +160,57 @@ class ClaudeAdvisorParseTest {
 
     /** Phase 11's prompt: an SLT-informed coach, a comparison with last time, and a focus. */
     @Test fun `the system prompt asks for what phase 11 needs`() {
-        val p = ClaudeAdvisor.SYSTEM_PROMPT
+        val p = flowing(ClaudeAdvisor.SYSTEM_PROMPT)
         assertTrue("not a doctor", p.contains("όχι ως γιατρός"))
         assertTrue("compare with the previous advices", p.contains("προηγούμενες συμβουλές"))
         assertTrue("one JSON object on one line", p.contains("σε μία γραμμή"))
+    }
+
+    /**
+     * The one thing that would make a model give the wrong advice from right numbers. «Άκου» is on
+     * every screen by design (errorless learning) and pressing it forces the recorded help to 3, so
+     * a mean of 2,4 can be a man choosing to listen rather than a man going backwards — and the
+     * conclusion a prompt without this invites is "stop giving him the model", which is the one
+     * recommendation the app must never carry.
+     */
+    @Test fun `the prompt says that listening is encouraged and raises the recorded help`() {
+        // Whitespace-normalised: the prompt is a wrapped raw string and the model reads it as
+        // flowing text, so a sentence that happens to straddle a line break is still that sentence.
+        val p = flowing(ClaudeAdvisor.SYSTEM_PROMPT)
+        assertTrue(p, p.contains("τον ενθαρρύνουμε να το πατάει"))
+        assertTrue(p, p.contains("γράφει βοήθεια τουλάχιστον 3"))
+        assertTrue(p, p.contains("δεν είναι από μόνη της οπισθοδρόμηση"))
+        assertTrue("and it must say so outright", p.contains("Μην προτείνεις ποτέ να του στερήσουν το"))
+    }
+
+    /** The JSON wants ids and the report speaks Greek; the pairing has to be in the prompt. */
+    @Test fun `the prompt pairs every Greek module name with its id`() {
+        val p = flowing(ClaudeAdvisor.SYSTEM_PROMPT)
+        listOf(
+            "Λέξεις = WORDCOACH", "Αριθμοί = NUMBERS", "Τραγούδα και πες το = SINGSAY",
+            "Διάλογοι = SCRIPTS", "Προτάσεις = SENTENCES", "Γράψε = TRACE", "Δεξί χέρι = ARCADE",
+            "Μίλα = TALKBOARD",
+        ).forEach { assertTrue(it, p.contains(it)) }
+        assertTrue("and which level keys exist", p.contains("μόνο numbers, sentences και"))
+    }
+
+    /** The scales the numbers are on, so «μέση βοήθεια 2,4» is read as what it is. */
+    @Test fun `the prompt explains the help scale and the boxes`() {
+        val p = flowing(ClaudeAdvisor.SYSTEM_PROMPT)
+        assertTrue(p, p.contains("0 = το είπε μόνος του με την εικόνα"))
+        assertTrue(p, p.contains("3 άκουσε τη λέξη"))
+        assertTrue(p, p.contains("1–5"))
+    }
+
+    /**
+     * `ask` resolves the model itself and falls back silently when the setting is blank, so a row
+     * that stored the setting could name a model that was never asked — and `advice.model` is the
+     * one field of that row nobody can check afterwards.
+     */
+    @Test fun `an answer carries no model until the advisor names one`() {
+        assertEquals("", ClaudeAdvisor.parse(answer("- Ένα.", "Μπράβο.")).model)
+        assertEquals("claude-opus-5", ClaudeAdvisor.parse(answer("- Ένα.", "Μπράβο."))
+            .copy(model = "claude-opus-5").model)
     }
 
     // ---- the third section ---------------------------------------------------------------------

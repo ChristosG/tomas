@@ -105,7 +105,10 @@ class AppGraph(context: Context) {
         store = { report, advice ->
             db.advice().upsert(
                 AdviceRow(
-                    model = settings.claudeModel.first(),
+                    // The model that actually answered, not the setting: `ask` resolves its own
+                    // value and falls back silently, so reading the setting again here could name
+                    // a model that was never asked — and nobody can check that row afterwards.
+                    model = advice.model.ifBlank { settings.claudeModel.first() },
                     report = report,
                     caregivers = advice.caregivers,
                     dimitris = advice.dimitris,

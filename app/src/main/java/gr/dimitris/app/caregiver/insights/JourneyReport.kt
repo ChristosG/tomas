@@ -4,12 +4,15 @@ import gr.dimitris.app.AppGraph
 import gr.dimitris.app.caregiver.progress.DayItemStat
 import gr.dimitris.app.caregiver.progress.DayStat
 import gr.dimitris.app.caregiver.progress.ItemHistory
+import gr.dimitris.app.caregiver.progress.ModuleHistory
 import gr.dimitris.app.caregiver.progress.ProgressStats
 import gr.dimitris.app.caregiver.progress.attemptsLine
 import gr.dimitris.app.caregiver.progress.minutesLine
 import gr.dimitris.app.core.data.AttemptDao
 import gr.dimitris.app.core.data.ItemKind
+import gr.dimitris.app.core.data.ModuleId
 import gr.dimitris.app.core.data.Note
+import gr.dimitris.app.core.data.Who
 import gr.dimitris.app.core.scheduler.LeitnerPolicy
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
@@ -70,6 +73,7 @@ object JourneyReport {
 
     const val PROFILE_HEADING = "Προφίλ"
     const val NOTES_HEADING = "Σημειώσεις φροντιστών"
+    const val MODULES_HEADING = "Ανά άσκηση"
     const val LIFETIME_HEADING = "Όλη η πορεία ανά λέξη"
     const val RECENT_HEADING = "Τελευταίες 4 εβδομάδες ανά ημέρα"
     const val PREVIOUS_HEADING = "Προηγούμενες συμβουλές"
@@ -93,14 +97,43 @@ object JourneyReport {
         δυσκολεύεται να βγάλει τις λέξεις) και ακαλκουλία. Η μνήμη, το χιούμορ και το τραγούδι του
         είναι ακέραια — τραγουδάει λέξεις που δεν μπορεί να πει.
 
-        Εξασκείται μόνος του στο τηλέφωνό του, στα ελληνικά. Οι ασκήσεις είναι: Λέξεις, Αριθμοί,
-        Τραγούδα και πες το, Διάλογοι, Προτάσεις, Γράψε, Δεξί χέρι. Ο πίνακας επικοινωνίας («Μίλα»)
-        δεν είναι άσκηση: κάθε πάτημα εκεί καταγράφεται ως σωστό επειδή είναι ο ίδιος που μιλάει,
-        οπότε μετράει στις ασκήσεις αλλά ποτέ στα σωστά.
+        Εξασκείται μόνος του στο τηλέφωνό του, στα ελληνικά. Οι ασκήσεις, με τα ονόματα που βλέπει
+        και τους κωδικούς που χρησιμοποιεί η εφαρμογή:
+        - Λέξεις = WORDCOACH (βρίσκει τη λέξη για μια εικόνα)
+        - Αριθμοί = NUMBERS (ποσά, ευρώ, ώρα)
+        - Τραγούδα και πες το = SINGSAY (τραγουδάει τη φράση και μετά τη λέει)
+        - Διάλογοι = SCRIPTS (έτοιμοι διάλογοι, π.χ. στην καφετέρια)
+        - Προτάσεις = SENTENCES (φτιάχνει πρόταση από λέξεις)
+        - Γράψε = TRACE (γράφει γράμματα και λέξεις με το δάχτυλο)
+        - Δεξί χέρι = ARCADE (ασκήσεις για το δεξί του χέρι, όχι λόγος)
+        - Μίλα = TALKBOARD, ο πίνακας επικοινωνίας. Δεν είναι άσκηση: κάθε πάτημα καταγράφεται ως
+          σωστό επειδή είναι ο ίδιος που μιλάει, οπότε μετράει στις ασκήσεις αλλά ποτέ στα σωστά.
 
-        Η βοήθεια μετριέται 0–4 σε κάθε λέξη (0 = καμία βοήθεια, 4 = του δόθηκε η λέξη). Λιγότερη
-        βοήθεια είναι καλύτερα. Το «κουτί» είναι η επανάληψη με κενά: 1 = καινούργια λέξη,
-        5 = μαθημένη.
+        Η βοήθεια μετριέται 0–4 σε κάθε λέξη, σε αυτή τη σειρά:
+        0 = το είπε μόνος του, με μόνη βοήθεια την εικόνα
+        1 = του δόθηκε ο πρώτος ήχος
+        2 = του δόθηκε η πρώτη συλλαβή
+        3 = άκουσε τη λέξη
+        4 = άκουσε και είδε γραμμένη τη λέξη
+
+        Σημαντικό: το κουμπί «Άκου» υπάρχει σε κάθε οθόνη και του λέει τη λέξη όποτε το ζητήσει.
+        Αυτό είναι σκόπιμο (μάθηση χωρίς λάθη) και τον ενθαρρύνουμε να το πατάει. Κάθε φορά που το
+        πατάει, η βοήθεια της προσπάθειας γράφεται τουλάχιστον 3. Άρα υψηλή μέση βοήθεια μπορεί να
+        σημαίνει απλώς ότι διάλεξε να ακούσει, όχι ότι πήγε πίσω. Μην προτείνεις ποτέ να του
+        στερήσουν το «Άκου».
+
+        Το αποτέλεσμα κάθε προσπάθειας είναι ένα από τα τρία:
+        σωστά = το είπε με βοήθεια 0–2
+        με βοήθεια = το είπε αφού άκουσε ή είδε τη λέξη (βοήθεια 3–4)
+        παράλειψη = το προσπέρασε χωρίς να το πει
+
+        Το «κουτί» είναι η επανάληψη με κενά, 1 έως 5: 1 = καινούργια λέξη, 5 = μαθημένη. Όσο πιο
+        ψηλά το κουτί, τόσο πιο αραιά του ξαναέρχεται η λέξη. Παύλα σημαίνει ότι η λέξη δεν έχει
+        μπει ακόμα σε πρόγραμμα επανάληψης.
+
+        Το «γράψιμο» σε μια γραμμή λέξης είναι πόσες φορές την έγραψε στο «Γράψε». Μετριέται χωριστά
+        επειδή αφορά το δεξί του χέρι και όχι την εύρεση της λέξης, και για τον ίδιο λόγο δεν
+        μετράει στα σωστά/με βοήθεια/παράλειψη.
     """.trimIndent()
 
     /**
@@ -110,22 +143,26 @@ object JourneyReport {
     fun build(
         profile: String,
         notes: List<Note>,
+        modules: List<ModuleHistory>,
         lifetime: List<ItemHistory>,
         recent: List<DayItemStat>,
+        wordless: Map<Long, Map<ModuleId, Int>>,
         days: List<DayStat>,
         previous: List<AdviceRow>,
         levels: Map<String, Int>,
         insights: List<String>,
+        names: Map<ModuleId, String> = AdviceSummary.MODULE_NAMES,
         zone: ZoneId = ZoneId.systemDefault(),
     ): String {
+        val all = Sections(profile, notes, modules, lifetime, recent, wordless, days, previous, levels, insights, names, zone)
         var lines = MAX_LIFETIME_LINES
-        var text = render(profile, notes, lifetime, recent, days, previous, levels, insights, zone, lines, Int.MAX_VALUE)
+        var text = render(all, lines, Int.MAX_VALUE)
         // The order the ceiling is paid for, cheapest loss first: the tail of the word history is
         // words he has barely met, and the day-by-day detail older than a fortnight is a month of
         // background against which nobody plans next week.
         while (text.length > MAX_CHARS && lines > 0) {
             lines /= 2
-            text = render(profile, notes, lifetime, recent, days, previous, levels, insights, zone, lines, Int.MAX_VALUE)
+            text = render(all, lines, Int.MAX_VALUE)
         }
         // Then the day-by-day detail, from a fortnight back and closing in. Every day keeps its
         // total however far this goes, because a report that has given up its detail is still a
@@ -133,27 +170,39 @@ object JourneyReport {
         // is what happens if this stops early, would be the wrong thing to lose.
         var detail = DETAIL_DAYS
         while (text.length > MAX_CHARS) {
-            text = render(profile, notes, lifetime, recent, days, previous, levels, insights, zone, lines, detail)
+            text = render(all, lines, detail)
             if (detail == 0) break
             detail /= 2
         }
         return if (text.length <= MAX_CHARS) text else cut(text)
     }
 
-    @Suppress("LongParameterList")
-    private fun render(
-        profile: String,
-        notes: List<Note>,
-        lifetime: List<ItemHistory>,
-        recent: List<DayItemStat>,
-        days: List<DayStat>,
-        previous: List<AdviceRow>,
-        levels: Map<String, Int>,
-        insights: List<String>,
-        zone: ZoneId,
-        lifetimeLines: Int,
-        detailDays: Int,
-    ): String = buildString {
+    /** Everything [build] was handed, so the renderer can be called again for less of it. */
+    private class Sections(
+        val profile: String,
+        val notes: List<Note>,
+        val modules: List<ModuleHistory>,
+        val lifetime: List<ItemHistory>,
+        val recent: List<DayItemStat>,
+        val wordless: Map<Long, Map<ModuleId, Int>>,
+        val days: List<DayStat>,
+        val previous: List<AdviceRow>,
+        val levels: Map<String, Int>,
+        val insights: List<String>,
+        val names: Map<ModuleId, String>,
+        val zone: ZoneId,
+    )
+
+    private fun render(all: Sections, lifetimeLines: Int, detailDays: Int): String = buildString {
+        val profile = all.profile
+        val notes = all.notes
+        val lifetime = all.lifetime
+        val recent = all.recent
+        val days = all.days
+        val previous = all.previous
+        val levels = all.levels
+        val insights = all.insights
+        val zone = all.zone
         appendLine(PROFILE_HEADING)
         appendLine(profile.trim())
         appendLine()
@@ -166,15 +215,27 @@ object JourneyReport {
         }
         appendLine()
 
+        appendLine(MODULES_HEADING)
+        appendLine("(όλη η πορεία, και οι ασκήσεις χωρίς λέξη — Αριθμοί, Προτάσεις, Γράψε, Δεξί χέρι)")
+        if (all.modules.isEmpty()) appendLine("- $NOTHING")
+        all.modules.forEach { appendLine("- ${moduleLine(it, all.names, zone)}") }
+        appendLine()
+
         appendLine(LIFETIME_HEADING)
         appendLine(
             "(οι ασκήσεις μετρούν και τον πίνακα επικοινωνίας· τα σωστά/με βοήθεια/παράλειψη μετρούν " +
-                "μόνο τις ασκήσεις που βαθμολογούνται)"
+                "μόνο τον λόγο, όχι το «Γράψε», που φαίνεται χωριστά ως «γράψιμο»)"
         )
         val shown = lifetime.take(lifetimeLines.coerceAtLeast(0))
         if (shown.isEmpty()) appendLine("- $NOTHING")
         shown.forEach { appendLine("- ${line(it, zone)}") }
-        if (lifetime.size > shown.size) appendLine("- … και άλλες ${lifetime.size - shown.size} λέξεις με λιγότερες ασκήσεις")
+        // Only one of the two lines: a section that says «Τίποτα ακόμα.» and then counts what it
+        // left out is telling the reader two different things about the same emptiness.
+        if (lifetime.size > shown.size && shown.isNotEmpty()) {
+            appendLine("- … και άλλες ${lifetime.size - shown.size} λέξεις με λιγότερες ασκήσεις")
+        } else if (lifetime.isNotEmpty() && shown.isEmpty()) {
+            appendLine("- (${lifetime.size} λέξεις, παραλείφθηκαν για να χωρέσει η αναφορά)")
+        }
         appendLine()
 
         appendLine(RECENT_HEADING)
@@ -185,7 +246,15 @@ object JourneyReport {
         val detailed = busy.takeLast(detailDays.coerceAtLeast(0)).map { it.day }.toSet()
         val byDay = recent.groupBy { it.day }
         busy.forEach { d ->
-            appendLine("- ${date(d.day, zone)}: ${minutesLine(d.minutes)}, ${attemptsLine(d.attempts)}")
+            // The day total counts every exercise; the lines under it are words only. Without this
+            // «12 ασκήσεις» over five word lines reads as data loss rather than as the numbers
+            // module having had a good morning.
+            val wordless = all.wordless[d.day].orEmpty()
+            val missing = wordless.values.sum()
+            val whichever = if (missing == 0) "" else
+                " (εκ των οποίων $missing χωρίς λέξη: " +
+                    wordless.entries.joinToString(", ") { (m, n) -> "${all.names[m] ?: m.name} $n" } + ")"
+            appendLine("- ${date(d.day, zone)}: ${minutesLine(d.minutes)}, ${attemptsLine(d.attempts)}$whichever")
             if (d.day in detailed) {
                 byDay[d.day].orEmpty().forEach { s ->
                     val cue = s.meanCue?.let { ", βοήθεια ${decimal(it)}" }.orEmpty()
@@ -202,7 +271,7 @@ object JourneyReport {
             if (i > 0) appendLine()
             appendLine("- ${date(a.at, zone)}")
             appendLine(a.caregivers.trim().take(MAX_ADVICE).ifBlank { NOTHING })
-            appendLine("Εστίαση: ${a.focusJson.oneLine().ifBlank { "—" }}")
+            appendLine("Εστίαση: ${a.focusJson.oneLine().take(MAX_ADVICE).ifBlank { "—" }}")
         }
         appendLine()
 
@@ -228,12 +297,51 @@ object JourneyReport {
         h.firstSound.ifBlank { "—" },
         "ασκήσεις ${h.attempts}",
         "σωστά ${h.correct}/με βοήθεια ${h.assisted}/παράλειψη ${h.skipped}",
+        "γράψιμο ${h.traced}",
         "μέση βοήθεια ${h.meanCue?.let { decimal(it) } ?: "—"}",
-        "κουτί ${h.box}",
+        // A dialogue line is scheduled against its script, never against itself, so it has no box
+        // of its own. «κουτί 0» would be a value outside the 1–5 scale the profile explains, and a
+        // reader would take it for "he has forgotten it" rather than "this is not a word".
+        "κουτί ${if (h.box <= 0) "—" else h.box.toString()}",
         "${date(h.firstAt, zone)}–${date(h.lastAt, zone)}",
         "φωτογραφία ${yesNo(h.hasPhoto)}",
         "φωνή ${yesNo(h.hasVoice)}",
     ).joinToString(" · ")
+
+    /**
+     * One module's whole life on one line:
+     * `Λέξεις (WORDCOACH) · ασκήσεις N · σ/β/π · μέση βοήθεια x,x · μέσος χρόνος N δευτ. ·
+     * πρώτη/τελευταία φορά · επίπεδο ανά εβδομάδα: 3/8 2,0 · 10/8 3,0`.
+     *
+     * The enum name is printed beside the Greek one on purpose: the focus JSON asks for module ids,
+     * and a model that has only ever been shown «Γράψε» has to guess that it means `TRACE`.
+     */
+    internal fun moduleLine(m: ModuleHistory, names: Map<ModuleId, String>, zone: ZoneId): String {
+        val scored = if (m.module in ProgressStats.GRADED_MODULES) {
+            "σωστά ${m.correct}/με βοήθεια ${m.assisted}/παράλειψη ${m.skipped}"
+        } else {
+            "πίνακας επικοινωνίας, χωρίς σωστό και λάθος"
+        }
+        val levels = if (m.levels.isEmpty()) "χωρίς επίπεδο" else
+            "επίπεδο ανά εβδομάδα: " + m.levels.joinToString(" · ") { "${shortDate(it.weekStart, zone)} ${decimal(it.level)}" }
+        return listOf(
+            "${names[m.module] ?: m.module.name} (${m.module.name})",
+            "ασκήσεις ${m.attempts}",
+            scored,
+            "μέση βοήθεια ${m.meanCue?.let { decimal(it) } ?: "—"}",
+            "μέσος χρόνος ${seconds(m.meanMs)}",
+            "${date(m.firstAt, zone)}–${date(m.lastAt, zone)}",
+            levels,
+        ).joinToString(" · ")
+    }
+
+    /** Milliseconds as the seconds a person would say. */
+    private fun seconds(ms: Long): String = "${decimal(ms / 1000f)} δευτ."
+
+    private fun shortDate(at: Long, zone: ZoneId): String {
+        val d = Instant.ofEpochMilli(at).atZone(zone).toLocalDate()
+        return "${d.dayOfMonth}/${d.monthValue}"
+    }
 
     private fun kind(kind: ItemKind): String = when (kind) {
         ItemKind.WORD -> "λέξη"
@@ -300,7 +408,8 @@ suspend fun journeyReport(
     val everything = db.attempts().all(AttemptDao.LIFETIME_LIMIT)
     val items = db.items().allActive().associateBy { it.id }
     val schedules = db.schedules().allRows()
-    val voices = db.recordings().itemsWithVoice().toSet()
+    // A caregiver's voice only: his own takes are him practising, not a model to practise against.
+    val voices = db.recordings().itemsWithVoice(Who.CAREGIVER).toSet()
     val sessions = db.sessions().between(from, to)
     val mastered = db.schedules().masteredCount(LeitnerPolicy.MAX_BOX)
     val notes = db.notes().recent(JourneyReport.MAX_NOTES)
@@ -310,6 +419,8 @@ suspend fun journeyReport(
         graph.settings.sentencesLevel.first(),
         graph.settings.traceLevel.first(),
     )
+    // The names the modules themselves carry, so a renamed module renames its line here too.
+    val names = graph.modules.associate { it.id to it.titleGreek } + (ModuleId.TALKBOARD to "Μίλα")
 
     return withContext(Dispatchers.Default) {
         val window = everything.filter { it.startedAt >= earlier }
@@ -317,12 +428,15 @@ suspend fun journeyReport(
         JourneyReport.build(
             profile = JourneyReport.PROFILE,
             notes = notes,
+            modules = ProgressStats.moduleHistory(everything, zone = zone),
             lifetime = ProgressStats.lifetime(everything, schedules, items, voices),
             recent = ProgressStats.recentByDay(window, items, from, to, zone),
+            wordless = ProgressStats.wordlessByDay(window, items, from, to, zone),
             days = p.days,
             previous = previous,
             levels = levels,
             insights = InsightRules.generate(p, window, items),
+            names = names,
             zone = zone,
         )
     }
