@@ -2,9 +2,29 @@
 
 A personal Android app for Dimitris: daily speech, number and writing practice after a stroke, a talk board for everyday communication, and a caregiver mode for the people around him. Greek-only, one-handed, works fully offline. Not a product.
 
-- Design: `docs/superpowers/specs/2026-09-05-dimitris-app-design.md`
-- Handover and known limitations: `docs/HANDOVER.md`
-- Sync server for the family's own web servers: `server/README.md` (with a Greek summary)
+## Read first
+
+- [Design specification](docs/superpowers/specs/2026-09-05-dimitris-app-design.md) — who the app is for, the design rules, every module, the data model and the sync contract.
+- [Handover notes](docs/HANDOVER.md) — what is built, what only a human can verify, the decisions made on Chris's behalf, known limitations.
+- [Sync server](server/README.md) — how to run the family's own sync server (English, with a Greek summary: «Περίληψη στα ελληνικά»).
+
+## Implementation plans (one per phase, each ending with its execution record)
+
+| Phase | Plan |
+|---|---|
+| 0 | [Plumbing: database, audio, caregiver mode, backup](docs/superpowers/plans/2026-09-05-phase0-plumbing.md) |
+| 1 | [Talk board](docs/superpowers/plans/2026-09-05-phase1-talkboard.md) |
+| 2 | [Word coach and the daily session](docs/superpowers/plans/2026-09-05-phase2-wordcoach.md) |
+| 3 | [Number sense](docs/superpowers/plans/2026-09-05-phase3-numbers.md) |
+| 4 | [Sing-then-say (melodic intonation)](docs/superpowers/plans/2026-09-05-phase4-singsay.md) |
+| 5 | [Dialogues (script practice)](docs/superpowers/plans/2026-09-05-phase5-scripts.md) |
+| 6 | [Sentence builder](docs/superpowers/plans/2026-09-05-phase6-sentences.md) |
+| 7 | [Trace and write](docs/superpowers/plans/2026-09-05-phase7-trace.md) |
+| 8 | [Right-hand arcade](docs/superpowers/plans/2026-09-05-phase8-arcade.md) |
+| 9 | [Progress, insights and the Claude advisor](docs/superpowers/plans/2026-09-05-phase9-progress.md) |
+| 10 | [Sync between the family's phones](docs/superpowers/plans/2026-09-05-phase10-sync.md) |
+
+Feedback on the medical reasoning is as welcome as feedback on the code: the therapy assumptions are spelled out in the specification and in each plan's execution record, and they are guesses by a programmer until a clinician says otherwise.
 
 ## Build and install
 
@@ -19,7 +39,7 @@ ANDROID_SERIAL=<serial> ./gradlew installDebug
 
 ## Releases
 
-Pushing a tag such as `v0.2` builds a signed APK on GitHub Actions and attaches it to a GitHub Release:
+Pushing a tag such as `v0.2` builds a signed APK on GitHub Actions and attaches it to a [GitHub Release](https://github.com/ChristosG/tomas/releases):
 
 ```bash
 git tag v0.2
