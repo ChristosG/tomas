@@ -120,3 +120,90 @@ class ClaudeAdvisor(private val secrets: SecretStore, private val model: suspend
 ### Task 4: Phase 9 verification
 
 - [ ] Full suites green; install on the phone; Chris enters his key later — verify the no-key and bad-key paths; Σφάλματα shows the bad-key error once. Append notes; commit `docs(phase9): verification notes`.
+
+---
+
+## Verification notes
+
+Written at the end of the phase-9 fix wave, on `worktree-phase0`. Device: `emulator-5554` only —
+the attached phone was never addressed. Commits: `5a52db2`, `5401236` (dashboard), `7b469d1`,
+`9f85d88` (advisor), then the fix wave `cd59252`, `1f6584d`, `d3e6f4d`.
+
+### Suites
+
+| Suite | Count | Notes |
+|---|---|---|
+| `./gradlew -q testDebugUnitTest` | **362**, green | 1 skipped — `ClaudeAdvisorLiveTest`, see below |
+| `./gradlew connectedDebugAndroidTest` | **79**, green | run once at the end after `adb shell pm clear gr.dimitris.app` |
+
+Phase 9 added 64 unit tests (298 → 362) and 12 instrumented ones (67 → 79), including the
+`5 → 6` migration that indexes `sessions.startedAt`.
+
+### **No live Claude call has ever been made.**
+
+This is the one thing about phase 9 that is not verified end to end, and it should be read plainly:
+**the happy path has never returned a 200 from the Anthropic API.** The dev machine this was built
+on has no `ANTHROPIC_API_KEY` in its environment, so `ClaudeAdvisorLiveTest` — the one test that
+would spend money — has skipped on every run. Nothing has ever seen a real answer split into its two
+Greek sections by `ClaudeAdvisor.parse`.
+
+What *is* verified, on the emulator, against the real `api.anthropic.com`:
+
+- the request is well formed as far as authentication — a deliberately wrong key (`sk-ant-invalid…`)
+  reaches Anthropic and comes back **401**, so the model id, the adaptive thinking config, the
+  system prompt and the body were all accepted up to the point where the key was checked;
+- the 401 becomes «Το κλειδί δεν έγινε δεκτό. Έλεγξε το κλειδί στις ρυθμίσεις.» on screen and one
+  sanitised row in `Σφάλματα`, with no trace of `sk-ant`, `x-api-key` or `api.anthropic` anywhere in
+  `dimitris.db` or its write-ahead log;
+- the two halves of the *response reading* — which text blocks become the answer, which stop reason
+  is a refusal, which is a truncation — are pinned by `ClaudeAdvisorMessageTest` against `Message`
+  objects built with the SDK's own builders, so they do not depend on a network call at all;
+- `ClaudeAdvisorParseTest` pins the split, the 400-character cap on the part read aloud to Dimitris,
+  and every shape where the split cannot be trusted (his half stays empty).
+
+**How Chris closes the gap, once, with his own key:**
+
+```
+export ANTHROPIC_API_KEY=sk-ant-...      # his own key, in the shell only
+./gradlew -q testDebugUnitTest --tests 'gr.dimitris.app.caregiver.insights.ClaudeAdvisorLiveTest'
+```
+
+The test is guarded by `Assume.assumeTrue(System.getenv("ANTHROPIC_API_KEY") != null)`, so it skips
+silently everywhere else and needs no flag. It sends a small made-up summary — nothing of Dimitris'
+own goes over the wire in a test — and asserts the caregivers' section comes back non-empty. It
+costs one short Opus request. Do not put the key in `gradle.properties`, `local.properties` or any
+file in the repository: the app's own key lives in `EncryptedSharedPreferences` on the phone and
+nowhere else, and the test's key should live in a shell and nowhere else.
+
+The same gap closes from the other side the first time a caregiver taps «Ρώτα τον Claude» with a
+real key on the phone. Until one of those two things happens, treat the advisor as *built and
+unproven on its happy path*.
+
+### Manual checks on the emulator (fresh install, `pm clear`, a mixed session played first)
+
+Screenshots in `.superpowers/sdd/2026-09-05-phase9-progress/shots/`.
+
+| # | Shot | What it shows |
+|---|---|---|
+| 16 | `16-dashboard-caption-and-board.png` | «Τελευταίες 4 εβδομάδες» under «Ανά άσκηση»; «Μίλα — 2 ασκήσεις — πίνακας» with no percentage next to «Λέξεις — 100% σωστά» |
+| 17 | `17-stepper-three-fast-taps.png` | three fast taps on `+` move Αριθμοί from 1 to 4 (DataStore holds 4) |
+| 18 | `18-key-field-password-keyboard.png` | the key field with a password keyboard — `inputType=0x81`, no autocorrect |
+| 19 | `19-advice-bad-key-error.png` | the Greek key message after a real 401 |
+| 20 | `20-advice-summary-preview.png` | «Τι θα σταλεί» — the talk board with no percentage, the levels with their ranges |
+| 21 | `21-error-log-one-sanitised-row.png` | `Σφάλματα`: one row, `claude advice`, the Greek sentence and nothing else |
+| 22 | `22-share-summary.png` | the share sheet carrying the same summary |
+
+Earlier shots `01`–`15` are from the two build rounds and are kept for the record.
+
+`Σφάλματα` holds exactly one row after the whole pass — the bad-key error. Nothing else was
+recorded: leaving a screen mid-load no longer writes a cancellation row, and the "no key" state is
+not a fault to log.
+
+### Known gaps, carried forward
+
+1. The live call above.
+2. `InsightRules` still carries its `CHRIS: rewrite me.` markers, and those sentences now go into the
+   summary the advisor reads as well as onto the screen.
+3. The release build is unminified; the Anthropic SDK's HttpComponents and victools weight is dead
+   code the moment R8 is turned on, and whoever turns it on will need keep rules for the SDK's
+   reflective Jackson models.
