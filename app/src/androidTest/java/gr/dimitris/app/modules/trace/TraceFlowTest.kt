@@ -99,6 +99,9 @@ class TraceFlowTest {
      * Level 5 is the recall exercise, and it is not begun until he has taken the letter away: until
      * then «Έτοιμο» is dead, so the cheap route — trace what is on the screen and be marked as
      * though it had not been — does not exist. Once he passes, the word comes back to compare.
+     *
+     * «Το είδα» takes the paper with the letter, so tracing it first and hiding it afterwards is not
+     * a way through either: what is marked is only what he wrote once the word was gone.
      */
     @Test fun levelFiveIsNotBegunUntilHeHasTakenTheLetterAway() {
         val word = openPractice(level = 5)
@@ -109,6 +112,12 @@ class TraceFlowTest {
 
         compose.onNodeWithText("Το είδα").performClick()
         compose.waitUntil(TIMEOUT_MS) { compose.onAllNodesWithTag(TRACE_TEXT_HIDDEN_TAG).fetchSemanticsNodes().isNotEmpty() }
+        // The word he traced while it was still on the screen went with it: there is nothing on the
+        // paper to hand in, so «Έτοιμο» is still dead.
+        compose.onNodeWithText("Έτοιμο").assertIsNotEnabled()
+
+        // Now he writes it, with nothing to follow. This is the exercise.
+        write(word)
         compose.onNodeWithText("Έτοιμο").assertIsEnabled()
         finish()
 

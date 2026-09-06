@@ -205,11 +205,18 @@ class TraceViewModel(
         _state.update { it.copy(strokes = emptyList(), score = null) }
     }
 
-    /** «Το είδα», level 5 only: the letter goes away and he writes it from memory. */
+    /**
+     * «Το είδα», level 5 only: the letter goes away and he writes it from memory.
+     *
+     * The paper goes with it. Otherwise the cheapest way through level 5 is to trace the word while
+     * it is still on the screen, press «Το είδα», and hand in a fully traced word to be marked under
+     * the kinder recall line — easier than level 4 for doing less, and the recall exercise never
+     * happens. Taking the letter away has to mean taking it away.
+     */
     fun hide() {
         if (finishing || ending) return
         if (_state.value.level < RECALL_LEVEL) return
-        _state.update { it.copy(templateVisible = false) }
+        _state.update { it.copy(templateVisible = false, strokes = emptyList(), score = null) }
     }
 
     /**
