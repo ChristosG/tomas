@@ -195,8 +195,44 @@ class TraceFlowTest {
         write(OTHER_WORD)
         finish()
 
-        compose.waitUntil(TIMEOUT_MS) { compose.onAllNodes(hasText(TraceViewModel.TRY_AGAIN)).fetchSemanticsNodes().isNotEmpty() }
+        waitForNudge()
         assertTrue("«$OTHER_WORD» passed as «$name»", attempts().isEmpty())
+    }
+
+    /**
+     * The field test of this round, on the glass: his name written properly except that one «η» of
+     * it is a «Κ». Seven letters right out of eight is seven letters right — and the nudge has to
+     * say *which* letter, because «Ξανά» over a word of eight is not something a man with aphasia
+     * can act on.
+     */
+    @Test fun aKOverOneLetterOfHisNameNamesThatLetter() {
+        val name = openPractice(level = 3)
+        val (width, height) = canvasSize()
+        val glyph = Glyphs.template(name, width, height)
+        val eta = glyph.letters.indexOfLast { it.text == WRONG_IN_NAME }
+        assertTrue("no «$WRONG_IN_NAME» in «$name»", eta > 0)
+        val its = glyph.points.filter { it.letter == eta }
+        val left = its.minOf { it.pt.x }
+        val right = its.maxOf { it.pt.x }
+        val top = its.minOf { it.pt.y }
+        val bottom = its.maxOf { it.pt.y }
+        val middle = (top + bottom) / 2f
+
+        // Every letter but that one, written by hand, and a «Κ» where it should have been.
+        val hand = HandTrace.centreLine(glyph)
+        draw(hand.filter { stroke -> stroke.map { it.x }.average() !in left.toDouble()..right.toDouble() })
+        draw(
+            listOf(
+                listOf(Pt(left, top), Pt(left, bottom)),
+                listOf(Pt(right, top), Pt(left, middle)),
+                listOf(Pt(left, middle), Pt(right, bottom)),
+            )
+        )
+        finish()
+
+        waitForNudge()
+        compose.onNodeWithText("${TraceViewModel.TRY_AGAIN} — δες το «$WRONG_IN_NAME».").assertIsDisplayed()
+        assertTrue("a «Κ» over one «$WRONG_IN_NAME» passed as «$name»", attempts().isEmpty())
     }
 
     /**
@@ -261,6 +297,11 @@ class TraceFlowTest {
         val (width, height) = canvasSize()
         val strokes = HandTrace.centreLine(Glyphs.template(text, width, height))
         assertTrue("«$text» has no strokes to write in a ${width}x$height box", strokes.isNotEmpty())
+        draw(strokes)
+    }
+
+    /** Whatever he drew, put on the paper one stroke at a time, his finger lifted between them. */
+    private fun draw(strokes: List<List<Pt>>) {
         for (stroke in strokes) {
             compose.onNodeWithTag(TRACE_CANVAS_TAG).performTouchInput {
                 down(Offset(stroke.first().x, stroke.first().y))
@@ -268,6 +309,11 @@ class TraceFlowTest {
                 up()
             }
         }
+    }
+
+    /** Waits for the nudge, whichever letter it goes on to name. */
+    private fun waitForNudge() = compose.waitUntil(TIMEOUT_MS) {
+        compose.onAllNodes(hasText(TraceViewModel.TRY_AGAIN, substring = true)).fetchSemanticsNodes().isNotEmpty()
     }
 
     private fun finish() = compose.onNodeWithText("Έτοιμο").performClick()
@@ -287,6 +333,9 @@ class TraceFlowTest {
 
         /** Not his name, and near enough to it that the shape is what refuses it. */
         const val OTHER_WORD = "Δημητρα"
+
+        /** The letter of his name that gets written as a «Κ» instead. */
+        const val WRONG_IN_NAME = "η"
         const val TIMEOUT_MS = 20_000L
     }
 }

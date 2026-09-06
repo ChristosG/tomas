@@ -146,10 +146,8 @@ class GlyphsTest {
      * ceiling on the two distances the wrong letter passed here exactly as it did on a capital
      * before any of this — 0.94 coverage, 1.00 precision. The letter's own size is that ceiling.
      *
-     * «Χαλαρό» is measured and not demanded below about 300 px of letter: the ceiling is a twelfth
-     * of the letter, which is looser against a small letter's stroke than 12 dp is against a big
-     * one's, and the «Κ» lands at 0.755 / 0.866 against Χαλαρό's 0.75. What the app promises — the
-     * wrong letter never passes — it promises at «Κανονικό», and that holds at every size here.
+     * Every strictness refuses it, «Χαλαρό» included: the ceiling on both distances is a little
+     * under a piece of the letter, which is what closes the gap a twelfth of it left open.
      */
     @Test fun aKOverASmallHIsNotAnHEither() {
         // A letter of 200, 133 and 86 px: the sizes one letter of a word comes out at.
@@ -164,7 +162,6 @@ class GlyphsTest {
                 Log.i(TAG, "H ${small.height} px by hand at $level: $right")
                 Log.i(TAG, "K over the ${small.height} px H at $level: $wrong")
                 assertTrue("writing a word-sized «Η» by hand was refused at $level: $right", right.passed)
-                if (level == TraceStrictness.LOOSE) continue
                 assertFalse("a «Κ» passed as an «Η» at ${small.height} px at $level: $wrong", wrong.passed)
             }
         }
@@ -172,41 +169,72 @@ class GlyphsTest {
 
     /**
      * And on a whole word, against the device's own font — the level-3 exercise. His name written by
-     * hand is his name, and a different word over it is not.
+     * hand is his name; another word over it is not; and, the case this round exists for, his name
+     * with **one letter of the eight wrong** is not either.
      *
-     * The numbers of the near cases are logged rather than asserted, and they are the honest limit
-     * of marking a word as one shape: eight Greek letters fill the same eight places whatever they
-     * are, so a word of the same length lands within a twelfth of the letter of the right one
-     * nearly everywhere («Καλημέρα» over «Δημήτρης»: 0.87 / 0.93, a pass at Κανονικό), and one
-     * wrong letter out of eight is inside every budget there is. Telling those apart needs the word
-     * marked letter by letter, which is a design change and not a threshold.
+     * A word marked as one shape could not tell those apart: eight Greek letters fill the same eight
+     * places whatever they are, so an eighth of the ink being wrong is inside any budget a real hand
+     * also has to fit through. Every letter is now its own exercise.
      */
     @Test fun aDifferentWordIsNotTheWordHeWasAskedFor() {
         val name = Glyphs.template("Δημήτρης", boxWidth, boxHeight)
-        val right = score(HandTrace.centreLine(name), name, TraceStrictness.NORMAL)
-        Log.i(TAG, "the name by hand at NORMAL: $right")
-        assertTrue("writing «Δημήτρης» by hand was refused: $right", right.passed)
-
-        val other = Glyphs.template("ψωμί", boxWidth, boxHeight)
         for (level in TraceStrictness.entries) {
-            val wrong = score(HandTrace.centreLine(other), name, level)
-            Log.i(TAG, "another word over the name at $level: $wrong")
-            assertFalse("«ψωμί» passed as «Δημήτρης» at $level: $wrong", wrong.passed)
+            val right = score(HandTrace.centreLine(name), name, level)
+            Log.i(TAG, "the name by hand at $level: $right")
+            assertTrue("writing «Δημήτρης» by hand was refused at $level: $right", right.passed)
         }
 
-        for (near in listOf("Δημητρα", "Καλημέρα", "Δημήτρηα")) {
-            val trace = HandTrace.centreLine(Glyphs.template(near, boxWidth, boxHeight))
-            Log.i(TAG, "«$near» over the name at NORMAL: ${score(trace, name, TraceStrictness.NORMAL)}")
+        for (other in listOf("ψωμί", "Καλημέρα", "Δημητρα", "Δημήτρηα")) {
+            val trace = HandTrace.centreLine(Glyphs.template(other, boxWidth, boxHeight))
+            for (level in TraceStrictness.entries) {
+                val wrong = score(trace, name, level)
+                Log.i(TAG, "«$other» over the name at $level: $wrong")
+                assertFalse("«$other» passed as «Δημήτρης» at $level: $wrong", wrong.passed)
+            }
         }
     }
 
-    private fun score(strokes: List<List<Pt>>, glyph: GlyphTemplate, level: TraceStrictness) = TraceScorer.score(
-        strokes = strokes,
-        template = glyph.points,
-        inside = glyph.inside,
-        s = Strictness.of(level, density, glyph.height, recall = false),
-        skeletonPx = glyph.skeleton,
-    )
+    /**
+     * The one the coordinator asked for, and the one a caregiver will see: his name written properly
+     * except that one «η» of it is drawn as a «Κ». Seven letters right out of eight is seven letters
+     * right, and the eighth is the one he is practising.
+     *
+     * The «Κ» goes in the «η»'s own place, over its own ink, so nothing about position or size gives
+     * it away — only its shape. The nudge has to be able to name that letter.
+     */
+    @Test fun aKOverOneEtaOfHisNameIsRefusedAndNamed() {
+        val name = Glyphs.template("Δημήτρης", boxWidth, boxHeight)
+        val eta = name.letters.indexOfLast { it.text == "η" }
+        assertTrue("no «η» in «Δημήτρης»", eta > 0)
+        val its = name.points.filter { it.letter == eta }
+        val left = its.minOf { it.pt.x }
+        val right = its.maxOf { it.pt.x }
+        val top = its.minOf { it.pt.y }
+        val bottom = its.maxOf { it.pt.y }
+        val middle = (top + bottom) / 2f
+
+        // Everything but that letter, written by hand, and a «Κ» where it should have been.
+        val hand = HandTrace.centreLine(name)
+        val others = hand.filter { stroke -> stroke.map { it.x }.average() !in left.toDouble()..right.toDouble() }
+        assertTrue("the «η» owned every stroke of the word", others.size < hand.size)
+        val wrong = others + listOf(
+            listOf(Pt(left, top), Pt(left, bottom)),
+            listOf(Pt(right, top), Pt(left, middle)),
+            listOf(Pt(left, middle), Pt(right, bottom)),
+        )
+
+        for (level in TraceStrictness.entries) {
+            val s = score(wrong, name, level)
+            Log.i(TAG, "a K over one eta of the name at $level: $s")
+            Log.i(TAG, "  letters: " + s.letters.joinToString { "${it.text} ${it.coverage}/${it.precision}" })
+            assertFalse("a «Κ» drawn over one «η» passed as his name at $level: $s", s.passed)
+            assertTrue("the letter that was wrong is not the one named: ${s.failed.map { it.text }}", s.failed.any { it.text == "η" })
+            assertTrue("more letters were blamed than he got wrong: ${s.failed.map { it.text }}", s.failed.size <= 2)
+        }
+    }
+
+    private fun score(strokes: List<List<Pt>>, glyph: GlyphTemplate, level: TraceStrictness) =
+        TraceScorer.score(strokes, glyph.target, level, density, recall = false)
 
     /**
      * The letter he was asked for passes, however hard a caregiver set the marking: a capital with

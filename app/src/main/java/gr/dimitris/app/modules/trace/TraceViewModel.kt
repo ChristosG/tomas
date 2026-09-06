@@ -35,24 +35,14 @@ data class TraceState(
     val itemId: String? = null,
     /** False only at level 5, after «Το είδα»: from there he is writing it from memory. */
     val templateVisible: Boolean = true,
-    val template: List<TemplatePoint> = emptyList(),
+    /** The letter or word he is writing, in pieces, letter by letter. See [TraceScorer.score]. */
+    val target: Target = Target(emptyList(), emptyList()),
     /** How tall the letter came out, in canvas pixels. Nothing is marked by it any more; it is what
      * says how big the thing he was asked to write actually was, which is the first question of
      * anyone reading these sittings back. */
     val templateHeight: Float = 0f,
-    /** Roughly how long the letter is as a line: the budget for how much ink one try may use. */
-    val skeleton: Float = 0f,
     /** How hard he is marked, as a caregiver set it. Read once, when the sitting is loaded. */
     val strictness: TraceStrictness = TraceStrictness.DEFAULT,
-    /**
-     * The ink of the letter: true where a point is on it. See [Glyphs] and [TraceScorer].
-     *
-     * A fresh lambda every time the letter is rebuilt, so no two states with a letter in them are
-     * ever equal and the flow never conflates. That is the honest description of this screen anyway
-     * — every stroke of his changes [strokes] — and giving the mask an identity would buy a
-     * comparison that is already false.
-     */
-    val inside: (Pt) -> Boolean = { false },
     val strokes: List<List<Pt>> = emptyList(),
     /**
      * How many of [strokes] have already been judged. They stay on the paper, faded, so he can see
@@ -71,6 +61,13 @@ data class TraceState(
 ) {
     /** The strokes of the try he is on now: everything since the last «Έτοιμο». */
     val fresh: List<List<Pt>> get() = if (judged <= 0) strokes else strokes.drop(judged)
+
+    /** Which letters of the word he has to look at again, by their place in [target]. */
+    val failedLetters: Set<Int> get() {
+        val marks = score?.letters ?: return emptySet()
+        if (score.passed) return emptySet()
+        return marks.indices.filter { !marks[it].passed }.toSet()
+    }
 }
 
 /**
@@ -128,6 +125,13 @@ class TraceViewModel(
 
     /** True while one «Έτοιμο» is being marked off the main thread, so a second tap cannot start another. */
     private var judging = false
+
+    /**
+     * The marking in flight. Cancelled by [leave]: a judgement that comes back after «Πίσω» would
+     * say «Μπράβο» to an empty screen, speak over the silence the back arrow asked for, and write a
+     * row behind the session that has already counted them.
+     */
+    private var judgeJob: Job? = null
 
     init { load() }
 
@@ -217,13 +221,8 @@ class TraceViewModel(
         val text = _state.value.text
         if (text.isEmpty() || boxWidth <= 0f || boxHeight <= 0f) return
         val glyph = runCatching { Glyphs.template(text, boxWidth, boxHeight) }
-            .getOrElse { graph.errors.record("trace template", it); GlyphTemplate(emptyList(), 0f) { false } }
-        _state.update {
-            it.copy(
-                template = glyph.points, templateHeight = glyph.height,
-                inside = glyph.inside, skeleton = glyph.skeleton,
-            )
-        }
+            .getOrElse { graph.errors.record("trace template", it); GlyphTemplate(Target(emptyList(), emptyList()), 0f) }
+        _state.update { it.copy(target = glyph.target, templateHeight = glyph.height) }
     }
 
     /** One finished stroke. It answers the nudge as well: «Ξανά» goes when he starts writing again. */
@@ -283,11 +282,13 @@ class TraceViewModel(
 
         val fromMemory = writingFromMemory(s)
         judging = true
+        // The letters he is writing, kept for the nudge: the state may have moved on by the time
+        // the marking comes back.
         // Off the main thread: it is one distance per point of his against every point of the
         // letter, which on a whole word is millions of them, and the one button he presses must not
         // be the one that stutters. Nothing else touches the state until the answer comes back —
         // `judging` holds the door — and the answer is applied on the main thread as usual.
-        viewModelScope.launch {
+        judgeJob = viewModelScope.launch {
             // In fingertips, and never wider than a piece of the letter: a tolerance of a tenth of
             // the height was half the paper on a capital, and a fixed 12 dp is a quarter of a letter
             // in a word of eight. That is how a «Κ» drawn over an «Η» came to pass, at both scales.
@@ -295,10 +296,10 @@ class TraceViewModel(
             val score = withContext(Dispatchers.Default) {
                 TraceScorer.score(
                     strokes = fresh,
-                    template = s.template,
-                    inside = s.inside,
-                    s = Strictness.of(s.strictness, density, s.templateHeight, recall = fromMemory),
-                    skeletonPx = s.skeleton,
+                    target = s.target,
+                    level = s.strictness,
+                    density = density,
+                    recall = fromMemory,
                 )
             }
             judging = false
@@ -318,7 +319,9 @@ class TraceViewModel(
                 graph.feedback.nudge()
                 // His strokes stay where they are and the letter comes back over them, so he can see
                 // where he went — faded, and out of the marking, so what he writes next is judged on
-                // its own. At level 5 that is also the answer to what he was trying to remember.
+                // its own. At level 5 that is also the answer to what he was trying to remember. The
+                // letters that missed are named and marked on the paper: «Ξανά» over a word of eight
+                // letters is not an instruction anybody can follow.
                 _state.update {
                     it.copy(score = score, tries = it.tries + 1, templateVisible = true, judged = it.strokes.size)
                 }
@@ -359,7 +362,7 @@ class TraceViewModel(
         _state.update {
             it.copy(
                 index = i, text = target.text, itemId = target.itemId, templateVisible = true,
-                template = emptyList(), templateHeight = 0f, inside = { false }, skeleton = 0f,
+                target = Target(emptyList(), emptyList()), templateHeight = 0f,
                 strokes = emptyList(), judged = 0, score = null, tries = 0,
             )
         }
@@ -389,6 +392,11 @@ class TraceViewModel(
      * would lose the letter he had just written.
      */
     fun leave(then: () -> Unit) {
+        // Nothing more is to happen on this screen: the guard inside the marking reads this too, so
+        // a judgement that is already past its cancellation point still throws its answer away
+        // rather than saying «Μπράβο» and writing a row after he has gone.
+        ending = true
+        judgeJob?.cancel()
         loadJob?.cancel()
         graph.voice.quiet()
         val write = lastWrite
@@ -425,6 +433,12 @@ class TraceViewModel(
                 "coverage" to score?.coverage,
                 "precision" to score?.precision,
                 "strictness" to s.strictness.name,
+                // Letter by letter, because that is how it was marked and how it will be read: a
+                // word he passes with one weak letter is a letter to practise, not a word.
+                "letters" to score?.letters?.map { mapOf("c" to it.text, "coverage" to it.coverage, "precision" to it.precision) },
+                // How much line he drew against how long the letter is. Kept on every row so the
+                // budget that refuses colouring-in can be set from real hands instead of guesses.
+                "inkRatio" to score?.inkRatio?.takeIf { it > 0f },
             )
         )
         // Read eagerly: the clock is restarted the moment the next letter arrives.
@@ -471,6 +485,26 @@ class TraceViewModel(
          * shape", so it is a different sentence.
          */
         const val TOO_MUCH_INK = "Πολύ μελάνι. Ξανά, πιο απλά."
+
+        /**
+         * The nudge, and where to look. «Ξανά» over a word of eight letters says nothing a man with
+         * aphasia can act on; the letter that missed is named, in the shape it is written on the
+         * screen, and the paper marks it too.
+         *
+         * One letter is named, two are named, and more than two are not: a list of five letters is
+         * a page of text, and the marked letters on the paper say it better.
+         */
+        fun tryAgain(score: TraceScore?): String {
+            if (score?.tooMuchInk == true) return TOO_MUCH_INK
+            val missed = score?.failed.orEmpty()
+            // A single letter he was asked for: there is nothing to point at but the letter itself.
+            if (missed.isEmpty() || score?.letters.orEmpty().size < 2) return TRY_AGAIN
+            return when (missed.size) {
+                1 -> "$TRY_AGAIN — δες το «${missed[0].text}»."
+                2 -> "$TRY_AGAIN — δες το «${missed[0].text}» και το «${missed[1].text}»."
+                else -> "$TRY_AGAIN — δες τα γράμματα."
+            }
+        }
 
         /** Said on the screen when the letter he passed made no sound at all. */
         const val SPEECH_FAILED = "Δεν ακούγεται η φωνή. Δες τις ρυθμίσεις."

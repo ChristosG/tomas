@@ -29,6 +29,7 @@ class TraceScorerTest {
 
     /** An «Η» 800 px tall: two stems and a crossbar, each 50 px of ink across. */
     private val h = glyph(
+        "Η",
         Bar(Pt(180f, 100f), Pt(180f, 900f), STROKE),
         Bar(Pt(620f, 100f), Pt(620f, 900f), STROKE),
         Bar(Pt(180f, 500f), Pt(620f, 500f), STROKE),
@@ -36,6 +37,7 @@ class TraceScorerTest {
 
     /** A «Κ» in the same box: the same stem, and two diagonals where the crossbar was. */
     private val k = glyph(
+        "Κ",
         Bar(Pt(180f, 100f), Pt(180f, 900f), STROKE),
         Bar(Pt(620f, 100f), Pt(180f, 500f), STROKE),
         Bar(Pt(180f, 500f), Pt(620f, 900f), STROKE),
@@ -126,11 +128,58 @@ class TraceScorerTest {
 
             // And on a letter the size of one inside a word, both are one piece of the letter.
             val inAWord = Strictness.of(level, DENSITY, small.height, recall = false)
-            assertEquals(small.height * TraceScorer.SEGMENT_FRACTION, inAWord.tolerancePx, 0.001f)
-            assertEquals(small.height * TraceScorer.SEGMENT_FRACTION, inAWord.coverRadiusPx, 0.001f)
+            assertEquals(small.height * Strictness.CAP_FRACTION, inAWord.tolerancePx, 0.001f)
+            assertEquals(small.height * Strictness.CAP_FRACTION, inAWord.coverRadiusPx, 0.001f)
         }
         // No letter at all: nothing to be judged at the scale of, so no ceiling.
         assertEquals(12f, Strictness.of(TraceStrictness.NORMAL, 1f, 0f, recall = false).tolerancePx, 0.001f)
+    }
+
+    /**
+     * A word is every letter of it. Seven letters right out of eight is seven letters right, and the
+     * eighth is the one he is practising — so a word passes only when its worst letter does.
+     *
+     * Two «Η»s side by side, and the second one written as a «Κ»: the first letter passes on its own
+     * numbers, the second does not, and the word does not.
+     */
+    @Test fun `a word is refused for the one letter of it that is wrong`() {
+        val both = word(h, h.at(GAP))
+        val right = listOf(handH, handH.map { stroke -> stroke.map { Pt(it.x + GAP, it.y) } }).flatten()
+        val wrong = listOf(handH, handK.map { stroke -> stroke.map { Pt(it.x + GAP, it.y) } }).flatten()
+
+        for (level in TraceStrictness.entries) {
+            val written = TraceScorer.score(right, both, level, DENSITY, recall = false)
+            assertTrue("«ΗΗ» written by hand was refused at $level: $written", written.passed)
+            assertEquals("a word of two letters was marked as one", 2, written.letters.size)
+
+            val missed = TraceScorer.score(wrong, both, level, DENSITY, recall = false)
+            assertFalse("a «Κ» passed as the second «Η» at $level: $missed", missed.passed)
+            assertTrue("the letter he wrote correctly was marked wrong: $missed", missed.letters[0].passed)
+            assertFalse("the letter he got wrong was marked right: $missed", missed.letters[1].passed)
+            assertEquals("the nudge cannot name the letter", "Η", missed.failed.single().text)
+        }
+
+        // And the whole word's numbers stay high while a letter of it is refused — which is exactly
+        // why the worst letter, and not the average, is what passes.
+        val missed = TraceScorer.score(wrong, both, TraceStrictness.NORMAL, DENSITY, recall = false)
+        assertTrue("one wrong letter of two barely moved the word's own numbers: $missed", missed.coverage > 0.75f)
+    }
+
+    /**
+     * Whose ink is whose. A stroke drawn straight across two letters is not one letter's mistake: it
+     * is split where the letters meet, so each of them is marked on the half he drew over it.
+     */
+    @Test fun `a stroke that crosses two letters is shared between them`() {
+        val both = word(h, h.at(GAP))
+        // From the middle of the first letter's crossbar, straight on into the middle of the
+        // second's: half of it is on a letter and half of it is over the white space between them.
+        val across = listOf(line(Pt(400f, 500f), Pt(400f + GAP, 500f)))
+        val s = TraceScorer.score(across, both, TraceStrictness.NORMAL, DENSITY, recall = false)
+
+        assertEquals("the two letters did not get a half each", s.letters[0].precision, s.letters[1].precision, 0.1f)
+        assertTrue("the crossing stroke was given to one letter whole: $s", s.letters[0].precision in 0.35f..0.65f)
+        assertTrue("the crossing stroke was given to one letter whole: $s", s.letters[1].precision in 0.35f..0.65f)
+        assertFalse("one line across two letters passed: $s", s.passed)
     }
 
     /** The other one he drew: an «Ο» over a «Κ». Nothing about it is the letter. */
@@ -180,10 +229,7 @@ class TraceScorerTest {
             scribble(Pt(620f, 100f), Pt(620f, 900f)),
             scribble(Pt(180f, 500f), Pt(620f, 500f)),
         )
-        val plain = TraceScorer.score(
-            zigzag, h.template, h.inside,
-            Strictness.of(TraceStrictness.NORMAL, DENSITY, h.height, false), skeletonPx = 0f,
-        )
+        val plain = TraceScorer.score(zigzag, h.target.copy(skeleton = 0f), TraceStrictness.NORMAL, DENSITY, recall = false)
         assertEquals("a scribble inside the ink missed a piece of the letter", 1f, plain.coverage, 0.001f)
         assertEquals("a scribble inside the ink left the letter", 1f, plain.precision, 0.001f)
         assertTrue("without a budget, colouring the letter in is a pass: $plain", plain.passed)
@@ -367,7 +413,7 @@ class TraceScorerTest {
 
     /** No letter to trace — a box too small to fit one — is not something he can fail at either. */
     @Test fun `an empty template refuses rather than divides by zero`() {
-        val s = TraceScorer.score(handH, emptyList(), h.inside, Strictness.of(TraceStrictness.NORMAL, DENSITY, h.height, false), h.skeleton)
+        val s = TraceScorer.score(handH, Target(emptyList(), emptyList()), TraceStrictness.NORMAL, DENSITY, recall = false)
         assertFalse(s.passed)
         assertEquals(0f, s.coverage, 0f)
     }
@@ -376,10 +422,10 @@ class TraceScorerTest {
     @Test fun `with no ink to measure against, the outline is what is left`() {
         val s = TraceScorer.score(
             strokes = listOf(line(Pt(180f, 100f), Pt(180f, 900f))),
-            template = h.template,
-            inside = { false },
-            s = Strictness.of(TraceStrictness.NORMAL, DENSITY, h.height, false),
-            skeletonPx = h.skeleton,
+            target = h.target.copy(inside = { false }),
+            level = TraceStrictness.NORMAL,
+            density = DENSITY,
+            recall = false,
         )
         // A little under half, because at the two ends of the stem the nearest outline is its cap.
         assertEquals("half the width of the ink", STROKE / 2f, s.meanDistance, 4f)
@@ -462,10 +508,7 @@ class TraceScorerTest {
         glyph: TestGlyph,
         level: TraceStrictness,
         recall: Boolean = false,
-    ): TraceScore = TraceScorer.score(
-        strokes, glyph.template, glyph.inside,
-        Strictness.of(level, DENSITY, glyph.height, recall), glyph.skeleton,
-    )
+    ): TraceScore = TraceScorer.score(strokes, glyph.target, level, DENSITY, recall)
 }
 
 // ---- the paper this is all drawn on -----------------------------------------------------------
@@ -491,6 +534,9 @@ private const val SWAY = 0.6f
  * a capital fills by itself comes out about a seventh of the height. The 800 px «Η» becomes 120 px.
  */
 private const val WORD_SCALE = 0.15f
+
+/** How far the second letter of the two-letter word stands from the first. */
+private const val GAP = 1000f
 
 /** How much line he drew, as a multiple of the letter's own length. See [TraceScorer.INK_BUDGET]. */
 private fun inkRatio(strokes: List<List<Pt>>, glyph: TestGlyph): Float {
@@ -529,7 +575,8 @@ private fun scribble(from: Pt, to: Pt): List<Pt> {
 private fun scale(p: Pt, by: Float) = Pt(p.x * by, p.y * by)
 
 /** A letter, as bars of ink: the outline of each bar is a contour, and the ink is their union. */
-private fun glyph(vararg bars: Bar) = TestGlyph(
+private fun glyph(text: String, vararg bars: Bar) = TestGlyph(
+    text = text,
     height = bars.flatMap { it.contour() }.let { points -> points.maxOf { it.y } - points.minOf { it.y } },
     contours = bars.map { it.contour() },
     inside = { p -> bars.any { it.holds(p) } },
@@ -537,22 +584,73 @@ private fun glyph(vararg bars: Bar) = TestGlyph(
 
 /** An «Ο»: two contours — the outside and the hole — and the ink between them. */
 private fun ring(cx: Float, cy: Float, outer: Float, inner: Float) = TestGlyph(
+    text = "Ο",
     height = 2f * outer,
     contours = listOf(circle(cx, cy, outer), circle(cx, cy, inner)),
     inside = { p -> hypot(p.x - cx, p.y - cy) in inner..outer },
 )
 
-private class TestGlyph(val height: Float, val contours: List<List<Pt>>, val inside: (Pt) -> Boolean) {
+private class TestGlyph(
+    val text: String,
+    val height: Float,
+    val contours: List<List<Pt>>,
+    val inside: (Pt) -> Boolean,
+) {
     val template: List<TemplatePoint> = TraceScorer.segments(contours, height)
     val skeleton: Float = TraceScorer.skeleton(contours)
+    val left: Float = contours.flatten().minOf { it.x }
+    val right: Float = contours.flatten().maxOf { it.x }
+
+    /** This letter on its own, as the whole of what he was asked to write. */
+    val target: Target get() = word(this)
 
     /** The same letter, smaller: the size one letter of a word comes out at in the same box. */
     fun scaled(by: Float) = TestGlyph(
+        text = text,
         height = height * by,
         contours = contours.map { c -> c.map { scale(it, by) } },
         inside = { p -> inside(Pt(p.x / by, p.y / by)) },
     )
+
+    /** The same letter, moved along the line: the next place in a word. */
+    fun at(x: Float) = TestGlyph(
+        text = text,
+        height = height,
+        contours = contours.map { c -> c.map { Pt(it.x + x, it.y) } },
+        inside = { p -> inside(Pt(p.x - x, p.y)) },
+    )
 }
+
+/**
+ * Letters side by side, as one thing to write — the same shape [Glyphs] hands the scorer for a word:
+ * the pieces numbered on across the letters, each point tagged with whose it is, and the paper
+ * shared out at the halfway line between one letter's ink and the next.
+ */
+private fun word(vararg glyphs: TestGlyph): Target {
+    val points = mutableListOf<TemplatePoint>()
+    val letters = mutableListOf<GlyphLetter>()
+    var next = 0
+    for ((i, g) in glyphs.withIndex()) {
+        for (t in g.template) points += TemplatePoint(t.pt, next + t.segment, i)
+        next += (g.template.maxOfOrNull { it.segment } ?: -1) + 1
+        letters += GlyphLetter(g.text, g.height, g.left, g.right, g.skeleton)
+    }
+    val shared = letters.mapIndexed { i, letter ->
+        letter.copy(
+            left = if (i == 0) -FAR else (letters[i - 1].right + letter.left) / 2f,
+            right = if (i == letters.lastIndex) FAR else (letter.right + letters[i + 1].left) / 2f,
+        )
+    }
+    return Target(
+        points = points,
+        letters = shared,
+        skeleton = glyphs.sumOf { it.skeleton.toDouble() }.toFloat(),
+        inside = { p -> glyphs.any { it.inside(p) } },
+    )
+}
+
+/** Off the paper in either direction: the first and last letters own everything beyond the word. */
+private const val FAR = 1e9f
 
 /** One stroke of ink: a rectangle [width] across, from [from] to [to], with flat ends. */
 private class Bar(val from: Pt, val to: Pt, val width: Float) {

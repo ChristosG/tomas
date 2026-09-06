@@ -3,7 +3,9 @@ package gr.dimitris.app.modules.trace
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.drag
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
@@ -14,7 +16,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
@@ -50,6 +54,12 @@ fun TraceCanvas(
      * paper still shows him where he went, and the dark ink is the letter he is writing now.
      */
     judged: Int = 0,
+    /**
+     * The letters he has to look at again. They are drawn in the nudge's own colour on a tinted
+     * ground, so «δες το «η»» has something to point at: a man who cannot ask which one is meant
+     * must be able to see it.
+     */
+    highlight: Set<Int> = emptySet(),
 ) {
     // The gesture is installed once and outlives any number of recompositions, so it must not close
     // over a stale callback.
@@ -75,13 +85,24 @@ fun TraceCanvas(
             .border(EDGE, Palette.mist, paper)
             .pointerInput(enabled) {
                 if (!enabled) return@pointerInput
-                detectDragGestures(
-                    onDragStart = { live.clear(); live += Pt(it.x, it.y) },
+                // The gesture is taken apart rather than left to `detectDragGestures`, for one
+                // reason: that helper reports the stroke from where the drag was *recognised* — a
+                // touch slop of 8 dp along — and the first 8 dp of every stroke would be missing
+                // from his writing. On a capital that is nothing; on one letter of «Δημήτρης», with
+                // every letter now marked on its own, it is the top of the stem gone from all three
+                // strokes of it. His ink starts where his finger did.
+                awaitEachGesture {
+                    val down = awaitFirstDown(requireUnconsumed = false)
+                    live.clear()
+                    live += Pt(down.position.x, down.position.y)
                     // Consumed: this is his handwriting, not a scroll or a swipe for anyone else.
-                    onDrag = { change, _ -> change.consume(); live += Pt(change.position.x, change.position.y) },
-                    onDragEnd = { if (live.isNotEmpty()) emit(live.toList()) },
-                    onDragCancel = { live.clear() },
-                )
+                    down.consume()
+                    drag(down.id) { change ->
+                        change.consume()
+                        live += Pt(change.position.x, change.position.y)
+                    }
+                    if (live.isNotEmpty()) emit(live.toList())
+                }
             }
     ) {
         val width = INK.toPx()
@@ -92,7 +113,29 @@ fun TraceCanvas(
         // and the whole exercise is following a line he can still see.
         if (showTemplate) {
             val radius = DOT.toPx()
-            for (p in template) drawCircle(Palette.mist, radius = radius, center = Offset(p.pt.x, p.pt.y))
+            // The letter that missed first: its ground, so his own ink is not what is tinted.
+            if (highlight.isNotEmpty()) {
+                val pad = MARK_PAD.toPx()
+                for (letter in highlight) {
+                    val mine = template.filter { it.letter == letter }
+                    if (mine.isEmpty()) continue
+                    val left = mine.minOf { it.pt.x } - pad
+                    val top = mine.minOf { it.pt.y } - pad
+                    drawRoundRect(
+                        Palette.amber.copy(alpha = MARK_FILL),
+                        topLeft = Offset(left, top),
+                        size = Size(mine.maxOf { it.pt.x } + pad - left, mine.maxOf { it.pt.y } + pad - top),
+                        cornerRadius = CornerRadius(pad, pad),
+                    )
+                }
+            }
+            for (p in template) {
+                drawCircle(
+                    if (p.letter in highlight) Palette.amber else Palette.mist,
+                    radius = if (p.letter in highlight) radius * MARK_DOT else radius,
+                    center = Offset(p.pt.x, p.pt.y),
+                )
+            }
         }
     }
 }
@@ -116,6 +159,11 @@ private fun DrawScope.ink(points: List<Pt>, width: Float, colour: Color) {
  * he is writing now is obviously the dark one, dark enough that he can still see where he went.
  */
 private const val FADED = 0.22f
+
+/** How the letter he has to look at again is marked: a tinted ground and a heavier dotted line. */
+private const val MARK_FILL = 0.16f
+private const val MARK_DOT = 1.6f
+private val MARK_PAD = 8.dp
 
 /** As wide as a felt-tip: a hairline is not what a shaking hand can aim, or see afterwards. */
 private val INK = 14.dp

@@ -13,8 +13,43 @@ data class Pt(val x: Float, val y: Float)
  * of the letter, and a big enough scribble is always near some part of it; the segments ask the
  * other question — did he go over *this* piece, and this one, and this one. A «Κ» drawn over an «Η»
  * never touches the crossbar, and that is the sentence "it is not an Η" written as a number.
+ *
+ * [letter] is which letter of the word this point belongs to. A word is marked letter by letter —
+ * eight Greek letters fill the same eight places whatever they are, so a word taken as one shape
+ * cannot tell «Δημήτρης» from «Καλημέρα» — and every point has to know whose it is.
  */
-data class TemplatePoint(val pt: Pt, val segment: Int)
+data class TemplatePoint(val pt: Pt, val segment: Int, val letter: Int = 0)
+
+/**
+ * One letter of what he was asked to write, as everything but the font sees it: the character
+ * itself, how tall it came out, the slice of the paper it stands on, and how long it is as a line.
+ *
+ * [left] and [right] are what his ink is shared out by. A stroke that crosses from one letter into
+ * the next is split at the boundary, point by point, so the «Κ» he drew over the «η» is the «η»'s
+ * problem and not the «μ»'s.
+ */
+data class GlyphLetter(
+    val text: String,
+    val height: Float,
+    val left: Float,
+    val right: Float,
+    val skeleton: Float,
+)
+
+/** How one letter of the word came out. [text] is the letter as it is shown, so it can be said. */
+data class LetterScore(val text: String, val coverage: Float, val precision: Float, val passed: Boolean)
+
+/**
+ * Everything he was asked to write, as the scorer needs it: the outline in pieces, the letters those
+ * pieces belong to, how long the whole thing is as a line, and where the ink is.
+ */
+data class Target(
+    val points: List<TemplatePoint>,
+    val letters: List<GlyphLetter>,
+    val skeleton: Float = 0f,
+    /** True where the ink is. Counters are not ink. See [Glyphs]. */
+    val inside: (Pt) -> Boolean = { false },
+)
 
 /**
  * How close one traced letter came.
@@ -32,7 +67,12 @@ data class TemplatePoint(val pt: Pt, val segment: Int)
  * long. Colouring a letter in reaches every piece of it and stays on the ink, so it scores 1.00 and
  * 1.00 without a letter ever having been written; and because precision is a ratio, enough scribble
  * inside the ink dilutes a wrong letter until it passes. It is a different sentence on the screen,
- * because "do less" is not the same advice as "look at the shape".
+ * because "do less" is not the same advice as "look at the shape". [inkRatio] is how much line he
+ * drew against how long the letter is, kept on every row so the budget can be set from real hands.
+ *
+ * [letters] is the word marked letter by letter, and [passed] is the *worst* of them, not the
+ * average: a word is eight letters he is learning to write, and seven of them being right is seven
+ * of them being right. [coverage] and [precision] above are the whole word, for the record.
  */
 data class TraceScore(
     val coverage: Float,
@@ -40,7 +80,12 @@ data class TraceScore(
     val meanDistance: Float,
     val passed: Boolean,
     val tooMuchInk: Boolean = false,
-)
+    val letters: List<LetterScore> = emptyList(),
+    val inkRatio: Float = 0f,
+) {
+    /** The letters he has to look at again, in the order they are written. */
+    val failed: List<LetterScore> get() = letters.filter { !it.passed }
+}
 
 /**
  * How hard the writing module marks, as a caregiver sets it: «Χαλαρό», «Κανονικό», «Αυστηρό».
@@ -94,6 +139,9 @@ data class Strictness(
          */
         const val RECALL_ALLOWANCE = 0.15f
 
+        /** How near "near" may ever mean, as a fraction of the letter's own height. */
+        const val CAP_FRACTION = 0.09f
+
         /**
          * [templateHeight] is how tall the letter came out, in the same pixels. It is a ceiling on
          * both distances, and it is what keeps the marking honest at word scale.
@@ -103,14 +151,20 @@ data class Strictness(
          * a fifth of that height — and there 12 dp is a quarter of a letter and 14 dp of reach is
          * wider than one, so every wrong shape lands "near enough" to something. The cap is one
          * segment's length, the same twelfth of the letter that a piece of it is: whatever he is
-         * writing, "near" can never mean further than the pieces the letter is counted in.
+         * writing, "near" can never mean further than a fraction of the letter itself. It is a
+         * little under a piece of the letter ([CAP_FRACTION] against [TraceScorer.SEGMENT_FRACTION]),
+         * because at a twelfth a «Κ» over an «Η» of a word still cleared «Χαλαρό».
+         *
+         * At word scale this is each *letter's* own height, not the word's: the «τ» of «Δημήτρης» is
+         * half the height of its «Δ», and a fifth of a «τ» is not the same distance as a fifth of a
+         * «Δ».
          */
         fun of(level: TraceStrictness, density: Float, templateHeight: Float, recall: Boolean): Strictness {
             // A density of zero is a screen nobody can write on; 1 keeps the numbers meaning dp.
             val scale = if (density > 0f) density else 1f
             val give = if (recall) RECALL_ALLOWANCE else 0f
             // No letter, no ceiling: there is nothing to be judged at the scale of.
-            val cap = if (templateHeight > 0f) templateHeight * TraceScorer.SEGMENT_FRACTION else Float.MAX_VALUE
+            val cap = if (templateHeight > 0f) templateHeight * CAP_FRACTION else Float.MAX_VALUE
             return Strictness(
                 tolerancePx = minOf(level.toleranceDp * scale, cap),
                 coverRadiusPx = minOf(level.coverRadiusDp * scale, cap),
@@ -240,7 +294,11 @@ object TraceScorer {
      * And where his finger is on the ink, the radius is measured from the edge of the letter rather
      * than from his finger: both edges of a stem are the one stroke he is drawing down the middle of.
      *
-     * [skeletonPx] is how long the letter is as a line (see [skeleton]); drawing more than
+     * A word is marked letter by letter and passes only when every letter of it does. Each letter
+     * gets his ink from its own slice of the paper, its own ceiling on the two distances, and its own
+     * pieces to be gone over; the numbers on [TraceScore] itself are the whole word, for the record.
+     *
+     * [Target.skeleton] is how long the whole thing is as a line (see [skeleton]); drawing more than
      * [INK_BUDGET] times that is refused as [TraceScore.tooMuchInk] before the shape is judged at
      * all. Zero switches the budget off, for a caller with no letter to measure against.
      *
@@ -249,15 +307,21 @@ object TraceScorer {
      */
     fun score(
         strokes: List<List<Pt>>,
-        template: List<TemplatePoint>,
-        inside: (Pt) -> Boolean,
-        s: Strictness,
-        skeletonPx: Float,
+        target: Target,
+        level: TraceStrictness,
+        density: Float,
+        recall: Boolean,
     ): TraceScore {
-        if (template.isEmpty()) return NOTHING
+        val letters = target.letters
+        if (target.points.isEmpty() || letters.isEmpty()) return NOTHING
+
+        // One strictness per letter, because the ceiling on both distances is the letter's own
+        // height: the «τ» of «Δημήτρης» is half the height of its «Δ».
+        val bars = letters.map { Strictness.of(level, density, it.height, recall) }
+        // Fine enough for the smallest letter, so no piece of it is stepped over.
+        val step = (bars.minOf { it.tolerancePx } * STEP_OF_TOLERANCE).coerceAtLeast(MIN_STEP)
 
         // Evenly spaced along each stroke, so speed stops being part of the mark.
-        val step = (s.tolerancePx * STEP_OF_TOLERANCE).coerceAtLeast(MIN_STEP)
         val walked = ArrayList<Pt>()
         var drawn = 0f
         for (stroke in strokes) {
@@ -269,62 +333,114 @@ object TraceScorer {
         }
         // Nothing drawn is not a bad attempt, it is no attempt.
         if (walked.isEmpty()) return NOTHING
+        val ratio = if (target.skeleton > 0f) drawn / target.skeleton else 0f
         // Refused before the shape is judged: colouring the letter in reaches every piece of it and
         // never leaves the ink, and no number below could tell it from writing.
-        if (skeletonPx > 0f && drawn > INK_BUDGET * skeletonPx) {
-            return TraceScore(0f, 0f, Float.MAX_VALUE, passed = false, tooMuchInk = true)
+        if (target.skeleton > 0f && ratio > INK_BUDGET) {
+            return TraceScore(0f, 0f, Float.MAX_VALUE, passed = false, tooMuchInk = true, inkRatio = ratio)
         }
 
-        val present = HashSet<Int>()
-        for (t in template) present += t.segment
-        val covered = HashSet<Int>()
-        // Kept between points rather than rebuilt, and only filled for the points that need it: one
-        // letter is ~700 points and one trace ~200.
-        val away = FloatArray(template.size)
+        // His ink shared out among the letters, and the letter's own outline with it. A stroke that
+        // runs from one letter into the next is split where they meet, point by point.
+        val hisInk = Array(letters.size) { ArrayList<Pt>() }
+        for (p in walked) hisInk[nearestLetter(p, letters)] += p
+        val outlines = Array(letters.size) { ArrayList<TemplatePoint>() }
+        for (t in target.points) if (t.letter in outlines.indices) outlines[t.letter] += t
 
-        var total = 0.0
-        var onLetter = 0
-        for (p in walked) {
-            // On the ink costs nothing: a line down the middle of a stroke is the letter, written.
-            val onInk = inside(p)
-            var best = Float.MAX_VALUE
-            if (onInk) {
-                // The radius is measured from the edge of the letter, not from the middle of it: a
-                // man told «γράψε Η» draws one line down the middle of the stem, and the *far* edge
-                // of that stem is not a piece of the letter he missed — it is the other side of the
-                // very stroke he is standing on. Without this the stem of a big capital, 17 dp of
-                // ink across on the device's own font, would be wider than the 14 dp he is allowed,
-                // and writing the letter correctly would fail. It costs the second pass below,
-                // because the reach is not known until the nearest edge is.
-                for (i in template.indices) {
-                    val d = dist(p, template[i].pt)
-                    away[i] = d
-                    if (d < best) best = d
+        var coveredAll = 0
+        var presentAll = 0
+        var onLetterAll = 0
+        var distanceAll = 0.0
+        val marks = ArrayList<LetterScore>(letters.size)
+        for (i in letters.indices) {
+            val outline = outlines[i]
+            // A letter with nothing to trace — a space between two words — is not one he can miss.
+            if (outline.isEmpty()) continue
+            val mine = hisInk[i]
+            val bar = bars[i]
+
+            val present = HashSet<Int>()
+            for (t in outline) present += t.segment
+            val covered = HashSet<Int>()
+            val away = FloatArray(outline.size)
+            var onLetter = 0
+            var total = 0.0
+
+            for (p in mine) {
+                // On the ink costs nothing: a line down the middle of a stroke is the letter, written.
+                val onInk = target.inside(p)
+                var best = Float.MAX_VALUE
+                if (onInk) {
+                    // The radius is measured from the edge of the letter, not from the middle of it:
+                    // a man told «γράψε Η» draws one line down the middle of the stem, and the *far*
+                    // edge of that stem is not a piece of the letter he missed — it is the other side
+                    // of the very stroke he is standing on. Without this the stem of a big capital,
+                    // 17 dp of ink across on the device's own font, would be wider than the 14 dp he
+                    // is allowed, and writing the letter correctly would fail. It costs the second
+                    // pass below, because the reach is not known until the nearest edge is.
+                    for (j in outline.indices) {
+                        val d = dist(p, outline[j].pt)
+                        away[j] = d
+                        if (d < best) best = d
+                    }
+                    val reach = best + bar.coverRadiusPx
+                    for (j in outline.indices) if (away[j] <= reach) covered += outline[j].segment
+                    onLetter++
+                } else {
+                    // Off the letter: the reach is the plain radius, so one pass answers both.
+                    for (t in outline) {
+                        val d = dist(p, t.pt)
+                        if (d < best) best = d
+                        if (d <= bar.coverRadiusPx) covered += t.segment
+                    }
+                    total += best
+                    if (best <= bar.tolerancePx) onLetter++
                 }
-                val reach = best + s.coverRadiusPx
-                for (i in template.indices) if (away[i] <= reach) covered += template[i].segment
-                onLetter++
-            } else {
-                // Off the letter: the reach is the plain radius, so one pass answers both questions.
-                for (t in template) {
-                    val d = dist(p, t.pt)
-                    if (d < best) best = d
-                    if (d <= s.coverRadiusPx) covered += t.segment
-                }
-                total += best
-                if (best <= s.tolerancePx) onLetter++
             }
+
+            // No ink at all on this letter is not a letter he wrote.
+            val coverage = covered.size.toFloat() / present.size
+            val precision = if (mine.isEmpty()) 0f else onLetter.toFloat() / mine.size
+            marks += LetterScore(
+                text = letters[i].text,
+                coverage = coverage,
+                precision = precision,
+                passed = coverage >= bar.minCoverage && precision >= bar.minPrecision,
+            )
+            coveredAll += covered.size
+            presentAll += present.size
+            onLetterAll += onLetter
+            distanceAll += total
         }
 
-        val coverage = covered.size.toFloat() / present.size
-        val precision = onLetter.toFloat() / walked.size
-        val meanDistance = (total / walked.size).toFloat()
+        if (marks.isEmpty()) return NOTHING
         return TraceScore(
-            coverage = coverage,
-            precision = precision,
-            meanDistance = meanDistance,
-            passed = coverage >= s.minCoverage && precision >= s.minPrecision,
+            coverage = coveredAll.toFloat() / presentAll,
+            precision = onLetterAll.toFloat() / walked.size,
+            meanDistance = (distanceAll / walked.size).toFloat(),
+            // The worst letter, not the average of them: seven letters right out of eight is seven
+            // letters right, and the eighth is the one he is practising.
+            passed = marks.all { it.passed },
+            letters = marks,
+            inkRatio = ratio,
         )
+    }
+
+    /**
+     * Whose ink this point is. The letters stand side by side on the paper, so the slice of it a
+     * point falls in says which letter he was writing; ink beyond both ends of the word belongs to
+     * the letter it is nearest.
+     */
+    private fun nearestLetter(p: Pt, letters: List<GlyphLetter>): Int {
+        var best = 0
+        var away = Float.MAX_VALUE
+        for (i in letters.indices) {
+            val letter = letters[i]
+            if (p.x >= letter.left && p.x <= letter.right) return i
+            val d = if (p.x < letter.left) letter.left - p.x else p.x - letter.right
+            if (d < away) { away = d; best = i }
+        }
+        return best
     }
 
     /**

@@ -20,13 +20,15 @@ import kotlin.math.roundToInt
  * Anything [inside] answers true for is on the letter, distance nothing.
  */
 data class GlyphTemplate(
-    val points: List<TemplatePoint>,
+    /** Everything the scorer marks against: the outline in pieces, the letters, the ink. */
+    val target: Target,
     val height: Float,
-    /** Roughly how long this letter is as a line: [TraceScorer.skeleton] of its contours. */
-    val skeleton: Float = 0f,
-    /** True where the ink is, in the same canvas pixels as [points]. Counters are not ink. */
-    val inside: (Pt) -> Boolean,
-)
+) {
+    val points: List<TemplatePoint> get() = target.points
+    val letters: List<GlyphLetter> get() = target.letters
+    val skeleton: Float get() = target.skeleton
+    val inside: (Pt) -> Boolean get() = target.inside
+}
 
 /**
  * The letter he is asked to write, laid out for one canvas.
@@ -71,19 +73,31 @@ object Glyphs {
         if (bounds.width() <= 0f || bounds.height() <= 0f) return EMPTY
         paint.textSize = PROBE_SIZE * minOf(FILL * boxWidth / bounds.width(), FILL * boxHeight / bounds.height())
 
-        val path = Path()
-        paint.getTextPath(text, 0, text.length, 0f, 0f, path)
-        // Contour by contour, because that is what a segment is cut out of: the outside of an «Ο»
-        // and the hole in it are two lines to be gone over, not one long one.
-        val contours = sample(path)
-        val points = contours.flatten()
-        if (points.isEmpty()) return EMPTY
+        // One letter at a time, each set down at the advance of everything before it. A word marked
+        // as one shape cannot tell «Δημήτρης» from «Καλημέρα» — eight Greek letters fill the same
+        // eight places whatever they are — so every letter has to be its own exercise, and that
+        // starts with knowing which ink is whose.
+        val whole = Path()
+        val drawn = mutableListOf<Letter>()
+        var advance = 0f
+        for (i in text.indices) {
+            val letter = Path()
+            paint.getTextPath(text, i, i + 1, advance, 0f, letter)
+            advance += paint.measureText(text, i, i + 1)
+            val contours = sample(letter)
+            // A space has no outline: nothing to trace, and nothing he can be marked as missing.
+            if (contours.isEmpty()) continue
+            whole.addPath(letter)
+            drawn += Letter(text.substring(i, i + 1), contours)
+        }
+        if (drawn.isEmpty()) return EMPTY
 
         // Centred on what was really drawn, not on the font's line box: a word with no descender
         // sits high in its own metrics, and he would be tracing in the top half of the canvas.
+        val all = drawn.flatMap { it.contours }.flatten()
         var minX = Float.MAX_VALUE; var maxX = -Float.MAX_VALUE
         var minY = Float.MAX_VALUE; var maxY = -Float.MAX_VALUE
-        for (p in points) {
+        for (p in all) {
             if (p.x < minX) minX = p.x
             if (p.x > maxX) maxX = p.x
             if (p.y < minY) minY = p.y
@@ -92,12 +106,58 @@ object Glyphs {
         val dx = boxWidth / 2f - (minX + maxX) / 2f
         val dy = boxHeight / 2f - (minY + maxY) / 2f
 
+        // The pieces are cut per letter, against that letter's own height: a piece of a «τ» is
+        // shorter than a piece of a «Δ», because it is a piece of a smaller letter.
+        val points = mutableListOf<TemplatePoint>()
+        val letters = mutableListOf<GlyphLetter>()
+        var nextSegment = 0
+        for ((index, letter) in drawn.withIndex()) {
+            val moved = letter.contours.map { contour -> contour.map { Pt(it.x + dx, it.y + dy) } }
+            val flat = moved.flatten()
+            val height = flat.maxOf { it.y } - flat.minOf { it.y }
+            val cut = TraceScorer.segments(moved, height)
+            for (t in cut) points += TemplatePoint(t.pt, nextSegment + t.segment, index)
+            nextSegment += (cut.maxOfOrNull { it.segment } ?: -1) + 1
+            letters += GlyphLetter(
+                text = letter.text,
+                height = height,
+                // The slice of the paper this letter stands on, from halfway to each neighbour, so
+                // every point of his ink belongs to exactly one letter and none is left out.
+                left = flat.minOf { it.x },
+                right = flat.maxOf { it.x },
+                skeleton = TraceScorer.skeleton(moved),
+            )
+        }
+        if (points.isEmpty()) return EMPTY
+
         // The same move applied to the filled path, so the mask and the dots describe one letter.
-        path.offset(dx, dy)
-        val height = maxY - minY
-        val moved = contours.map { contour -> contour.map { Pt(it.x + dx, it.y + dy) } }
-        return GlyphTemplate(TraceScorer.segments(moved, height), height, TraceScorer.skeleton(moved), mask(path))
+        whole.offset(dx, dy)
+        return GlyphTemplate(
+            target = Target(
+                points = points,
+                letters = share(letters),
+                skeleton = letters.sumOf { it.skeleton.toDouble() }.toFloat(),
+                inside = mask(whole),
+            ),
+            height = maxY - minY,
+        )
     }
+
+    /**
+     * The letters' slices of the paper, widened until they touch: each boundary is halfway between
+     * one letter's last ink and the next letter's first, and the two ends run off the paper. Every
+     * point of his ink then belongs to exactly one letter, including the overshoot past the end of
+     * the word and the loop of a «ρ» that leans into its neighbour's gap.
+     */
+    private fun share(letters: List<GlyphLetter>): List<GlyphLetter> = letters.mapIndexed { i, letter ->
+        letter.copy(
+            left = if (i == 0) -Float.MAX_VALUE / 4f else (letters[i - 1].right + letter.left) / 2f,
+            right = if (i == letters.lastIndex) Float.MAX_VALUE / 4f else (letter.right + letters[i + 1].left) / 2f,
+        )
+    }
+
+    /** One letter as it was laid out: what it says, and its outline walked contour by contour. */
+    private class Letter(val text: String, val contours: List<List<Pt>>)
 
     /**
      * Where the ink is. [Region] fills the path with the font's own winding rule, so the hole in an
@@ -146,5 +206,5 @@ object Glyphs {
     /** Big enough that the measurement below is precise, and never drawn at this size. */
     private const val PROBE_SIZE = 200f
 
-    private val EMPTY = GlyphTemplate(emptyList(), 0f) { false }
+    private val EMPTY = GlyphTemplate(Target(emptyList(), emptyList()), 0f)
 }

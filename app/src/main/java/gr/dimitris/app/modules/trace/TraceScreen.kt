@@ -173,9 +173,9 @@ fun TraceScreen(count: Int, sessionId: String?, onDone: () -> Unit, onLeave: () 
                 // missed. The strokes stay where they are and the letter comes back under them.
                 if (missed) {
                     Text(
-                        // Too much ink is its own sentence: «Ξανά» over a letter he has coloured in
-                        // tells him to do it again, and doing it again is not what is wanted.
-                        if (s.score?.tooMuchInk == true) TraceViewModel.TOO_MUCH_INK else TraceViewModel.TRY_AGAIN,
+                        // Too much ink is its own sentence, and so is a word with one letter wrong:
+                        // «Ξανά» tells him to do it again, and which letter is what he needs.
+                        TraceViewModel.tryAgain(s.score),
                         style = MaterialTheme.typography.headlineMedium,
                         color = MaterialTheme.colorScheme.secondary,
                     )
@@ -205,10 +205,13 @@ fun TraceScreen(count: Int, sessionId: String?, onDone: () -> Unit, onLeave: () 
                             .then(if (tight) Modifier.verticalScroll(rememberScrollState()) else Modifier)
                     ) {
                         TraceCanvas(
-                            template = s.template,
+                            template = s.target.points,
                             // Always there to follow, except in the seconds of level 5 when the point
                             // is that it is not.
-                            showTemplate = s.templateVisible && s.template.isNotEmpty(),
+                            showTemplate = s.templateVisible && s.target.points.isNotEmpty(),
+                            // The letters that missed, marked on the paper. A word of eight letters
+                            // and one word — «Ξανά» — is not something anybody can act on.
+                            highlight = s.failedLetters,
                             strokes = s.strokes,
                             // The tries that have already been marked, drawn faded: he can see where
                             // he went, and what he writes now is judged on its own.
