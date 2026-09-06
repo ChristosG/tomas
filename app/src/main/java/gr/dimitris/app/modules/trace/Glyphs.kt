@@ -22,6 +22,8 @@ import kotlin.math.roundToInt
 data class GlyphTemplate(
     val points: List<TemplatePoint>,
     val height: Float,
+    /** Roughly how long this letter is as a line: [TraceScorer.skeleton] of its contours. */
+    val skeleton: Float = 0f,
     /** True where the ink is, in the same canvas pixels as [points]. Counters are not ink. */
     val inside: (Pt) -> Boolean,
 )
@@ -94,7 +96,7 @@ object Glyphs {
         path.offset(dx, dy)
         val height = maxY - minY
         val moved = contours.map { contour -> contour.map { Pt(it.x + dx, it.y + dy) } }
-        return GlyphTemplate(TraceScorer.segments(moved, height), height, mask(path))
+        return GlyphTemplate(TraceScorer.segments(moved, height), height, TraceScorer.skeleton(moved), mask(path))
     }
 
     /**

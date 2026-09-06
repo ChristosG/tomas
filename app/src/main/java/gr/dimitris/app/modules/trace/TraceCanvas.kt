@@ -15,6 +15,7 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
@@ -44,6 +45,11 @@ fun TraceCanvas(
     onStroke: (List<Pt>) -> Unit,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
+    /**
+     * How many of [strokes] belong to a try that has already been marked. They are drawn faded: the
+     * paper still shows him where he went, and the dark ink is the letter he is writing now.
+     */
+    judged: Int = 0,
 ) {
     // The gesture is installed once and outlives any number of recompositions, so it must not close
     // over a stale callback.
@@ -79,8 +85,8 @@ fun TraceCanvas(
             }
     ) {
         val width = INK.toPx()
-        for (stroke in strokes) ink(stroke, width)
-        ink(live, width)
+        strokes.forEachIndexed { i, stroke -> ink(stroke, width, if (i < judged) Palette.navy.copy(alpha = FADED) else Palette.navy) }
+        ink(live, width, Palette.navy)
         // The letter goes on top of his writing, not under it. His line is as wide as a marker and
         // the letter's is a thin one, so underneath it would disappear the moment he crossed it —
         // and the whole exercise is following a line he can still see.
@@ -91,19 +97,25 @@ fun TraceCanvas(
     }
 }
 
-/** One stroke, in navy, as wide as a marker and rounded at both ends like one. */
-private fun DrawScope.ink(points: List<Pt>, width: Float) {
+/** One stroke, as wide as a marker and rounded at both ends like one. */
+private fun DrawScope.ink(points: List<Pt>, width: Float, colour: Color) {
     if (points.isEmpty()) return
     // A tap that never moved is still a mark he made: a dot, not nothing.
     if (points.size == 1) {
-        drawCircle(Palette.navy, radius = width / 2f, center = Offset(points[0].x, points[0].y))
+        drawCircle(colour, radius = width / 2f, center = Offset(points[0].x, points[0].y))
         return
     }
     val path = Path()
     path.moveTo(points[0].x, points[0].y)
     for (i in 1 until points.size) path.lineTo(points[i].x, points[i].y)
-    drawPath(path, Palette.navy, style = Stroke(width = width, cap = StrokeCap.Round, join = StrokeJoin.Round))
+    drawPath(path, colour, style = Stroke(width = width, cap = StrokeCap.Round, join = StrokeJoin.Round))
 }
+
+/**
+ * How much of a try that has already been marked is left on the paper. Faint enough that the letter
+ * he is writing now is obviously the dark one, dark enough that he can still see where he went.
+ */
+private const val FADED = 0.22f
 
 /** As wide as a felt-tip: a hairline is not what a shaking hand can aim, or see afterwards. */
 private val INK = 14.dp

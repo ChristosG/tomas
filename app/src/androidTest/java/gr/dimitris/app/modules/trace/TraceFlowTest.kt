@@ -184,6 +184,52 @@ class TraceFlowTest {
         compose.onNodeWithText("Έτοιμο").assertIsDisplayed()
     }
 
+    /**
+     * His own name, which is level 3 and the same eight letters every time — so unlike the shuffled
+     * capitals above, what this asks is the same on every run: a whole word written by hand is the
+     * word, and another word written just as well over it is not.
+     */
+    @Test fun aDifferentWordOverHisNameIsNotHisName() {
+        val name = openPractice(level = 3)
+        assertEquals("Δημήτρης", name)
+        write(OTHER_WORD)
+        finish()
+
+        compose.waitUntil(TIMEOUT_MS) { compose.onAllNodes(hasText(TraceViewModel.TRY_AGAIN)).fetchSemanticsNodes().isNotEmpty() }
+        assertTrue("«$OTHER_WORD» passed as «$name»", attempts().isEmpty())
+    }
+
+    /**
+     * The letter written correctly after a try that missed, without wiping the paper first.
+     *
+     * The ink of the miss stays on the paper — faded — so he can see where he went, and it is not
+     * marked again: what he writes after a nudge is a new attempt. Without that, the wrong first try
+     * is still half the ink on the paper, a perfect second try is refused for it, and a man who
+     * cannot ask why is left pressing «Έτοιμο» over a letter he has just written correctly. Twice
+     * wrong and then right, because two misses used to be unrecoverable without «Καθάρισε».
+     */
+    @Test fun theLetterWrittenCorrectlyAfterTwoMissesIsAPass() {
+        val letter = openPractice(level = 1)
+        val wrong = if (letter == WRONG_LETTER) "Ο" else WRONG_LETTER
+        write(wrong)
+        finish()
+        compose.waitUntil(TIMEOUT_MS) { compose.onAllNodes(hasText(TraceViewModel.TRY_AGAIN)).fetchSemanticsNodes().isNotEmpty() }
+        write(wrong)
+        finish()
+        compose.waitUntil(TIMEOUT_MS) { compose.onAllNodes(hasText(TraceViewModel.TRY_AGAIN)).fetchSemanticsNodes().isNotEmpty() }
+        assertTrue("a miss was recorded as an attempt", attempts().isEmpty())
+
+        // Now the letter, written over the two tries that missed. Nothing is wiped.
+        write(letter)
+        finish()
+
+        compose.waitUntil(TIMEOUT_MS) { attempts().isNotEmpty() }
+        val attempt = attempts().single()
+        assertEquals("the letter written after two misses was refused", Outcome.ASSISTED, attempt.outcome)
+        assertTrue("the two tries that missed are not on the row", attempt.detail.contains("\"tries\":2"))
+        compose.onNodeWithText("Επόμενο").assertIsDisplayed()
+    }
+
     /** Sets the level, opens free practice and returns what it is asking him to write. */
     private fun openPractice(level: Int): String {
         runBlocking { graph.settings.setTraceLevel(level) }
@@ -238,6 +284,9 @@ class TraceFlowTest {
 
         /** The letter that comes nearest to being another one, which is why it is the test. */
         const val WRONG_LETTER = "Κ"
+
+        /** Not his name, and near enough to it that the shape is what refuses it. */
+        const val OTHER_WORD = "Δημητρα"
         const val TIMEOUT_MS = 20_000L
     }
 }

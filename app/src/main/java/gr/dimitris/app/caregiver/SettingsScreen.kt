@@ -196,7 +196,7 @@ fun SettingsScreen(onBack: () -> Unit) {
                 StrictnessChip("Αυστηρό", TraceStrictness.STRICT, strictness, Modifier.weight(1f)) { scope.launch { graph.settings.setTraceStrictness(it) } }
             }
             Text(
-                "Πόσο κοντά στο γράμμα πρέπει να γράψει. Στο «Κανονικό» άλλο γράμμα δεν περνά.",
+                "Πόσο κοντά στο γράμμα πρέπει να γράψει. Άλλο γράμμα δεν περνά σε καμία ρύθμιση.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

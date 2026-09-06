@@ -123,7 +123,9 @@ fun TraceScreen(count: Int, sessionId: String?, onDone: () -> Unit, onLeave: () 
                     // his first try, and hand back the word he was about to write from memory.
                     BigButton(
                         "Έτοιμο", onClick = vm::check, tone = ButtonTone.Success,
-                        enabled = s.strokes.isNotEmpty() && !(recall && s.templateVisible),
+                        // The ink of the try he is on, not everything on the paper: after a nudge
+                        // the faded strokes are there to look at, not to hand in again.
+                        enabled = s.fresh.isNotEmpty() && !(recall && s.templateVisible),
                         modifier = Modifier.weight(1f),
                     )
                 }
@@ -171,7 +173,10 @@ fun TraceScreen(count: Int, sessionId: String?, onDone: () -> Unit, onLeave: () 
                 // missed. The strokes stay where they are and the letter comes back under them.
                 if (missed) {
                     Text(
-                        TraceViewModel.TRY_AGAIN, style = MaterialTheme.typography.headlineMedium,
+                        // Too much ink is its own sentence: «Ξανά» over a letter he has coloured in
+                        // tells him to do it again, and doing it again is not what is wanted.
+                        if (s.score?.tooMuchInk == true) TraceViewModel.TOO_MUCH_INK else TraceViewModel.TRY_AGAIN,
+                        style = MaterialTheme.typography.headlineMedium,
                         color = MaterialTheme.colorScheme.secondary,
                     )
                 }
@@ -205,6 +210,9 @@ fun TraceScreen(count: Int, sessionId: String?, onDone: () -> Unit, onLeave: () 
                             // is that it is not.
                             showTemplate = s.templateVisible && s.template.isNotEmpty(),
                             strokes = s.strokes,
+                            // The tries that have already been marked, drawn faded: he can see where
+                            // he went, and what he writes now is judged on its own.
+                            judged = s.judged,
                             onStroke = vm::addStroke,
                             modifier = Modifier.requiredSize(width, if (word) width / WORD_BOX else width)
                                 .align(Alignment.TopCenter)

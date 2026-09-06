@@ -27,12 +27,19 @@ data class TemplatePoint(val pt: Pt, val segment: Int)
  *
  * [meanDistance] is how far off the letter he was, in pixels. Nothing is decided by it any more —
  * it is kept because it is the one number a person reading the attempt rows can picture.
+ *
+ * [tooMuchInk] is the one refusal that is not about shape: he drew far more line than the letter is
+ * long. Colouring a letter in reaches every piece of it and stays on the ink, so it scores 1.00 and
+ * 1.00 without a letter ever having been written; and because precision is a ratio, enough scribble
+ * inside the ink dilutes a wrong letter until it passes. It is a different sentence on the screen,
+ * because "do less" is not the same advice as "look at the shape".
  */
 data class TraceScore(
     val coverage: Float,
     val precision: Float,
     val meanDistance: Float,
     val passed: Boolean,
+    val tooMuchInk: Boolean = false,
 )
 
 /**
@@ -42,6 +49,11 @@ data class TraceScore(
  * fingertip and his fingertip is the same size on a capital and on a word of eight letters. That is
  * the whole of the field-test bug: a «Κ» drawn over an «Η» passed, because on a big letter a
  * tolerance of a tenth of its height is most of the paper.
+ *
+ * A fingertip is not the whole answer either, and [Strictness.of] holds the other half: on a word of
+ * eight letters, 12 dp is a quarter of a letter, and the wrong letter would pass again — so the two
+ * distances are also capped by the letter's own size. Big letters are marked in fingertips, small
+ * ones in letters, and neither is marked in whichever unit happens to be kinder.
  */
 enum class TraceStrictness(
     val toleranceDp: Float,
@@ -49,7 +61,7 @@ enum class TraceStrictness(
     val minCoverage: Float,
     val minPrecision: Float,
 ) {
-    LOOSE(16f, 18f, 0.70f, 0.70f),
+    LOOSE(16f, 18f, 0.75f, 0.75f),
     NORMAL(12f, 14f, 0.80f, 0.80f),
     STRICT(8f, 10f, 0.90f, 0.90f);
 
@@ -82,13 +94,26 @@ data class Strictness(
          */
         const val RECALL_ALLOWANCE = 0.15f
 
-        fun of(level: TraceStrictness, density: Float, recall: Boolean): Strictness {
+        /**
+         * [templateHeight] is how tall the letter came out, in the same pixels. It is a ceiling on
+         * both distances, and it is what keeps the marking honest at word scale.
+         *
+         * A capital fills the paper: 12 dp is 5 % of it, the cap never binds, and he is marked in
+         * fingertips as he should be. «Δημήτρης» in the same box is eight letters wide, each of them
+         * a fifth of that height — and there 12 dp is a quarter of a letter and 14 dp of reach is
+         * wider than one, so every wrong shape lands "near enough" to something. The cap is one
+         * segment's length, the same twelfth of the letter that a piece of it is: whatever he is
+         * writing, "near" can never mean further than the pieces the letter is counted in.
+         */
+        fun of(level: TraceStrictness, density: Float, templateHeight: Float, recall: Boolean): Strictness {
             // A density of zero is a screen nobody can write on; 1 keeps the numbers meaning dp.
             val scale = if (density > 0f) density else 1f
             val give = if (recall) RECALL_ALLOWANCE else 0f
+            // No letter, no ceiling: there is nothing to be judged at the scale of.
+            val cap = if (templateHeight > 0f) templateHeight * TraceScorer.SEGMENT_FRACTION else Float.MAX_VALUE
             return Strictness(
-                tolerancePx = level.toleranceDp * scale,
-                coverRadiusPx = level.coverRadiusDp * scale,
+                tolerancePx = minOf(level.toleranceDp * scale, cap),
+                coverRadiusPx = minOf(level.coverRadiusDp * scale, cap),
                 minCoverage = (level.minCoverage - give).coerceAtLeast(0f),
                 minPrecision = (level.minPrecision - give).coerceAtLeast(0f),
             )
@@ -122,11 +147,21 @@ object TraceScorer {
     const val SEGMENT_FRACTION = 0.12f
 
     /**
-     * However short a contour is, it is still cut into this many pieces. Without it the ring of an
-     * «Ο» drawn a third of the way round would count as a third of one segment out of one, and a
-     * third of a letter would be a pass.
+     * A contour at least one segment long is cut into this many pieces however short it is, so that
+     * the ring of an «Ο» gone a third of the way round reads as a third of a letter and not as one
+     * piece out of one. A contour *shorter* than a segment — the tonos over an «ή», a dot — is one
+     * piece: eight pieces of an accent would make the accent a third of the word.
      */
     const val MIN_SEGMENTS = 8
+
+    /**
+     * How much more line than the letter itself he may draw before it stops being writing. The
+     * letter as a line is about half its outline (up one side of every stroke and back down the
+     * other), and two and a half times that leaves room for a hand that goes over a stroke twice,
+     * overshoots every corner, and joins letters — while a scribble that colours the letter in, or a
+     * wrong letter padded out until its bad ink is a minority, is several times over it.
+     */
+    const val INK_BUDGET = 2.5f
 
     /**
      * How far apart his path is cut into points before it is judged, as a fraction of the tolerance.
@@ -162,9 +197,9 @@ object TraceScorer {
             val at = FloatArray(contour.size)
             for (i in 1 until contour.size) at[i] = at[i - 1] + dist(contour[i - 1], contour[i])
             val length = at.last()
-            // A contour of no length at all — one point, or a hundred on the same pixel — is one
-            // piece: it is a mark on the letter, not eight pieces of it that can never be reached.
-            val pieces = if (length <= 0f) 1 else maxOf(MIN_SEGMENTS, ceil(length / target).toInt())
+            // A contour shorter than one segment — an accent, a dot, or a hundred points on the
+            // same pixel — is one piece: it is a mark on the letter, not eight pieces of it.
+            val pieces = if (length < target) 1 else maxOf(MIN_SEGMENTS, ceil(length / target).toInt())
             for (i in contour.indices) {
                 val piece = if (length <= 0f) 0 else ((at[i] / length) * pieces).toInt().coerceIn(0, pieces - 1)
                 out += TemplatePoint(contour[i], next + piece)
@@ -172,6 +207,22 @@ object TraceScorer {
             next += pieces
         }
         return out
+    }
+
+    /**
+     * Roughly how long the letter is *as a line* — what a pen would travel to write it once.
+     *
+     * It is estimated as half the outline, and the estimate is the whole of it: a glyph's outline is
+     * a closed loop round every stroke, so it goes up one side of the stem and back down the other,
+     * and half of it is one trip along the middle. It over-estimates a little (the caps at the ends
+     * of a stroke are counted, and both sides of a stroke are longer than the middle of a curve) and
+     * it is generous where it is wrong, which is the right way round for a budget nobody should hit
+     * by writing carefully. Zero when there is no letter, which switches the budget off.
+     */
+    fun skeleton(contours: List<List<Pt>>): Float {
+        var total = 0f
+        for (contour in contours) for (i in 1 until contour.size) total += dist(contour[i - 1], contour[i])
+        return total / 2f
     }
 
     /**
@@ -188,49 +239,81 @@ object TraceScorer {
      * there are points enough to fill them, and a piece with nothing in it is not a piece he missed.
      * And where his finger is on the ink, the radius is measured from the edge of the letter rather
      * than from his finger: both edges of a stem are the one stroke he is drawing down the middle of.
+     *
+     * [skeletonPx] is how long the letter is as a line (see [skeleton]); drawing more than
+     * [INK_BUDGET] times that is refused as [TraceScore.tooMuchInk] before the shape is judged at
+     * all. Zero switches the budget off, for a caller with no letter to measure against.
+     *
+     * Long enough to be worth a background thread on a big word: it is one distance per ink point
+     * per outline point, and the caller runs it off the main one.
      */
     fun score(
         strokes: List<List<Pt>>,
         template: List<TemplatePoint>,
         inside: (Pt) -> Boolean,
         s: Strictness,
+        skeletonPx: Float,
     ): TraceScore {
         if (template.isEmpty()) return NOTHING
 
         // Evenly spaced along each stroke, so speed stops being part of the mark.
         val step = (s.tolerancePx * STEP_OF_TOLERANCE).coerceAtLeast(MIN_STEP)
         val walked = ArrayList<Pt>()
-        for (stroke in strokes) if (stroke.isNotEmpty()) walked += resample(stroke, step)
+        var drawn = 0f
+        for (stroke in strokes) {
+            if (stroke.isEmpty()) continue
+            val even = resample(stroke, step)
+            // Measured along the path he actually walked, so a slow finger is not more ink.
+            for (i in 1 until even.size) drawn += dist(even[i - 1], even[i])
+            walked += even
+        }
         // Nothing drawn is not a bad attempt, it is no attempt.
         if (walked.isEmpty()) return NOTHING
+        // Refused before the shape is judged: colouring the letter in reaches every piece of it and
+        // never leaves the ink, and no number below could tell it from writing.
+        if (skeletonPx > 0f && drawn > INK_BUDGET * skeletonPx) {
+            return TraceScore(0f, 0f, Float.MAX_VALUE, passed = false, tooMuchInk = true)
+        }
 
         val present = HashSet<Int>()
         for (t in template) present += t.segment
         val covered = HashSet<Int>()
-        // Kept between points rather than rebuilt: one letter is ~700 points and one trace ~200.
+        // Kept between points rather than rebuilt, and only filled for the points that need it: one
+        // letter is ~700 points and one trace ~200.
         val away = FloatArray(template.size)
 
         var total = 0.0
         var onLetter = 0
         for (p in walked) {
-            var best = Float.MAX_VALUE
-            for (i in template.indices) {
-                val d = dist(p, template[i].pt)
-                away[i] = d
-                if (d < best) best = d
-            }
             // On the ink costs nothing: a line down the middle of a stroke is the letter, written.
             val onInk = inside(p)
-            total += if (onInk) 0f else best
-            if (onInk || best <= s.tolerancePx) onLetter++
-            // How far this one point of his reaches. The radius is measured from the edge of the
-            // letter, not from the middle of it: a man told «γράψε Η» draws one line down the
-            // middle of the stem, and the *far* edge of that stem is not a piece of the letter he
-            // missed — it is the other side of the very stroke he is standing on. Without this the
-            // stem of a big capital, 17 dp of ink across on the device's own font, would be wider
-            // than the 14 dp he is allowed, and writing the letter correctly would fail.
-            val reach = if (onInk) best + s.coverRadiusPx else s.coverRadiusPx
-            for (i in template.indices) if (away[i] <= reach) covered += template[i].segment
+            var best = Float.MAX_VALUE
+            if (onInk) {
+                // The radius is measured from the edge of the letter, not from the middle of it: a
+                // man told «γράψε Η» draws one line down the middle of the stem, and the *far* edge
+                // of that stem is not a piece of the letter he missed — it is the other side of the
+                // very stroke he is standing on. Without this the stem of a big capital, 17 dp of
+                // ink across on the device's own font, would be wider than the 14 dp he is allowed,
+                // and writing the letter correctly would fail. It costs the second pass below,
+                // because the reach is not known until the nearest edge is.
+                for (i in template.indices) {
+                    val d = dist(p, template[i].pt)
+                    away[i] = d
+                    if (d < best) best = d
+                }
+                val reach = best + s.coverRadiusPx
+                for (i in template.indices) if (away[i] <= reach) covered += template[i].segment
+                onLetter++
+            } else {
+                // Off the letter: the reach is the plain radius, so one pass answers both questions.
+                for (t in template) {
+                    val d = dist(p, t.pt)
+                    if (d < best) best = d
+                    if (d <= s.coverRadiusPx) covered += t.segment
+                }
+                total += best
+                if (best <= s.tolerancePx) onLetter++
+            }
         }
 
         val coverage = covered.size.toFloat() / present.size

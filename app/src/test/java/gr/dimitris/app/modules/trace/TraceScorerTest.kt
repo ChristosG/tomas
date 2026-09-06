@@ -63,6 +63,16 @@ class TraceScorerTest {
     /** An «Ο», down the middle of the ring. */
     private val handO = listOf(wobbled(circle(400f, 500f, 375f)))
 
+    /**
+     * The same «Η» and the same «Κ» at the size a letter really is inside a word: 120 px tall with a
+     * 9 px stroke, which is what «Δημήτρης» comes out as in the box a capital fills alone. At that
+     * size 12 dp of tolerance is a third of the letter and 14 dp of reach is wider than the whole of
+     * it, so without a ceiling on the two distances every wrong shape lands "near enough".
+     */
+    private val small = h.scaled(WORD_SCALE)
+    private val handSmallH = handH.map { stroke -> stroke.map { scale(it, WORD_SCALE) } }
+    private val handSmallK = handK.map { stroke -> stroke.map { scale(it, WORD_SCALE) } }
+
     // ---- the letter he was asked for ---------------------------------------------------------
 
     @Test fun `an H written the way a hand writes it passes at every strictness`() {
@@ -88,6 +98,41 @@ class TraceScorerTest {
         assertFalse("a «Κ» passed as an «Η» even at Χαλαρό", score(handK, h, TraceStrictness.LOOSE).passed)
     }
 
+    /**
+     * The same two letters at word scale, which is where levels 3, 4 and 5 live. A tolerance in
+     * fingertips alone is a quarter of a letter here, and the «Κ» passed as an «Η» exactly as it did
+     * on a capital before this task — the same bug, the other way up. The distances are therefore
+     * capped by the letter's own size, and the wrong letter is refused at every strictness.
+     */
+    @Test fun `a K over an H the size of a letter in a word is not an H either`() {
+        assertTrue("the word-scale letter is not word-scale: ${small.height}", small.height in 100f..140f)
+        for (level in TraceStrictness.entries) {
+            val right = score(handSmallH, small, level)
+            assertTrue("writing a letter of a word by hand was refused at $level: $right", right.passed)
+            val wrong = score(handSmallK, small, level)
+            assertFalse("a «Κ» passed as an «Η» at word scale at $level: $wrong", wrong.passed)
+        }
+    }
+
+    /**
+     * The ceiling is a ceiling and not a rescaling: on a capital, where a fingertip is already the
+     * smaller of the two, nothing about the marking moves.
+     */
+    @Test fun `the ceiling never touches a letter big enough to be marked in fingertips`() {
+        for (level in TraceStrictness.entries) {
+            val capital = Strictness.of(level, DENSITY, h.height, recall = false)
+            assertEquals("$level lost its tolerance on a capital", level.toleranceDp * DENSITY, capital.tolerancePx, 0.001f)
+            assertEquals("$level lost its reach on a capital", level.coverRadiusDp * DENSITY, capital.coverRadiusPx, 0.001f)
+
+            // And on a letter the size of one inside a word, both are one piece of the letter.
+            val inAWord = Strictness.of(level, DENSITY, small.height, recall = false)
+            assertEquals(small.height * TraceScorer.SEGMENT_FRACTION, inAWord.tolerancePx, 0.001f)
+            assertEquals(small.height * TraceScorer.SEGMENT_FRACTION, inAWord.coverRadiusPx, 0.001f)
+        }
+        // No letter at all: nothing to be judged at the scale of, so no ceiling.
+        assertEquals(12f, Strictness.of(TraceStrictness.NORMAL, 1f, 0f, recall = false).tolerancePx, 0.001f)
+    }
+
     /** The other one he drew: an «Ο» over a «Κ». Nothing about it is the letter. */
     @Test fun `an O drawn over the K is not a K, however loosely it is marked`() {
         for (level in TraceStrictness.entries) {
@@ -98,7 +143,9 @@ class TraceScorerTest {
 
     /** Half a letter is precise everywhere and is still half a letter: coverage alone refuses it. */
     @Test fun `half the letter is refused for what it is missing, not for where it is`() {
-        val half = listOf(handH[0], handH[2])   // the left stem and the crossbar; no right stem
+        // One stroke, never leaving the ink: down the left stem, back up it, and out along the
+        // crossbar. Everything he drew is the letter; it is only half of the letter.
+        val half = listOf(wobbled(line(Pt(180f, 100f), Pt(180f, 900f)) + line(Pt(180f, 900f), Pt(180f, 500f)) + line(Pt(180f, 500f), Pt(620f, 500f))))
         val s = score(half, h, TraceStrictness.NORMAL)
         assertTrue("half an «Η» counted as most of it: $s", s.coverage < TraceStrictness.NORMAL.minCoverage)
         assertTrue("the half he did write was marked as off the letter: $s", s.precision >= TraceStrictness.NORMAL.minPrecision)
@@ -117,6 +164,43 @@ class TraceScorerTest {
         assertFalse("an «Ο» a fifth too big passed: $s", s.passed)
         // And the same «Ο» at its own size is the letter, or the test above would prove nothing.
         assertTrue("writing «Ο» by hand was refused: ${score(handO, o, TraceStrictness.NORMAL)}", score(handO, o, TraceStrictness.NORMAL).passed)
+    }
+
+    /**
+     * Colouring the letter in is not writing it. A zigzag that never leaves the ink touches every
+     * piece of the letter and is on it everywhere, so both numbers say 1.00 and no shape was ever
+     * drawn; and because precision is a ratio, a wrong letter padded out with enough scribble
+     * inside the ink would be diluted until it passed. The length of what he drew is what refuses
+     * both, and it says so in its own words on the screen.
+     */
+    @Test fun `colouring the letter in is not writing it`() {
+        // Every stroke of the «Η» filled in with a zigzag that never leaves the ink.
+        val zigzag = listOf(
+            scribble(Pt(180f, 100f), Pt(180f, 900f)),
+            scribble(Pt(620f, 100f), Pt(620f, 900f)),
+            scribble(Pt(180f, 500f), Pt(620f, 500f)),
+        )
+        val plain = TraceScorer.score(
+            zigzag, h.template, h.inside,
+            Strictness.of(TraceStrictness.NORMAL, DENSITY, h.height, false), skeletonPx = 0f,
+        )
+        assertEquals("a scribble inside the ink missed a piece of the letter", 1f, plain.coverage, 0.001f)
+        assertEquals("a scribble inside the ink left the letter", 1f, plain.precision, 0.001f)
+        assertTrue("without a budget, colouring the letter in is a pass: $plain", plain.passed)
+
+        val filled = score(zigzag, h, TraceStrictness.NORMAL)
+        assertTrue("a scribble inside the ink was not called out as too much ink: $filled", filled.tooMuchInk)
+        assertFalse("a scribble inside the ink passed: $filled", filled.passed)
+
+        // The «Κ» diluted: the wrong letter plus a pass of scribbling inside the ink.
+        val padded = score(handK + zigzag, h, TraceStrictness.NORMAL)
+        assertFalse("a «Κ» padded out with scribble passed as an «Η»: $padded", padded.passed)
+
+        // And a hand that writes the letter is nowhere near the budget: the ratio is reported so
+        // the margin is a number somebody can look at rather than a hope.
+        val used = inkRatio(handH, h)
+        assertTrue("writing «Η» by hand used $used of the letter's own length", used < TraceScorer.INK_BUDGET * 0.85f)
+        assertFalse("writing «Η» by hand was called too much ink", score(handH, h, TraceStrictness.NORMAL).tooMuchInk)
     }
 
     @Test fun `a single tap is never a letter`() {
@@ -145,23 +229,55 @@ class TraceScorerTest {
         assertFalse("a «Κ» passed as an «Η» from memory", score(handK, h, TraceStrictness.NORMAL, recall = true).passed)
     }
 
+    /**
+     * Where the precision line actually lives — the only test here whose ink is neither all on the
+     * letter nor mostly off it. A hand that wanders a fingertip off is still writing the letter; a
+     * crossbar well out of place is the letter he was asked for at «Κανονικό» and not at «Αυστηρό»,
+     * which is exactly what the caregiver's setting is for; a stem in the wrong place is not the
+     * letter at any setting.
+     */
+    @Test fun `a hand that wanders off the letter is marked on how far it went`() {
+        // The crossbar drawn 30 px low: outside the ink, inside the tolerance.
+        val nearly = listOf(handH[0], handH[1], wobbled(line(Pt(180f, 530f), Pt(620f, 530f))))
+        val near = score(nearly, h, TraceStrictness.NORMAL)
+        assertEquals("a crossbar a fingertip low left the letter", 1f, near.precision, 0.001f)
+        assertTrue("a crossbar a fingertip low was refused: $near", near.passed)
+
+        // The crossbar drawn 90 px low: a fifth of his ink is off the letter.
+        val low = listOf(handH[0], handH[1], wobbled(line(Pt(180f, 590f), Pt(620f, 590f))))
+        val ordinary = score(low, h, TraceStrictness.NORMAL)
+        assertTrue("a crossbar 90 px low is not near the line at all: $ordinary", ordinary.precision in 0.80f..0.90f)
+        assertTrue("a crossbar 90 px low was refused at Κανονικό: $ordinary", ordinary.passed)
+        assertFalse("a crossbar 90 px low passed at Αυστηρό", score(low, h, TraceStrictness.STRICT).passed)
+
+        // The right stem drawn 80 px out: two fifths of his ink is off the letter, and no setting
+        // calls that the letter he was asked for.
+        val astray = listOf(handH[0], wobbled(line(Pt(700f, 100f), Pt(700f, 900f))), handH[2])
+        for (level in TraceStrictness.entries) {
+            val far = score(astray, h, level)
+            assertTrue("a stem 80 px out of place counted as on the letter: $far", far.precision < 0.75f)
+            assertFalse("a stem 80 px out of place passed at $level: $far", far.passed)
+        }
+    }
+
     // ---- the strictness table ----------------------------------------------------------------
 
     @Test fun `the three strictnesses are the numbers the caregiver was promised`() {
         val d = DENSITY
-        val loose = Strictness.of(TraceStrictness.LOOSE, d, recall = false)
+        val tall = h.height
+        val loose = Strictness.of(TraceStrictness.LOOSE, d, tall, recall = false)
         assertEquals(16f * d, loose.tolerancePx, 0.001f)
         assertEquals(18f * d, loose.coverRadiusPx, 0.001f)
-        assertEquals(0.70f, loose.minCoverage, 0.0001f)
-        assertEquals(0.70f, loose.minPrecision, 0.0001f)
+        assertEquals(0.75f, loose.minCoverage, 0.0001f)
+        assertEquals(0.75f, loose.minPrecision, 0.0001f)
 
-        val normal = Strictness.of(TraceStrictness.NORMAL, d, recall = false)
+        val normal = Strictness.of(TraceStrictness.NORMAL, d, tall, recall = false)
         assertEquals(12f * d, normal.tolerancePx, 0.001f)
         assertEquals(14f * d, normal.coverRadiusPx, 0.001f)
         assertEquals(0.80f, normal.minCoverage, 0.0001f)
         assertEquals(0.80f, normal.minPrecision, 0.0001f)
 
-        val strict = Strictness.of(TraceStrictness.STRICT, d, recall = false)
+        val strict = Strictness.of(TraceStrictness.STRICT, d, tall, recall = false)
         assertEquals(8f * d, strict.tolerancePx, 0.001f)
         assertEquals(10f * d, strict.coverRadiusPx, 0.001f)
         assertEquals(0.90f, strict.minCoverage, 0.0001f)
@@ -171,8 +287,8 @@ class TraceScorerTest {
     }
 
     @Test fun `recall takes fifteen points off both lines and nothing off the distances`() {
-        val plain = Strictness.of(TraceStrictness.NORMAL, DENSITY, recall = false)
-        val memory = Strictness.of(TraceStrictness.NORMAL, DENSITY, recall = true)
+        val plain = Strictness.of(TraceStrictness.NORMAL, DENSITY, h.height, recall = false)
+        val memory = Strictness.of(TraceStrictness.NORMAL, DENSITY, h.height, recall = true)
         assertEquals(plain.tolerancePx, memory.tolerancePx, 0.001f)
         assertEquals(plain.coverRadiusPx, memory.coverRadiusPx, 0.001f)
         assertEquals(0.65f, memory.minCoverage, 0.0001f)
@@ -181,10 +297,10 @@ class TraceScorerTest {
 
     /** The dp are the point: the same setting is more pixels on a denser screen, and never zero. */
     @Test fun `the tolerances are fingertips, so they follow the screen`() {
-        assertEquals(12f, Strictness.of(TraceStrictness.NORMAL, 1f, recall = false).tolerancePx, 0.001f)
-        assertEquals(48f, Strictness.of(TraceStrictness.NORMAL, 4f, recall = false).tolerancePx, 0.001f)
+        assertEquals(12f, Strictness.of(TraceStrictness.NORMAL, 1f, h.height, recall = false).tolerancePx, 0.001f)
+        assertEquals(48f, Strictness.of(TraceStrictness.NORMAL, 4f, h.height, recall = false).tolerancePx, 0.001f)
         // A density of zero is a screen nobody can write on; the numbers still mean dp.
-        assertEquals(12f, Strictness.of(TraceStrictness.NORMAL, 0f, recall = false).tolerancePx, 0.001f)
+        assertEquals(12f, Strictness.of(TraceStrictness.NORMAL, 0f, h.height, recall = false).tolerancePx, 0.001f)
     }
 
     @Test fun `a stored strictness that is no longer one of the three reads as Κανονικό`() {
@@ -207,9 +323,15 @@ class TraceScorerTest {
         val long = line(Pt(0f, 0f), Pt(1200f, 0f), step = 6f)
         assertEquals(13, TraceScorer.segments(listOf(long), height).map { it.segment }.distinct().size)
 
-        // A line 60 long is under one piece, and is still cut into eight.
-        val short = line(Pt(0f, 0f), Pt(60f, 0f), step = 6f)
-        assertEquals(TraceScorer.MIN_SEGMENTS, TraceScorer.segments(listOf(short), height).map { it.segment }.distinct().size)
+        // A line 100 long is one piece and a bit, so the eight-piece floor holds: a third of a ring
+        // has to read as a third of a letter.
+        val ring = line(Pt(0f, 0f), Pt(100f, 0f), step = 6f)
+        assertEquals(TraceScorer.MIN_SEGMENTS, TraceScorer.segments(listOf(ring), height).map { it.segment }.distinct().size)
+
+        // A mark shorter than one piece — the tonos over an «ή» — is one piece, not eight. Eight
+        // would make an accent a third of the word, and a word written without it would fail.
+        val accent = line(Pt(0f, 0f), Pt(60f, 0f), step = 6f)
+        assertEquals(1, TraceScorer.segments(listOf(accent), height).map { it.segment }.distinct().size)
     }
 
     /** The hole in an «Ο» is pieces of its own, or going round the outside would be the whole letter. */
@@ -245,7 +367,7 @@ class TraceScorerTest {
 
     /** No letter to trace — a box too small to fit one — is not something he can fail at either. */
     @Test fun `an empty template refuses rather than divides by zero`() {
-        val s = TraceScorer.score(handH, emptyList(), h.inside, Strictness.of(TraceStrictness.NORMAL, DENSITY, false))
+        val s = TraceScorer.score(handH, emptyList(), h.inside, Strictness.of(TraceStrictness.NORMAL, DENSITY, h.height, false), h.skeleton)
         assertFalse(s.passed)
         assertEquals(0f, s.coverage, 0f)
     }
@@ -256,7 +378,8 @@ class TraceScorerTest {
             strokes = listOf(line(Pt(180f, 100f), Pt(180f, 900f))),
             template = h.template,
             inside = { false },
-            s = Strictness.of(TraceStrictness.NORMAL, DENSITY, false),
+            s = Strictness.of(TraceStrictness.NORMAL, DENSITY, h.height, false),
+            skeletonPx = h.skeleton,
         )
         // A little under half, because at the two ends of the stem the nearest outline is its cap.
         assertEquals("half the width of the ink", STROKE / 2f, s.meanDistance, 4f)
@@ -339,7 +462,10 @@ class TraceScorerTest {
         glyph: TestGlyph,
         level: TraceStrictness,
         recall: Boolean = false,
-    ): TraceScore = TraceScorer.score(strokes, glyph.template, glyph.inside, Strictness.of(level, DENSITY, recall))
+    ): TraceScore = TraceScorer.score(
+        strokes, glyph.template, glyph.inside,
+        Strictness.of(level, DENSITY, glyph.height, recall), glyph.skeleton,
+    )
 }
 
 // ---- the paper this is all drawn on -----------------------------------------------------------
@@ -356,8 +482,51 @@ private const val OUTLINE_STEP = 6f
 /** How often his finger reports a point. */
 private const val INK_STEP = 5f
 
-/** How far off the line a hand wanders. */
+/** How far off the line a hand wanders, and how slowly it sways back: about once every 50 px. */
 private const val WOBBLE_DP = 3f
+private const val SWAY = 0.6f
+
+/**
+ * How much smaller one letter of a word is than the same letter written alone: «Δημήτρης» in the box
+ * a capital fills by itself comes out about a seventh of the height. The 800 px «Η» becomes 120 px.
+ */
+private const val WORD_SCALE = 0.15f
+
+/** How much line he drew, as a multiple of the letter's own length. See [TraceScorer.INK_BUDGET]. */
+private fun inkRatio(strokes: List<List<Pt>>, glyph: TestGlyph): Float {
+    val step = (TraceStrictness.NORMAL.toleranceDp * DENSITY * TraceScorer.STEP_OF_TOLERANCE)
+    var drawn = 0f
+    for (stroke in strokes) {
+        val even = TraceScorer.resample(stroke, step)
+        for (i in 1 until even.size) drawn += hypot(even[i].x - even[i - 1].x, even[i].y - even[i - 1].y)
+    }
+    return drawn / glyph.skeleton
+}
+
+/**
+ * One stroke coloured in: a zigzag from [from] to [to] that stays inside a bar [STROKE] across, the
+ * way a man who has been told to fill the letter in would move.
+ */
+private fun scribble(from: Pt, to: Pt): List<Pt> {
+    val length = hypot(to.x - from.x, to.y - from.y)
+    val ux = (to.x - from.x) / length
+    val uy = (to.y - from.y) / length
+    val out = mutableListOf<Pt>()
+    var at = 0f
+    var side = 1f
+    val swing = STROKE / 2f - 5f
+    // Close enough together to actually fill the stroke, which is what colouring in means.
+    val along = 12f
+    while (at <= length) {
+        out += Pt(from.x + ux * at - uy * swing * side, from.y + uy * at + ux * swing * side)
+        side = -side
+        at += along
+    }
+    return out
+}
+
+/** The same point, moved towards the origin: a letter the size of one inside a word. */
+private fun scale(p: Pt, by: Float) = Pt(p.x * by, p.y * by)
 
 /** A letter, as bars of ink: the outline of each bar is a contour, and the ink is their union. */
 private fun glyph(vararg bars: Bar) = TestGlyph(
@@ -375,6 +544,14 @@ private fun ring(cx: Float, cy: Float, outer: Float, inner: Float) = TestGlyph(
 
 private class TestGlyph(val height: Float, val contours: List<List<Pt>>, val inside: (Pt) -> Boolean) {
     val template: List<TemplatePoint> = TraceScorer.segments(contours, height)
+    val skeleton: Float = TraceScorer.skeleton(contours)
+
+    /** The same letter, smaller: the size one letter of a word comes out at in the same box. */
+    fun scaled(by: Float) = TestGlyph(
+        height = height * by,
+        contours = contours.map { c -> c.map { scale(it, by) } },
+        inside = { p -> inside(Pt(p.x / by, p.y / by)) },
+    )
 }
 
 /** One stroke of ink: a rectangle [width] across, from [from] to [to], with flat ends. */
@@ -425,11 +602,15 @@ private fun circle(cx: Float, cy: Float, r: Float, step: Float = OUTLINE_STEP): 
 }
 
 /**
- * The same stroke as a hand would leave it: ±3 dp off the line, back and forth. A machine line down
+ * The same stroke as a hand would leave it: swaying ±3 dp off the line and back. A machine line down
  * the exact middle of the ink would prove that a machine can trace; what has to hold is that a
  * shaking hand's line is read as the letter.
+ *
+ * A sway and not a sawtooth. A hand that crossed the line every 5 px would draw twice the length of
+ * the stroke it was following, which is not what a hand does and would make the ink-length budget
+ * meaningless — it has to be able to tell a shaking hand from someone colouring the letter in.
  */
 private fun wobbled(points: List<Pt>): List<Pt> = points.mapIndexed { i, p ->
-    val off = ((i % 7) - 3) * (WOBBLE_DP * DENSITY / 3f)
+    val off = sin(i * SWAY) * WOBBLE_DP * DENSITY
     Pt(p.x + off, p.y + off)
 }
