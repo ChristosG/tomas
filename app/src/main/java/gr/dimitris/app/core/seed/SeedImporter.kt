@@ -21,7 +21,11 @@ class SeedImporter(private val graph: AppGraph) {
             // Every item the device has ever had, not only the seeded ones: see newEntries.
             for (entry in newEntries(manifest, onDevice(graph.db.items().all()))) {
                 val image = entry.image?.let { copyAsset("seed/$it") }
-                graph.items.save(Item(text = entry.text, kind = runCatching { ItemKind.valueOf(entry.kind) }.getOrDefault(ItemKind.WORD),
+                // The id comes from the word, not from a fresh UUID: see SeedIds. Two phones that
+                // import the same vocabulary have to write the same row, or sync merges the two
+                // copies onto both of them and Dimitris gets every word twice.
+                graph.items.save(Item(id = SeedIds.item(entry.text), text = entry.text,
+                    kind = runCatching { ItemKind.valueOf(entry.kind) }.getOrDefault(ItemKind.WORD),
                     category = runCatching { Category.valueOf(entry.category) }.getOrDefault(Category.CUSTOM),
                     imagePath = image?.let { graph.files.relativize(it) }, source = Source.SEED))
             }

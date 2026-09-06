@@ -25,7 +25,15 @@ class ScriptSeedImporter(private val graph: AppGraph) {
             val manifest = graph.app.assets.open("seed/scripts.json").bufferedReader().use { ScriptSeedManifest.parse(it.readText()) }
             if (graph.settings.scriptsSeedVersion.first() >= manifest.version) return@withContext
             for (s in newScripts(manifest, onDevice(graph.db.scripts().allScripts()))) {
-                graph.scripts.save(null, s.title, s.lines.map { LineDraft(speakerOf(it.speaker), it.text) }, source = Source.SEED)
+                // Fixed ids, derived from the dialogue and the turn's place in it: two phones that
+                // import the same bundled dialogue write the same rows, so sync merges them instead
+                // of leaving Dimitris «Στην καφετέρια» three times over. See SeedIds.
+                graph.scripts.save(
+                    SeedIds.script(s.title), s.title,
+                    s.lines.map { LineDraft(speakerOf(it.speaker), it.text) },
+                    source = Source.SEED,
+                    seedIds = { i -> SeedIds.line(s.title, i) to SeedIds.lineItem(s.title, i) },
+                )
             }
             graph.settings.setScriptsSeedVersion(manifest.version)
         } catch (ce: CancellationException) {

@@ -211,4 +211,35 @@ class ScriptRepositoryTest {
         assertEquals("ηχογράφηση", take.readText())
         assertEquals(1, recordingsDir.listFiles()!!.size)
     }
+
+    /**
+     * Two phones importing the same bundled dialogue have to write the same rows, or the first sync
+     * merges both copies onto both of them. The ids come from the dialogue, not from a fresh UUID —
+     * see [gr.dimitris.app.core.seed.SeedIds] — and this is the seam that carries them through.
+     */
+    @Test fun `a seeded dialogue writes the ids it was given, and writes them the same twice`() = runTest {
+        val ids: (Int) -> Pair<String, String> = { i -> "line-$i" to "line-item-$i" }
+        val first = repo.save("script-1", "Καφές", coffee, source = Source.SEED, seedIds = ids)
+
+        assertEquals("script-1", first.id)
+        val loaded = repo.load("script-1")!!
+        assertEquals(listOf("line-0", "line-1", "line-2", "line-3"), loaded.lines.map { it.first.id })
+        assertEquals(listOf("line-item-0", "line-item-1", "line-item-2", "line-item-3"), loaded.lines.map { it.second.id })
+
+        // The other phone: its own empty database, the same manifest, the same rows.
+        val otherItems = ItemRepository(FakeItemDao(), FakeRecordingDao()) { clock }
+        val other = ScriptRepository(FakeScriptDao(), otherItems) { clock }
+        val theirs = other.save("script-1", "Καφές", coffee, source = Source.SEED, seedIds = ids)
+
+        assertEquals(first.id, theirs.id)
+        assertEquals(loaded.lines.map { it.first.id }, other.load("script-1")!!.lines.map { it.first.id })
+    }
+
+    /** A dialogue a caregiver typed still gets fresh ids, and two of them are never the same. */
+    @Test fun `a caregiver's own dialogue gets ids of its own`() = runTest {
+        val one = repo.save(null, "Δικό της", coffee)
+        val two = repo.save(null, "Δικό της 2", coffee)
+        assertTrue(one.id != two.id)
+        assertEquals(4, repo.load(one.id)!!.lines.map { it.first.id }.distinct().size)
+    }
 }

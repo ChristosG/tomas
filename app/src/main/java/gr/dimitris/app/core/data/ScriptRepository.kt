@@ -62,10 +62,24 @@ class ScriptRepository(
      * moves or deletes the file — and it recognises the take it already holds, so no second row is
      * written for it.
      */
-    suspend fun save(id: String?, title: String, lines: List<LineDraft>, source: Source = Source.CAREGIVER): Script {
+    suspend fun save(
+        id: String?,
+        title: String,
+        lines: List<LineDraft>,
+        source: Source = Source.CAREGIVER,
+        /**
+         * Fixed ids for the rows a *seeded* dialogue creates — (line id, item id) by position, from
+         * [gr.dimitris.app.core.seed.SeedIds]. Null for a dialogue a caregiver typed, which gets
+         * fresh ones. Only new rows use it: a turn kept from a previous save keeps its own id.
+         */
+        seedIds: ((Int) -> Pair<String, String>)? = null,
+    ): Script {
         val t = clock()
         val existing = id?.let { scripts.get(it) }
-        val script = (existing ?: Script(title = title.trim(), source = source, createdAt = t)).copy(title = title.trim(), updatedAt = t)
+        // A caller that asked for a particular id and has no row yet gets that id, not a fresh one:
+        // it is how two phones importing the same bundled dialogue write the same row.
+        val script = (existing ?: Script(id = id ?: newId(), title = title.trim(), source = source, createdAt = t))
+            .copy(title = title.trim(), updatedAt = t)
         // The turns as they stand, so an unchanged one can be recognised and kept. Each is claimed
         // at most once: two identical turns in one dialogue keep one row each, not the same row.
         val reusable = if (existing == null) mutableListOf() else scripts.linesFor(script.id)
@@ -73,18 +87,21 @@ class ScriptRepository(
             .toMutableList()
         val rows = lines.filter { it.text.isNotBlank() }.mapIndexed { i, d ->
             val text = d.text.trim()
+            val fixed = seedIds?.invoke(i)
             val kept = reusable.firstOrNull { (line, item) -> line.speaker == d.speaker && item.text == text }
             val itemId = if (kept != null) {
                 reusable.remove(kept)
                 kept.second.id
             } else {
-                items.save(Item(text = text, kind = ItemKind.SCRIPT_LINE, category = Category.CUSTOM, source = source)).id
+                items.save(Item(id = fixed?.second ?: newId(), text = text, kind = ItemKind.SCRIPT_LINE,
+                    category = Category.CUSTOM, source = source)).id
             }
             if (d.recordingFile != null) items.addRecording(itemId, d.recordingFile, d.recordingMs, Who.CAREGIVER)
             // The kept row's own id, so nothing that pointed at the turn has to be rewritten; the
             // soft-delete below is undone by this very upsert, inside the same transaction.
             kept?.first?.copy(position = i, updatedAt = t, deleted = false)
-                ?: ScriptLine(scriptId = script.id, position = i, speaker = d.speaker, itemId = itemId, createdAt = t, updatedAt = t)
+                ?: ScriptLine(id = fixed?.first ?: newId(), scriptId = script.id, position = i, speaker = d.speaker,
+                    itemId = itemId, createdAt = t, updatedAt = t)
         }
         inTransaction {
             scripts.upsertScript(script)
