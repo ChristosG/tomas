@@ -53,3 +53,81 @@
 ### Task 3: Phase 8 verification
 
 - [ ] Full suites green; on the phone enable "Δεξί χέρι" in settings, play a full round with the right hand, confirm the target visibly shrinks after hits; Σφάλματα empty. Append notes; commit `docs(phase8): verification notes`.
+
+---
+
+## Verification notes
+
+Phase 8 ran as tasks 1–2 (`3ff7d7f`, `47804e6`, on the carried session-cap fix `e57829c`), a review,
+and a fix wave (`3709f67`, `22cfb6b`, `85b63f6`, plus the two phase-7 residuals `58fbd8d`, `8cd577f`).
+Emulator `Medium_Phone_API_36`, 1080×2400 @ 420 dpi (density 2.625), `emulator-5554` throughout.
+
+**Suites.** 298 unit tests green (`./gradlew -q testDebugUnitTest`); 67 instrumented tests green
+after `pm clear` (`connectedDebugAndroidTest`), of which 3 are `ArcadeFlowTest` and 6 `TraceFlowTest`.
+`error_logs` empty after every run.
+
+**The module.** Four games, always in the same order, no timers anywhere: press the circle twelve
+times, follow four lines, push five balls into their ring, open three photos with two fingers and
+close them again. One attempt row per game (`arcade:tap` and its three siblings) carrying hits,
+misses and the size he ended at; CORRECT at seven tries in ten, ASSISTED below it, SKIPPED when he
+passes. Off until a caregiver switches it on, with the physio's note under the switch.
+
+**Adaptive size, measured off the screen** (tap game, 12 targets caught in a row after three
+deliberate misses):
+
+| | Size |
+|---|---|
+| Start | 96 dp (252 px) |
+| After 3 misses | 130 dp — the ceiling — and the target had not moved |
+| Hits 1…12 | 336, 308, 284, 260, 240, 224, 204, 188, 172, 156, 144, 132 px (×0.92 each) |
+| Kept for tomorrow | the game's own key in the settings, read back at 47.8 dp |
+
+**What the review changed.** Two Important findings, both in the drag game, and both about the app
+telling him one thing and marking another:
+
+1. The ring was drawn at the live size but accepted at the size captured when the gesture block was
+   installed. After two misses the ring on screen was 208 dp wide and the accepted drop radius was
+   still 154 dp: a ball put plainly inside the circle got a buzz. Measured after the fix — ring
+   radius grown to 272 px, ball released 240 px from its centre, i.e. outside the old 201 px radius
+   — the drop counts (`shots/09`).
+2. At large sizes the ball could be placed inside its own ring, five rounds won by touching the
+   glass and a CORRECT row that overstated his arm. The ball is now placed clear of the ring by both
+   radii; `TargetPlacerTest` proves it at every size from 40 to 130 dp on a 360 × 480 dp board, and
+   every placement measured on the device was 519–751 px apart against a required 314–406.
+
+Nine Minors: a failed grab now buzzes instead of being silent, a press off the paper is no longer an
+aimed miss (measured: three taps outside the board left the target at 248 px, one tap inside it grew
+it to 288 px), a target that grew past the edge comes back on to the board, the pinch game no longer
+counts fingers spreading as they lift off a photo it has just accepted, every caught target shows a
+tick beside the counter (`shots/10`), the rotation ignores modules he skipped his way through, the
+`planToday` join is unit-tested with fake modules, and the Today grid's comment says seven.
+
+**Per-game difficulty.** The four games shared one size, so a good round of tapping walked the pinch
+game down with it. One key each now: after a sitting where only the drag game was finished, the
+store held `arcade_target_dp_drag = 85.68` and nothing else, and the tap game still opened at 96 dp
+(`shots/10`). A device that stored the old single size hands it to every game that has not been
+played since.
+
+**Also checked by hand.** The tile appears on Today only once the switch is on (`shots/01`, `02`);
+free practice ends on «Τέλος για σήμερα. Μπράβο το δεξί!» (`shots/07`); a session containing the
+arcade goes straight to the summary with the honest count — «Έκανες 1 άσκηση σήμερα: Δεξί χέρι.»
+after one game played and three skipped (`shots/08`); the rows read back
+`arcade:tap SKIPPED`, `arcade:trace SKIPPED`, `arcade:drag ASSISTED {"hits":5,"misses":3}`,
+`arcade:pinch SKIPPED` — 5 of 8 is below the seven-in-ten line, and the app said so without saying
+it to him.
+
+**The session cap** (carried phase-2 fix): with all seven modules enabled the session row read
+`plannedModules = WORDCOACH,NUMBERS,SINGSAY,SCRIPTS`, `plannedItemCount = 13`. The cap is per
+session, and the Today flow is one session a day; a second «Ξεκίνα» the same afternoon gives him the
+modules he has not done yet rather than a locked door.
+
+**Phase-7 residuals fixed here.** «Το είδα» now takes the ink with the letter, so the cheap route
+through level 5 — trace the visible word, then hide it — is closed (`shots/11`, `12`, and
+`TraceFlowTest` writes after the hide); the writing paper keeps a real 200 dp floor with
+`requiredSize`, the slot scrolling only in that extreme; a single letter's canvas is square, so a
+slot change scales the box by one factor and his ink no longer drifts sideways off the glyph.
+
+**Left for Chris.** The rounds — twelve taps, four lines, five balls, three photos — and the 70 %
+line are a programmer's guesses. So is the pinch game's "open to twice and back": it is the hardest
+thing in the app for that hand, and the physio may want it out of the rotation entirely. The module
+stays off until she says otherwise.
