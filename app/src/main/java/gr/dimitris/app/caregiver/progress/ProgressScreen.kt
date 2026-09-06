@@ -28,6 +28,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import gr.dimitris.app.LocalAppGraph
+import gr.dimitris.app.caregiver.insights.AdviceSummary
 import gr.dimitris.app.core.data.ModuleId
 import gr.dimitris.app.modules.numbers.NumberProgression
 import gr.dimitris.app.modules.sentences.SentenceTemplates
@@ -39,12 +40,10 @@ import gr.dimitris.app.ui.theme.Sizes
 import java.time.DayOfWeek
 import java.time.Instant
 import java.time.ZoneId
-import java.util.Locale
 import kotlin.math.roundToInt
 
 private const val WEEK = 7
 private val stepperWidth = 96.dp
-private val greek: Locale = Locale.forLanguageTag("el")
 
 /** What a section says when there is nothing in it yet. Never a scolding, never a zero. */
 private const val NOTHING = "Τίποτα ακόμα."
@@ -55,7 +54,7 @@ private const val NOTHING = "Τίποτα ακόμα."
  * one thing a caregiver may want to change the moment they see the numbers.
  */
 @Composable
-fun ProgressScreen(onBack: () -> Unit) {
+fun ProgressScreen(onBack: () -> Unit, onAdvice: () -> Unit = {}) {
     val graph = LocalAppGraph.current
     val context = LocalContext.current
     val vm: ProgressViewModel = viewModel { ProgressViewModel(graph) }
@@ -65,28 +64,29 @@ fun ProgressScreen(onBack: () -> Unit) {
     val names = remember(graph) {
         graph.modules.associate { it.id to it.titleGreek } + (ModuleId.TALKBOARD to "Μίλα")
     }
-    val levels = listOf(
-        "Αριθμοί" to state.numbersLevel,
-        "Προτάσεις" to state.sentencesLevel,
-        "Γράψε" to state.traceLevel,
+    val levels = linkedMapOf(
+        "Αριθμοί (${NumberProgression.MIN_LEVEL}–${NumberProgression.MAX_LEVEL})" to state.numbersLevel,
+        "Προτάσεις (${SentenceTemplates.MIN_LEVEL}–${SentenceTemplates.MAX_LEVEL})" to state.sentencesLevel,
+        "Γράψε (${TraceViewModel.MIN_LEVEL}–${TraceViewModel.MAX_LEVEL})" to state.traceLevel,
     )
 
     DimitrisScreen(
         title = "Πρόοδος",
         onBack = onBack,
         bottom = {
-            // Task 3 wires this up. Until a key is saved there is nothing to ask with, and a button
-            // that fails silently is worse than one that says why it cannot.
-            BigButton("Ρώτα τον Claude", onClick = {}, enabled = false, icon = Icons.Rounded.AutoAwesome)
-            Text(
-                "Βάλε κλειδί στις ρυθμίσεις",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            // The advice screen says the rest: it shows the summary, asks for it and reads the
+            // answer out. Disabled until there is something to summarise, which is also the only
+            // state in which asking could say anything at all.
+            BigButton(
+                "Ρώτα τον Claude",
+                onClick = onAdvice,
+                enabled = state.progress != null,
+                icon = Icons.Rounded.AutoAwesome,
             )
             Spacer(Modifier.height(Sizes.gapSmall))
             QuietButton("Εξαγωγή αναφοράς", icon = Icons.Rounded.Share, onClick = {
                 val p = state.progress ?: return@QuietButton
-                val text = report(p, state.insights, names, levels, zone)
+                val text = AdviceSummary.build(p, state.insights, levels, names, zone)
                 val send = Intent(Intent.ACTION_SEND).apply {
                     type = "text/plain"
                     putExtra(Intent.EXTRA_SUBJECT, "Πρόοδος — Δημήτρης")
@@ -252,59 +252,4 @@ private fun dayLabel(day: Long, zone: ZoneId): String =
 private fun dateLabel(at: Long, zone: ZoneId): String {
     val d = Instant.ofEpochMilli(at).atZone(zone).toLocalDate()
     return "${d.dayOfMonth}/${d.monthValue}"
-}
-
-/**
- * The shared report. Plain Greek text, no pictures, no recordings, no file paths — it goes out
- * through whatever app the caregiver picks, so it carries nothing that is not already words.
- *
- * Task 3 replaces this with `AdviceSummary.build`, which is the same text with the sections the
- * advisor's prompt expects.
- */
-internal fun report(
-    p: Progress,
-    insights: List<String>,
-    names: Map<ModuleId, String>,
-    levels: List<Pair<String, Int>>,
-    zone: ZoneId,
-): String = buildString {
-    appendLine("Πρόοδος — Δημήτρης")
-    appendLine("Περίοδος: ${fullDate(p.from, zone)} – ${fullDate(p.to, zone)}")
-    appendLine()
-    appendLine("Σύνολο: ${minutesLine(p.days.sumOf { it.minutes })}, ${attemptsLine(p.days.sumOf { it.attempts })}")
-    appendLine(streakLine(p.streakDays))
-    appendLine("Μαθημένες λέξεις: ${p.mastered}")
-    appendLine()
-    appendLine("Ανά άσκηση")
-    if (p.modules.isEmpty()) appendLine("- $NOTHING")
-    p.modules.forEach { m ->
-        appendLine(
-            "- ${names[m.module] ?: m.module.name}: ${attemptsLine(m.attempts)}, ${(m.accuracy * 100).roundToInt()}% σωστά " +
-                "(σωστά ${m.correct}, με βοήθεια ${m.assisted}, προσπέρασε ${m.skipped})"
-        )
-    }
-    appendLine()
-    appendLine("Πόση βοήθεια ανά εβδομάδα (λιγότερο = καλύτερα)")
-    if (p.cueTrend.isEmpty()) appendLine("- $NOTHING")
-    p.cueTrend.forEach { w -> appendLine("- ${dateLabel(w.weekStart, zone)}: ${String.format(greek, "%.1f", w.meanCue)}") }
-    appendLine()
-    appendLine("Δύσκολες λέξεις")
-    if (p.mostSkipped.isEmpty()) appendLine("- $NOTHING")
-    p.mostSkipped.forEach { (text, n) -> appendLine("- $text: ${timesLine(n)}") }
-    appendLine()
-    appendLine("Στον πίνακα λέει πιο συχνά")
-    if (p.mostUsedTalk.isEmpty()) appendLine("- $NOTHING")
-    p.mostUsedTalk.forEach { (text, n) -> appendLine("- $text: ${timesLine(n)}") }
-    appendLine()
-    appendLine("Επίπεδα")
-    levels.forEach { (label, value) -> appendLine("- $label: $value") }
-    appendLine()
-    appendLine("Τι βλέπω")
-    if (insights.isEmpty()) appendLine("- $NOTHING")
-    insights.forEach { appendLine("- $it") }
-}
-
-private fun fullDate(at: Long, zone: ZoneId): String {
-    val d = Instant.ofEpochMilli(at).atZone(zone).toLocalDate()
-    return "${d.dayOfMonth}/${d.monthValue}/${d.year}"
 }

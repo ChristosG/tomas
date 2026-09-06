@@ -3,6 +3,7 @@ package gr.dimitris.app
 import android.content.Context
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.room.withTransaction
+import gr.dimitris.app.caregiver.insights.ClaudeAdvisor
 import gr.dimitris.app.core.audio.ImageStore
 import gr.dimitris.app.core.audio.MediaFiles
 import gr.dimitris.app.core.audio.Player
@@ -14,6 +15,7 @@ import gr.dimitris.app.core.data.ItemRepository
 import gr.dimitris.app.core.data.ScriptRepository
 import gr.dimitris.app.core.log.ErrorReporter
 import gr.dimitris.app.core.scheduler.Scheduler
+import gr.dimitris.app.core.secrets.SecretStore
 import gr.dimitris.app.core.settings.Settings
 import gr.dimitris.app.core.speech.AndroidSpeechToText
 import gr.dimitris.app.core.speech.AndroidTextToSpeech
@@ -62,6 +64,18 @@ class AppGraph(context: Context) {
 
     val feedback = Feedback(app)
     val errors = ErrorReporter(scope) { db.errorLogs() }
+
+    /**
+     * The caregiver's own Anthropic key, encrypted. Constructing this touches nothing; the file is
+     * opened on the first read, which is why every read of it happens off the main thread.
+     */
+    val secrets = SecretStore(app)
+
+    /**
+     * Optional, and off until a caregiver saves a key. It is the only thing in the app that talks to
+     * anything outside the phone, and only when someone taps the button on the advice screen.
+     */
+    val advisor = ClaudeAdvisor(secrets) { settings.claudeModel.first() }
 
     /** Always built from the current db, so it survives a backup import. */
     val items: ItemRepository get() = ItemRepository(db.items(), db.recordings(), files::relativize)

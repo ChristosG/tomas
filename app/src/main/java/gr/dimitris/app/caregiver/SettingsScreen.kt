@@ -15,26 +15,33 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.VolumeUp
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import gr.dimitris.app.LocalAppGraph
 import gr.dimitris.app.core.data.ModuleId
+import gr.dimitris.app.core.secrets.SecretStore
 import gr.dimitris.app.core.settings.Settings
 import gr.dimitris.app.ui.components.DimitrisScreen
 import gr.dimitris.app.ui.components.QuietButton
 import gr.dimitris.app.ui.theme.Sizes
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /** One of the two hands, as a 72dp target: a chip the size of a chip is not a caregiver's tap either. */
 @Composable
@@ -147,6 +154,9 @@ fun SettingsScreen(onBack: () -> Unit) {
             }
             Spacer(Modifier.height(Sizes.gap))
 
+            ClaudeSection()
+            Spacer(Modifier.height(Sizes.gap))
+
             Text("Σχετικά", style = MaterialTheme.typography.titleLarge)
             Text("Η εφαρμογή του Δημήτρη, έκδοση $version. Φτιαγμένη από φίλους, για έναν φίλο.", style = MaterialTheme.typography.bodyMedium)
             Spacer(Modifier.height(Sizes.gapSmall))
@@ -156,4 +166,101 @@ fun SettingsScreen(onBack: () -> Unit) {
             )
         }
     }
+}
+
+/**
+ * The optional advisor's key and model. Everything else in this app works with the phone in flight
+ * mode; this section is the one place that turns that off, so it says what it does and it is the
+ * last thing before «Σχετικά» rather than the first thing a caregiver meets.
+ *
+ * The key is never shown. What is on screen is [SecretStore.mask] of it — enough to tell two keys
+ * apart, useless to anyone reading over a shoulder — and the field it is typed into is a password
+ * field. Reading and writing the encrypted file both happen off the main thread.
+ */
+@Composable
+private fun ClaudeSection() {
+    val graph = LocalAppGraph.current
+    val scope = rememberCoroutineScope()
+    val storedModel by graph.settings.claudeModel.collectAsStateWithLifecycle(initialValue = Settings.DEFAULT_CLAUDE_MODEL)
+    var saved by remember { mutableStateOf<String?>(null) }   // the masked stored key, null = none
+    var draft by remember { mutableStateOf("") }
+    var note by remember { mutableStateOf("") }
+    // Null until the field is touched, and after that the field owns itself: a text field fed
+    // straight from a DataStore flow fights the keyboard, because the value that comes back is
+    // trimmed and arrives a frame late, and the caret jumps. Emptying it is how you get the default
+    // back, which is why an empty draft must not be refilled from the flow either.
+    var modelDraft by remember { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(Unit) {
+        saved = withContext(Dispatchers.IO) { runCatching { graph.secrets.getClaudeKey() }.getOrNull() }
+            ?.let { SecretStore.mask(it) }
+    }
+
+    Text("Claude", style = MaterialTheme.typography.titleLarge)
+    Text(
+        "Προαιρετικό. Με κλειδί, η οθόνη «Πρόοδος» μπορεί να ζητήσει συμβουλές. Στέλνονται μόνο λόγια — ποτέ φωνή ή φωτογραφίες.",
+        style = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+    Spacer(Modifier.height(Sizes.gapSmall))
+    Text(
+        saved?.let { "Αποθηκευμένο κλειδί: $it" } ?: "Δεν υπάρχει κλειδί.",
+        style = MaterialTheme.typography.bodyLarge,
+    )
+    Spacer(Modifier.height(Sizes.gapSmall))
+    OutlinedTextField(
+        value = draft,
+        onValueChange = { draft = it; note = "" },
+        label = { Text("Κλειδί") },
+        singleLine = true,
+        visualTransformation = PasswordVisualTransformation(),
+        modifier = Modifier.fillMaxWidth().heightIn(min = Sizes.touchMin),
+    )
+    Spacer(Modifier.height(Sizes.gapSmall))
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+        QuietButton("Αποθήκευση κλειδιού", enabled = draft.isNotBlank(), modifier = Modifier.weight(1f), onClick = {
+            val typed = draft
+            scope.launch {
+                val ok = withContext(Dispatchers.IO) { runCatching { graph.secrets.setClaudeKey(typed) }.isSuccess }
+                if (ok) {
+                    saved = SecretStore.mask(typed)
+                    draft = ""
+                    note = "Το κλειδί αποθηκεύτηκε."
+                } else {
+                    note = "Δεν μπόρεσα να αποθηκεύσω το κλειδί."
+                }
+            }
+        })
+        Spacer(Modifier.width(Sizes.gapSmall))
+        QuietButton("Διαγραφή", enabled = saved != null, modifier = Modifier.weight(1f), onClick = {
+            scope.launch {
+                val ok = withContext(Dispatchers.IO) { runCatching { graph.secrets.setClaudeKey(null) }.isSuccess }
+                if (ok) {
+                    saved = null
+                    draft = ""
+                    note = "Το κλειδί διαγράφηκε."
+                } else {
+                    note = "Δεν μπόρεσα να διαγράψω το κλειδί."
+                }
+            }
+        })
+    }
+    if (note.isNotEmpty()) Text(note, style = MaterialTheme.typography.bodyMedium)
+
+    Spacer(Modifier.height(Sizes.gapSmall))
+    OutlinedTextField(
+        value = modelDraft ?: storedModel,
+        onValueChange = { typed ->
+            modelDraft = typed
+            scope.launch { graph.settings.setClaudeModel(typed) }
+        },
+        label = { Text("Μοντέλο") },
+        singleLine = true,
+        modifier = Modifier.fillMaxWidth().heightIn(min = Sizes.touchMin),
+    )
+    Text(
+        "Άφησέ το κενό για ${Settings.DEFAULT_CLAUDE_MODEL}.",
+        style = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
 }

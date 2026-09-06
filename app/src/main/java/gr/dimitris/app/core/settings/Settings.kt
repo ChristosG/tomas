@@ -84,6 +84,22 @@ class Settings(private val store: DataStore<Preferences>) {
     }
 
     /**
+     * Which Claude model the optional advisor asks. A caregiver never has to touch it; it is here
+     * so a newer model can be tried on the phone without a new build, and so a model that stops
+     * being served is one text field away from being fixed.
+     *
+     * Blank — or a value from a restored backup that is no longer a model id — reads as
+     * [DEFAULT_CLAUDE_MODEL] rather than as an empty request the API would refuse.
+     */
+    val claudeModel: Flow<String> = store.data.map { p -> p[CLAUDE_MODEL]?.trim()?.takeIf { it.isNotEmpty() } ?: DEFAULT_CLAUDE_MODEL }
+    suspend fun setClaudeModel(model: String) {
+        store.edit { p ->
+            val trimmed = model.trim()
+            if (trimmed.isEmpty()) p.remove(CLAUDE_MODEL) else p[CLAUDE_MODEL] = trimmed
+        }
+    }
+
+    /**
      * Which modules Dimitris gets. Everything is on unless a caregiver switched it off, except the
      * few in [DEFAULT_OFF], which are on only once someone deliberately asks for them.
      *
@@ -117,6 +133,9 @@ class Settings(private val store: DataStore<Preferences>) {
         const val HAND_RIGHT = "RIGHT"
         val HANDS = setOf(HAND_LEFT, HAND_RIGHT)
 
+        /** The advisor's model unless a caregiver types another one. */
+        const val DEFAULT_CLAUDE_MODEL = "claude-opus-5"
+
         const val DEFAULT_RATE = 0.8f
         const val MIN_RATE = 0.5f
         const val MAX_RATE = 1.3f
@@ -129,6 +148,7 @@ class Settings(private val store: DataStore<Preferences>) {
         private val SENTENCES_LEVEL = intPreferencesKey("sentences_level")
         private val TRACE_LEVEL = intPreferencesKey("trace_level")
         private val TRACE_HAND = stringPreferencesKey("trace_hand")
+        private val CLAUDE_MODEL = stringPreferencesKey("claude_model")
 
         /** One target size per game: `arcade_target_dp_tap` and its three siblings. */
         private fun arcadeKey(game: ArcadeGame) = floatPreferencesKey("arcade_target_dp_${game.id}")

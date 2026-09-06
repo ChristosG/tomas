@@ -13,6 +13,7 @@ import gr.dimitris.app.caregiver.ErrorListScreen
 import gr.dimitris.app.caregiver.SettingsScreen
 import gr.dimitris.app.caregiver.content.ItemEditScreen
 import gr.dimitris.app.caregiver.content.ItemListScreen
+import gr.dimitris.app.caregiver.insights.AdviceScreen
 import gr.dimitris.app.caregiver.progress.ProgressScreen
 import gr.dimitris.app.caregiver.scripts.ScriptEditScreen
 import gr.dimitris.app.caregiver.scripts.ScriptListScreen
@@ -38,6 +39,7 @@ object Routes {
     const val NEW_SCRIPT = "new"
     fun scriptEdit(id: String?) = "caregiver/scripts/${id ?: NEW_SCRIPT}"
     const val PROGRESS = "caregiver/progress"
+    const val ADVICE = "caregiver/advice"
     const val ERRORS = "caregiver/errors"
     const val SETTINGS = "caregiver/settings"
     const val BACKUP = "caregiver/backup"
@@ -86,7 +88,10 @@ fun AppNav() {
                 val id = entry.arguments?.getString("scriptId")?.takeIf { it != Routes.NEW_SCRIPT }
                 ScriptEditScreen(scriptId = id, onClose = { nav.popBackStack() })
             }
-            composable(Routes.PROGRESS) { ProgressScreen(onBack = { nav.popBackStack() }) }
+            composable(Routes.PROGRESS) {
+                ProgressScreen(onBack = { nav.popBackStack() }, onAdvice = { nav.navigate(Routes.ADVICE) })
+            }
+            composable(Routes.ADVICE) { AdviceScreen(onBack = { nav.popBackStack() }) }
             composable(Routes.ERRORS) { ErrorListScreen(onBack = { nav.popBackStack() }) }
             composable(Routes.SETTINGS) { SettingsScreen(onBack = { nav.popBackStack() }) }
             composable(Routes.BACKUP) {
