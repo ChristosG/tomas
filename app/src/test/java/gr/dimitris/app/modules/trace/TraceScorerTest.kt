@@ -6,80 +6,103 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * What "near enough" has to mean, written as squares because a square can be reasoned about: it is
- * 100 tall, so every threshold below is also a percentage of it.
+ * What "near enough" has to mean, written as a square letter: a ring of ink 10 wide inside a box 100
+ * tall, so every number below is also a percentage of the letter's height.
  *
- * The two halves of the mark are pulled apart on purpose. A trace can be accurate and cover a
- * quarter of the letter (he wrote one stroke of it), or cover all of it and be nowhere near (he
- * wrote it 20 % too low). Both are refused, and each test says which of the two refused it.
+ * The square stands in for a stroke of a real letter, and the test that matters is the first one: a
+ * line down the *middle* of the ink — what a person draws when told to write a letter — has to pass.
+ * Measured against the outline alone it would be half a stem out everywhere.
+ *
+ * The thresholds are the ones the screen works out for a 100-tall letter: 10 px of mean error,
+ * 15 px of reach for counting a piece of the outline as gone over.
  */
 class TraceScorerTest {
-    /** The letter's height, and so the scale every threshold is a fraction of. */
     private val height = 100f
+    private val tolerance = 10f
+    private val radius = 15f
 
-    /** 8 % of the height by default: how far off the line he may be, on average. */
-    private val maxMean = 0.08f * height
-
-    /** A square, walked once round, sampled every unit: 400 points, 100 to a side. */
-    private val square = perimeter(side = height, step = 1f)
-
-    @Test fun `going round the letter itself is right on the line and covers all of it`() {
-        val s = TraceScorer.score(square, square, height)
-        // Not exactly zero: the path is cut into evenly spaced points, and a cut lands between two
-        // points of the outline. Half a pixel out on a letter 100 tall is not a wobble.
-        assertEquals(0f, s.meanDistance, 1f)
-        assertEquals(1f, s.coverage, 0.001f)
-        assertTrue("an exact trace was refused: $s", s.passed)
+    /** The letter: a square ring of ink, outer edge 0..100, inner edge 10..90. */
+    private val outline = square(0f, 100f, 1f) + square(10f, 90f, 1f)
+    private val inside: (Pt) -> Boolean = { p ->
+        p.x in 0f..100f && p.y in 0f..100f && !(p.x > 10f && p.x < 90f && p.y > 10f && p.y < 90f)
     }
 
-    @Test fun `one side of four is a quarter of the letter and not enough`() {
-        val s = TraceScorer.score(listOf(Pt(0f, 0f), Pt(height, 0f)), square, height)
-        // A little over a quarter: the corners of the two sides it meets are within reach of it too.
-        assertEquals(0.25f, s.coverage, 0.1f)
-        // It failed on coverage alone — the stroke he did draw was right on the line.
-        assertTrue("one side was off the line: $s", s.meanDistance < maxMean)
+    /** Down the middle of the ink, all the way round: what writing the letter looks like. */
+    private val middle = square(5f, 95f, 1f)
+
+    @Test fun `a line down the middle of the ink is the letter, not a miss`() {
+        val s = score(listOf(middle))
+        assertEquals("a centre-line trace is not on the letter", 0f, s.meanDistance, 0.01f)
+        assertEquals("a centre-line trace missed part of the letter", 1f, s.coverage, 0.001f)
+        assertTrue("writing the letter correctly was refused: $s", s.passed)
+    }
+
+    @Test fun `a scribble in the middle of the letter is not the letter`() {
+        // Inside the hole: on the paper, over the letter, and no part of the letter written.
+        val scribble = listOf(Pt(40f, 50f), Pt(60f, 50f), Pt(40f, 55f), Pt(60f, 55f))
+        val s = score(listOf(scribble))
+        assertTrue("a scribble covered the letter: $s", s.coverage < 0.6f)
+        assertFalse("a scribble passed: $s", s.passed)
+    }
+
+    @Test fun `the whole letter written a quarter of its height away is refused`() {
+        val off = middle.map { Pt(it.x + 25f, it.y + 25f) }
+        val s = score(listOf(off))
+        assertTrue("a letter written 25 % away scored as on the line: $s", s.meanDistance > tolerance)
+        assertFalse("a letter written 25 % away passed: $s", s.passed)
+    }
+
+    /** One side of four: right on the letter, and not the letter. Coverage refuses this one alone. */
+    @Test fun `one stroke of four is not enough of the letter`() {
+        val s = score(listOf(listOf(Pt(5f, 5f), Pt(95f, 5f))))
+        assertEquals("the stroke he did draw was off the ink", 0f, s.meanDistance, 0.01f)
+        assertTrue("a quarter of the letter counted as most of it: $s", s.coverage < 0.6f)
         assertFalse("a quarter of the letter passed: $s", s.passed)
     }
 
-    @Test fun `the whole letter written 20 percent of its height away is refused`() {
-        val off = square.map { Pt(it.x + 0.2f * height, it.y + 0.2f * height) }
-        val s = TraceScorer.score(off, square, height)
-        assertEquals(0.2f * height, s.meanDistance, 3f)
-        assertTrue("20 % off scored as near the line: $s", s.meanDistance > maxMean)
-        assertFalse("a letter written 20 % away passed: $s", s.passed)
-    }
-
     /**
-     * The distance half of the mark on its own. 10 % off is close enough for every point of the
-     * letter to have been gone over — coverage says yes — and still further off the line than the
-     * exercise allows.
+     * A letter written in separate strokes. Lifting the finger is not drawing: the gap between two
+     * strokes must never be walked over, or a «Κ» written as three lines would be marked as though
+     * he had dragged the pen back across the letter twice.
      */
-    @Test fun `covering the whole letter does not excuse being off the line`() {
-        val off = square.map { Pt(it.x + 0.1f * height, it.y + 0.1f * height) }
-        val s = TraceScorer.score(off, square, height)
-        assertTrue("10 % off missed the letter as well: $s", s.coverage > 0.6f)
-        assertTrue("10 % off scored as near the line: $s", s.meanDistance > maxMean)
-        assertFalse("10 % off the line passed: $s", s.passed)
+    @Test fun `the gap between two strokes is not something he drew`() {
+        val left = listOf(Pt(5f, 5f), Pt(5f, 95f))
+        val right = listOf(Pt(95f, 5f), Pt(95f, 95f))
+        val apart = score(listOf(left, right))
+        assertEquals("two strokes on the ink scored as off it", 0f, apart.meanDistance, 0.01f)
+
+        // The same points as one unbroken line: the jump across the hole is now something he "drew".
+        val joined = score(listOf(left + right))
+        assertTrue("joining the strokes cost nothing, so the gap was never walked", joined.meanDistance > 10f * apart.meanDistance + 1f)
     }
 
-    /** The same trace, marked the way level 5 marks it: written from memory, so judged more kindly. */
-    @Test fun `a kinder threshold passes what the strict one refuses`() {
-        val off = square.map { Pt(it.x + 0.1f * height, it.y + 0.1f * height) }
-        assertFalse(TraceScorer.score(off, square, height).passed)
-        assertTrue(TraceScorer.score(off, square, height, maxMeanFraction = 0.12f, minCoverage = 0.5f).passed)
+    /** Level 5's kinder line: written from memory, so less of the letter is asked for. */
+    @Test fun `a kinder coverage threshold passes what the strict one refuses`() {
+        val part = middle.take((middle.size * 0.4f).toInt())
+        val strict = score(listOf(part))
+        val kind = score(listOf(part), minCoverage = 0.4f)
+        assertFalse("two fifths of the letter passed at the ordinary line: $strict", strict.passed)
+        assertTrue("two fifths of the letter was refused at the recall line: $kind", kind.passed)
     }
 
     @Test fun `nothing drawn is no attempt, not a bad one`() {
-        val s = TraceScorer.score(emptyList(), square, height)
+        val s = score(emptyList())
         assertEquals(Float.MAX_VALUE, s.meanDistance, 0f)
         assertEquals(0f, s.coverage, 0f)
         assertFalse(s.passed)
+        assertFalse("an empty stroke is still nothing", score(listOf(emptyList())).passed)
     }
 
     /** No letter to trace — a box too small to fit one — is not something he can fail at either. */
     @Test fun `an empty template refuses rather than divides by zero`() {
-        assertFalse(TraceScorer.score(square, emptyList(), height).passed)
-        assertFalse(TraceScorer.score(square, square, 0f).passed)
+        assertFalse(TraceScorer.scoreStrokes(listOf(middle), emptyList(), height, inside, tolerance, radius).passed)
+        assertFalse(TraceScorer.scoreStrokes(listOf(middle), outline, 0f, inside, tolerance, radius).passed)
+    }
+
+    /** Without a mask the outline is all there is, and the centre line is half a stem away from it. */
+    @Test fun `with no ink to measure against, the outline is what is left`() {
+        val s = TraceScorer.score(middle, outline, height, tolerancePx = tolerance, coverageRadiusPx = radius)
+        assertEquals("half the width of the ink", 5f, s.meanDistance, 0.5f)
     }
 
     @Test fun `a 100 unit line steps into 11 points`() {
@@ -106,17 +129,20 @@ class TraceScorerTest {
         assertEquals(2, TraceScorer.resample(listOf(Pt(0f, 0f), Pt(0f, 0f), Pt(0f, 0f), Pt(10f, 0f)), 10f).size)
     }
 
+    private fun score(strokes: List<List<Pt>>, minCoverage: Float = 0.6f) =
+        TraceScorer.scoreStrokes(strokes, outline, height, inside, tolerance, radius, minCoverage)
+
     /** One turn round a square, clockwise from the top-left corner. */
-    private fun perimeter(side: Float, step: Float): List<Pt> {
+    private fun square(from: Float, to: Float, step: Float): List<Pt> {
         val out = mutableListOf<Pt>()
-        var d = 0f
-        while (d < side) { out += Pt(d, 0f); d += step }
-        d = 0f
-        while (d < side) { out += Pt(side, d); d += step }
-        d = 0f
-        while (d < side) { out += Pt(side - d, side); d += step }
-        d = 0f
-        while (d < side) { out += Pt(0f, side - d); d += step }
+        var d = from
+        while (d < to) { out += Pt(d, from); d += step }
+        d = from
+        while (d < to) { out += Pt(to, d); d += step }
+        d = from
+        while (d < to) { out += Pt(to - (d - from), to); d += step }
+        d = from
+        while (d < to) { out += Pt(from, to - (d - from)); d += step }
         return out
     }
 }

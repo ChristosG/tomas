@@ -78,13 +78,16 @@ fun TraceCanvas(
                 )
             }
     ) {
+        val width = INK.toPx()
+        for (stroke in strokes) ink(stroke, width)
+        ink(live, width)
+        // The letter goes on top of his writing, not under it. His line is as wide as a marker and
+        // the letter's is a thin one, so underneath it would disappear the moment he crossed it —
+        // and the whole exercise is following a line he can still see.
         if (showTemplate) {
             val radius = DOT.toPx()
             for (p in template) drawCircle(Palette.mist, radius = radius, center = Offset(p.x, p.y))
         }
-        val width = INK.toPx()
-        for (stroke in strokes) ink(stroke, width)
-        ink(live, width)
     }
 }
 

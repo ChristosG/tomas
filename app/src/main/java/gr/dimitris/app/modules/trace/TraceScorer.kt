@@ -8,23 +8,25 @@ data class Pt(val x: Float, val y: Float)
 /**
  * How close one traced letter came.
  *
- * [meanDistance] is how far off the line he was, in pixels; [coverage] is how much of the letter he
- * actually went over, 0..1. Both are needed: a careful scribble over the crossbar of an «Α» is
- * accurate and empty, and a fast loop around the whole letter covers everything and is nowhere near
- * it. [passed] is the two of them together.
+ * [meanDistance] is how far off the letter he was, in pixels; [coverage] is how much of it he
+ * actually went over, 0..1. Both are needed: a careful stroke down one stem of an «Α» is accurate
+ * and a quarter of a letter, and a fast loop around the whole thing covers everything and is nowhere
+ * near it. [passed] is the two of them together.
  */
 data class TraceScore(val meanDistance: Float, val coverage: Float, val passed: Boolean)
 
 /**
- * CHRIS: rewrite me. How good does a traced letter have to be? The thresholds below are a guess —
- * a therapist's guess is worth more, and TraceScorerTest describes the contract either way.
+ * CHRIS: rewrite me. How good does a traced letter have to be? The thresholds are handed in from the
+ * screen, which is where the guesses live; TraceScorerTest describes the contract either way.
  *
- * Pure: no Android, no Compose, no clock. It is handed the finger's path and the letter's outline,
- * both already in canvas pixels, and it answers one question — is that letter, near enough?
+ * Pure: no Android, no Compose, no clock. It is handed the finger's path, the letter's outline and
+ * the letter's ink, all in canvas pixels, and it answers one question — is that letter, near enough?
  *
- * "Near enough" is scaled to the letter, never to the screen: [templateHeight] is what every
- * threshold is a fraction of, so the same trace scores the same on a tablet and on a phone, and a
- * word set in small type is not judged as harshly as a capital that fills the box.
+ * The ink is the thing that makes it answerable. A man told «γράψε Κ» draws one line down the middle
+ * of each stroke; the outline is the two *edges* of every stroke, so measured against the outline his
+ * line is half a stem out everywhere and the better he writes the worse he scores. Measured against
+ * the ink — [inside] — a line down the middle costs nothing, which is what the exercise is asking
+ * for, and the outline is left doing the job it is good at: saying how much of the letter he covered.
  */
 object TraceScorer {
     /**
@@ -34,46 +36,64 @@ object TraceScorer {
      */
     const val RESAMPLE_FRACTION = 0.03f
 
-    /** How much wider than the distance threshold a template point's "he went over me" radius is. */
-    const val COVERAGE_SLACK = 1.5f
+    /** Nothing to judge: the worst distance there is, no coverage, and never a pass. */
+    private val NOTHING = TraceScore(Float.MAX_VALUE, 0f, false)
 
     /**
-     * [user] is every stroke he drew, in order, as one list of points; [template] is the letter's
-     * outline, and [templateHeight] its height in the same pixels.
+     * One stroke, judged. [user] is the points of a single unbroken line; see [scoreStrokes] for the
+     * usual case of a letter written in several.
      *
-     * [maxMeanFraction] is how far off the line he may be on average, as a fraction of the letter's
-     * height, and [minCoverage] how much of the letter he has to have gone over. Both are arguments
-     * because level 5 — writing from memory, with the letter no longer on the screen — is a harder
-     * exercise that has to be marked more kindly, or he would never leave it.
-     *
-     * Nothing drawn is not a bad attempt, it is no attempt: it scores the worst distance there is
-     * and no coverage, and never passes.
+     * [tolerancePx] is how far off the letter he may be on average and [coverageRadiusPx] how near a
+     * point of the outline he has to have come for it to count as gone over — both in pixels, worked
+     * out by the caller from the letter's height and the size of a fingertip, because "8 % of the
+     * height" is a hair's breadth on a word and half a stem on a capital.
      */
     fun score(
         user: List<Pt>,
         template: List<Pt>,
         templateHeight: Float,
-        maxMeanFraction: Float = 0.08f,
+        inside: (Pt) -> Boolean = { false },
+        tolerancePx: Float,
+        coverageRadiusPx: Float,
+        minCoverage: Float = 0.6f,
+    ): TraceScore = scoreStrokes(listOf(user), template, templateHeight, inside, tolerancePx, coverageRadiusPx, minCoverage)
+
+    /**
+     * Everything he drew, judged as what it is: separate strokes.
+     *
+     * Each is resampled on its own, so the gap between lifting his finger and putting it down again
+     * is never walked over — a «Κ» written as a stem and two diagonals must not be marked as though
+     * he had dragged a line back across the letter between them.
+     */
+    fun scoreStrokes(
+        strokes: List<List<Pt>>,
+        template: List<Pt>,
+        templateHeight: Float,
+        inside: (Pt) -> Boolean = { false },
+        tolerancePx: Float,
+        coverageRadiusPx: Float,
         minCoverage: Float = 0.6f,
     ): TraceScore {
-        if (user.isEmpty() || template.isEmpty() || templateHeight <= 0f) return TraceScore(Float.MAX_VALUE, 0f, false)
+        if (template.isEmpty() || templateHeight <= 0f) return NOTHING
 
-        // The path he drew, evenly spaced, so speed stops being part of the mark.
-        val walked = resample(user, (templateHeight * RESAMPLE_FRACTION).coerceAtLeast(MIN_STEP))
-        val maxMean = maxMeanFraction * templateHeight
-        val near = maxMean * COVERAGE_SLACK
+        // Evenly spaced along each stroke, so speed stops being part of the mark.
+        val step = (templateHeight * RESAMPLE_FRACTION).coerceAtLeast(MIN_STEP)
+        val walked = ArrayList<Pt>()
+        for (stroke in strokes) if (stroke.isNotEmpty()) walked += resample(stroke, step)
+        // Nothing drawn is not a bad attempt, it is no attempt.
+        if (walked.isEmpty()) return NOTHING
 
         var total = 0.0
-        for (p in walked) total += nearest(p, template)
+        for (p in walked) total += if (inside(p)) 0f else nearest(p, template)
         val meanDistance = (total / walked.size).toFloat()
 
-        // Counted over the template and not over his strokes: what is being asked is how much of the
+        // Counted over the letter and not over his strokes: what is being asked is how much of the
         // letter he went over, so a finger that went round the same corner twenty times covers one
         // corner, however many points it left behind.
-        val covered = template.count { t -> walked.any { dist(it, t) <= near } }
+        val covered = template.count { t -> walked.any { dist(it, t) <= coverageRadiusPx } }
         val coverage = covered.toFloat() / template.size
 
-        return TraceScore(meanDistance, coverage, meanDistance <= maxMean && coverage >= minCoverage)
+        return TraceScore(meanDistance, coverage, meanDistance <= tolerancePx && coverage >= minCoverage)
     }
 
     /**
@@ -82,7 +102,7 @@ object TraceScorer {
      *
      * The finger reports points as fast as the screen can read it, so what comes in is a crowd where
      * it went slowly and a scattering where it went fast. This makes the path even, which is what
-     * lets the mean below mean anything at all.
+     * lets the mean above mean anything at all.
      */
     fun resample(points: List<Pt>, step: Float): List<Pt> {
         if (points.size < 2 || step <= 0f) return points
@@ -109,7 +129,7 @@ object TraceScorer {
         return out
     }
 
-    /** Distance from [p] to the nearest point of [template]. Brute force: a letter is ~500 points. */
+    /** Distance from [p] to the nearest point of [template]. Brute force: a letter is ~700 points. */
     private fun nearest(p: Pt, template: List<Pt>): Float {
         var best = Float.MAX_VALUE
         for (t in template) {

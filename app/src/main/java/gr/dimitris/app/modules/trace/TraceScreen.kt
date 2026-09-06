@@ -1,6 +1,8 @@
 package gr.dimitris.app.modules.trace
 
 import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -35,6 +37,13 @@ const val TRACE_CANVAS_TAG = "trace-canvas"
 
 /** The letter or word he is being asked to write. Tagged so a test can read what it was given. */
 const val TRACE_TEXT_TAG = "trace-text"
+
+/**
+ * The same line while level 5 is hiding it. It keeps its place in the layout — the paper must not
+ * jump the moment he looks away — so the tag is the only way to tell "there" from "gone", and a test
+ * that could not tell them apart could not prove he ever wrote anything from memory.
+ */
+const val TRACE_TEXT_HIDDEN_TAG = "trace-text-hidden"
 
 /**
  * [count] letters or words, one per item the session budgeted for this module.
@@ -87,6 +96,9 @@ fun TraceScreen(count: Int, sessionId: String?, onDone: () -> Unit, onLeave: () 
     // Level 5 shows the letter once, then takes it away: from «Το είδα» on, he is writing it himself.
     val recall = s.level >= TraceViewModel.RECALL_LEVEL
 
+    /** True in the stretch of level 5 when he is on his own: no word, no letter, blank paper. */
+    val hidden = recall && !s.templateVisible
+
     DimitrisScreen(
         title = "Γράψε ${s.index + 1}/${s.total}",
         // Back is "I want out", not "I finished": the module drops what it was doing and says so.
@@ -103,7 +115,14 @@ fun TraceScreen(count: Int, sessionId: String?, onDone: () -> Unit, onLeave: () 
                     // Dead until there is ink to wipe, so it cannot be the button he learns to press.
                     QuietButton("Καθάρισε", onClick = vm::clear, enabled = s.strokes.isNotEmpty(), modifier = Modifier.weight(1f))
                     Spacer(Modifier.width(Sizes.gapSmall))
-                    BigButton("Έτοιμο", onClick = vm::check, tone = ButtonTone.Success, modifier = Modifier.weight(1f))
+                    // Dead until there is something to judge, and at level 5 until he has taken the
+                    // letter away: an «Έτοιμο» pressed over an empty canvas would nudge him, spend
+                    // his first try, and hand back the word he was about to write from memory.
+                    BigButton(
+                        "Έτοιμο", onClick = vm::check, tone = ButtonTone.Success,
+                        enabled = s.strokes.isNotEmpty() && !(recall && s.templateVisible),
+                        modifier = Modifier.weight(1f),
+                    )
                 }
                 Spacer(Modifier.height(Sizes.gapSmall))
                 QuietButton("Παράλειψη", onClick = vm::skip)
@@ -112,63 +131,90 @@ fun TraceScreen(count: Int, sessionId: String?, onDone: () -> Unit, onLeave: () 
     ) {
         if (s.text.isEmpty()) { Text("Ετοιμάζω...", style = MaterialTheme.typography.headlineMedium); return@DimitrisScreen }
 
-        Text(
-            if (s.hand == Settings.HAND_RIGHT) "Με το δεξί χέρι" else "Με το αριστερό χέρι",
-            style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        Spacer(Modifier.height(Sizes.gapSmall))
-
-        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-            // At level 5 the word goes on holding its place after «Το είδα» — invisible, not gone, so
-            // the canvas underneath does not jump up the screen the moment he takes his eyes off it.
-            Text(
-                s.text, style = MaterialTheme.typography.displayLarge, maxLines = 1, textAlign = TextAlign.Start,
-                modifier = Modifier.weight(1f).alpha(if (recall && !s.templateVisible) 0f else 1f).testTag(TRACE_TEXT_TAG),
-            )
-            // Smaller than the letter beside it, so the tick arriving cannot move the canvas.
-            SuccessMark(visible = passed, size = TICK)
-        }
-        // A miss says so in writing as well as with the buzz: the sound may be off, or missed. The
-        // strokes stay where they are and the letter comes back under them, to be gone over again.
-        if (missed) {
-            Text(
-                TraceViewModel.TRY_AGAIN, style = MaterialTheme.typography.headlineMedium,
-                color = MaterialTheme.colorScheme.secondary,
-            )
-        }
-        if (s.error != null) {
-            Text(s.error!!, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyLarge)
-        }
-        Spacer(Modifier.height(Sizes.gapSmall))
-
-        // The paper takes the room that is left and no more. A word wants a taller box than a single
-        // letter, but the shape is a preference and the fit is not: measured against what is actually
-        // there, so an extra line above — «Ξανά», or level 5's «Το είδα» below — makes the letter
-        // smaller instead of pushing «Έτοιμο» off the bottom of a screen that cannot scroll.
+        // Everything but the title, measured before a word of it is laid out, so the one thing that
+        // must never be squeezed to nothing — the paper — can be given its room first.
         BoxWithConstraints(Modifier.fillMaxWidth().weight(1f)) {
-            val shape = if (s.text.length > 1) WORD_BOX else LETTER_BOX
-            val width = minOf(maxWidth, maxHeight * shape)
-            TraceCanvas(
-                template = s.template,
-                // Always there to follow, except in the seconds of level 5 when the point is that it is not.
-                showTemplate = s.templateVisible && s.template.isNotEmpty(),
-                strokes = s.strokes,
-                onStroke = vm::addStroke,
-                modifier = Modifier.size(width, width / shape)
-                    .align(Alignment.TopCenter)
-                    .onSizeChanged { vm.setCanvasSize(it.width.toFloat(), it.height.toFloat()) }
-                    .testTag(TRACE_CANVAS_TAG),
-                enabled = !passed,
-            )
+            // On a short screen at a large font scale there is not room for both the hint and a
+            // paper worth writing on. The paper wins: the hand is the same every day, and a canvas
+            // too small to write in is a letter he cannot pass.
+            val roomForHint = maxHeight >= HINT_NEEDS
+            Column(Modifier.fillMaxSize()) {
+                if (roomForHint) {
+                    Text(
+                        if (s.hand == Settings.HAND_RIGHT) "Με το δεξί χέρι" else "Με το αριστερό χέρι",
+                        style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(Modifier.height(Sizes.gapSmall))
+                }
+
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                    // At level 5 the word goes on holding its place after «Το είδα» — invisible, not
+                    // gone, so the canvas does not jump up the screen the moment he looks away.
+                    Text(
+                        s.text,
+                        // «ΔΗΜΗΤΡΗΣ» at 44 sp is wider than a phone; a long word steps down a size
+                        // rather than being cut off, because the word is what he is being asked for.
+                        style = if (s.text.length > LONG_TEXT) MaterialTheme.typography.headlineMedium
+                        else MaterialTheme.typography.displayLarge,
+                        maxLines = 1, textAlign = TextAlign.Start,
+                        modifier = Modifier.weight(1f)
+                            .alpha(if (hidden) 0f else 1f)
+                            .testTag(if (hidden) TRACE_TEXT_HIDDEN_TAG else TRACE_TEXT_TAG),
+                    )
+                    // Smaller than the letter beside it, so the tick arriving cannot move the canvas.
+                    SuccessMark(visible = passed, size = TICK)
+                }
+                // A miss says so in writing as well as with the buzz: the sound may be off, or
+                // missed. The strokes stay where they are and the letter comes back under them.
+                if (missed) {
+                    Text(
+                        TraceViewModel.TRY_AGAIN, style = MaterialTheme.typography.headlineMedium,
+                        color = MaterialTheme.colorScheme.secondary,
+                    )
+                }
+                if (s.error != null) {
+                    Text(s.error!!, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyLarge)
+                }
+                Spacer(Modifier.height(Sizes.gapSmall))
+
+                // The paper is the biggest one that fits above the buttons. A single letter takes
+                // the whole slot — every pixel of it is tolerance for his hand, and a letter drawn
+                // half the size is a pass line half as wide. A word keeps its taller shape, capped
+                // by whichever of the two directions runs out first.
+                BoxWithConstraints(Modifier.fillMaxWidth().weight(1f)) {
+                    val word = s.text.length > 1
+                    val height = maxHeight.coerceAtLeast(MIN_PAPER)
+                    val width = if (word) minOf(maxWidth, height * WORD_BOX) else maxWidth
+                    TraceCanvas(
+                        template = s.template,
+                        // Always there to follow, except in the seconds of level 5 when the point is
+                        // that it is not.
+                        showTemplate = s.templateVisible && s.template.isNotEmpty(),
+                        strokes = s.strokes,
+                        onStroke = vm::addStroke,
+                        modifier = Modifier.size(width, if (word) width / WORD_BOX else height)
+                            .align(Alignment.TopCenter)
+                            .onSizeChanged { vm.setCanvasSize(it.width.toFloat(), it.height.toFloat()) }
+                            .testTag(TRACE_CANVAS_TAG),
+                        enabled = !passed,
+                    )
+                }
+            }
         }
     }
 }
 
-/** A single letter is wider than it is tall in its box: a capital «Α» does not need a page. */
-private const val LETTER_BOX = 1.2f
-
-/** A word needs the room, so its box is taller than it is wide. */
+/** A word needs the room, so its box is taller than it is wide. A single letter takes the lot. */
 private const val WORD_BOX = 0.9f
+
+/** Below this the hand hint goes, so the paper does not. */
+private val HINT_NEEDS = 420.dp
+
+/** Paper smaller than this is not writeable; below it the layout spills rather than the letter. */
+private val MIN_PAPER = 200.dp
+
+/** Longer than this and the prompt steps down a size to stay on one line. */
+private const val LONG_TEXT = 6
 
 /** No taller than the letter it sits next to: a tick that changes the layout moves his paper. */
 private val TICK = 56.dp

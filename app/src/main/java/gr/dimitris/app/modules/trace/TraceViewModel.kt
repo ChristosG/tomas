@@ -35,6 +35,8 @@ data class TraceState(
     val templateVisible: Boolean = true,
     val template: List<Pt> = emptyList(),
     val templateHeight: Float = 0f,
+    /** The ink of the letter: true where a point is on it. See [Glyphs] and [TraceScorer]. */
+    val inside: (Pt) -> Boolean = { false },
     val strokes: List<List<Pt>> = emptyList(),
     /** Null until he says he is done, and again the moment he starts writing over a poor try. */
     val score: TraceScore? = null,
@@ -75,6 +77,11 @@ class TraceViewModel(
     /** The canvas in pixels, as the screen last measured it. Zero until it has been laid out once. */
     private var boxWidth = 0f
     private var boxHeight = 0f
+
+    /** Screen pixels per dp: the floors below are about the size of his fingertip, not of the glyph. */
+    private val density = graph.app.resources.displayMetrics.density
+
+    private fun dp(value: Float): Float = value * density
 
     /** The settings and vocabulary read. Cancelled on the way out, so nothing lands on the next screen. */
     private var loadJob: Job? = null
@@ -132,9 +139,13 @@ class TraceViewModel(
         2 -> SMALL.shuffled().take(wanted).map { TraceTarget(it) }
         3 -> List(wanted) { i -> TraceTarget(NAME[i % NAME.size]) }
         else -> {
+            // Twice as many short words as the sitting needs, then shuffled: the six shortest words
+            // on the device, in the same order, every sitting for the rest of his life is not
+            // practice, it is a rut — and the pool is still short words, which is the point.
             val shortest = words.filter { it.text.isNotBlank() }
                 .sortedWith(compareBy({ it.text.length }, { it.text }))
-                .take(wanted)
+                .take(wanted * SHORT_POOL)
+                .shuffled()
             if (shortest.isEmpty()) List(wanted) { i -> TraceTarget(NAME[i % NAME.size]) }
             // The item id only where it means something: at level 5 the word is a prompt for
             // recall, not a card he is practising, so that row is about the level like 1..3 are.
@@ -173,9 +184,9 @@ class TraceViewModel(
     private fun rebuildTemplate() {
         val text = _state.value.text
         if (text.isEmpty() || boxWidth <= 0f || boxHeight <= 0f) return
-        val (points, height) = runCatching { Glyphs.template(text, boxWidth, boxHeight) }
-            .getOrElse { graph.errors.record("trace template", it); emptyList<Pt>() to 0f }
-        _state.update { it.copy(template = points, templateHeight = height) }
+        val glyph = runCatching { Glyphs.template(text, boxWidth, boxHeight) }
+            .getOrElse { graph.errors.record("trace template", it); GlyphTemplate(emptyList(), 0f) { false } }
+        _state.update { it.copy(template = glyph.points, templateHeight = glyph.height, inside = glyph.inside) }
     }
 
     /** One finished stroke. It answers the nudge as well: «Ξανά» goes when he starts writing again. */
@@ -202,26 +213,47 @@ class TraceViewModel(
     }
 
     /**
+     * True once he is writing from memory: level 5, with the letter hidden by «Το είδα». It is the
+     * hidden template and not the level that makes the exercise the harder one, so it is also what
+     * earns the kinder marking — otherwise the cheapest way through level 5 would be to ignore
+     * «Το είδα», trace the letter that is still on the screen, and be marked more gently than at
+     * level 4 for doing less.
+     */
+    private fun writingFromMemory(s: TraceState): Boolean = s.level >= RECALL_LEVEL && !s.templateVisible
+
+    /**
      * «Έτοιμο». A pass is said out loud and written down; a miss is a nudge, the template back under
      * his strokes, and another go — never a fail state, and never a letter that cannot be finished.
      */
     fun check() {
         val s = _state.value
         if (finishing || ending || s.text.isEmpty()) return
-        // Every stroke as one path. A finger lifted mid-letter is walked over as if it had drawn the
-        // shortest way across, which costs a little accuracy on a letter written in pieces — the
-        // thresholds are loose enough to carry it, and a miss only ever costs him a retry.
-        val drawn = s.strokes.flatten()
-        val score = if (s.level >= RECALL_LEVEL) {
-            // Written from memory, with nothing to follow: marked as the harder exercise it is.
-            TraceScorer.score(drawn, s.template, s.templateHeight, RECALL_MAX_MEAN, RECALL_MIN_COVERAGE)
-        } else {
-            TraceScorer.score(drawn, s.template, s.templateHeight)
-        }
+        // An empty canvas is not a poor attempt: it would nudge him, spend his first try, and at
+        // level 5 give away the word he was about to write. The button is disabled too.
+        if (s.strokes.isEmpty()) return
+        // Level 5 is not begun until he has taken the letter away.
+        if (s.level >= RECALL_LEVEL && s.templateVisible) return
+
+        val fromMemory = writingFromMemory(s)
+        val h = s.templateHeight
+        // In pixels, and never smaller than a fingertip: 10 % of the height is half a stem on a
+        // capital and a hair's breadth on a word of eight letters, and his hand is the same size for
+        // both. Every stroke is judged on its own, so lifting his finger is never counted as a line.
+        val score = TraceScorer.scoreStrokes(
+            strokes = s.strokes,
+            template = s.template,
+            templateHeight = h,
+            inside = s.inside,
+            tolerancePx = maxOf((if (fromMemory) RECALL_TOLERANCE else TOLERANCE) * h, dp(MIN_TOLERANCE_DP)),
+            coverageRadiusPx = maxOf(COVERAGE_RADIUS * h, dp(MIN_COVERAGE_RADIUS_DP)),
+            minCoverage = if (fromMemory) RECALL_MIN_COVERAGE else MIN_COVERAGE,
+        )
         if (score.passed) {
             graph.feedback.success()
             finishing = true
-            _state.update { it.copy(score = score) }
+            // The letter comes back under his own writing, so he can see what he made of it — at
+            // level 5 that is the answer to what he was remembering, and he has earned the look.
+            _state.update { it.copy(score = score, templateVisible = true) }
             // What he has just written, said: the point of writing it is that it is a word.
             viewModelScope.launch { report(graph.speaker.speakText(s.text)) }
             record(s, score, firstTry = s.tries == 0)
@@ -240,7 +272,9 @@ class TraceViewModel(
         if (finishing || ending || s.text.isEmpty()) return
         finishing = true
         graph.feedback.nudge()
-        record(s, s.score, firstTry = false, skipped = true)
+        // No numbers on a skipped row: the last failed try's mean and coverage belong to a trace he
+        // has since wiped, and reading them back later as "how he did on this word" would be a lie.
+        record(s, null, firstTry = false, skipped = true)
         advance()
     }
 
@@ -264,7 +298,8 @@ class TraceViewModel(
         _state.update {
             it.copy(
                 index = i, text = target.text, itemId = target.itemId, templateVisible = true,
-                template = emptyList(), templateHeight = 0f, strokes = emptyList(), score = null, tries = 0,
+                template = emptyList(), templateHeight = 0f, inside = { false },
+                strokes = emptyList(), score = null, tries = 0,
             )
         }
         rebuildTemplate()
@@ -318,6 +353,9 @@ class TraceViewModel(
                 "text" to s.text,
                 "level" to s.level,
                 "tries" to s.tries,
+                // Which hand he was told to use. Nothing else records it, the rows are append-only,
+                // and "was this his good hand?" is the first question anyone will ask of them.
+                "hand" to s.hand,
                 "meanDistance" to score?.meanDistance?.takeIf { it != Float.MAX_VALUE },
                 "coverage" to score?.coverage,
             )
@@ -354,9 +392,24 @@ class TraceViewModel(
         /** Writing from memory: the template is shown once, then taken away. */
         const val RECALL_LEVEL = 5
 
-        /** Level 5's thresholds. Looser than tracing, because there is no line to follow. */
-        const val RECALL_MAX_MEAN = 0.12f
-        const val RECALL_MIN_COVERAGE = 0.5f
+        /**
+         * How far off the letter he may be on average, as a fraction of its height, and how near a
+         * point of the outline counts as gone over. Under [MIN_TOLERANCE_DP] and
+         * [MIN_COVERAGE_RADIUS_DP] they stop being fractions: a word of eight letters is a tenth as
+         * tall as a capital, and his hand does not shrink with it.
+         */
+        const val TOLERANCE = 0.10f
+        const val COVERAGE_RADIUS = 0.15f
+        const val MIN_TOLERANCE_DP = 10f
+        const val MIN_COVERAGE_RADIUS_DP = 14f
+        const val MIN_COVERAGE = 0.6f
+
+        /** Level 5 once the letter is hidden: looser, because there is nothing left to follow. */
+        const val RECALL_TOLERANCE = 0.14f
+        const val RECALL_MIN_COVERAGE = 0.4f
+
+        /** How deep into the short words levels 4 and 5 draw before shuffling: six of twelve. */
+        const val SHORT_POOL = 2
 
         /** What a poor trace says on the screen. Never "λάθος": there is nothing to fail here. */
         const val TRY_AGAIN = "Ξανά"

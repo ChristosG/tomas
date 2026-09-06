@@ -3,21 +3,38 @@ package gr.dimitris.app.modules.trace
 import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.PathMeasure
+import android.graphics.Rect
 import android.graphics.RectF
+import android.graphics.Region
 import android.graphics.Typeface
+import kotlin.math.roundToInt
 
 /**
- * The letter he is asked to write, as a line of points to trace.
+ * The letter he is asked to write: the line to follow, its height, and the ink itself.
  *
- * It is the font's own outline, not a hand-drawn skeleton: the system's bold sans-serif is what
- * every sign and menu in Greece is set in, so the shape he is copying is the shape he has to read
- * outside. The points are what the canvas draws as grey dots and what
- * [TraceScorer] measures his finger against — one list, two uses, so what he is shown and what he
- * is marked on can never drift apart.
+ * [points] is the outline — what the canvas draws as grey dots. [inside] is the filled letter, and
+ * it is the half that makes the exercise possible: a man told «γράψε Κ» draws a line down the middle
+ * of the stem, not around both of its edges, and a line down the middle is nowhere near the outline
+ * while being exactly right. Anything [inside] answers true for is on the letter, distance nothing.
+ */
+data class GlyphTemplate(
+    val points: List<Pt>,
+    val height: Float,
+    /** True where the ink is, in the same canvas pixels as [points]. Counters are not ink. */
+    val inside: (Pt) -> Boolean,
+)
+
+/**
+ * The letter he is asked to write, laid out for one canvas.
+ *
+ * The face is the system's sans-serif at its ordinary weight — not bold: a bold stem is 20 % of the
+ * letter's height wide, and its two edges are two lines he would have to choose between. The regular
+ * face's stem is thin enough that the outline reads as one line, which is what he is being asked to
+ * follow.
  *
  * Deterministic for a given text and box: the same call gives the same points, in the same order.
- * It cannot be a JVM unit test — [Paint] and [PathMeasure] are the device's — so `GlyphsTest` is
- * instrumented, and everything that can be judged without a font lives in [TraceScorer] instead.
+ * It cannot be a JVM unit test — [Paint], [PathMeasure] and [Region] are the device's — so
+ * `GlyphsTest` is instrumented, and everything measurable without a font lives in [TraceScorer].
  */
 object Glyphs {
     /** How far apart the outline is sampled, in pixels. Fine enough to draw as a dotted line. */
@@ -27,18 +44,17 @@ object Glyphs {
     const val FILL = 0.8f
 
     /**
-     * The outline of [text] laid out to fill [FILL] of a [boxWidth] × [boxHeight] box, centred in
-     * it, with the glyph's height alongside — everything the scorer measures is a fraction of that
-     * height, never of the screen.
+     * The letter [text] laid out to fill [FILL] of a [boxWidth] × [boxHeight] box and centred in it.
      *
-     * An empty box or a blank text gives no points and no height: there is nothing to trace, and
-     * the screen and the scorer both read that as "not yet" rather than as a letter he got wrong.
+     * An empty box or a blank text gives no points, no height and a mask that is false everywhere:
+     * there is nothing to trace, and the screen and the scorer both read that as "not yet" rather
+     * than as a letter he got wrong.
      */
-    fun template(text: String, boxWidth: Float, boxHeight: Float): Pair<List<Pt>, Float> {
-        if (text.isBlank() || boxWidth <= 0f || boxHeight <= 0f) return emptyList<Pt>() to 0f
+    fun template(text: String, boxWidth: Float, boxHeight: Float): GlyphTemplate {
+        if (text.isBlank() || boxWidth <= 0f || boxHeight <= 0f) return EMPTY
 
         val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            typeface = Typeface.create(Typeface.SANS_SERIF, Typeface.BOLD)
+            typeface = Typeface.create(Typeface.SANS_SERIF, Typeface.NORMAL)
             textSize = PROBE_SIZE
         }
         // Measured once at a size big enough to be precise, then set to the size that fits. Scaling
@@ -48,13 +64,13 @@ object Glyphs {
         val probe = Path()
         paint.getTextPath(text, 0, text.length, 0f, 0f, probe)
         @Suppress("DEPRECATION") probe.computeBounds(bounds, true)
-        if (bounds.width() <= 0f || bounds.height() <= 0f) return emptyList<Pt>() to 0f
+        if (bounds.width() <= 0f || bounds.height() <= 0f) return EMPTY
         paint.textSize = PROBE_SIZE * minOf(FILL * boxWidth / bounds.width(), FILL * boxHeight / bounds.height())
 
         val path = Path()
         paint.getTextPath(text, 0, text.length, 0f, 0f, path)
         val points = sample(path)
-        if (points.isEmpty()) return emptyList<Pt>() to 0f
+        if (points.isEmpty()) return EMPTY
 
         // Centred on what was really drawn, not on the font's line box: a word with no descender
         // sits high in its own metrics, and he would be tracing in the top half of the canvas.
@@ -68,7 +84,29 @@ object Glyphs {
         }
         val dx = boxWidth / 2f - (minX + maxX) / 2f
         val dy = boxHeight / 2f - (minY + maxY) / 2f
-        return points.map { Pt(it.x + dx, it.y + dy) } to (maxY - minY)
+
+        // The same move applied to the filled path, so the mask and the dots describe one letter.
+        path.offset(dx, dy)
+        return GlyphTemplate(points.map { Pt(it.x + dx, it.y + dy) }, maxY - minY, mask(path))
+    }
+
+    /**
+     * Where the ink is. [Region] fills the path with the font's own winding rule, so the hole in an
+     * «Ο» is outside the letter exactly as the eye says it is — which is what stops a scribble
+     * through the middle of a letter from being scored as the letter.
+     */
+    private fun mask(path: Path): (Pt) -> Boolean {
+        val bounds = RectF()
+        @Suppress("DEPRECATION") path.computeBounds(bounds, true)
+        val clip = Rect(
+            bounds.left.toInt() - 1, bounds.top.toInt() - 1,
+            bounds.right.toInt() + 1, bounds.bottom.toInt() + 1,
+        )
+        val region = Region()
+        // A path too complex or too thin to fill leaves an empty region; the scorer then falls back
+        // to the outline distance, which is the behaviour it had before the mask existed.
+        if (!region.setPath(path, Region(clip))) return { false }
+        return { p -> region.contains(p.x.roundToInt(), p.y.roundToInt()) }
     }
 
     /** Every contour of [path], walked in order, a point every [SAMPLE_STEP] pixels. */
@@ -91,4 +129,6 @@ object Glyphs {
 
     /** Big enough that the measurement below is precise, and never drawn at this size. */
     private const val PROBE_SIZE = 200f
+
+    private val EMPTY = GlyphTemplate(emptyList(), 0f) { false }
 }
