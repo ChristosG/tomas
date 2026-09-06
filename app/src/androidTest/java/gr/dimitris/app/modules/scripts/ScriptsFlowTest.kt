@@ -2,11 +2,13 @@ package gr.dimitris.app.modules.scripts
 
 import androidx.activity.compose.setContent
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.hasScrollAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isEnabled
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollToNode
@@ -21,6 +23,7 @@ import gr.dimitris.app.core.data.ModuleId
 import gr.dimitris.app.core.data.Outcome
 import gr.dimitris.app.core.data.ScriptWithLines
 import gr.dimitris.app.core.data.Speaker
+import gr.dimitris.app.ui.components.LISTEN_TAG
 import gr.dimitris.app.ui.theme.DimitrisTheme
 import gr.dimitris.app.ui.theme.LocalFeedback
 import kotlinx.coroutines.runBlocking
@@ -68,6 +71,29 @@ class ScriptsFlowTest {
         assertEquals("cue 0: nothing was given away", 0, written.cueLevel)
         assertTrue("the dialogue belongs in the attempt: ${written.detail}", written.detail.contains("\"scriptId\""))
         assertTrue("the turn's place in it too: ${written.detail}", written.detail.contains("\"position\""))
+    }
+
+    /**
+     * The bug Chris found in the field: «Άκου ξανά» sat on his turn dead until «Βοήθεια» had been
+     * pressed, so the one thing errorless learning says must never be withheld was the one thing he
+     * had to earn. The button is now the big «Άκου» in the bottom row, live from the first second of
+     * the turn, and using it reaches the row instead of being quietly free: the line was said to him,
+     * which is cue level 3's worth of help, and the count of listens rides along in the detail.
+     */
+    @Test fun theModelIsOnOfferBeforeAnyHintAndTheRowSaysHeUsedIt() {
+        val before = attempts()
+        openModule()
+
+        compose.onNodeWithTag(LISTEN_TAG).assertIsEnabled()
+        compose.onNodeWithTag(LISTEN_TAG).performClick()
+        compose.waitUntil(TIMEOUT_MS) { enabled(SAID_IT) }
+        compose.onNodeWithText(SAID_IT).performClick()
+
+        compose.waitUntil(TIMEOUT_MS) { attempts().size == before.size + 1 }
+        val written = (attempts() - before.toSet()).single()
+        assertEquals("a line he had said to him is work done with help", Outcome.ASSISTED, written.outcome)
+        assertTrue("hearing the model is level 3's worth of help: ${written.cueLevel}", (written.cueLevel ?: 0) >= 3)
+        assertTrue("the row has to carry the listen: ${written.detail}", written.detail.contains("\"listened\":1"))
     }
 
     /** Passing on a turn is not doing it: the row has to say so, and the dialogue has to move on. */

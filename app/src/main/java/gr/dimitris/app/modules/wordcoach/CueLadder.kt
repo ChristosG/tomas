@@ -12,12 +12,35 @@ class CueLadder(private val item: Item) {
     val levels: List<Int> = listOfNotNull(0, 1, if (ownRung(item)) 2 else null, 3, 4)
     private var index = 0
 
+    /** Set by [listened] and never cleared while the item lasts: he heard the word, and that is that. */
+    private var heard = false
+
+    /** Where the hint sequence stands. This is what is shown and said, and «Βοήθεια» walks it. */
     val level: Int get() = levels[index]
+
+    /**
+     * What the attempt row and the Leitner box are scored on: the rung he reached, or [LISTENED]
+     * once he has asked to hear the word, whichever is higher.
+     *
+     * The two are not the same thing since «Άκου» became always available (spec §12, errorless
+     * learning). Hearing the model is the same help level 3 gives — the word said to him — so the
+     * data have to carry it; but it is not a rung, so nothing on the screen moves.
+     */
+    val recordedLevel: Int get() = if (heard) maxOf(level, LISTENED) else level
+
     val canHint: Boolean get() = index < levels.lastIndex
     val showsWord: Boolean get() = level == 4
 
     fun hint(): Int { if (canHint) index++; return level }
-    fun reset() { index = 0 }
+
+    /**
+     * He pressed «Άκου». The recorded level rises to at least [LISTENED]; the hint sequence does
+     * not move, so the next «Βοήθεια» carries on from exactly where it was and nothing of the word
+     * appears on screen that was not there before.
+     */
+    fun listened(): Int { heard = true; return recordedLevel }
+
+    fun reset() { index = 0; heard = false }
 
     /**
      * What to show and say at the current level; null at level 0.
@@ -34,13 +57,20 @@ class CueLadder(private val item: Item) {
         else -> null
     }?.let(::trimmed)
 
+    /** Judged on [recordedLevel]: a word he had said to him is assisted work, however he got it said. */
     fun outcomeFor(confirmed: Boolean): Outcome = when {
         !confirmed -> Outcome.SKIPPED
-        level <= 2 -> Outcome.CORRECT
+        recordedLevel <= 2 -> Outcome.CORRECT
         else -> Outcome.ASSISTED
     }
 
     companion object {
+        /**
+         * The rung hearing the model is worth: level 3 is "the word spoken", which is exactly what
+         * «Άκου» does. Every module scores a listen at this, ladder or no ladder.
+         */
+        const val LISTENED = 3
+
         /** Marks a Greek line can carry. None of them is a sound he can start a word from. */
         val PUNCTUATION = charArrayOf(',', '.', ';', '·', '!', '?', '«', '»', '"', '\'')
 

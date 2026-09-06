@@ -1,6 +1,7 @@
 package gr.dimitris.app.modules.singsay
 
 import gr.dimitris.app.core.data.Outcome
+import gr.dimitris.app.modules.wordcoach.CueLadder
 
 /**
  * The five steps of melodic intonation therapy, in order: he listens, sings along with the phone,
@@ -26,17 +27,25 @@ object SingStage {
         else -> 0f
     }
 
-    /** Stage 5 = said it alone = cue 0; stage 1 = only listened = cue 4. */
-    fun cueLevelFor(stage: Int): Int = (SPEAK - stage).coerceIn(0, 4)
+    /**
+     * Stage 5 = said it alone = cue 0; stage 1 = only listened = cue 4.
+     *
+     * [listened] is «Άκου»: the phrase said to him on his own asking, which is the same help the
+     * word coach's level 3 is, so a stage that would have scored lower is lifted to it. The button
+     * is never withheld (spec §12) — the honesty is in the row, not in the refusal.
+     */
+    fun cueLevelFor(stage: Int, listened: Boolean = false): Int =
+        maxOf((SPEAK - stage).coerceIn(0, 4), if (listened) CueLadder.LISTENED else 0)
 
     /**
-     * What the attempt says. Only the last stage — the phrase spoken with nothing left to lean on —
-     * is his own; claiming it earlier is real work done with help, and is written as such instead of
-     * being lost. A phrase passed over is neither: [Outcome.SKIPPED], whatever stage it reached.
+     * What the attempt says. Only the last stage — the phrase spoken with nothing left to lean on
+     * and without asking to hear it — is his own; claiming it earlier, or after «Άκου», is real work
+     * done with help, and is written as such instead of being lost. A phrase passed over is neither:
+     * [Outcome.SKIPPED], whatever stage it reached.
      */
-    fun outcomeFor(stage: Int, skipped: Boolean): Outcome = when {
+    fun outcomeFor(stage: Int, skipped: Boolean, listened: Boolean = false): Outcome = when {
         skipped -> Outcome.SKIPPED
-        stage >= SPEAK -> Outcome.CORRECT
+        stage >= SPEAK && !listened -> Outcome.CORRECT
         else -> Outcome.ASSISTED
     }
 

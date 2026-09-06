@@ -151,7 +151,7 @@ private class Roles(pool: List<Item>, private val random: Random) {
      * Drawing it from the same set as the object was the defect this is written to stop. With
      * «εγώ θέλω νερό τώρα» on the board and «καφέ» beside it, nothing on the screen said which of
      * the two the app had in mind: he built «εγώ θέλω καφέ τώρα», faultless Greek, and was answered
-     * with «Όχι έτσι.» and an assisted mark. A correction he could not have avoided teaches him
+     * with «Σχεδόν.» and an assisted mark. A correction he could not have avoided teaches him
      * nothing about word order, which is the one thing this module is for.
      */
     fun distractor(tiles: List<Tile>): Tile? {

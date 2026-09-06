@@ -38,6 +38,8 @@ data class ScriptsState(
     val skippedLines: Set<Int> = emptySet(),
     /** The microphone is open on this turn: «Ηχογράφηση» has become «Στοπ». */
     val isRecording: Boolean = false,
+    /** The model line is sounding right now: «Άκου» is off for exactly as long as that lasts. */
+    val modelPlaying: Boolean = false,
     /** His own take of this turn, once he has made one: what «Άκου» plays after the model. */
     val selfRecordingPath: String? = null,
     val done: Boolean = false,
@@ -93,8 +95,17 @@ class ScriptsViewModel(
     /** The other person's line. It is the only job that advances the dialogue. */
     private var speakJob: Job? = null
 
-    /** A hint, a repeat, or a bubble tapped again. Never advances anything. */
+    /** A hint, a listen, or a bubble tapped again. Never advances anything. */
     private var cueJob: Job? = null
+
+    /** How many times he asked to hear the line of the turn he is on. It goes into the attempt. */
+    private var listens = 0
+
+    /**
+     * Bumped by every «Άκου» and by every turn change. A cancelled job's `finally` can land after
+     * the next one has started, and it must not put «Άκου» back for a model that is still playing.
+     */
+    private var listenToken = 0
 
     /** The closing line and the "done" that follows it. */
     private var endJob: Job? = null
@@ -149,13 +160,17 @@ class ScriptsViewModel(
         // A take belongs to the turn it was made for, and so does its write.
         if (graph.voice.isRecording) graph.voice.cancelRecording()
         recordingSave = null
+        // The listens belong to the turn being left, and so does any «Άκου» still in flight: the
+        // new turn starts with its own count and with the button live.
+        listens = 0
+        listenToken++
         val (line, item) = lines[i]
         if (line.speaker == Speaker.OTHER) {
             ladder = null
             _state.update {
                 it.copy(
                     index = i, phase = ScriptPhase.OTHER_SPEAKING, level = 0, cueText = null, showsWord = false,
-                    canHint = false, isRecording = false, selfRecordingPath = null,
+                    canHint = false, isRecording = false, modelPlaying = false, selfRecordingPath = null,
                 )
             }
             if (onScreen) speakOther(i)
@@ -167,7 +182,7 @@ class ScriptsViewModel(
                 it.copy(
                     index = i, phase = ScriptPhase.WAITING_FOR_DIMITRIS,
                     level = next.level, cueText = next.cueText(), showsWord = next.showsWord, canHint = next.canHint,
-                    isRecording = false, selfRecordingPath = null,
+                    isRecording = false, modelPlaying = false, selfRecordingPath = null,
                 )
             }
         }
@@ -222,9 +237,32 @@ class ScriptsViewModel(
         speakCue()
     }
 
-    fun repeatCue() {
-        if (_state.value.phase != ScriptPhase.WAITING_FOR_DIMITRIS) return
-        speakCue()
+    /**
+     * «Άκου». His own line, said to him — the caregiver's recording of it if she made one, else
+     * Greek TTS — from the moment the turn appears and at every rung of the ladder. Chris found the
+     * old «Άκου ξανά» dead until «Βοήθεια» had been pressed; a man who cannot retrieve a word is
+     * not helped by being made to fail for it first (spec §12).
+     *
+     * The help is written down instead of being refused: [CueLadder.listened] scores the turn at 3
+     * without moving the hint sequence, so «Βοήθεια» carries on from where it was and the
+     * conversation gives nothing away that it had not already.
+     */
+    fun listenModel() {
+        val l = ladder ?: return
+        val s = _state.value
+        if (s.phase != ScriptPhase.WAITING_FOR_DIMITRIS || s.isRecording || s.modelPlaying) return
+        val item = lines.getOrNull(s.index)?.second ?: return
+        listens++
+        l.listened()
+        val token = ++listenToken
+        _state.update { it.copy(modelPlaying = true) }
+        cue {
+            try {
+                report(graph.speaker.speak(item))
+            } finally {
+                if (listenToken == token) _state.update { it.copy(modelPlaying = false) }
+            }
+        }
     }
 
     /** A line already said, tapped again: what did they ask me? A dialogue he cannot re-hear is a trap. */
@@ -336,11 +374,13 @@ class ScriptsViewModel(
         graph.voice.quiet()
         val i = _state.value.index
         val (line, item) = lines[i]
-        // Read eagerly: the ladder and the clock belong to the turn being left behind.
-        val level = l.level
+        // Read eagerly: the ladder and the clock belong to the turn being left behind. The recorded
+        // level, not the rung on screen: a line he asked to hear was a line said to him.
+        val level = l.recordedLevel
         val outcome = l.outcomeFor(confirmed)
         val began = startedAt
         val position = line.position
+        val heard = listens
         val save = recordingSave
         worstCue = maxOf(worstCue, level)
         if (!confirmed) skipped = true
@@ -356,7 +396,7 @@ class ScriptsViewModel(
                     Attempt(
                         itemId = item.id, module = ModuleId.SCRIPTS, sessionId = sessionId, startedAt = began,
                         durationMs = now() - began, outcome = outcome, cueLevel = level, selfRecordingId = recordingId,
-                        detail = """{"scriptId":${jsonString(scriptId)},"position":$position}""",
+                        detail = """{"scriptId":${jsonString(scriptId)},"position":$position,"listened":$heard}""",
                     )
                 )
             }.onFailure { graph.errors.record("scripts line", it) }
@@ -469,6 +509,8 @@ class ScriptsViewModel(
         speakJob?.cancel()
         cueJob?.cancel()
         endJob?.cancel()
+        listenToken++
+        _state.update { it.copy(modelPlaying = false) }
         graph.voice.quiet()
     }
 

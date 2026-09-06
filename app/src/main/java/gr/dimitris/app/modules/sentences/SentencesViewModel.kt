@@ -11,6 +11,7 @@ import gr.dimitris.app.core.data.ModuleId
 import gr.dimitris.app.core.data.Outcome
 import gr.dimitris.app.core.data.now
 import gr.dimitris.app.core.scheduler.LevelProgression
+import gr.dimitris.app.modules.wordcoach.CueLadder
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -32,6 +33,8 @@ data class SentencesState(
     /** Null until the last card of a sentence is down: there is no verdict on half a sentence. */
     val correct: Boolean? = null,
     val wrongTries: Int = 0,
+    /** The sentence is being said right now: «Άκου» is off for exactly as long as that lasts. */
+    val modelPlaying: Boolean = false,
     val done: Boolean = false,
     val levelChanged: Int? = null,
     /** Said on the screen when a tap made no sound at all. */
@@ -66,6 +69,18 @@ class SentencesViewModel(
 
     /** The vocabulary read. Cancelled on the way out, so nothing arrives to speak over the next screen. */
     private var loadJob: Job? = null
+
+    /** How many times he asked to hear this sentence. It goes into the attempt's detail as it stands. */
+    private var listens = 0
+
+    /** Whatever this screen is saying: a tapped word, the verdict, or the model sentence. */
+    private var speakJob: Job? = null
+
+    /**
+     * Bumped by every new utterance. A cancelled job's `finally` can land after the next one has
+     * started, and it must not put «Άκου» back for a sentence that is still being said.
+     */
+    private var speakToken = 0
 
     /**
      * The attempt write of the sentence just finished. It runs on the app scope, so the end of the
@@ -157,21 +172,21 @@ class SentencesViewModel(
         val chosen = s.chosen + tile
         _state.update { it.copy(chosen = chosen) }
         if (chosen.size < sentence.tiles.size) {
-            viewModelScope.launch { report(graph.speaker.speakText(tile.label)) }
+            speaking { report(graph.speaker.speakText(tile.label)) }
             return
         }
         if (chosen.map { it.label } == sentence.tiles.map { it.label }) {
             graph.feedback.success()
             finishing = true
             _state.update { it.copy(correct = true) }
-            viewModelScope.launch { report(graph.speaker.speakText(sentence.text)) }
+            speaking { report(graph.speaker.speakText(sentence.text)) }
             record(sentence, chosen, firstTry = s.wrongTries == 0)
         } else {
             // Never a fail state: the sentence is said and left on the screen, the cards come back,
             // and he tries again as often as he likes. Only the first-try mark is spent.
             graph.feedback.nudge()
             _state.update { it.copy(chosen = emptyList(), correct = false, wrongTries = it.wrongTries + 1) }
-            viewModelScope.launch { report(graph.speaker.speakText("$WRONG_ORDER ${sentence.text}")) }
+            speaking { report(graph.speaker.speakText("$WRONG_ORDER ${sentence.text}")) }
         }
     }
 
@@ -179,6 +194,42 @@ class SentencesViewModel(
     fun undo() {
         if (finishing || ending) return
         _state.update { it.copy(chosen = it.chosen.dropLast(1)) }
+    }
+
+    /**
+     * «Άκου»: the whole sentence, said. There is no cue ladder here — the model *is* the answer, in
+     * the order he has to build it — and it is still never withheld (spec §12): a man who cannot
+     * retrieve the word order is not taught by being made to guess wrong first.
+     *
+     * What it costs is the row. The attempt is written at [CueLadder.LISTENED] and as assisted work
+     * rather than his own, so the level progression is judged on the sentences he built without
+     * hearing them, and the caregiver's numbers do not quietly turn into a score for listening.
+     */
+    fun listenModel() {
+        val s = _state.value
+        val sentence = s.sentence ?: return
+        if (ending || s.modelPlaying) return
+        listens++
+        speaking { report(graph.speaker.speakText(sentence.text)) }
+    }
+
+    /**
+     * Runs one utterance of this screen, and only one: a new tap replaces whatever was sounding.
+     * `quiet()` as well as cancelling, because a cancel only lands at the next suspension point and
+     * the old voice would be heard under the new one.
+     */
+    private fun speaking(block: suspend () -> Unit) {
+        speakJob?.cancel()
+        graph.voice.quiet()
+        val token = ++speakToken
+        _state.update { it.copy(modelPlaying = true) }
+        speakJob = viewModelScope.launch {
+            try {
+                block()
+            } finally {
+                if (speakToken == token) _state.update { it.copy(modelPlaying = false) }
+            }
+        }
     }
 
     fun skip() {
@@ -210,6 +261,8 @@ class SentencesViewModel(
         if (i >= sentences.size) { finishSitting(); return }
         val sentence = sentences[i]
         startedAt = now()
+        // The listens belonged to the sentence being left: the new one starts its own count.
+        listens = 0
         _state.update {
             it.copy(index = i, sentence = sentence, shuffledTiles = board(sentence), chosen = emptyList(), correct = null, wrongTries = 0)
         }
@@ -243,6 +296,7 @@ class SentencesViewModel(
      */
     fun leave(then: () -> Unit) {
         loadJob?.cancel()
+        speakJob?.cancel()
         graph.voice.quiet()
         val write = lastWrite
         viewModelScope.launch { write?.join(); then() }
@@ -258,7 +312,14 @@ class SentencesViewModel(
     )
 
     private fun record(sentence: Sentence, chosen: List<Tile>, firstTry: Boolean, skipped: Boolean = false) {
-        val outcome = when { skipped -> Outcome.SKIPPED; firstTry -> Outcome.CORRECT; else -> Outcome.ASSISTED }
+        // A sentence he asked to hear is a sentence he was given: assisted work, on the same footing
+        // as one he had to be corrected on. The button stays; only the row knows.
+        val heard = listens
+        val outcome = when {
+            skipped -> Outcome.SKIPPED
+            firstTry && heard == 0 -> Outcome.CORRECT
+            else -> Outcome.ASSISTED
+        }
         // Every finished sentence is evidence, a skip included: passing on a sentence is not neutral,
         // it is one he could not do, and a level he skips his way through has to be steppable down.
         results += (outcome == Outcome.CORRECT)
@@ -267,6 +328,7 @@ class SentencesViewModel(
                 "tiles" to sentence.tiles.map { it.label },
                 "chosen" to chosen.map { it.label },
                 "firstTry" to firstTry,
+                "listened" to heard,
             )
         )
         // Read eagerly: the clock is restarted the moment the next sentence arrives.
@@ -281,7 +343,10 @@ class SentencesViewModel(
                 graph.db.attempts().insert(
                     Attempt(
                         itemId = "sentences:level:${sentence.level}", module = ModuleId.SENTENCES, sessionId = sessionId,
-                        startedAt = began, durationMs = now() - began, outcome = outcome, cueLevel = null, detail = detail,
+                        startedAt = began, durationMs = now() - began, outcome = outcome,
+                        // The one thing this module has to say on the word coach's 0–4 scale: he
+                        // had the sentence said to him. Otherwise there is no ladder here at all.
+                        cueLevel = if (heard > 0) CueLadder.LISTENED else null, detail = detail,
                     )
                 )
             }.onFailure { graph.errors.record("sentences record", it) }
@@ -292,7 +357,15 @@ class SentencesViewModel(
         /** Said on the screen when a tap made no sound at all. */
         const val SPEECH_FAILED = "Δεν ακούγεται η φωνή. Δες τις ρυθμίσεις."
 
-        /** What a wrong order is answered with, out loud and in writing. Never "λάθος". */
-        const val WRONG_ORDER = "Όχι έτσι."
+        /**
+         * What an order that was not the sentence is answered with, out loud and in writing.
+         *
+         * «Όχι έτσι.» — the phase-4 wording — was already softer than «Λάθος», but it is still a
+         * "no" said to him, and since «Άκου» he can reach that "no" straight after doing the one
+         * thing the app tells him to do: hear the sentence, then build it. Spec §12 does not allow
+         * an assisted or retried turn to be called wrong, so what is left is the encouragement and
+         * the model to copy, which is the whole of the exercise anyway.
+         */
+        const val WRONG_ORDER = "Σχεδόν."
     }
 }

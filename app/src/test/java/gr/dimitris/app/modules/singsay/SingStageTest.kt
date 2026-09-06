@@ -32,6 +32,20 @@ class SingStageTest {
         assertEquals(2, SingStage.cueLevelFor(SingStage.FADING))
     }
 
+    /**
+     * «Άκου» is live at every stage, the last one included (spec §12), so a phrase said alone after
+     * asking to hear it is assisted work at the listening level — not the clean CORRECT at cue 0 it
+     * would otherwise be. The button is never taken away; the row is what carries the honesty.
+     */
+    @Test fun `hearing the model is assisted work at the listening level`() {
+        assertEquals(3, SingStage.cueLevelFor(SingStage.SPEAK, listened = true))
+        assertEquals(Outcome.ASSISTED, SingStage.outcomeFor(SingStage.SPEAK, skipped = false, listened = true))
+        // Where the stage already scored higher, listening changes nothing: stage 1 is cue 4.
+        assertEquals(4, SingStage.cueLevelFor(SingStage.LISTEN, listened = true))
+        // And a phrase passed over is passed over, however many times he heard it first.
+        assertEquals(Outcome.SKIPPED, SingStage.outcomeFor(SingStage.SPEAK, skipped = true, listened = true))
+    }
+
     @Test fun `labels are Greek`() {
         assertEquals("Άκου", SingStage.label(SingStage.LISTEN))
         assertEquals("Τραγούδα μαζί", SingStage.label(SingStage.TOGETHER))

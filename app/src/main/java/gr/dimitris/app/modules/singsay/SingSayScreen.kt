@@ -24,7 +24,6 @@ import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.Compare
 import androidx.compose.material.icons.rounded.Mic
 import androidx.compose.material.icons.rounded.Stop
-import androidx.compose.material.icons.rounded.VolumeUp
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -42,6 +41,7 @@ import gr.dimitris.app.core.data.Item
 import gr.dimitris.app.ui.components.BigButton
 import gr.dimitris.app.ui.components.ButtonTone
 import gr.dimitris.app.ui.components.DimitrisScreen
+import gr.dimitris.app.ui.components.ListenButton
 import gr.dimitris.app.ui.components.QuietButton
 import gr.dimitris.app.ui.components.SuccessMark
 import gr.dimitris.app.ui.theme.Sizes
@@ -91,12 +91,25 @@ fun SingSayScreen(items: List<Item>, sessionId: String?, onDone: () -> Unit, onL
                 modifier = Modifier.height(110.dp), enabled = !s.playing && !s.isRecording,
             )
             Spacer(Modifier.height(Sizes.gapSmall))
+            // «Άκου» is here rather than up with the syllables: it is the one control that must not
+            // be hunted for, and it belongs where his thumb already is. It shares the row with «Το
+            // έκανα» so the pad above keeps its full height — nothing shrinks to make room for it.
+            val canListen = !s.playing && !s.isRecording
             if (s.stage != SingStage.SPEAK) {
-                // Not while the microphone is open: a phrase finished mid-take ends with a recording
-                // that spans stages, and the «Στοπ» that would have closed it is a screen away.
-                BigButton("Το έκανα", onClick = vm::didIt, tone = ButtonTone.Success, enabled = !s.playing && !s.isRecording)
-                Spacer(Modifier.height(Sizes.gapSmall))
+                Row {
+                    ListenButton(onClick = vm::listenModel, enabled = canListen, modifier = Modifier.weight(1f))
+                    Spacer(Modifier.width(Sizes.gapSmall))
+                    // Not while the microphone is open: a phrase finished mid-take ends with a
+                    // recording that spans stages, and the «Στοπ» that would have closed it is a
+                    // screen away.
+                    BigButton("Το έκανα", onClick = vm::didIt, tone = ButtonTone.Success, enabled = canListen, modifier = Modifier.weight(1f))
+                }
+            } else {
+                // The last stage says it with nothing left under it, and «Άκου» is still there:
+                // that is the whole of spec §12 in one button.
+                ListenButton(onClick = vm::listenModel, enabled = canListen)
             }
+            Spacer(Modifier.height(Sizes.gapSmall))
             // Not while the phrase is still loading: a skip landing then would finish a phrase whose
             // own sung model has not even been looked up yet.
             QuietButton("Παράλειψη", onClick = vm::skip, enabled = !s.loading)
@@ -139,10 +152,8 @@ fun SingSayScreen(items: List<Item>, sessionId: String?, onDone: () -> Unit, onL
                 }
             }
             Spacer(Modifier.height(Sizes.gap))
-            // One under the other, not side by side: «Ηχογράφηση» is too long a word to share a row
-            // with anything at his text size, and it broke across two lines mid-word when it did.
-            QuietButton("Άκου", onClick = vm::playModel, icon = Icons.Rounded.VolumeUp, enabled = !s.isRecording)
-            Spacer(Modifier.height(Sizes.gapSmall))
+            // Listening moved to the bottom row, where his thumb is and where it is on every screen
+            // of every module: there is exactly one «Άκου» here now.
             QuietButton(
                 if (s.isRecording) "Στοπ" else "Ηχογράφηση",
                 onClick = { askMic.launch(Manifest.permission.RECORD_AUDIO) },

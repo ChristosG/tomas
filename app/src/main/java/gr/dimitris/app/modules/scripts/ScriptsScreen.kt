@@ -23,7 +23,6 @@ import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.Compare
 import androidx.compose.material.icons.rounded.Mic
 import androidx.compose.material.icons.rounded.Stop
-import androidx.compose.material.icons.rounded.VolumeUp
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -44,6 +43,7 @@ import gr.dimitris.app.core.data.Speaker
 import gr.dimitris.app.ui.components.BigButton
 import gr.dimitris.app.ui.components.ButtonTone
 import gr.dimitris.app.ui.components.DimitrisScreen
+import gr.dimitris.app.ui.components.ListenButton
 import gr.dimitris.app.ui.components.QuietButton
 import gr.dimitris.app.ui.components.SuccessMark
 import gr.dimitris.app.ui.theme.Sizes
@@ -105,12 +105,20 @@ fun ScriptsScreen(items: List<Item>, sessionId: String?, onDone: () -> Unit, onL
         onBack = { vm.leave(onLeave) },
         bottom = {
             when (s.phase) {
+                // «Άκου» is the first button of the top row from the moment the turn appears, and
+                // the confirm gets the whole width below it: three big buttons in one row would each
+                // be narrower than his thumb, and nothing shrinks to make room for this one.
                 ScriptPhase.WAITING_FOR_DIMITRIS -> {
                     Row {
-                        BigButton("Βοήθεια", onClick = vm::hint, tone = ButtonTone.Secondary, enabled = s.canHint, modifier = Modifier.weight(1f))
+                        ListenButton(
+                            onClick = vm::listenModel, enabled = !s.modelPlaying && !s.isRecording,
+                            modifier = Modifier.weight(1f),
+                        )
                         Spacer(Modifier.width(Sizes.gapSmall))
-                        BigButton("Το είπα!", onClick = vm::confirm, tone = ButtonTone.Success, modifier = Modifier.weight(1f))
+                        BigButton("Βοήθεια", onClick = vm::hint, tone = ButtonTone.Secondary, enabled = s.canHint, modifier = Modifier.weight(1f))
                     }
+                    Spacer(Modifier.height(Sizes.gapSmall))
+                    BigButton("Το είπα!", onClick = vm::confirm, tone = ButtonTone.Success)
                     Spacer(Modifier.height(Sizes.gapSmall))
                     QuietButton("Παράλειψη", onClick = vm::skip)
                 }
@@ -140,7 +148,6 @@ fun ScriptsScreen(items: List<Item>, sessionId: String?, onDone: () -> Unit, onL
                         word = if (s.showsWord) item.text else null,
                         recording = s.isRecording,
                         hasTake = s.selfRecordingPath != null,
-                        onListen = vm::repeatCue,
                         // Stopping is not a permission question: only starting asks.
                         onRecord = { if (s.isRecording) vm.toggleRecording() else askMic.launch(Manifest.permission.RECORD_AUDIO) },
                         onCompare = vm::playComparison,
@@ -198,8 +205,9 @@ private fun Bubble(text: String, mine: Boolean, skipped: Boolean, onClick: (() -
 }
 
 /**
- * His turn. Nothing of the line is given away until he asks: level 0 is the bare invitation, 1 and 2
+ * His turn. Nothing of the line is *written* until he asks: level 0 is the bare invitation, 1 and 2
  * show the sound and the syllable, 3 says it aloud without writing it, and only 4 puts it on screen.
+ * Hearing it is another matter — «Άκου» sits in the bottom row and is live from the first second.
  *
  * At any level he may record himself and hear the model and his own take back to back — the half of
  * the cue ladder that gives him feedback on how it came out, and the same pair the word coach has.
@@ -211,7 +219,6 @@ private fun TurnCard(
     word: String?,
     recording: Boolean,
     hasTake: Boolean,
-    onListen: () -> Unit,
     onRecord: () -> Unit,
     onCompare: () -> Unit,
 ) {
@@ -241,13 +248,11 @@ private fun TurnCard(
                     )
                 }
                 Spacer(Modifier.height(Sizes.gapSmall))
-                // One under the other, not side by side: «Ηχογράφηση» at his text size wraps onto
-                // three lines in half a card, and a word broken across three lines is not a word.
-                // Nothing to say at level 0: the invitation is the whole of the cue. Nothing to say
-                // while the microphone is open either — one sound at a time is the rule, and a tap
-                // here mid-take came back as «Δεν ακούγεται η φωνή», which is not what happened.
-                QuietButton("Άκου ξανά", onClick = onListen, icon = Icons.Rounded.VolumeUp, enabled = level > 0 && !recording)
-                Spacer(Modifier.height(Sizes.gapSmall))
+                // «Άκου ξανά» used to live here, dead until «Βοήθεια» had been pressed — which is
+                // what Chris found in the field. It is gone: the one «Άκου» this screen has is the
+                // big one in the bottom row, live from the first second of the turn. Two buttons
+                // both called «Άκου» is one too many, so the pair below is «Σύγκριση», the word the
+                // word coach and «Τραγούδα και πες το» already use for the same thing.
                 QuietButton(
                     if (recording) "Στοπ" else "Ηχογράφηση", onClick = onRecord,
                     icon = if (recording) Icons.Rounded.Stop else Icons.Rounded.Mic,
@@ -255,7 +260,7 @@ private fun TurnCard(
                 // Only once there is something of his to compare the model against.
                 if (hasTake && !recording) {
                     Spacer(Modifier.height(Sizes.gapSmall))
-                    QuietButton("Άκου", onClick = onCompare, icon = Icons.Rounded.Compare)
+                    QuietButton("Σύγκριση", onClick = onCompare, icon = Icons.Rounded.Compare)
                 }
             }
         }

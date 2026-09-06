@@ -17,7 +17,6 @@ import androidx.compose.material.icons.rounded.Compare
 import androidx.compose.material.icons.rounded.Hearing
 import androidx.compose.material.icons.rounded.Mic
 import androidx.compose.material.icons.rounded.Stop
-import androidx.compose.material.icons.rounded.VolumeUp
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -34,6 +33,7 @@ import gr.dimitris.app.core.data.Item
 import gr.dimitris.app.ui.components.BigButton
 import gr.dimitris.app.ui.components.ButtonTone
 import gr.dimitris.app.ui.components.DimitrisScreen
+import gr.dimitris.app.ui.components.ListenButton
 import gr.dimitris.app.ui.components.PictureCard
 import gr.dimitris.app.ui.components.QuietButton
 import gr.dimitris.app.ui.components.SuccessMark
@@ -64,14 +64,24 @@ fun WordCoachScreen(items: List<Item>, sessionId: String?, onDone: () -> Unit, o
         // Back is "I want out", not "I finished": the module drops what it was doing and says so.
         onBack = { vm.leave(onLeave) },
         bottom = {
+            // «Άκου» is the first button of the top row at every level, «Βοήθεια» beside it, and the
+            // confirm gets the whole width below them: three big buttons in one row would each be
+            // narrower than his thumb, and the rule is that nothing shrinks to make room for this.
+            val canListen = !s.modelPlaying && !s.isRecording
             if (s.confirmed) {
-                BigButton("Επόμενο", onClick = vm::next, tone = ButtonTone.Success)
+                Row {
+                    ListenButton(onClick = vm::listenModel, enabled = canListen, modifier = Modifier.weight(1f))
+                    Spacer(Modifier.width(Sizes.gapSmall))
+                    BigButton("Επόμενο", onClick = vm::next, tone = ButtonTone.Success, modifier = Modifier.weight(1f))
+                }
             } else {
                 Row {
-                    BigButton("Βοήθεια", onClick = vm::hint, tone = ButtonTone.Secondary, enabled = s.canHint, modifier = Modifier.weight(1f))
+                    ListenButton(onClick = vm::listenModel, enabled = canListen, modifier = Modifier.weight(1f))
                     Spacer(Modifier.width(Sizes.gapSmall))
-                    BigButton("Το είπα!", onClick = vm::confirm, tone = ButtonTone.Success, modifier = Modifier.weight(1f))
+                    BigButton("Βοήθεια", onClick = vm::hint, tone = ButtonTone.Secondary, enabled = s.canHint, modifier = Modifier.weight(1f))
                 }
+                Spacer(Modifier.height(Sizes.gapSmall))
+                BigButton("Το είπα!", onClick = vm::confirm, tone = ButtonTone.Success)
                 Spacer(Modifier.height(Sizes.gapSmall))
                 QuietButton("Παράλειψη", onClick = vm::skip)
             }
@@ -81,7 +91,9 @@ fun WordCoachScreen(items: List<Item>, sessionId: String?, onDone: () -> Unit, o
         // his text size: scrolling is better than a button he cannot reach.
         Column(Modifier.verticalScroll(rememberScrollState())) {
             Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                PictureCard(imageFile = s.item.imagePath?.let { graph.files.resolve(it) }, label = if (s.showsWord) s.item.text else null, onClick = vm::repeatCue,
+                // The picture is «Άκου» with a picture on it, and it says the word at every level,
+                // level 0 included: tapping the thing he is trying to name has to answer him.
+                PictureCard(imageFile = s.item.imagePath?.let { graph.files.resolve(it) }, label = if (s.showsWord) s.item.text else null, onClick = vm::listenModel,
                     modifier = Modifier.fillMaxWidth(0.7f))
                 SuccessMark(visible = s.confirmed)
             }
@@ -90,21 +102,15 @@ fun WordCoachScreen(items: List<Item>, sessionId: String?, onDone: () -> Unit, o
                 Text(s.cueText ?: "", style = MaterialTheme.typography.displayLarge, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
             }
             Spacer(Modifier.height(Sizes.gapSmall))
-            // Once he has said it, the word is done: only listening again and "Επόμενο" are left.
-            Row {
-                // Nothing to say at level 0: the picture is the cue. Nothing to say while the
-                // microphone is open either — a tap here mid-take came back as «Δεν ακούγεται η
-                // φωνή», an error about a phone that was working exactly as it should.
-                QuietButton("Άκου", onClick = vm::repeatCue, icon = Icons.Rounded.VolumeUp, enabled = s.level > 0 && !s.isRecording, modifier = Modifier.weight(1f))
-                if (!s.confirmed) {
-                    Spacer(Modifier.width(Sizes.gapSmall))
-                    QuietButton(
-                        if (s.isRecording) "Στοπ" else "Πες το",
-                        onClick = { askMic.launch(Manifest.permission.RECORD_AUDIO) },
-                        icon = if (s.isRecording) Icons.Rounded.Stop else Icons.Rounded.Mic,
-                        modifier = Modifier.weight(1f),
-                    )
-                }
+            // Listening lives in the bottom row now, where his thumb is and where it cannot be
+            // missed; there is exactly one «Άκου» on this screen. Once he has said the word there
+            // is nothing left to record either: only «Άκου» and «Επόμενο» remain.
+            if (!s.confirmed) {
+                QuietButton(
+                    if (s.isRecording) "Στοπ" else "Πες το",
+                    onClick = { askMic.launch(Manifest.permission.RECORD_AUDIO) },
+                    icon = if (s.isRecording) Icons.Rounded.Stop else Icons.Rounded.Mic,
+                )
             }
             if (!s.confirmed && s.selfRecordingPath != null && !s.isRecording) {
                 Spacer(Modifier.height(Sizes.gapSmall))

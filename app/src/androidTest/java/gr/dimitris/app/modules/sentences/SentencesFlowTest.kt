@@ -3,6 +3,7 @@ package gr.dimitris.app.modules.sentences
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
@@ -20,6 +21,7 @@ import gr.dimitris.app.core.data.ModuleId
 import gr.dimitris.app.core.data.Outcome
 import gr.dimitris.app.core.data.now
 import gr.dimitris.app.today.MODULE_GRID_TAG
+import gr.dimitris.app.ui.components.LISTEN_TAG
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.After
@@ -61,7 +63,7 @@ class SentencesFlowTest {
     @Test fun aWrongOrderShowsTheSentenceToCopyAndCountsAsHelped() {
         val right = openPractice()
         tapInOrder(right.reversed())
-        compose.waitUntil(TIMEOUT_MS) { compose.onAllNodes(hasText("Όχι έτσι.")).fetchSemanticsNodes().isNotEmpty() }
+        compose.waitUntil(TIMEOUT_MS) { compose.onAllNodes(hasText(SentencesViewModel.WRONG_ORDER)).fetchSemanticsNodes().isNotEmpty() }
         // Said out loud and left on the screen, in the order he has to copy.
         compose.onNodeWithText("Σωστά: ${right.joinToString(" ")}").assertIsDisplayed()
         // A wrong order is not an answer: nothing is written until the sentence is finished.
@@ -70,6 +72,26 @@ class SentencesFlowTest {
         tapInOrder(right)
         compose.waitUntil(TIMEOUT_MS) { attempts().any { it.outcome == Outcome.ASSISTED } }
         assertEquals("one sentence, one row", 1, attempts().size)
+    }
+
+    /**
+     * There is no cue ladder here, so «Άκου» gives him the whole answer — the sentence in the order
+     * the cards go down — and it is still on offer from the first second, because spec §12 does not
+     * make him earn the model. What it costs is the row: the sentence is written as assisted work at
+     * the listening level rather than as one he found himself, so the level progression stays honest.
+     */
+    @Test fun theModelIsOnOfferFromTheFirstSecondAndTheRowSaysHeUsedIt() {
+        val right = openPractice()
+
+        compose.onNodeWithTag(LISTEN_TAG).assertIsEnabled()
+        compose.onNodeWithTag(LISTEN_TAG).performClick()
+        tapInOrder(right)
+
+        compose.waitUntil(TIMEOUT_MS) { attempts().isNotEmpty() }
+        val written = attempts().single()
+        assertEquals("a sentence he had said to him is work done with help", Outcome.ASSISTED, written.outcome)
+        assertTrue("hearing the model is level 3's worth of help: ${written.cueLevel}", (written.cueLevel ?: 0) >= 3)
+        assertTrue("the row has to carry the listen: ${written.detail}", written.detail.contains("\"listened\":1"))
     }
 
     /**

@@ -31,6 +31,8 @@ data class WordCoachState(
     val showsWord: Boolean = false,
     val canHint: Boolean = true,
     val isRecording: Boolean = false,
+    /** The model is sounding right now: «Άκου» is off for exactly as long as that lasts. */
+    val modelPlaying: Boolean = false,
     val selfRecordingPath: String? = null,
     val sttOn: Boolean = false,
     val listening: Boolean = false,
@@ -45,6 +47,18 @@ data class WordCoachState(
 class WordCoachViewModel(private val graph: AppGraph, private val items: List<Item>, private val sessionId: String?) : ViewModel() {
     private var ladder = CueLadder(items.first())
     private var startedAt = now()
+
+    /** How many times he asked to hear this word. It goes into the attempt's detail as it stands. */
+    private var listens = 0
+
+    /** Whatever this screen is saying: the cue, the model, or the model and his own take. */
+    private var speakJob: Job? = null
+
+    /**
+     * Bumped by every new utterance. A cancelled job's `finally` can land after the next one has
+     * started, and it must not put «Άκου» back for a model that is still playing.
+     */
+    private var speakToken = 0
 
     /**
      * The write of the last take, as a value: the attempt awaits the id instead of reading a field
@@ -90,19 +104,48 @@ class WordCoachViewModel(private val graph: AppGraph, private val items: List<It
     }
 
     /**
-     * The picture is a listen button too, and it has no disabled state to show: while a take is
-     * running it simply says nothing, instead of answering with «Δεν ακούγεται η φωνή» — the
-     * refusal the one-sound-at-a-time rule owes the microphone, not a fault he can do anything about.
+     * «Άκου», and the picture, which is the same button with a picture on it. The model is said —
+     * the caregiver's recording if she made one, else Greek TTS — whatever rung the ladder is on,
+     * level 0 included: this is the one thing the app never makes him earn.
+     *
+     * It costs him the cue level, not the word: [CueLadder.listened] scores the attempt at 3
+     * without moving the hint sequence, so the screen shows no more than it did and the caregiver's
+     * numbers still say the word needed help.
      */
-    fun repeatCue() { if (!_state.value.isRecording) speakCue() }
+    fun listenModel() {
+        val s = _state.value
+        if (s.isRecording || s.modelPlaying) return
+        listens++
+        ladder.listened()
+        speaking { report(graph.speaker.speak(s.item)) }
+    }
 
     private fun speakCue() {
         val s = _state.value
-        viewModelScope.launch {
+        speaking {
             when (s.level) {
                 1, 2 -> ladder.cueText()?.let { report(graph.speaker.speakText(it)) }
                 3, 4 -> report(graph.speaker.speak(s.item))
                 else -> Unit
+            }
+        }
+    }
+
+    /**
+     * Runs one utterance of this screen, and only one: a new tap replaces whatever was sounding.
+     * `quiet()` as well as cancelling, because a cancel only lands at the next suspension point and
+     * the old voice would be heard under the new one.
+     */
+    private fun speaking(block: suspend () -> Unit) {
+        speakJob?.cancel()
+        graph.voice.quiet()
+        val token = ++speakToken
+        _state.update { it.copy(modelPlaying = true) }
+        speakJob = viewModelScope.launch {
+            try {
+                block()
+            } finally {
+                if (speakToken == token) _state.update { it.copy(modelPlaying = false) }
             }
         }
     }
@@ -149,7 +192,7 @@ class WordCoachViewModel(private val graph: AppGraph, private val items: List<It
     /** Model voice, then his own recording. */
     fun playComparison() {
         val path = _state.value.selfRecordingPath ?: return
-        viewModelScope.launch {
+        speaking {
             report(graph.speaker.speak(_state.value.item))
             report(graph.voice.play(graph.files.resolve(path)))
         }
@@ -192,10 +235,14 @@ class WordCoachViewModel(private val graph: AppGraph, private val items: List<It
         if (_state.value.isRecording) toggleRecording()
         val s = _state.value
         val outcome = ladder.outcomeFor(confirmed)
-        // Read eagerly: the ladder is replaced the moment the next word starts.
-        val level = ladder.level
+        // Read eagerly: the ladder is replaced the moment the next word starts. The recorded level,
+        // not the rung on screen: a word he asked to hear was a word said to him.
+        val level = ladder.recordedLevel
         val save = recordingSave
-        val detail = s.heard?.let { """{"heard":${jsonString(it)},"matched":${s.heardMatched}}""" } ?: "{}"
+        // Every row says how many times he asked for the model, so a caregiver reading a run of
+        // assisted words can see whether it was the ladder or the listening that made them assisted.
+        val heard = s.heard?.let { ""","heard":${jsonString(it)},"matched":${s.heardMatched}""" }.orEmpty()
+        val detail = """{"listened":$listens$heard}"""
         // The app scope, not this screen's: pressing back must not lose the word he just said.
         lastWrite = graph.scope.launch {
             runCatching {
@@ -236,6 +283,7 @@ class WordCoachViewModel(private val graph: AppGraph, private val items: List<It
         }
         ladder = CueLadder(items[i])
         startedAt = now()
+        listens = 0
         recordingSave = null
         _state.value = WordCoachState(index = i, total = items.size, item = items[i], sttOn = _state.value.sttOn)
     }
@@ -247,6 +295,7 @@ class WordCoachViewModel(private val graph: AppGraph, private val items: List<It
      */
     fun leave(then: () -> Unit) {
         if (graph.voice.isRecording) graph.voice.cancelRecording()
+        speakJob?.cancel()
         graph.voice.quiet()
         val write = lastWrite
         viewModelScope.launch { write?.join(); then() }
@@ -259,12 +308,14 @@ class WordCoachViewModel(private val graph: AppGraph, private val items: List<It
      * he finds on the way back is a «Στοπ» for a microphone that is no longer running.
      */
     fun screenGone() {
+        speakJob?.cancel()
         graph.voice.quiet()
         if (graph.voice.isRecording) graph.voice.cancelRecording()
-        _state.update { it.copy(isRecording = false, listening = false) }
+        _state.update { it.copy(isRecording = false, listening = false, modelPlaying = false) }
     }
 
     override fun onCleared() {
+        speakJob?.cancel()
         if (graph.voice.isRecording) graph.voice.cancelRecording()
     }
 

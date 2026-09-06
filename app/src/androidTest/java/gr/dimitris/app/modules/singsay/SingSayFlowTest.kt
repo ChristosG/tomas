@@ -1,10 +1,13 @@
 package gr.dimitris.app.modules.singsay
 
 import androidx.compose.ui.test.hasScrollAction
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isEnabled
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollToNode
@@ -14,6 +17,7 @@ import gr.dimitris.app.MainActivity
 import gr.dimitris.app.core.data.Attempt
 import gr.dimitris.app.core.data.ModuleId
 import gr.dimitris.app.core.data.Outcome
+import gr.dimitris.app.ui.components.LISTEN_TAG
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -76,6 +80,35 @@ class SingSayFlowTest {
         assertTrue("the stage reached belongs in the attempt: ${written.detail}", written.detail.contains("\"stage\":3"))
     }
 
+    /**
+     * «Άκου» is live at the first stage before anything has been tapped, and it is still live at the
+     * fifth, where the whole point is that the music and the model are gone — spec §12 does not make
+     * an exception for the stage that is hardest. What it costs is the row: a phrase said alone after
+     * asking to hear it is assisted work at the listening level, not the clean cue 0 it would be
+     * otherwise, and the count of listens rides along in the detail.
+     */
+    @Test fun theModelIsOnOfferAtEveryStageAndTheRowSaysHeUsedIt() {
+        val before = attempts()
+        openModule()
+
+        // Before a single tap: the model is already on offer, once the stage has finished speaking.
+        compose.waitUntil(TIMEOUT_MS) { enabledTag(LISTEN_TAG) }
+
+        tapToSpeakStage()
+        compose.waitUntil(TIMEOUT_MS) { enabledTag(LISTEN_TAG) }
+        compose.onNodeWithTag(LISTEN_TAG).performClick()
+
+        compose.waitUntil(TIMEOUT_MS) { enabled(SAID_IT) }
+        compose.onNodeWithText(SAID_IT).performClick()
+
+        compose.waitUntil(TIMEOUT_MS) { attempts().size == before.size + 1 }
+        val written = (attempts() - before.toSet()).single()
+        assertEquals("a phrase he had said to him is work done with help", Outcome.ASSISTED, written.outcome)
+        assertTrue("hearing the model is level 3's worth of help: ${written.cueLevel}", (written.cueLevel ?: 0) >= 3)
+        assertTrue("the row has to carry the listen: ${written.detail}", written.detail.contains("\"listened\":1"))
+        assertTrue("and the stage he reached is still his: ${written.detail}", written.detail.contains("\"stage\":5"))
+    }
+
     @Test fun skipMovesOnAndSaysSoInTheRow() {
         val before = attempts()
         openModule()
@@ -123,6 +156,11 @@ class SingSayFlowTest {
     private fun onScreen(text: String) = compose.onAllNodesWithText(text).fetchSemanticsNodes().isNotEmpty()
 
     private fun enabled(text: String) = compose.onAllNodes(hasText(text) and isEnabled()).fetchSemanticsNodes().isNotEmpty()
+
+    /** «Άκου» is found by its tag: the first stage's own label is the same word. */
+    private fun enabledTag(tag: String) =
+        compose.onAllNodesWithTag(tag).fetchSemanticsNodes().isNotEmpty() &&
+            compose.onAllNodes(hasTestTag(tag) and isEnabled()).fetchSemanticsNodes().isNotEmpty()
 
     private fun attempts(): List<Attempt> =
         runBlocking { graph.db.attempts().since(0).filter { it.module == ModuleId.SINGSAY } }

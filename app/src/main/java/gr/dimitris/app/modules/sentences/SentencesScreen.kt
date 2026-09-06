@@ -42,6 +42,7 @@ import gr.dimitris.app.LocalAppGraph
 import gr.dimitris.app.ui.components.BigButton
 import gr.dimitris.app.ui.components.ButtonTone
 import gr.dimitris.app.ui.components.DimitrisScreen
+import gr.dimitris.app.ui.components.ListenButton
 import gr.dimitris.app.ui.components.PictureCard
 import gr.dimitris.app.ui.components.QuietButton
 import gr.dimitris.app.ui.components.SuccessMark
@@ -106,6 +107,11 @@ fun SentencesScreen(count: Int, sessionId: String?, onDone: () -> Unit, onLeave:
         // Back is "I want out", not "I finished": the module drops what it was doing and says so.
         onBack = { vm.leave(onLeave) },
         bottom = {
+            // «Άκου» says the whole sentence, in the order the cards have to go down. There is no
+            // ladder here to withhold it behind, and nothing to earn it with: it is the first thing
+            // in the bottom block, above «Παράλειψη», at its full width.
+            ListenButton(onClick = vm::listenModel, enabled = s.sentence != null && !s.modelPlaying)
+            Spacer(Modifier.height(Sizes.gapSmall))
             // Finished: the only way on is «Επόμενο», and it is green because he found it himself.
             if (s.correct == true) BigButton("Επόμενο", onClick = vm::next, tone = ButtonTone.Success)
             else Row {
@@ -124,8 +130,9 @@ fun SentencesScreen(count: Int, sessionId: String?, onDone: () -> Unit, onLeave:
 
         ChosenStrip(s.chosen, done = s.correct == true, picture = picture)
 
-        // A miss says so in writing as well as out loud: the sound may be off, or missed. The
-        // sentence stays on the screen while he builds it again — copying it is the exercise.
+        // An order that was not the sentence is answered in writing as well as out loud: the sound
+        // may be off, or missed. The sentence stays on the screen while he builds it again —
+        // copying it is the exercise, and it is never called a mistake.
         if (s.correct == false) {
             Spacer(Modifier.height(Sizes.gapSmall))
             Text(SentencesViewModel.WRONG_ORDER, style = MaterialTheme.typography.headlineMedium, color = MaterialTheme.colorScheme.secondary)

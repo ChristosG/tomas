@@ -8,6 +8,7 @@ import gr.dimitris.app.core.data.Item
 import gr.dimitris.app.core.data.ModuleId
 import gr.dimitris.app.core.data.Who
 import gr.dimitris.app.core.data.now
+import gr.dimitris.app.modules.wordcoach.CueLadder
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Job
@@ -67,6 +68,9 @@ class SingSayViewModel(private val graph: AppGraph, private val items: List<Item
     /** True from the moment a phrase is finished or skipped until the next one is ready. */
     private var finishing = false
 
+    /** How many times he asked to hear this phrase. It goes into the attempt's detail as it stands. */
+    private var listens = 0
+
     /** Whatever is being played right now: the model, the melody, or a tapped note. */
     private var playJob: Job? = null
 
@@ -89,6 +93,7 @@ class SingSayViewModel(private val graph: AppGraph, private val items: List<Item
         loadJob?.cancel()
         recordingSave = null
         sungModelPath = null
+        listens = 0
         // playing from the first frame: the model is about to start, and a stage button tapped in
         // the gap would belong to the phrase he has just left.
         _state.value = SingSayState(index = i, total = items.size, item = item, notes = Melody.forPhrase(item.text), playing = true)
@@ -149,9 +154,15 @@ class SingSayViewModel(private val graph: AppGraph, private val items: List<Item
         }
     }
 
-    /** «Άκου»: the caregiver's sung model if there is one, else TTS, then the melody. */
-    fun playModel() {
+    /**
+     * «Άκου»: the caregiver's sung model if there is one, else TTS, then the melody — at every one
+     * of the five stages, the last one included, where the whole point is that the music is gone.
+     * Hearing the phrase is never withheld (spec §12); what it costs is the row, not the button.
+     */
+    fun listenModel() {
         val s = _state.value
+        if (s.isRecording) return
+        listens++
         val token = claimPlayback()
         playJob = viewModelScope.launch {
             _state.update { it.copy(playing = true, lit = -1) }
@@ -314,7 +325,7 @@ class SingSayViewModel(private val graph: AppGraph, private val items: List<Item
 
     /**
      * The model voice, then his own take, back to back in one job. The model playback is written out
-     * here rather than calling [playModel]: that would cancel the very job it was started from, and
+     * here rather than calling [listenModel]: that would cancel the very job it was started from, and
      * the comparison would stop before his own voice was ever reached.
      */
     fun playComparison() {
@@ -345,8 +356,9 @@ class SingSayViewModel(private val graph: AppGraph, private val items: List<Item
         if (_state.value.isRecording) toggleRecording()
         val s = _state.value
         val stageReached = s.stage
-        val cue = SingStage.cueLevelFor(stageReached)
-        val outcome = SingStage.outcomeFor(stageReached, skipped)
+        val heard = listens
+        val cue = SingStage.cueLevelFor(stageReached, listened = heard > 0)
+        val outcome = SingStage.outcomeFor(stageReached, skipped, listened = heard > 0)
         // Read eagerly: the clock and the take belong to the phrase being left behind.
         val began = startedAt
         val save = recordingSave
@@ -364,7 +376,7 @@ class SingSayViewModel(private val graph: AppGraph, private val items: List<Item
                     Attempt(
                         itemId = s.item.id, module = ModuleId.SINGSAY, sessionId = sessionId, startedAt = began,
                         durationMs = now() - began, outcome = outcome, cueLevel = cue, selfRecordingId = recordingId,
-                        detail = """{"stage":$stageReached}""",
+                        detail = """{"stage":$stageReached,"listened":$heard}""",
                     )
                 )
                 graph.scheduler.record(s.item.id, ModuleId.SINGSAY, outcome, cue)
