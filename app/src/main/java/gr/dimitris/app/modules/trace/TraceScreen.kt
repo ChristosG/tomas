@@ -1,5 +1,6 @@
 package gr.dimitris.app.modules.trace
 
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -7,8 +8,10 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -177,27 +180,39 @@ fun TraceScreen(count: Int, sessionId: String?, onDone: () -> Unit, onLeave: () 
                 }
                 Spacer(Modifier.height(Sizes.gapSmall))
 
-                // The paper is the biggest one that fits above the buttons. A single letter takes
-                // the whole slot — every pixel of it is tolerance for his hand, and a letter drawn
-                // half the size is a pass line half as wide. A word keeps its taller shape, capped
-                // by whichever of the two directions runs out first.
+                // The paper is the biggest one that fits above the buttons. A word keeps its taller
+                // shape, capped by whichever of the two directions runs out first; a single letter
+                // takes a square of the slot — square, because the box has to change in both
+                // directions by the same factor when the slot does. The glyph is re-fitted with one
+                // uniform scale, so a box that stretched in y alone would slide his own ink sideways
+                // off the letter it is being marked against.
                 BoxWithConstraints(Modifier.fillMaxWidth().weight(1f)) {
                     val word = s.text.length > 1
                     val height = maxHeight.coerceAtLeast(MIN_PAPER)
-                    val width = if (word) minOf(maxWidth, height * WORD_BOX) else maxWidth
-                    TraceCanvas(
-                        template = s.template,
-                        // Always there to follow, except in the seconds of level 5 when the point is
-                        // that it is not.
-                        showTemplate = s.templateVisible && s.template.isNotEmpty(),
-                        strokes = s.strokes,
-                        onStroke = vm::addStroke,
-                        modifier = Modifier.size(width, if (word) width / WORD_BOX else height)
-                            .align(Alignment.TopCenter)
-                            .onSizeChanged { vm.setCanvasSize(it.width.toFloat(), it.height.toFloat()) }
-                            .testTag(TRACE_CANVAS_TAG),
-                        enabled = !passed,
-                    )
+                    val width = if (word) minOf(maxWidth, height * WORD_BOX) else minOf(maxWidth, height)
+                    // The floor is a floor: `size` would hand back whatever the slot had, and a slot
+                    // squeezed to nothing (a short screen at a large font scale) left him a canvas he
+                    // could not write on and an «Έτοιμο» that could never light up. In that one case
+                    // the paper keeps its size and this box scrolls instead.
+                    val tight = maxHeight < MIN_PAPER
+                    Box(
+                        Modifier.fillMaxSize()
+                            .then(if (tight) Modifier.verticalScroll(rememberScrollState()) else Modifier)
+                    ) {
+                        TraceCanvas(
+                            template = s.template,
+                            // Always there to follow, except in the seconds of level 5 when the point
+                            // is that it is not.
+                            showTemplate = s.templateVisible && s.template.isNotEmpty(),
+                            strokes = s.strokes,
+                            onStroke = vm::addStroke,
+                            modifier = Modifier.requiredSize(width, if (word) width / WORD_BOX else width)
+                                .align(Alignment.TopCenter)
+                                .onSizeChanged { vm.setCanvasSize(it.width.toFloat(), it.height.toFloat()) }
+                                .testTag(TRACE_CANVAS_TAG),
+                            enabled = !passed,
+                        )
+                    }
                 }
             }
         }
