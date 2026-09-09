@@ -280,3 +280,23 @@ Chris tested the first release on his phone. These amendments follow from his no
 **Caregivers can verify what they add.** «Δοκίμασέ το» in the word editor runs that word at once; new caregiver words go first in the next session.
 
 **The Claude advisor gets a memory and a journey.** Instead of a one-page summary it receives: Dimitris' profile, the caregivers' notes (what the therapist said, current goals), the lifetime table of every word practised (attempts, outcomes, mean help, first/last seen, box), the last 28 days in per-word-per-day detail, daily minutes, the previous advices it gave, and the app's own insight lines. It answers in three sections: for the caregivers, for Dimitris (read aloud), and «Εστίαση», a small JSON block naming the words, sounds, modules and level suggestions to boost. Advices and notes are stored (and synced) so the next consultation builds on the last; the app schedules the focus words first for the following week. Still text-only, still only when a caregiver taps the button, and the caregiver sees exactly what is sent.
+
+## 13. Re-scope after Dimitris' own feedback (2026-09-10)
+
+Dimitris tried v0.2.0 and said it is too easy. The picture is stronger than §1 assumed: he says most everyday words (not always cleanly), reads Greek slowly but understands abstract words, reasons well, uses a chat assistant with photos and a few typed words, and did SQL as a programmer. His speech is telegraphic («φάρμακα πρέπει πάρω»). What he lacks is full sentences and multi-step tasks; that is the new centre of the app.
+
+**Principles that do not change:** Greek-only, one-handed, adult tone, errorless speech, shape-judged writing, no timers. **One added:** the interface stays simple whatever the difficulty — one primary action per screen, at most three actions in the bottom area, every new activity is a tile on the grid, and difficulty is one row of five dots he can tap himself, bounded by the caregiver.
+
+**Sentence expansion is the core therapy.** Wherever he speaks or taps content words, the app can return the full sentence, speak it, and let him repeat it: on the talk board (tap words → «Ολόκληρη» → the grammatical sentence), in dialogues (his open answer → accepted, or nudged towards the full form), and in the sentence builder (typed or spoken sentences judged for grammar).
+
+**Open dialogues.** His answers are judged for relevance and form, not matched to a script line. Any sensible reply counts; a telegraphic one earns the expanded form to repeat; questions get harder (two-step answers).
+
+**Judgement and expansion through one Claude API.** Per-turn judging uses a fast model (`claude-haiku-4-5-20251001`), advice keeps `claude-opus-5`. Turn judging sends only text (the prompt, the target, his transcript) and only when the caregiver has turned «Έλεγχος με Claude» on and a key exists; without it the app falls back to local matching.
+
+**Transcription stays free and on the phone.** Android's on-device recogniser (Android 13 and newer) with the Greek pack downloaded from a caregiver setting; the network recogniser only as a fallback, with honest Greek lines for "no connection" and "Greek pack missing". One speech control: «Μίλα» records his take and transcribes the same audio; «Άκου» afterwards plays the model and his take back to back.
+
+**Difficulty 1–5 everywhere,** set by him on each module's first screen and bounded by the caregiver. Numbers grow to 1000 and beyond with operations, change, time, dates and two-step word problems; sentences to seven words with articles, prepositions and clauses, plus gap-filling and typed sentences; vocabulary gains abstract and multi-syllable tiers; writing gains dictation and typed sentences; sing-then-say moves to long sentences and stays off unless enabled.
+
+**Two new tiles** (phase 13): «SQL», beginner puzzles run for real on tiny tables, both about his life and textbook ones; and «Βήματα», ordering and telling the steps of a task, for the multi-step reasoning he calls «είμαι καμένος».
+
+**Privacy.** Nothing about his health beyond what §1 states enters prompts, reports or documents. Per-turn judging is opt-in and text-only.
