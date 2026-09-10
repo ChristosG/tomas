@@ -20,6 +20,8 @@ import androidx.annotation.RequiresApi
 import gr.dimitris.app.core.audio.Recorded
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -107,29 +109,52 @@ class AndroidSpeechToText(
         if (!withContext(Dispatchers.Default) { isAvailable }) {
             return Result.failure(SpeechFailure.NotWorking(NO_RECOGNIZER))
         }
-        val engine = engine()
-        // There is a recognition service, and it still cannot hear him: the only way
-        // [OnDeviceSupport.decide] says this is a cloud-only engine with no connection, which is
-        // Chris' code 2 — and it is said as «Χρειάζεται σύνδεση» rather than as «δεν λειτούργησε».
-        if (engine == OnDeviceSupport.Engine.NONE) {
-            return Result.failure(SpeechFailure.NotWorking(SpeechRecognizer.ERROR_NETWORK))
+        // The wait is claimed, and his «Στοπ» cleared, *before* anything that can take time — asking
+        // the engine what languages it has, and opening a microphone. The screen puts «Στοπ» under
+        // his thumb the instant he taps «Μίλα», so a stop landing in that gap used to be wiped by
+        // this line and lost, and the indicator would sit there for the whole window. From here on
+        // every «Στοπ» belongs to this wait. Claiming and clearing together, on the one thread that
+        // owns them, is also what keeps a second overlapping call from clearing the first's stop.
+        val claimed = withContext(NonCancellable + Dispatchers.Main) {
+            if (waiting) false else { waiting = true; stopped = false; true }
         }
-        val onDevice = engine == OnDeviceSupport.Engine.ON_DEVICE
-        // The microphone is the app's own on this path, and opening one is not something the screen
-        // may wait on: an `AudioRecord` and a file, off the drawing thread, before the loop below
-        // ever touches the main looper. A take that cannot be started is not a failure — the session
-        // simply runs with the engine's own microphone, as it always did.
-        var pcm = if (onDevice) withContext(Dispatchers.IO) { startTake() } else null
-        return withContext(Dispatchers.Main) {
-            if (waiting) {
-                pcm?.let { withContext(NonCancellable + Dispatchers.IO) { it.cancel() } }
-                return@withContext Result.failure(SpeechFailure.NotWorking(ALREADY_LISTENING))
+        if (!claimed) return Result.failure(SpeechFailure.NotWorking(ALREADY_LISTENING))
+        var pcm: PcmTake? = null
+        try {
+            val engine = engine()
+            // There is a recognition service, and it still cannot hear him: the only way
+            // [OnDeviceSupport.decide] says this is a cloud-only engine with no connection, which is
+            // Chris' code 2 — said as «Χρειάζεται σύνδεση» rather than as «δεν λειτούργησε».
+            if (engine == OnDeviceSupport.Engine.NONE) {
+                return Result.failure(SpeechFailure.NotWorking(SpeechRecognizer.ERROR_NETWORK))
             }
-            waiting = true
-            stopped = false
-            take = pcm
-            val startedAt = SystemClock.elapsedRealtime()
-            try {
+            val onDevice = engine == OnDeviceSupport.Engine.ON_DEVICE
+            // He said he was finished while the engine was being asked. The microphone never opens:
+            // there is nothing to record and nothing to recognise, and the window comes back the way
+            // every stopped window does — with nothing heard, which costs him no try.
+            if (stopped) return Result.success(Transcript("", 0f))
+            if (onDevice) {
+                // The microphone is the app's own on this path, and opening one is not something the
+                // screen may wait on: an `AudioRecord` and a file, off the drawing thread.
+                //
+                // `NonCancellable` around it, and the handle stored the moment it comes back: a
+                // cancellation landing between building the recorder and storing it would leave an
+                // open microphone on `VOICE_RECOGNITION` that nothing could ever reach — its reader
+                // loops on a flag only [PcmTake.stop] clears — writing a WAV at 32 kB/s for the life
+                // of the process. «Μίλα» followed inside a few tens of milliseconds by «Επόμενο» or
+                // a back press is all that would take. A take that cannot be started is not a
+                // failure: the session simply runs with the engine's own microphone, as it always
+                // did.
+                pcm = withContext(NonCancellable + Dispatchers.IO) { startTake() }
+            }
+            // Now that the take is held — so the `finally` below can close it — whatever happened
+            // while the microphone was opening is answered: a cancelled wait goes no further, and a
+            // «Στοπ» ends the window before a session is ever opened.
+            currentCoroutineContext().ensureActive()
+            if (stopped) return Result.success(Transcript("", 0f))
+            return withContext(Dispatchers.Main) {
+                take = pcm
+                val startedAt = SystemClock.elapsedRealtime()
                 var outcome: Result<Transcript>
                 var restarts = 0
                 while (true) {
@@ -164,16 +189,21 @@ class AndroidSpeechToText(
                 val closing = pcm
                 val kept = closing?.let { withContext(NonCancellable + Dispatchers.IO) { finishTake(it) } }
                 outcome.withTake(kept)
-            } finally {
-                waiting = false
-                take = null
-                _level.value = 0f
-                // A wait that was cancelled — he pressed back, the session moved on — never reached
-                // the line above, and a microphone left open would outlive the word it belonged to.
-                // The take goes with it: it is a recording of a word he has left behind. Off the
-                // main thread, because cancelling joins a reader and rewrites a header, and the
-                // screen he is leaving must not stutter for it.
-                pcm?.let { open -> if (open.isRecording) withContext(NonCancellable + Dispatchers.IO) { open.cancel() } }
+            }
+        } finally {
+            val open = pcm
+            withContext(NonCancellable) {
+                withContext(Dispatchers.Main) {
+                    waiting = false
+                    take = null
+                    _level.value = 0f
+                }
+                // A wait that was cancelled — he pressed back, the session moved on — or one his
+                // «Στοπ» ended before it began never closed its take, and a microphone left open
+                // would outlive the word it belonged to. The take goes with it: it is a recording of
+                // a word he has left behind. Off the main thread, because cancelling joins a reader
+                // and rewrites a header, and the screen he is leaving must not stutter for it.
+                if (open != null && open.isRecording) withContext(Dispatchers.IO) { open.cancel() }
             }
         }
     }
