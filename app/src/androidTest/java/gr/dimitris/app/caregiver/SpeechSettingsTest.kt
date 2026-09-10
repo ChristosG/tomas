@@ -50,10 +50,15 @@ class SpeechSettingsTest {
     @After fun putItBack() { graph.stt = realStt }
 
     /**
-     * The real recogniser on this emulator, untouched. There is no speech engine here, so
-     * [OnDeviceSupport.decide] is never even reached — `isRecognitionAvailable` is false and the
-     * engine is [OnDeviceSupport.Engine.NONE] — and the row says the one true thing and offers
-     * nothing. A download button on a phone that cannot use it would be a button that lies.
+     * The real recogniser on this emulator, untouched.
+     *
+     * What that resolves to is deliberately not asserted, because it is not the same on every image:
+     * this API 36 one *does* have a recognition service (it answers `ERROR_SERVER_DISCONNECTED`), so
+     * the engine here is [OnDeviceSupport.Engine.NETWORK]; an image without one would give
+     * [OnDeviceSupport.Engine.NONE]. Both mean the same thing to a caregiver — this phone cannot
+     * hear Greek without a connection — and both map to `UNSUPPORTED`, which is what the row must
+     * say. Neither offers a download button: one on a phone that cannot use it would be a button
+     * that lies.
      */
     @Test fun anEngineLessPhoneSaysGreekIsNotSupportedAndOffersNoDownload() {
         show()

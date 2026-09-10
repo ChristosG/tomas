@@ -129,6 +129,59 @@ object MediaRefs {
     fun folderFor(extension: String, files: MediaPaths): File =
         if (extension in Tables.RECORDING_EXTS) files.recordingsDir else files.photosDir
 
+    /**
+     * Whether these are the first bytes of a WAV: `RIFF` at 0 and `WAVE` at 8.
+     *
+     * Both halves are checked because `RIFF` alone is a container, not a format — a WebP photograph
+     * starts with `RIFF` too, and would otherwise be filed away as a voice.
+     */
+    fun isWav(head: ByteArray): Boolean =
+        head.size >= WAVE_END && matches(head, 0, "RIFF") && matches(head, WAVE_AT, "WAVE")
+
+    /**
+     * What a downloaded file should really be called, given its first bytes.
+     *
+     * A row on the wire carries a hash and nothing else, so the extension a phone gives the bytes it
+     * downloads comes from [Tables.mediaFields] — one value per column, and the recordings column has
+     * to name one of the two. Since «Μίλα» began keeping his audio as raw PCM, a recording can arrive
+     * as either an `.m4a` or a `.wav`, and the bytes are the only thing that knows which. Reading them
+     * is honest and costs twelve bytes; guessing would leave a WAV named `.m4a` on the caregiver's
+     * phone for ever.
+     */
+    fun extensionOf(head: ByteArray, fallback: String): String =
+        if (isWav(head)) Tables.WAV_EXT else fallback
+
+    /**
+     * The file a downloaded recording should be under, renaming it when its name and its bytes
+     * disagree. Returns the file that holds the bytes either way: a rename that fails is untidy, not
+     * a lost recording, and the row must still point at something playable.
+     */
+    fun settle(file: File): File {
+        val head = runCatching { file.inputStream().use { input -> ByteArray(WAVE_END).also { input.read(it) } } }
+            .getOrNull() ?: return file
+        val extension = file.name.substringAfterLast('.', "")
+        val real = extensionOf(head, extension)
+        if (real == extension) return file
+        val renamed = File(file.parentFile, file.nameWithoutExtension + "." + real)
+        return if (runCatching { file.renameTo(renamed) }.getOrDefault(false)) renamed else file
+    }
+
+    /**
+     * A file this phone already has for [sha], under either name a recording may carry. Without the
+     * second name a WAV settled on an earlier sync would be downloaded again on every run.
+     */
+    fun existing(folder: File, sha: String, extension: String): File? =
+        (listOf(extension) + Tables.RECORDING_EXTS)
+            .map { File(folder, "$sha.$it") }
+            .firstOrNull { it.isFile && it.length() > 0 }
+
+    private fun matches(bytes: ByteArray, at: Int, text: String): Boolean =
+        text.indices.all { bytes[at + it].toInt().toChar() == text[it] }
+
+    /** `WAVE` sits at byte 8 of a RIFF header, so twelve bytes are enough to know. */
+    private const val WAVE_AT = 8
+    private const val WAVE_END = 12
+
     private fun isSynced(file: File, files: MediaPaths): Boolean =
         under(file, files.photosDir) || under(file, files.recordingsDir)
 

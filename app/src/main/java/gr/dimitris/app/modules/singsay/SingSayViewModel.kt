@@ -540,6 +540,12 @@ class SingSayViewModel(private val graph: AppGraph, private val items: List<Item
             )
         }
         listenJob = viewModelScope.launch {
+            // Which engine will answer, asked again rather than remembered from the first phrase of
+            // the run: the Greek pack can land mid-exercise, and a screen still showing
+            // «Ηχογράφηση» beside a «Μίλα» that has started keeping his takes would be two
+            // microphones.
+            oneControl = graph.stt.engine() == OnDeviceSupport.Engine.ON_DEVICE
+            _state.update { it.copy(oneControl = oneControl) }
             val heard = graph.stt.listen()
             // On the on-device path the window also hands back his own voice as a file, because the
             // app held the microphone and the engine was fed from it. Kept whatever the phone made

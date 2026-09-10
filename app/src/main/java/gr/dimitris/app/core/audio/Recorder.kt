@@ -20,16 +20,27 @@ import java.util.TimerTask
  * It defaults to 0 so that a [Recorded] built anywhere else — a test, a future recorder — reads as
  * silence rather than quietly passing a check it was never measured for.
  */
-data class Recorded(val file: File, val durationMs: Long, val peakAmplitude: Int = 0) {
+data class Recorded(
+    val file: File,
+    val durationMs: Long,
+    val peakAmplitude: Int = 0,
+    /**
+     * The line *this* take is judged against. It travels with the take because the two recorders
+     * measure the same 0..32767 scale through different paths and do not deserve the same number:
+     * see [SILENCE_PEAK] and [SILENCE_PEAK_PCM]. A `Recorded` built anywhere else gets the stricter
+     * of the two rather than quietly passing a check it was never measured for.
+     */
+    val silenceFloor: Int = SILENCE_PEAK,
+) {
     /**
      * Nothing was said into this one. Chris found that a take never checked anything, so a silent
      * one "passed" and was saved as his voice; the module deletes these and asks again instead.
      */
-    val isSilent: Boolean get() = peakAmplitude < SILENCE_PEAK
+    val isSilent: Boolean get() = peakAmplitude < silenceFloor
 
     companion object {
         /**
-         * Below this, nobody spoke.
+         * Below this, nobody spoke into a [Recorder] take.
          *
          * Calibration: the emulator's microphone is dead silent and a take of over a second reads a
          * peak of about 8 — the codec's own noise floor, measured by `RecorderTest`, not zero. A
@@ -40,6 +51,36 @@ data class Recorded(val file: File, val durationMs: Long, val peakAmplitude: Int
          * number can be moved on evidence from his phone instead of on a guess.
          */
         const val SILENCE_PEAK = 1_500
+
+        /**
+         * The same line for a take made by [gr.dimitris.app.core.speech.PcmTake], and it is lower on
+         * purpose.
+         *
+         * **Measured, on this emulator:** a second of its silent microphone reads a peak of **8**
+         * through `PcmTake` (`PcmTakeTest`) — the same 8 `RecorderTest` reads through the AAC
+         * encoder. So the noise floor itself gives no reason to move the line.
+         *
+         * **Unmeasured, and the reason it moves anyway:** [SILENCE_PEAK] was calibrated against
+         * `MediaRecorder.getMaxAmplitude()`, which reads the signal on its way into the AAC encoder
+         * with whatever gain the `MIC` source applies. `PcmTake` reads raw PCM16 off
+         * `VOICE_RECOGNITION`, a source the platform documents as leaving its own gain shaping out
+         * of the way of a recogniser. Whether the *same voice* lands lower on that path is a
+         * property of his Samsung and cannot be measured on a silent emulator — but if it does, and
+         * the line stayed at 1 500, quiet Greek words he really said would start being deleted.
+         *
+         * The reasoning for 600, said plainly rather than promised: the floor is 8, room noise
+         * through a phone microphone sits in the low hundreds, quiet speech at normal distance lands
+         * around 1 500–3 000, and an ordinary word well above that. 600 is two orders of magnitude
+         * above the floor, clear of a quiet room, and comfortably below the quietest thing he is
+         * likely to get out. Erring low is the right direction here, because the cost of keeping a
+         * too-quiet take is a quiet playback, while the cost of deleting one is losing the one word
+         * he managed.
+         *
+         * **Adaptation data.** Every take's real peak rides in the attempt's detail as `peak`
+         * alongside `sttOn`, so a fortnight of his rows says whether 600 is right: the number to
+         * watch is the *lowest* peak on takes he did speak into. See `docs/ADAPTATION.md`.
+         */
+        const val SILENCE_PEAK_PCM = 600
 
         /** Said when the take had nothing in it. An invitation, never a verdict on his voice. */
         const val SILENT_TAKE = "Δεν σε άκουσα. Πες το πιο δυνατά."

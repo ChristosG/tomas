@@ -476,12 +476,18 @@ class SyncEngine(
      * the row: the value stays a `media://` and the next sync asks for the file again.
      */
     private suspend fun fetch(sha: String, extension: String, tally: Tally): File? {
-        val destination = File(MediaRefs.folderFor(extension, files), "$sha.$extension")
-        if (destination.isFile && destination.length() > 0) return destination
+        val folder = MediaRefs.folderFor(extension, files)
+        // Either name a recording may already be under: a WAV that arrived on an earlier sync was
+        // renamed by its bytes, and looking only for the registry's extension would fetch it again
+        // every run.
+        MediaRefs.existing(folder, sha, extension)?.let { return it }
+        val destination = File(folder, "$sha.$extension")
         return try {
             client.getMedia(sha, destination)
             tally.mediaDown++
-            destination
+            // The wire carries a hash, not a format. His takes are raw PCM now and the caregiver's
+            // are AAC, and the only thing that knows which arrived is the first twelve bytes.
+            MediaRefs.settle(destination)
         } catch (ce: CancellationException) {
             throw ce
         } catch (e: Throwable) {

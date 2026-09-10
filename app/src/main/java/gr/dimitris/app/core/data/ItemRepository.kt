@@ -11,6 +11,8 @@ class ItemRepository(
     private val recordings: RecordingDao,
     /** How a media file becomes a stored path. The app passes MediaFiles::relativize; JVM tests keep it absolute. */
     private val relativize: (File) -> String = { it.absolutePath },
+    /** The other direction, for the one thing that has to reach a file: pruning his old takes. */
+    private val resolve: (String) -> File = ::File,
     private val clock: () -> Long = ::now,
 ) {
     fun observeAll(): Flow<List<Item>> = items.observeActive()
@@ -53,7 +55,38 @@ class ItemRepository(
         recordings.latestFor(itemId, who, style)?.takeIf { it.path == path }?.let { return link(itemId, it, who, style) }
         val recording = Recording(itemId = itemId, path = path, who = who, style = style, durationMs = durationMs, recordedAt = clock())
         recordings.upsert(recording)
+        prune(itemId, who, style)
         return link(itemId, recording, who, style)
+    }
+
+    /**
+     * Only the newest [HIS_TAKES] of **his** takes of one word are kept; the rest are soft-deleted
+     * and their files removed.
+     *
+     * A take used to be a deliberate «Ηχογράφηση» tap and an AAC file of about half a megabyte a
+     * minute. Since spec §13 folded the two microphones into one it is *every* «Μίλα» window and raw
+     * PCM at nearly four times the size, so a word he practises daily would quietly gather hundreds
+     * of megabytes on his phone and, through sync, on the caregiver's too — and a row under it in
+     * «Πρόοδος» for every window he ever opened.
+     *
+     * Three, because three is what anyone actually listens back to: this one, and the two before it
+     * to hear whether it is coming easier. The delete is soft and stamped, so it travels as a
+     * deletion on the next sync and the other phone loses the file too.
+     *
+     * A caregiver's model voice is never pruned. Hers is the thing being practised against, there is
+     * one of it per word, and it is not hers to lose.
+     */
+    private suspend fun prune(itemId: String, who: Who, style: RecordingStyle) {
+        if (who != Who.DIMITRIS) return
+        val old = recordings.allFor(itemId, who, style).drop(HIS_TAKES)
+        if (old.isEmpty()) return
+        val at = clock()
+        for (row in old) {
+            recordings.softDelete(row.id, at)
+            // The row is gone whatever happens to the file: a delete that fails — a file already
+            // removed, a path from a phone this backup came from — must not stop the next one.
+            runCatching { resolve(row.path).takeIf { it.isFile }?.delete() }
+        }
     }
 
     /** A spoken caregiver take is the item's model voice; anything else is a second recording of it. */
@@ -70,4 +103,12 @@ class ItemRepository(
 
     /** The caregiver singing this item, for "Τραγούδα και πες το". Null when nobody has sung it yet. */
     suspend fun sungRecording(item: Item): Recording? = recordings.latestFor(item.id, Who.CAREGIVER, RecordingStyle.SUNG)
+
+    companion object {
+        /**
+         * How many of his own takes of one word survive. Three: this one, and the two before it to
+         * hear whether it is coming easier. See [prune].
+         */
+        const val HIS_TAKES = 3
+    }
 }

@@ -1,6 +1,7 @@
 package gr.dimitris.app.core.sync
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -134,6 +135,63 @@ class MediaRefsTest {
         assertEquals(setOf("m4a", "wav"), Tables.RECORDING_EXTS)
         assertTrue(Tables.RECORDING_EXT in Tables.RECORDING_EXTS)
         assertTrue(Tables.WAV_EXT in Tables.RECORDING_EXTS)
+    }
+
+    // The wire carries a hash and nothing else, so the bytes are the only thing that knows whether a
+    // recording is one of his raw-PCM takes or one of the caregiver's AAC ones.
+
+    private fun wav(): ByteArray = gr.dimitris.app.core.audio.Wav.header(0)
+
+    @Test fun `a RIFF WAVE header is a wav`() = assertTrue(MediaRefs.isWav(wav()))
+
+    /** `RIFF` alone is a container: a WebP photograph starts with it and is not a voice. */
+    @Test fun `RIFF alone is not enough`() {
+        val webp = "RIFF____WEBPVP8 ".toByteArray(Charsets.US_ASCII)
+        assertFalse(MediaRefs.isWav(webp))
+        assertEquals("jpg", MediaRefs.extensionOf(webp, "jpg"))
+    }
+
+    @Test fun `an m4a keeps the extension the registry gave it`() {
+        // The first bytes of an MPEG-4 container: a size, then `ftyp`.
+        val m4a = byteArrayOf(0, 0, 0, 0x20) + "ftypM4A ".toByteArray(Charsets.US_ASCII)
+        assertFalse(MediaRefs.isWav(m4a))
+        assertEquals("m4a", MediaRefs.extensionOf(m4a, Tables.RECORDING_EXT))
+    }
+
+    @Test fun `bytes too short to tell are left alone`() {
+        assertFalse(MediaRefs.isWav("RIFF".toByteArray(Charsets.US_ASCII)))
+        assertFalse(MediaRefs.isWav(ByteArray(0)))
+        assertEquals("m4a", MediaRefs.extensionOf(ByteArray(3), Tables.RECORDING_EXT))
+    }
+
+    @Test fun `a wav downloaded under the m4a name is renamed by its bytes`() {
+        val downloaded = files.recording("$abcSha.m4a", wav())
+        val settled = MediaRefs.settle(downloaded)
+        assertEquals("$abcSha.wav", settled.name)
+        assertTrue("the bytes moved with the name", settled.isFile)
+        assertFalse("and nothing is left under the old one", downloaded.exists())
+    }
+
+    @Test fun `a real m4a is left where it landed`() {
+        val downloaded = files.recording("$abcSha.m4a", byteArrayOf(0, 0, 0, 0x20) + "ftypM4A ".toByteArray(Charsets.US_ASCII))
+        assertEquals(downloaded, MediaRefs.settle(downloaded))
+        assertTrue(downloaded.isFile)
+    }
+
+    /** A settled wav must be recognised next time, or every sync downloads it again. */
+    @Test fun `a file already here is found under either name`() {
+        val wavFile = files.recording("$abcSha.wav", wav())
+        assertEquals(wavFile, MediaRefs.existing(files.recordingsDir, abcSha, Tables.RECORDING_EXT))
+        wavFile.delete()
+        assertNull(MediaRefs.existing(files.recordingsDir, abcSha, Tables.RECORDING_EXT))
+        val m4aFile = files.recording("$abcSha.m4a", "abc".toByteArray())
+        assertEquals(m4aFile, MediaRefs.existing(files.recordingsDir, abcSha, Tables.RECORDING_EXT))
+    }
+
+    /** An empty file is not a file it has: a download that failed halfway must be asked for again. */
+    @Test fun `an empty file does not count as already here`() {
+        files.recording("$abcSha.wav", ByteArray(0))
+        assertNull(MediaRefs.existing(files.recordingsDir, abcSha, Tables.RECORDING_EXT))
     }
 
     @Test fun `a value that only looks like a media url is not one`() {

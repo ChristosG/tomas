@@ -74,6 +74,15 @@ interface RecordingDao {
     @Query("SELECT * FROM recordings WHERE id = :id AND deleted = 0") suspend fun get(id: String): Recording?
     @Query("SELECT * FROM recordings WHERE itemId = :itemId AND who = :who AND style = :style AND deleted = 0 ORDER BY recordedAt DESC LIMIT 1")
     suspend fun latestFor(itemId: String, who: Who, style: RecordingStyle): Recording?
+
+    /**
+     * Every take of one voice on one word, newest first. Read only to keep the newest few of *his*
+     * and let the rest go: since «Μίλα» began keeping the audio of every recognition window, a word
+     * he practises daily would otherwise gather a raw-PCM file a minute of speech long every time.
+     * See [gr.dimitris.app.core.data.ItemRepository.addRecording].
+     */
+    @Query("SELECT * FROM recordings WHERE itemId = :itemId AND who = :who AND style = :style AND deleted = 0 ORDER BY recordedAt DESC")
+    suspend fun allFor(itemId: String, who: Who, style: RecordingStyle): List<Recording>
     @Query("UPDATE recordings SET deleted = 1, updatedAt = :now WHERE id = :id") suspend fun softDelete(id: String, now: Long)
 
     /**

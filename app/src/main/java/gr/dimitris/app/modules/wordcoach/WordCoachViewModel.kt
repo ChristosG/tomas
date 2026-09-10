@@ -388,6 +388,12 @@ class WordCoachViewModel(private val graph: AppGraph, private val items: List<It
         silence()
         _state.update { it.copy(listening = true, listenLevel = 0f, heard = null, heardMatched = false, nudge = false, error = null) }
         listenJob = viewModelScope.launch {
+            // Which engine will answer, asked again rather than remembered from the first word of
+            // the run: the Greek pack can land while he is inside the module, and a screen still
+            // showing «Ηχογράφηση» beside a «Μίλα» that has started keeping his takes would be the
+            // two microphones this phase exists to remove.
+            val one = graph.stt.engine() == OnDeviceSupport.Engine.ON_DEVICE
+            _state.update { it.copy(oneControl = one) }
             val heard = graph.stt.listen()
             heard.take?.let { keep(it) }
             heard.fold(

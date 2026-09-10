@@ -535,7 +535,13 @@ class ScriptsViewModel(
             rec.file.delete()
             return false
         }
-        val itemId = lines.getOrNull(_state.value.index)?.second?.id ?: return false
+        // No turn to attach it to — the dialogue moved under it. The take goes with the turn it was
+        // made for rather than staying on disk with nothing pointing at it: `false` means "deleted,
+        // nothing written" everywhere this is called from, and it has to mean that here too.
+        val itemId = lines.getOrNull(_state.value.index)?.second?.id ?: run {
+            rec.file.delete()
+            return false
+        }
         _state.update { it.copy(selfRecordingPath = graph.files.relativize(rec.file)) }
         // The app scope, not this screen's: the take is on disk, its row must land too.
         recordingSave = graph.scope.async {
@@ -569,6 +575,11 @@ class ScriptsViewModel(
         stopCue()
         _state.update { it.copy(listening = true, listenLevel = 0f, heard = null, heardMatched = false, nudge = false, error = null) }
         listenJob = viewModelScope.launch {
+            // Which engine will answer, asked again rather than remembered from the first turn of
+            // the run: the Greek pack can land mid-dialogue, and a card still showing «Ηχογράφηση»
+            // beside a «Μίλα» that has started keeping his takes would be two microphones.
+            val one = graph.stt.engine() == OnDeviceSupport.Engine.ON_DEVICE
+            _state.update { it.copy(oneControl = one) }
             val heard = graph.stt.listen()
             heard.take?.let { keep(it) }
             heard.fold(

@@ -136,7 +136,7 @@ class AppGraph(context: Context) {
     )
 
     /** Always built from the current db, so it survives a backup import. */
-    val items: ItemRepository get() = ItemRepository(db.items(), db.recordings(), files::relativize)
+    val items: ItemRepository get() = ItemRepository(db.items(), db.recordings(), files::relativize, files::resolve)
 
     /**
      * Always built from the current db, so it survives a backup import. The database is read once
