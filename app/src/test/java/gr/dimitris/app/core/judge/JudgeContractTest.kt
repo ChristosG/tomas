@@ -1,6 +1,7 @@
 package gr.dimitris.app.core.judge
 
 import com.google.gson.JsonParser
+import gr.dimitris.app.core.data.Adapt
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -68,9 +69,14 @@ class JudgeContractTest {
      * quietly growing a medical history the next time somebody tunes it.
      */
     @Test fun `the system prompt says nothing about his health beyond the three sentences`() {
-        listOf("ακαλκουλ", "ημιπάρεση", "ημιπαρεσ", "απραξ", "καρωτ", "δυσαρθρ", "μνήμη", "τραγούδ").forEach { word ->
-            assertFalse("the prompt mentions «$word»", JudgeContract.SYSTEM_PROMPT.contains(word))
-        }
+        // «απραξία» is deliberately **not** on this list. The prompt's «η άρθρωση του κοστίζει» is §1's
+        // "Likely apraxia of speech: what he says is hard to articulate", restated — inside §1 and so
+        // permitted, and judging his articulation is the whole point of a WORD turn. What is checked
+        // here is everything that is *not* needed to judge one Greek sentence.
+        listOf("ακαλκουλ", "ημιπάρεση", "ημιπαρεσ", "καρωτ", "μνήμη", "τραγούδ", "φυσιοθερα", "χιούμορ")
+            .forEach { word ->
+                assertFalse("the prompt mentions «$word»", JudgeContract.SYSTEM_PROMPT.contains(word))
+            }
     }
 
     /** Never «λάθος», never «όχι» — the rule the prompt has to carry, stated in the prompt. */
@@ -162,20 +168,38 @@ class JudgeContractTest {
         assertNull(JudgeContract.parse("", dialogue))
     }
 
-    @Test fun `a bare number, a truncated object and a list of objects are not verdicts`() {
+    @Test fun `a bare number and a truncated object are not verdicts`() {
         assertNull(JudgeContract.parse("0.9", dialogue))
-        // A reply cut off by max_tokens mid-string. Braces to braces finds no closing one.
+        // A reply cut off by max_tokens mid-string: the object is never closed.
         assertNull(JudgeContract.parse("""{"accept":true,"feedback":"κόπ""", dialogue))
-        assertNull(JudgeContract.parse("""[{"accept":true},{"accept":false}]""", dialogue))
+        assertNull(JudgeContract.parse("""{"accept":true""", dialogue))
     }
 
     /**
-     * A single object inside brackets *is* read: braces to braces finds it, and a model that wrapped
-     * one verdict in a list still judged the turn. Written down because it is a consequence of the
-     * extraction rather than a decision anybody made, and the next reader should not have to guess.
+     * The first object and only the first, found by counting depth rather than by running to the last
+     * `}` in the reply. First-brace-to-last-brace threw all three of these away — each was a verdict
+     * the model really did give, turned into a local fallback and a row in the caregiver's log.
      */
-    @Test fun `one object inside a list is still read`() {
+    @Test fun `the first whole object is found whatever follows it`() {
+        // A second object after the first.
+        assertTrue(JudgeContract.parse("""{"accept":true,"score":0.7}{"accept":false}""", dialogue)!!.accept)
+        // A closing brace in trailing prose.
+        assertTrue(JudgeContract.parse("""{"accept":true} — έτσι το έκρινα }""", dialogue)!!.accept)
+        // One object wrapped in a list, and a list of two.
         assertTrue(JudgeContract.parse("""[{"accept":true,"score":0.7}]""", dialogue)!!.accept)
+        assertTrue(JudgeContract.parse("""[{"accept":true},{"accept":false}]""", dialogue)!!.accept)
+    }
+
+    /** A brace inside a Greek string is text, not structure. */
+    @Test fun `a brace inside a string does not end the object`() {
+        val v = JudgeContract.parse("""{"accept":true,"feedback":"Ωραία } μπράβο","score":1}""", dialogue)
+        assertEquals("Ωραία } μπράβο", v!!.feedback)
+    }
+
+    /** A nested object, should the model ever volunteer one, is walked through rather than cut. */
+    @Test fun `a nested object does not end the outer one`() {
+        val v = JudgeContract.parse("""{"accept":true,"meta":{"a":{"b":1}},"score":0.4}""", dialogue)
+        assertEquals(0.4f, v!!.score, 0.001f)
     }
 
     /**
@@ -188,12 +212,152 @@ class JudgeContractTest {
         assertNull(JudgeContract.parse("""{"accept":null}""", dialogue))
     }
 
-    /** An EXPAND asks exactly one thing. A reply without it answered nothing. */
-    @Test fun `an EXPAND with no sentence in it is not a verdict`() {
+    /**
+     * Reading the reply and deciding whether it is *usable* are two jobs. An EXPAND with no sentence
+     * in it parses perfectly well — it simply carries no expansion — and `TurnJudge` is what turns
+     * that into the local fallback, so the log can say what actually happened. See
+     * `TurnJudgeTest.an expansion that came back empty falls back to his own words`.
+     */
+    @Test fun `an EXPAND with no sentence parses, and leaves the usability question to the judge`() {
         val expand = Ask(Kind.EXPAND, heard = "φάρμακα πρέπει πάρω")
-        assertNull(JudgeContract.parse("""{"accept":true,"expanded":null,"score":1}""", expand))
-        assertNotNull(
-            JudgeContract.parse("""{"accept":true,"expanded":"Πρέπει να πάρω τα φάρμακα.","score":1}""", expand)
+        val v = JudgeContract.parse("""{"accept":true,"expanded":null,"score":1}""", expand)
+        assertNotNull(v)
+        assertNull(v!!.expanded)
+        assertEquals(
+            "Πρέπει να πάρω τα φάρμακα.",
+            JudgeContract.parse("""{"accept":true,"expanded":"Πρέπει να πάρω τα φάρμακα.","score":1}""", expand)!!.expanded,
         )
     }
+
+    // --- his own words are not an expansion of his own words ------------------------------------
+
+    /**
+     * A model that echoes him back hands the callers an "expansion" identical to what he said, and
+     * the screen then offers «here is the full form, say it again» over the sentence he has just
+     * finished saying.
+     */
+    @Test fun `an expansion that is only his own words echoed back is nothing`() {
+        val ask = Ask(Kind.DIALOGUE, prompt = "Τι θα πάρεις;", heard = "θέλω καφέ")
+        assertNull(JudgeContract.parse("""{"accept":true,"expanded":"θέλω καφέ"}""", ask)!!.expanded)
+        // Compared as leniently as the gentle check compares: punctuation, case and accents are not
+        // an expansion either.
+        assertNull(JudgeContract.parse("""{"accept":true,"expanded":"Θέλω καφέ!"}""", ask)!!.expanded)
+        // A real expansion survives.
+        assertEquals(
+            "Θέλω έναν καφέ.",
+            JudgeContract.parse("""{"accept":true,"expanded":"Θέλω έναν καφέ."}""", ask)!!.expanded,
+        )
+    }
+
+    // --- the feedback gate ----------------------------------------------------------------------
+
+    /**
+     * The prompt forbids «λάθος» and «όχι»; a prompt is an instruction, not a guarantee, and a refused
+     * SENTENCE is exactly the turn a model opens with «Όχι ακριβώς…». TTS would then say it to the one
+     * man the whole app is built never to tell no.
+     */
+    @Test fun `feedback containing the two forbidden words is dropped`() {
+        listOf(
+            "Όχι ακριβώς, δοκίμασε πάλι.",
+            "οχι, σχεδόν!",
+            "ΌΧΙ ΑΚΡΙΒΩΣ",
+            "Μικρό λάθος, πάμε ξανά.",
+            "ΛΑΘΟΣ",
+            "Λάθος!",
+        ).forEach { line ->
+            assertNull(
+                "«$line» reached him",
+                JudgeContract.parse("""{"accept":false,"feedback":${quote(line)}}""", dialogue)!!.feedback,
+            )
+        }
+    }
+
+    /** Word by word, so a word that merely contains the letters is not the word. */
+    @Test fun `a warm line that only looks like a forbidden word survives`() {
+        listOf("Μπράβο, πολύ καλά!", "Σε άκουσα καθαρά.", "Η κόχη του ήχου ήταν σωστή.").forEach { line ->
+            assertEquals(
+                line,
+                JudgeContract.parse("""{"accept":true,"feedback":${quote(line)}}""", dialogue)!!.feedback,
+            )
+        }
+    }
+
+    /** Twelve Greek words is encouragement; thirteen is a paragraph read at a man with aphasia. */
+    @Test fun `feedback longer than twelve words is dropped`() {
+        val twelve = (1..JudgeContract.MAX_FEEDBACK_WORDS).joinToString(" ") { "καλά" }
+        assertEquals(
+            twelve,
+            JudgeContract.parse("""{"accept":true,"feedback":${quote(twelve)}}""", dialogue)!!.feedback,
+        )
+
+        val thirteen = "$twelve ακόμη"
+        assertNull(JudgeContract.parse("""{"accept":true,"feedback":${quote(thirteen)}}""", dialogue)!!.feedback)
+    }
+
+    /** Dropping the line leaves a complete verdict: `feedback` was always optional. */
+    @Test fun `dropping the feedback does not drop the verdict`() {
+        val v = JudgeContract.parse("""{"accept":false,"expanded":"Πίνω καφέ.","feedback":"Λάθος.","score":0.3}""", dialogue)
+        assertNotNull(v)
+        assertFalse(v!!.accept)
+        assertEquals("Πίνω καφέ.", v.expanded)
+        assertNull(v.feedback)
+        assertEquals(0.3f, v.score, 0.001f)
+    }
+
+    @Test fun `the gate is the same whichever way it is reached`() {
+        assertNull(JudgeContract.warm("Όχι ακριβώς."))
+        assertNull(JudgeContract.warm("   "))
+        assertNull(JudgeContract.warm(null))
+        assertEquals("Μπράβο!", JudgeContract.warm(" Μπράβο! "))
+    }
+
+    // --- the difficulty that goes up ------------------------------------------------------------
+
+    /** The prompt promises the model 1–5; a caller outside that must not silently redefine it. */
+    @Test fun `difficulty is clamped to the scale the prompt describes`() {
+        fun sent(d: Int) = JsonParser
+            .parseString(JudgeContract.userMessage(Ask(Kind.WORD, heard = "καφές", difficulty = d)))
+            .asJsonObject.get("difficulty").asInt
+
+        assertEquals(1, sent(0))
+        assertEquals(1, sent(-7))
+        assertEquals(5, sent(9))
+        assertEquals(3, sent(3))
+    }
+
+    // --- the row every caller writes ------------------------------------------------------------
+
+    /**
+     * One shape, decided here, so Tasks 3, 6 and 7 cannot drift on key names or on whether `expanded`
+     * is included — and so the caregiver's progress reader has one shape to support.
+     */
+    @Test fun `detail carries source, accept and ms, and expanded only when there is one`() {
+        val judged = Verdict(accept = true, expanded = "Θέλω έναν καφέ.", feedback = "Μπράβο!", score = 0.9f, source = Source.JUDGE)
+        assertEquals(
+            mapOf("source" to "JUDGE", "accept" to true, "ms" to 642L, "expanded" to "Θέλω έναν καφέ."),
+            judged.detail(642),
+        )
+
+        val local = Verdict(accept = false, score = 0f, source = Source.LOCAL)
+        assertEquals(mapOf("source" to "LOCAL", "accept" to false, "ms" to 3L), local.detail(3))
+    }
+
+    /** A clock that went backwards is not a negative measurement. */
+    @Test fun `a negative elapsed time is written as zero`() {
+        assertEquals(0L, Verdict(accept = true, source = Source.LOCAL).detail(-5)["ms"])
+    }
+
+    /**
+     * An attempt row leaves the phone twice — it syncs to the father's server and it goes to Claude
+     * inside the journey report — so the one free-text field in it obeys the same cap as every other
+     * detail string.
+     */
+    @Test fun `a very long expansion is capped like any other detail string`() {
+        val long = "α".repeat(Adapt.MAX_TEXT + 50)
+        val kept = Verdict(accept = true, expanded = long, source = Source.JUDGE).detail(1)["expanded"] as String
+        assertEquals(Adapt.MAX_TEXT, kept.length)
+    }
+
+    /** JSON string literal for a Greek line with no escaping of its own. */
+    private fun quote(s: String) = "\"$s\""
 }

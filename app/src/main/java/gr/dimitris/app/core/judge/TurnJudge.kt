@@ -49,8 +49,15 @@ class JudgeException(message: String) : Exception(message)
  * * **It is off by default.** The toggle starts false and the key starts absent, so a fresh install
  *   judges every turn on the phone and touches nothing outside it.
  *
- * The toggle is read *before* the key, because reading the key opens an encrypted file and touches
- * the keystore; a caregiver who never turned this on should not pay for that on every word.
+ * A blank `heard` is answered before any of that: nothing was said, so there is nothing to judge, and
+ * the common failure of the on-device Greek recogniser must not cost him the whole timeout. The toggle
+ * is then read *before* the key, because reading the key opens an encrypted file and touches the
+ * keystore; a caregiver who never turned this on should not pay for that on every word.
+ *
+ * One thing it cannot do: a turn he walks away from still holds its IO thread until the HTTP client's
+ * own timeout, because `messages().create` is a blocking Java call and coroutine cancellation cannot
+ * interrupt it. Bounded by [TIMEOUT_SECONDS] and by how fast he can tap, and the client is closed
+ * either way — a note, not a leak.
  */
 class TurnJudge(
     private val secrets: Secrets,
@@ -77,11 +84,21 @@ class TurnJudge(
      * A new session or a new module. Clears what has been reported, so a connection that was down
      * this morning and is down again tonight is two rows rather than one — and still not three
      * hundred. Nothing breaks if a caller never calls it; the log just stays quieter.
+     *
+     * Two things a caller should know. It is **app-wide**, because there is one judge: a module that
+     * calls this clears what another module recorded, so two screens in one sitting can produce two
+     * rows for one fact. And until Tasks 3, 6 and 7 call it when a run starts, a failure class is
+     * written once per *process* — quieter than intended, never noisier.
      */
     fun newRun() = reported.clear()
 
     /** Never throws. Every failure is a [LocalJudge] verdict and at most one row in the error log. */
     suspend fun judge(ask: Ask): Verdict = withContext(Dispatchers.IO) {
+        // Nothing heard is not a turn to judge. The on-device Greek recogniser comes back empty often
+        // enough on his phone that this is the common case, not the edge one — and without this he
+        // would watch the whole timeout for a model opinion about an empty string, where the local
+        // judge has the same answer instantly. Not a fault, so not a row either.
+        if (ask.heard.isBlank()) return@withContext LocalJudge.judge(ask)
         if (!on()) return@withContext LocalJudge.judge(ask)
         val key = key() ?: return@withContext LocalJudge.judge(ask)
 
@@ -95,7 +112,14 @@ class TurnJudge(
             return@withContext fallback(ask, WHERE_FAILED, FAILED)
         }
         if (reply == null) return@withContext fallback(ask, WHERE_REFUSED, REFUSED)
-        JudgeContract.parse(reply, ask) ?: fallback(ask, WHERE_REPLY, BAD_REPLY)
+        val verdict = JudgeContract.parse(reply, ask) ?: return@withContext fallback(ask, WHERE_REPLY, BAD_REPLY)
+        // An EXPAND asks exactly one thing, and a verdict without it answered nothing — so his own
+        // words come back instead. Logged as its own class rather than as an unreadable reply, because
+        // «δεν διαβάστηκε» would send whoever is debugging this after a parser that worked fine.
+        if (ask.kind == Kind.EXPAND && verdict.expanded == null) {
+            return@withContext fallback(ask, WHERE_NO_EXPANSION, NO_EXPANSION)
+        }
+        verdict
     }
 
     private fun fallback(ask: Ask, where: String, message: String): Verdict {
@@ -133,25 +157,37 @@ class TurnJudge(
          */
         const val MODEL = "claude-haiku-4-5-20251001"
 
-        /** One small JSON object. Adaptive thinking is deliberately **not** asked for: see [Anthropic]. */
-        const val MAX_TOKENS = 300L
+        /**
+         * One small JSON object, with room for a long Greek sentence inside it. Adaptive thinking is
+         * deliberately **not** asked for: see [Anthropic].
+         *
+         * 400 rather than 300 because the budget is spent on exactly the thing this is for. A seven-word
+         * target sentence at difficulty 5, expanded and returned inside a JSON string, plus a warm line:
+         * 300 tokens could cut that mid-string, and half a JSON object is not a verdict, so the turn
+         * would fall back to local matching and log a reply that was in fact fine.
+         */
+        const val MAX_TOKENS = 400L
 
         /**
-         * Per attempt, and with [MAX_RETRIES] that is two attempts. Chosen against what he is doing
-         * while it runs: he has just finished saying a sentence and the phone owes him an answer.
-         * Eight seconds is a noticeable wait; sixteen is the outer edge, and past that the local
-         * judge's answer — which is the one he used to get — is better than a correct one nobody is
-         * still waiting for.
+         * One attempt, and then the local judge. Chosen against what he is doing while it runs: he has
+         * just finished saying a sentence and the phone owes him an answer. Eight seconds is already a
+         * noticeable wait, and past it the local judge's answer — the one he used to get for every turn
+         * — is better than a correct one nobody is still waiting for.
          */
         const val TIMEOUT_SECONDS = 8L
 
-        /** One retry. A turn is cheap to re-ask and expensive to keep him waiting for. */
-        const val MAX_RETRIES = 1
+        /**
+         * No retry, so [TIMEOUT_SECONDS] is the whole of the wait rather than half of it. A retry would
+         * have doubled the worst case to sixteen seconds on a screen where he is waiting, to buy back a
+         * turn that the fallback answers anyway.
+         */
+        const val MAX_RETRIES = 0
 
         /** Where in the app a failure happened, for the caregiver's error list. */
         const val WHERE_FAILED = "claude judge"
         const val WHERE_REFUSED = "claude judge refused"
         const val WHERE_REPLY = "claude judge reply"
+        const val WHERE_NO_EXPANSION = "claude judge expansion"
 
         /**
          * What is written down. Greek, because a caregiver reads these, and carrying nothing from the
@@ -160,6 +196,7 @@ class TurnJudge(
         const val FAILED = "Ο έλεγχος με Claude δεν απάντησε. Η άσκηση συνέχισε χωρίς αυτόν."
         const val REFUSED = "Ο Claude δεν έκρινε αυτόν τον γύρο. Η άσκηση συνέχισε χωρίς αυτόν."
         const val BAD_REPLY = "Η απάντηση του Claude δεν διαβάστηκε. Η άσκηση συνέχισε χωρίς αυτόν."
+        const val NO_EXPANSION = "Ο Claude δεν έφτιαξε ολόκληρη πρόταση. Η άσκηση συνέχισε χωρίς αυτόν."
 
         /**
          * The real call. A new client per request, as [ClaudeAdvisor] does: the key is read fresh

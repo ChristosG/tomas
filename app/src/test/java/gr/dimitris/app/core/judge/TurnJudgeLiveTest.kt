@@ -27,7 +27,10 @@ class TurnJudgeLiveTest {
 
     @Test fun `a real telegraphic answer comes back accepted, with the whole sentence`() {
         val key = System.getenv("ANTHROPIC_API_KEY")
-        assumeTrue("ANTHROPIC_API_KEY not set — skipping the live call", key != null)
+        // Blank as well as absent: `ANTHROPIC_API_KEY=""` would otherwise pass the guard, be read as
+        // "no key" by the judge, and fail here as «the judge fell back to local matching» — a failure
+        // about the environment dressed up as a failure about the prompt.
+        assumeTrue("ANTHROPIC_API_KEY not set — skipping the live call", !key.isNullOrBlank())
 
         val judge = TurnJudge(Secrets { key }, enabled = { true })
         val ask = Ask(

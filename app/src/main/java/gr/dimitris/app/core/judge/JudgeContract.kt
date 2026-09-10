@@ -2,6 +2,8 @@ package gr.dimitris.app.core.judge
 
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
+import gr.dimitris.app.core.data.Adapt
+import gr.dimitris.app.core.greek.Greek
 
 /**
  * What the app is asking about. Four questions, because they are four different judgements and a
@@ -62,7 +64,35 @@ data class Verdict(
     val feedback: String? = null,
     val score: Float = 0f,
     val source: Source,
-)
+) {
+    /**
+     * The shape **every** caller writes under `detail.judge` on the attempt row — Tasks 3, 6 and 7,
+     * and anything after them. Here rather than in three view models so that the caregiver's progress
+     * reader has one shape to support instead of three that drifted: the key names, whether `expanded`
+     * is included at all, and whether `ms` covers the local path are all decided once, in this
+     * function.
+     *
+     * ```
+     * val detail = Adapt.detail { kept("judge", verdict.detail(ms = now() - began)) }
+     * ```
+     *
+     * [ms] is how long the verdict took to arrive, measured by the caller around its own
+     * [TurnJudge.judge] call — so a `LOCAL` row with `ms` near zero is the fallback answering
+     * instantly and a `LOCAL` row with `ms` near 8 000 is a timeout. That difference is the whole
+     * reason the field is worth keeping.
+     *
+     * `expanded` is absent rather than null when there was no expansion, which is
+     * [gr.dimitris.app.core.data.Adapt]'s rule for every other detail key, and it is capped at
+     * [Adapt.MAX_TEXT] because an attempt row leaves the phone twice — it syncs to the father's
+     * server and it goes to Claude inside the journey report.
+     */
+    fun detail(ms: Long): Map<String, Any?> = buildMap {
+        put("source", source.name)
+        put("accept", accept)
+        put("ms", ms.coerceAtLeast(0L))
+        expanded?.trim()?.takeIf { it.isNotEmpty() }?.let { put("expanded", it.take(Adapt.MAX_TEXT)) }
+    }
+}
 
 /**
  * The wire between the app and one Haiku call: what goes up, and how what comes back is read.
@@ -149,15 +179,20 @@ object JudgeContract {
         o.addProperty("prompt", ask.prompt?.trim()?.takeIf { it.isNotEmpty() })
         o.addProperty("target", ask.target?.trim()?.takeIf { it.isNotEmpty() })
         o.addProperty("heard", ask.heard.trim())
-        o.addProperty("difficulty", ask.difficulty)
+        // Clamped, because the prompt promises the model a 1–5 scale and a caller that passed 0 or 7
+        // would be quietly asking it to interpret a number the prompt never described.
+        o.addProperty("difficulty", ask.difficulty.coerceIn(MIN_DIFFICULTY, MAX_DIFFICULTY))
         return o.toString()
     }
 
     /**
      * The reply, or null when it is not a verdict at all and [LocalJudge] should answer instead.
      *
-     * [ask] is needed for one rule only: an EXPAND whose reply carries no sentence answered the one
-     * question it was asked with nothing, so it is no more usable than prose would have been.
+     * [ask] is needed for one rule only: an `expanded` that is simply his own words echoed back is not
+     * an expansion, and handing it on would put «the full form, say it again» on the screen over the
+     * sentence he has just said.
+     *
+     * Whether a verdict is *usable* is [TurnJudge]'s question, not this one — see its EXPAND check.
      */
     fun parse(reply: String, ask: Ask): Verdict? {
         val raw = jsonObject(reply) ?: return null
@@ -165,12 +200,10 @@ object JudgeContract {
         if (!element.isJsonObject) return null
         val o = element.asJsonObject
         val accept = bool(o, "accept") ?: return null
-        val expanded = str(o, "expanded")
-        if (ask.kind == Kind.EXPAND && expanded == null) return null
         return Verdict(
             accept = accept,
-            expanded = expanded,
-            feedback = str(o, "feedback"),
+            expanded = str(o, "expanded")?.takeIf { !echoes(it, ask.heard) },
+            feedback = warm(str(o, "feedback")),
             // A reply that judged the turn but forgot to score it is still a verdict; the score is
             // for a progress screen, not for him, so it is derived rather than thrown away.
             score = (num(o, "score") ?: if (accept) 1f else 0f).coerceIn(0f, 1f),
@@ -179,15 +212,73 @@ object JudgeContract {
     }
 
     /**
-     * Braces to braces. The prompt asks for one bare object; models wrap it in ``` or introduce it
-     * with a sentence anyway, and throwing that away would mean falling back to local matching over
-     * punctuation.
+     * The model's line, or nothing, and this is the last gate before a sentence a language model wrote
+     * is read out loud to him.
+     *
+     * The prompt asks for at most [MAX_FEEDBACK_WORDS] warm Greek words and forbids [FORBIDDEN] —
+     * «λάθος» and «όχι», the two words the whole app is built never to say to him. A prompt is an
+     * instruction, not a guarantee: a refused SENTENCE is exactly the turn a model is most likely to
+     * open with «Όχι ακριβώς…», and TTS would then say it. So the rule is enforced here as well, and
+     * enforced by dropping the line rather than by editing it — [feedback] is optional, [LocalJudge]
+     * proves a null one is a complete verdict, and half a sentence of encouragement is worse than none.
+     *
+     * Matched word by word on lower-cased, unaccented text, so «ΛΑΘΟΣ», «Λάθος» and «όχι,» are all the
+     * same word, and «κόχη» is not one of them.
+     */
+    internal fun warm(feedback: String?): String? {
+        val text = feedback?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+        if (text.split(WHITESPACE).count { it.isNotEmpty() } > MAX_FEEDBACK_WORDS) return null
+        return if (plain(text).split(NOT_LETTERS).any { it in FORBIDDEN }) null else text
+    }
+
+    /** The same words he just said, back again. Compared as leniently as the gentle check compares. */
+    private fun echoes(expanded: String, heard: String): Boolean {
+        val said = key(heard)
+        return said.isNotEmpty() && key(expanded) == said
+    }
+
+    private fun key(s: String): String = plain(s).replace(NOT_LETTERS, " ").trim()
+
+    /**
+     * Lower-cased, unaccented, and with both sigmas written the same way — so «ΛΑΘΟΣ», «Λάθος» and a
+     * model that typed «λάθοσ» are one word, not three. The JDK's Greek lower-casing already picks the
+     * final form by position; folding it away means nothing here depends on having picked the same one.
+     */
+    private fun plain(s: String): String =
+        Greek.stripAccents(Greek.normalize(s)).replace(FINAL_SIGMA, MEDIAL_SIGMA)
+
+    /**
+     * The one JSON object in the reply: from the first `{` forward to the brace that closes it,
+     * counting depth and skipping over anything inside a string.
+     *
+     * The prompt asks for one bare object; models wrap it in ``` or introduce it with a sentence
+     * anyway, and throwing that away would mean falling back to local matching over punctuation. But
+     * first-brace-to-*last*-brace was too greedy in the other direction: one closing brace anywhere in
+     * trailing prose, or a second object after the first, and the substring is not JSON — Gson refuses
+     * trailing content too — so a perfectly good verdict became a LOCAL fallback and a row in the log.
      */
     internal fun jsonObject(raw: String): String? {
         val start = raw.indexOf('{')
-        val end = raw.lastIndexOf('}')
-        if (start < 0 || end <= start) return null
-        return raw.substring(start, end + 1)
+        if (start < 0) return null
+        var depth = 0
+        var inString = false
+        var escaped = false
+        for (i in start until raw.length) {
+            val c = raw[i]
+            when {
+                escaped -> escaped = false
+                c == '\\' && inString -> escaped = true
+                c == '"' -> inString = !inString
+                inString -> Unit
+                c == '{' -> depth++
+                c == '}' -> {
+                    depth--
+                    if (depth == 0) return raw.substring(start, i + 1)
+                }
+            }
+        }
+        // Never closed: a reply cut off by max_tokens mid-object. Not a verdict.
+        return null
     }
 
     /** `true`, and also `"true"` and `1`, because all three turn up. */
@@ -209,4 +300,29 @@ object JudgeContract {
     private fun num(o: JsonObject, key: String): Float? =
         o.get(key)?.takeIf { it.isJsonPrimitive }?.let { runCatching { it.asFloat }.getOrNull() }
             ?.takeIf { it.isFinite() }
+
+    /** The scale the prompt describes to the model. His own dot row, bounded by the caregiver. */
+    const val MIN_DIFFICULTY = 1
+    const val MAX_DIFFICULTY = 5
+
+    /**
+     * How long a line may be before it stops being encouragement. The prompt asks for at most twelve
+     * Greek words; past that it is a paragraph, and a paragraph read at a man with expressive aphasia
+     * is not feedback.
+     */
+    const val MAX_FEEDBACK_WORDS = 12
+
+    /**
+     * The two words he must never hear, unaccented and lower-cased as [warm] compares them. «λάθος»
+     * and «όχι» are the whole of spec §12's errorless rule said out loud, and
+     * [gr.dimitris.app.core.speech.GentleCheck.TRY_AGAIN] exists precisely so that neither is needed.
+     */
+    val FORBIDDEN = setOf("λαθοσ", "οχι")
+
+    /** Final and medial sigma. Written as escapes so that nothing here rests on an invisible choice. */
+    private const val FINAL_SIGMA = '\u03C2'
+    private const val MEDIAL_SIGMA = '\u03C3'
+
+    private val WHITESPACE = Regex("\\s+")
+    private val NOT_LETTERS = Regex("[^\\p{L}\\p{N}]+")
 }

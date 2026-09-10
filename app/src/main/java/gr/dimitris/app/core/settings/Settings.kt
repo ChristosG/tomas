@@ -154,11 +154,13 @@ class Settings(private val store: DataStore<Preferences>) {
      * off — or with no key saved — [gr.dimitris.app.core.judge.TurnJudge] never touches the network
      * and every turn is matched locally, exactly as it was before phase 12.
      *
-     * What goes up when it is on is three strings: the question, the target and what the recogniser
-     * heard. Never the audio, never a photo, never a name, never anything about his health beyond the
-     * three sentences of [gr.dimitris.app.core.judge.JudgeContract.SYSTEM_PROMPT]. The settings line
-     * under the toggle says so in those words, because a caregiver consenting to "AI" has consented
-     * to nothing they can picture.
+     * What goes up when it is on is one small JSON object of five fields — the kind of exercise, the
+     * question, the target, what the recogniser heard, and the 1–5 difficulty — and the fixed system
+     * prompt, which names him and states the three sentences of §1 that judging a sentence needs
+     * ([gr.dimitris.app.core.judge.JudgeContract.SYSTEM_PROMPT]). Never the audio, never a photo,
+     * never an item id, never a history, and nothing about his health beyond those three sentences.
+     * The caregiver-facing line under the toggle says the short version of this, because a caregiver
+     * consenting to "AI" has consented to nothing they can picture.
      */
     val claudeJudging: Flow<Boolean> = store.data.map { it[CLAUDE_JUDGING] ?: false }
     suspend fun setClaudeJudging(on: Boolean) { store.edit { it[CLAUDE_JUDGING] = on } }

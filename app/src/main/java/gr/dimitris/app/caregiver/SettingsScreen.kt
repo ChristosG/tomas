@@ -543,7 +543,10 @@ private fun ClaudeSection() {
             },
     )
     Text(
-        "Άφησέ το κενό για ${Settings.DEFAULT_CLAUDE_MODEL}.",
+        // Which model this field is, now that there are two. The judge's is fixed in code
+        // (TurnJudge.MODEL) and deliberately not a setting: a caregiver has no way to tell a model
+        // that is good at judging one Greek sentence from one that is not.
+        "Μοντέλο για τις συμβουλές. Άφησέ το κενό για ${Settings.DEFAULT_CLAUDE_MODEL}.",
         style = MaterialTheme.typography.bodyMedium,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
     )

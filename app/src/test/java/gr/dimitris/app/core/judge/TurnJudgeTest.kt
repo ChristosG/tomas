@@ -135,11 +135,80 @@ class TurnJudgeTest {
         assertEquals(listOf(TurnJudge.BAD_REPLY), rows.messages)
     }
 
-    /** An EXPAND that came back with no sentence falls back to his own words, not to an error. */
+    /**
+     * An EXPAND that came back with no sentence falls back to his own words, not to an error — and it
+     * is logged as its own class, because «δεν διαβάστηκε» would send whoever is debugging it after a
+     * parser that worked perfectly.
+     */
     @Test fun `an expansion that came back empty falls back to his own words`() = runBlocking {
-        val v = judge(FakeClient { """{"accept":true,"expanded":null,"score":1}""" }).judge(expand)
+        val rows = Rows()
+        val v = judge(FakeClient { """{"accept":true,"expanded":null,"score":1}""" }, rows).judge(expand)
         assertEquals(Source.LOCAL, v.source)
         assertEquals("φάρμακα πρέπει πάρω", v.expanded)
+        assertEquals(listOf(TurnJudge.WHERE_NO_EXPANSION), rows.where)
+        assertEquals(listOf(TurnJudge.NO_EXPANSION), rows.messages)
+    }
+
+    /** An echo of his own words is not an expansion either, and lands on the same path. */
+    @Test fun `an expansion that is only an echo falls back too`() = runBlocking {
+        val rows = Rows()
+        val v = judge(FakeClient { """{"accept":true,"expanded":"Φάρμακα πρέπει πάρω","score":1}""" }, rows)
+            .judge(expand)
+        assertEquals(Source.LOCAL, v.source)
+        assertEquals("φάρμακα πρέπει πάρω", v.expanded)
+        assertEquals(listOf(TurnJudge.WHERE_NO_EXPANSION), rows.where)
+    }
+
+    /** Only EXPAND is held to that: the other three never asked for a sentence. */
+    @Test fun `a dialogue with no expansion is a perfectly good verdict`() = runBlocking {
+        val rows = Rows()
+        val v = judge(FakeClient { """{"accept":true,"expanded":null,"score":1}""" }, rows).judge(ask)
+        assertEquals(Source.JUDGE, v.source)
+        assertNull(v.expanded)
+        assertEquals(emptyList<String>(), rows.where)
+    }
+
+    // --- nothing heard is nothing to judge ------------------------------------------------------
+
+    /**
+     * The on-device Greek recogniser comes back empty often enough on his phone that this is the
+     * common case, not the edge one. Without this he would wait out the whole timeout for a model
+     * opinion about an empty string, where the local judge has the same answer instantly.
+     */
+    @Test fun `nothing heard is answered locally without a network call`() = runBlocking {
+        val rows = Rows()
+        listOf("", "   ", "\n\t ").forEach { heard ->
+            val client = FakeClient { error("the network must not be touched") }
+            val v = judge(client, rows).judge(ask.copy(heard = heard))
+            assertEquals("«$heard»", 0, client.calls)
+            assertEquals("«$heard»", Source.LOCAL, v.source)
+            assertFalse("«$heard»", v.accept)
+        }
+        // Not a fault: he simply did not say anything, and the screen already has words for that.
+        assertEquals(emptyList<String>(), rows.where)
+    }
+
+    /** Including an EXPAND of nothing, which is the talk board with an empty strip. */
+    @Test fun `an expansion of nothing is answered locally`() = runBlocking {
+        val client = FakeClient { error("the network must not be touched") }
+        val v = judge(client).judge(expand.copy(heard = " "))
+        assertEquals(0, client.calls)
+        assertEquals(Source.LOCAL, v.source)
+        assertNull(v.expanded)
+    }
+
+    /** The ruled feedback gate is on the path he actually hears, not only in the parser's own test. */
+    @Test fun `a forbidden or overlong feedback never reaches the verdict`() = runBlocking {
+        val refusal = judge(FakeClient { """{"accept":false,"expanded":"Πίνω καφέ.","feedback":"Όχι, λάθος."}""" })
+            .judge(Ask(Kind.SENTENCE, target = "Πίνω καφέ", heard = "καφε"))
+        assertEquals(Source.JUDGE, refusal.source)
+        assertNull("he was told no", refusal.feedback)
+        assertEquals("Πίνω καφέ.", refusal.expanded)
+
+        val wordy = judge(FakeClient { """{"accept":true,"feedback":"${(1..13).joinToString(" ") { "καλά" }}"}""" })
+            .judge(ask)
+        assertEquals(Source.JUDGE, wordy.source)
+        assertNull(wordy.feedback)
     }
 
     /**
