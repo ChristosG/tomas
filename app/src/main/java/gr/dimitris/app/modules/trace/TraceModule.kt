@@ -32,6 +32,12 @@ object TraceModule : Module {
     /**
      * [items] are placeholders, but their number is the session's budget for this module: it runs one
      * letter per item it was given, which is the contract every module owes the session runner.
+     *
+     * One exception, since phase 13: the typed level builds its boards out of his vocabulary through
+     * [gr.dimitris.app.modules.sentences.SentenceTemplates], and a vocabulary that cannot fill the
+     * shape as many times as the budget asks gives a **shorter** sitting rather than a repeated one.
+     * The screen counts what was really built and the session counts the rows he leaves, so nothing
+     * downstream promises an exercise that never ran.
      */
     @Composable
     override fun Screen(items: List<Item>, sessionId: String?, onDone: () -> Unit, onLeave: () -> Unit) =

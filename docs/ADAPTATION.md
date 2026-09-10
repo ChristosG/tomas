@@ -154,7 +154,7 @@ the three to read it as.
 | `tries` | how many goes at this letter or word |
 | `coverage`, `precision` | the two numbers the marking is made of, 0..1; absent on a skip |
 | `meanDistance` | how far his ink ran from the letter, in canvas pixels |
-| `letters` | the same marks letter by letter: `[{c, coverage, precision, ink}, …]`, where `ink` is that letter's own share of the line against how long the letter is. On a dictated word each letter also carries `missed` — whether it had to be shown to him before he could write it |
+| `letters` | the same marks letter by letter: `[{c, coverage, precision, ink}, …]`, where `ink` is that letter's own share of the line against how long the letter is. A letter that has a **diacritic** also carries `accent`: whether he wrote the mark. Nothing turns on it — the accent is spelling, and the two lines this scorer holds him to are about shape — but "does he write the accents?" is a real question and this is the only row that could answer it. On a dictated word each letter also carries `missed`: whether it had to be shown to him before he could write it |
 | `inkRatio` | how much line he drew against how long the whole word is |
 | `strictness` | `LOOSE` / `NORMAL` / `STRICT`, as a caregiver had it set |
 | `strokes` | how many separate strokes the *marked* try took |
@@ -190,6 +190,10 @@ the three to read it as.
 - **Whether level 4 is too long a word.** `listened` rising with the word's length across a
   fortnight is a working-memory ceiling rather than a hand problem: keep the dictation to the
   shorter half of the pool (`TraceViewModel.SHORT_POOL`) before stepping the dot down.
+- **The accents, which nothing marks him on.** `accent: false` on every letter of a fortnight's
+  dictated words is not a hand problem and not a spelling one either — the mark is not on the paper
+  to copy, and nobody has ever asked him for it. If it is worth asking for, it is worth *asking*:
+  a line on the caregiver screen, never a refusal on the writing screen.
 
 ### Δεξί χέρι — arcade (`module = 'ARCADE'`, `itemId = 'arcade:<game>'`)
 

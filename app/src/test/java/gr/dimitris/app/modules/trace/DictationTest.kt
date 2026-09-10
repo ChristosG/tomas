@@ -104,6 +104,40 @@ class DictationTest {
         assertEquals(1.5f, d.ink!!, 0.001f)
     }
 
+    /**
+     * Which of his words this level can dictate at all.
+     *
+     * Case cannot be heard: «Δευτέρα» sounds exactly like «δευτέρα», so the first slot of a
+     * capital-initial card refuses a correctly written letter and reveals a capital he had no way of
+     * knowing was wanted — one guaranteed miss and an assisted row about a letter he can write. The
+     * seed's seven day names are WORD items, and every name a caregiver adds is one too.
+     */
+    @Test fun `a word he cannot spell from the sound is not one to dictate`() {
+        for (word in listOf("νερό", "ψωμί", "λογαριασμός", "ζωή")) {
+            assertTrue(word, TraceViewModel.dictatable(word))
+        }
+        for (word in listOf("Δευτέρα", "Μαρία", "Δημήτρης", "ΔΗΜΗΤΡΗΣ")) {
+            assertFalse("«$word» begins with a letter he cannot hear", TraceViewModel.dictatable(word))
+        }
+        assertFalse("a phrase is a dozen slots on one sheet of paper", TraceViewModel.dictatable("θέλω καφέ"))
+        assertFalse(TraceViewModel.dictatable("   "))
+    }
+
+    /**
+     * And what it says when there is nothing on the device to say: five everyday words, never his
+     * name. The other levels fall back on «Δημήτρης» because it is the one word nobody can delete;
+     * dictating it would be eight letters he cannot hear the case of, and «ΔΗΜΗΤΡΗΣ» eight more.
+     */
+    @Test fun `the fallback words are words he can spell from hearing them`() {
+        assertTrue("nothing to dictate", TraceViewModel.DICTATION_WORDS.isNotEmpty())
+        for (word in TraceViewModel.DICTATION_WORDS) {
+            assertTrue("«$word» cannot be dictated", TraceViewModel.dictatable(word))
+        }
+        for (word in TraceViewModel.NAME) {
+            assertFalse("his name is not something to dictate", word in TraceViewModel.DICTATION_WORDS)
+        }
+    }
+
     /** A word nobody has written a letter of yet has no numbers, and says so with absence. */
     @Test fun `a word with no letters written has nothing to say about itself`() {
         val d = Dictation(word)

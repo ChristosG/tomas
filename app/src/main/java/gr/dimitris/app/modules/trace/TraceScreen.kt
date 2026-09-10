@@ -18,9 +18,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.Image
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -33,8 +30,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.graphics.vector.rememberVectorPainter
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.AnnotatedString
@@ -48,7 +43,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
-import coil3.compose.AsyncImage
 import gr.dimitris.app.LocalAppGraph
 import gr.dimitris.app.core.settings.Settings
 import gr.dimitris.app.modules.sentences.Tile
@@ -56,6 +50,7 @@ import gr.dimitris.app.ui.components.BigButton
 import gr.dimitris.app.ui.components.ButtonTone
 import gr.dimitris.app.ui.components.DimitrisScreen
 import gr.dimitris.app.ui.components.ListenButton
+import gr.dimitris.app.ui.components.Pictogram
 import gr.dimitris.app.ui.components.QuietButton
 import gr.dimitris.app.ui.components.SuccessMark
 import gr.dimitris.app.ui.theme.Sizes
@@ -356,8 +351,14 @@ fun TraceScreen(count: Int, sessionId: String?, onDone: () -> Unit, onLeave: () 
  * it on the screen would be the exercise given away.
  */
 private fun slots(dictation: Dictation): AnnotatedString = buildAnnotatedString {
-    withStyle(SpanStyle(fontSize = ACCEPTED_LETTER)) { append(dictation.accepted) }
-    append(TraceViewModel.SLOT)
+    // Finished, the word is no longer a row of slots: it is the word he wrote from hearing, and it
+    // stands at the size every other level shows the thing he has just written. A trailing «_» under
+    // the tick would say there is one more letter to come.
+    if (dictation.done) append(dictation.accepted)
+    else {
+        withStyle(SpanStyle(fontSize = ACCEPTED_LETTER)) { append(dictation.accepted) }
+        append(TraceViewModel.SLOT)
+    }
 }
 
 /**
@@ -390,7 +391,7 @@ private fun TypedPaper(s: TraceState, vm: TraceViewModel, picture: (Tile) -> Fil
         // needs are the sentence, the field and the button. It comes back on the next board.
         if (s.whole == null) s.sentence?.picture?.let { card ->
             Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                Pictogram(picture(card))
+                Pictogram(picture(card), size = Sizes.pictureCard)
             }
             Text(
                 TraceViewModel.WRITE_IT, style = MaterialTheme.typography.bodyLarge,
@@ -434,24 +435,6 @@ private fun TypedPaper(s: TraceState, vm: TraceViewModel, picture: (Tile) -> Fil
         if (s.error != null) {
             Spacer(Modifier.height(Sizes.gapSmall))
             Text(s.error!!, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyLarge)
-        }
-    }
-}
-
-/** A picture that was deleted or moved falls back to the placeholder, so the word still works. */
-@Composable
-private fun Pictogram(file: File?) {
-    Box(Modifier.size(Sizes.pictureCard), contentAlignment = Alignment.Center) {
-        if (file != null && file.exists()) {
-            AsyncImage(
-                model = file, contentDescription = null, contentScale = ContentScale.Fit,
-                error = rememberVectorPainter(Icons.Rounded.Image), modifier = Modifier.size(Sizes.pictureCard),
-            )
-        } else {
-            Icon(
-                Icons.Rounded.Image, contentDescription = null, modifier = Modifier.size(Sizes.pictureCard),
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
         }
     }
 }

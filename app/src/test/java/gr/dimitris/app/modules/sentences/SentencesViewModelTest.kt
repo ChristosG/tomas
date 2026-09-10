@@ -81,6 +81,11 @@ class SentencesViewModelTest {
         assertEquals(target, ask.target)
         assertEquals(target, ask.heard)
         assertEquals("his own dot row decides how much grammar to insist on", 4, ask.difficulty)
+        // And no intent. This module's boards have exactly one right answer — the sentence the cards
+        // were laid out from — so the target *is* what a good answer has to convey; an intent would
+        // tell the model to accept any correct sentence about the picture, which is «Γράψε»'s typed
+        // level and not this one. See [gr.dimitris.app.core.judge.Ask.intent].
+        assertNull("a board with one right answer sent an intent", ask.intent)
         // The row has to be able to say the judge answered, and how long it took.
         assertEquals(Source.JUDGE.name, written.judge["source"])
         assertEquals(true, written.judge["accept"])

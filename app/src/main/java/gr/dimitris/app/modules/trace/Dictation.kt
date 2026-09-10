@@ -14,6 +14,8 @@ data class DictatedLetter(
     val precision: Float,
     val ink: Float,
     val missed: Boolean,
+    /** Whether he wrote the letter's accent, on a letter that has one. See [LetterScore.accent]. */
+    val accent: Boolean? = null,
 )
 
 /**
@@ -104,11 +106,13 @@ data class Dictation(
             precision = mark.precision,
             ink = mark.ink,
             missed = missed,
+            accent = mark.accent,
         ),
     )
 
     /**
-     * The per-letter rows the attempt's detail carries: `{c, coverage, precision, ink, missed}` each.
+     * The per-letter rows the attempt's detail carries: `{c, coverage, precision, ink, missed}` each,
+     * and `accent` where the letter has one.
      *
      * Written as plain maps because that is what [gr.dimitris.app.core.data.Adapt.Detail.kept] puts
      * on the row, and shaped exactly like the per-letter marks phase 6 already wrote for a traced
@@ -117,9 +121,11 @@ data class Dictation(
      */
     val detail: List<Map<String, Any?>>
         get() = written.map {
+            // A null `accent` is a letter with none, and Gson leaves a null out of the object: the
+            // key is there exactly where there was a mark to hit.
             mapOf(
                 "c" to it.c, "coverage" to it.coverage, "precision" to it.precision,
-                "ink" to it.ink, "missed" to it.missed,
+                "ink" to it.ink, "missed" to it.missed, "accent" to it.accent,
             )
         }
 

@@ -73,7 +73,12 @@ internal fun traceDetail(s: TraceState, score: TraceScore?, ms: Long): String = 
     kept(
         "letters",
         s.dictation?.detail
-            ?: score?.letters?.map { mapOf("c" to it.text, "coverage" to it.coverage, "precision" to it.precision, "ink" to it.ink) },
+            ?: score?.letters?.map {
+                mapOf(
+                    "c" to it.text, "coverage" to it.coverage, "precision" to it.precision,
+                    "ink" to it.ink, "accent" to it.accent,
+                )
+            },
     )
     // The same for the whole word. Kept on every row so the budget that refuses
     // colouring-in can be set from real hands instead of guesses.
@@ -84,7 +89,11 @@ internal fun traceDetail(s: TraceState, score: TraceScore?, ms: Long): String = 
     // letter he passed on was never marked, so there is no such try: the count of whatever ink he
     // had left on the paper would read as the shape of a letter nobody looked at, next to a
     // coverage and a precision that are correctly absent.
-    put("strokes", s.fresh.size.takeIf { score != null })
+    //
+    // Absent on a dictated word for the reason `meanDistance` is: the try that was marked there is
+    // the *last letter's*, and a count of its strokes standing under a word of five would be read
+    // as the word's. The letters are on the row; how many strokes each took is not, yet.
+    put("strokes", s.fresh.size.takeIf { score != null && s.dictation == null })
     // How tall the letter came out on this phone. Every distance above is in these pixels, so
     // without it none of them can be compared between a tablet and a phone. A row with no paper on
     // it at all — the typed level — has no such height, and says nothing rather than zero.
@@ -480,23 +489,43 @@ class TraceViewModel(
     /**
      * The words of the dictation level, in the order he will meet them: shortest first.
      *
-     * Shortest first in the sitting as well as in the pool, which is the one place this differs from
-     * [traced]. Writing a word from hearing, letter by letter, with nothing on the paper is the
-     * hardest thing this module asks; a sitting that opens with «λογαριασμός» is a sitting he stops
-     * doing, and one that opens with «ψωμί» is one he finishes.
+     * Shortest first *within the six he was given*, which is the one place this differs from
+     * [traced]: writing a word from hearing, letter by letter, with nothing on the paper is the
+     * hardest thing this module asks, and a sitting that opens with «λογαριασμός» is a sitting he
+     * stops doing where one that opens with «ψωμί» is one he finishes. Sorting the whole shuffled
+     * pool instead would have opened every sitting of his life with the same two shortest words on
+     * the device, which is the rut the shuffle exists to stop.
      *
-     * One word and never a phrase: a space is nothing he can write on the paper, and a two-word card
-     * dictated letter by letter is a dozen slots on one sheet of paper.
+     * Two words are refused outright, and both because of what he is given to go on — a sound:
+     *
+     *  * **a phrase.** A space is nothing he can write on the paper, and a two-word card dictated
+     *    letter by letter is a dozen slots on one sheet.
+     *  * **a word that starts with a capital.** Case cannot be heard. «Δευτέρα» and «Μαρία» sound
+     *    exactly like «δευτέρα» and «μαρία», so the first slot would refuse a correctly written
+     *    letter and reveal a capital he had no way of knowing was wanted — one guaranteed miss per
+     *    such word, and an ASSISTED row that says he could not write a letter he can write.
      */
     private fun dictated(words: List<Item>, difficulty: Int): List<TraceTarget> {
-        val shortest = shortest(pool(words, difficulty).filter { it.text.none(Char::isWhitespace) })
-            .sortedBy { it.text.length }
-        if (shortest.isEmpty()) return name(TraceVariant.DICTATION)
+        val sayable = pool(words, difficulty).filter { dictatable(it.text) }
+        val chosen = shortest(sayable).take(wanted).sortedBy { it.text.length }
+        if (chosen.isEmpty()) return dictationFallback()
         return List(wanted) { i ->
-            val word = shortest[i % shortest.size]
+            val word = chosen[i % chosen.size]
             TraceTarget(word.text, word.id, word, variant = TraceVariant.DICTATION)
         }
     }
+
+    /**
+     * What the dictation level dictates on a device with no vocabulary it can use: five short
+     * everyday words, in lower case, that every Greek speaker can spell from the sound.
+     *
+     * **Not his name**, which is what the other levels fall back on. «Δημήτρης» begins with a capital
+     * he cannot hear, and «ΔΗΜΗΤΡΗΣ» is eight of them: dictating it is eight guaranteed misses, eight
+     * reveals and an assisted row, which is the exact opposite of what a fallback is for. These rows
+     * belong to the level rather than to a card, because they are nobody's vocabulary.
+     */
+    private fun dictationFallback(): List<TraceTarget> =
+        List(wanted) { i -> TraceTarget(DICTATION_WORDS[i % DICTATION_WORDS.size], variant = TraceVariant.DICTATION) }
 
     /**
      * The typed level's boards: one sentence per target, built from his own vocabulary at
@@ -812,7 +841,12 @@ class TraceViewModel(
                 _state.update { it.copy(checking = false) }
                 return@launch
             }
-            if (ending) return@launch
+            // The board he asked about is still the board he is on. The judge takes seconds, and
+            // «Παράλειψη» stays live through «Διαβάζω...» — so the answer to board 1 could otherwise
+            // land on board 2: mark it finished, say his old sentence over it and write a row against
+            // a sentence he never wrote. `checking` is the exact flag, because it is set by this
+            // press and cleared by everything that moves the board ([advance], [load]).
+            if (ending || !_state.value.checking) return@launch
             if (written.accepted) {
                 graph.feedback.success()
                 finishing = true
@@ -861,7 +895,7 @@ class TraceViewModel(
     }
 
     /**
-     * «Άκου»: the word again.
+     * «Άκου»: the word again — or, once he has earned it, the sentence.
      *
      * At the dictation level it is the exercise itself — the word is never written down, so a man who
      * cannot hear it has nothing to write — and at the typed level it is the word the sentence has to
@@ -869,15 +903,22 @@ class TraceViewModel(
      * counts the presses ([TraceState.listens]) because a word he asked for four times is a word he
      * could not hold, and that is a fact about the word.
      *
-     * It never says the sentence he is being asked to produce. That would be the answer, and the one
-     * place this module hands the answer over is a refusal, where it has been earned.
+     * It never says the sentence he is being *asked* to produce. That would be the answer, and with an
+     * intent the target is only one correct sentence out of many. But once a sentence of his has been
+     * refused, the whole form is on the screen and has already been said once — and one saying is not
+     * enough for a man who loses the front of a long sentence. That is phase 12's own ruling for the
+     * sibling typed board ("he can hear the whole sentence as often as he needs it"), and withholding
+     * a correction he has already earned would be a different rule for the same screen.
      */
     fun listen() {
         val s = _state.value
         if (ending || s.text.isEmpty()) return
         if (s.variant == TraceVariant.FINGER) return
         _state.update { it.copy(listens = it.listens + 1) }
-        say(text = s.text, item = targets.getOrNull(s.index)?.item)
+        // A correction is said as a correction — «Σωστά: …», the same words the screen shows — and
+        // never in a caregiver's recorded voice for the word, which is about the word.
+        if (s.whole != null) say(text = listened(s), item = null)
+        else say(text = s.text, item = targets.getOrNull(s.index)?.item)
     }
 
     /**
@@ -1102,6 +1143,16 @@ class TraceViewModel(
         /** The empty slot of a dictated word: where the letter he is writing will go. */
         const val SLOT = "_"
 
+        /**
+         * What «Άκου» says on this board: the correction where there is one to hear again, and the
+         * word the exercise is about where there is not.
+         *
+         * Its own function so that "the sentence he has already been shown can be heard again, and
+         * the one he has not been shown cannot" is a sentence a unit test can hold the module to —
+         * the speaking itself is a text-to-speech engine and a device.
+         */
+        fun listened(s: TraceState): String = s.whole?.let { "$CORRECTION $it" } ?: s.text
+
         /** What a poor trace says on the screen. Never "λάθος": there is nothing to fail here. */
         const val TRY_AGAIN = "Ξανά"
 
@@ -1155,8 +1206,36 @@ class TraceViewModel(
          * What the word levels fall back on when the device has no vocabulary at all: his own name,
          * twice as it is written and once in capitals. It was level 3 itself until phase 13 moved the
          * words down into that level, and it is still the one word nobody can delete.
+         *
+         * The dictation level does **not** use it — a capital cannot be heard. See [DICTATION_WORDS].
          */
         val NAME = listOf("Δημήτρης", "Δημήτρης", "ΔΗΜΗΤΡΗΣ")
+
+        /**
+         * Whether a card is a word this level can dictate: one word, and one whose spelling he can
+         * get from the sound alone.
+         *
+         * A capital cannot be heard. «Δευτέρα» and «Μαρία» sound exactly like «δευτέρα» and «μαρία»,
+         * so the first slot of such a word would refuse a correctly written letter and reveal a
+         * capital he had no way of knowing was wanted — one guaranteed miss, and an assisted row
+         * about a letter he can write perfectly well. The seed's seven day names and every name a
+         * caregiver adds are the ordinary case, not the corner.
+         *
+         * A space is not something he can write on the paper, and a two-word card dictated letter by
+         * letter is a dozen slots on one sheet.
+         */
+        fun dictatable(text: String): Boolean =
+            text.isNotBlank() && text.none(Char::isWhitespace) && text.first().isLowerCase()
+
+        /**
+         * What the dictation level says when the device has no word it can dictate: five everyday
+         * words, lower case, short, and spelled the way they sound.
+         *
+         * Kept here rather than taken from the seed because this is the case where the seed is not
+         * there — a phone whose first import has not landed, or a vocabulary a caregiver has pruned
+         * to nothing. Every one of them is a word he uses.
+         */
+        val DICTATION_WORDS = listOf("νερό", "καφές", "σπίτι", "ψωμί", "φως")
 
         val CAPITALS = "ΑΒΓΔΕΖΗΘΙΚΛΜΝΞΟΠΡΣΤΥΦΧΨΩ".map { it.toString() }
         val SMALL = "αβγδεζηθικλμνξοπρστυφχψω".map { it.toString() }

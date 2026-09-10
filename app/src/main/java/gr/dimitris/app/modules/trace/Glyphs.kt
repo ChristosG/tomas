@@ -118,7 +118,9 @@ object Glyphs {
             val flat = moved.flatten()
             val height = flat.maxOf { it.y } - flat.minOf { it.y }
             val cut = TraceScorer.segments(moved, height)
-            for (t in cut) points += TemplatePoint(t.pt, nextSegment + t.segment, index)
+            // The mark on the letter stays a mark once the pieces are renumbered into the word: a
+            // tonos is the accent of *this* letter wherever it lands. See [TemplatePoint.accent].
+            for (t in cut) points += TemplatePoint(t.pt, nextSegment + t.segment, index, t.accent)
             nextSegment += (cut.maxOfOrNull { it.segment } ?: -1) + 1
             // The same move applied to this letter's own path, so its mask stands where its dots do.
             letter.path.offset(dx, dy)

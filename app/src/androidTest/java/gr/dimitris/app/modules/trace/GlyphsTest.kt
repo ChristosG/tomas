@@ -268,6 +268,65 @@ class GlyphsTest {
         }
     }
 
+    /**
+     * The accented vowels, written without their accent, against the device's own font.
+     *
+     * Every word the dictation level can offer him out of the seed carries exactly one accented
+     * vowel — εγώ, αυγό, γάλα, μάτι, μήλο, μετά — and at that level there is nothing on the paper to
+     * copy the mark from: he hears the word and writes it. Phase 11's floor made the tonos eight
+     * *required* pieces of the letter, which on this font is a fifth of an «ί», so a correctly formed
+     * letter came out at 0.65 coverage and was refused with a bare «Ξανά».
+     *
+     * So: the base letter, hand-written, marked against the accented template — passing at every
+     * strictness, and the row saying he did not write the mark. The strokes of the accent are found
+     * by the template's own [TemplatePoint.accent] points rather than by guessing at the top of the
+     * letter, which is the same rule the scorer applies.
+     */
+    @Test fun aLetterWrittenWithoutItsTonosIsThatLetter() {
+        for (text in listOf("ί", "ή", "ύ", "έ", "ό", "ά")) {
+            val glyph = Glyphs.template(text, boxWidth, boxHeight)
+            val mark = glyph.points.filter { it.accent }
+            assertTrue("«$text» has no accent in this font", mark.isNotEmpty())
+            val reach = glyph.height * ACCENT_REACH
+            val hand = HandTrace.centreLine(glyph)
+            val body = hand.filter { stroke -> stroke.none { p -> mark.any { hypot(p.x - it.pt.x, p.y - it.pt.y) <= reach } } }
+            assertTrue("the accent owned every stroke of «$text»", body.isNotEmpty() && body.size < hand.size)
+
+            for (level in TraceStrictness.entries) {
+                val s = score(body, glyph, level)
+                Log.i(TAG, "«$text» without its tonos at $level: $s")
+                assertTrue("«$text» written without its tonos was refused at $level: $s", s.passed)
+                assertEquals("a mark he did not write was recorded as one he did", false, s.letters.single().accent)
+                // And the whole letter, written whole, still passes and says he wrote the mark.
+                val whole = score(hand, glyph, level)
+                assertTrue("«$text» written whole was refused at $level: $whole", whole.passed)
+                assertEquals(true, whole.letters.single().accent)
+            }
+        }
+    }
+
+    /**
+     * And the marks are exactly the accents: no stroke of a real letter is quietly demoted to one.
+     *
+     * The «Ο» — its ring and its hole — and the stem of an «ι» are the three the review measured, and
+     * they are the shortest contours in the alphabet that are still strokes.
+     */
+    @Test fun everyStrokeOfARealLetterIsStillAStrokeOfIt() {
+        for (text in listOf("Ο", "ι", "Ξ", "α", "Δημητρα")) {
+            val glyph = Glyphs.template(text, boxWidth, boxHeight)
+            val marks = glyph.points.count { it.accent }
+            Log.i(TAG, "«$text»: ${glyph.points.size} points, $marks of them marks on the letter")
+            assertEquals("a stroke of «$text» was read as a mark on it", 0, marks)
+        }
+
+        // And in a word that *does* carry an accent, the mark belongs to the letter it sits over and
+        // to no other: his own name, whose «ή» is the only accented letter of the eight.
+        val name = Glyphs.template("Δημήτρης", boxWidth, boxHeight)
+        val marked = name.points.filter { it.accent }.map { it.letter }.distinct()
+        assertEquals("the tonos of «ή» is not one letter's mark: $marked", 1, marked.size)
+        assertEquals("the mark was given to the wrong letter", "ή", name.letters[marked.single()].text)
+    }
+
     private fun score(strokes: List<List<Pt>>, glyph: GlyphTemplate, level: TraceStrictness) =
         TraceScorer.score(strokes, glyph.target, level, density, recall = false)
 
@@ -328,5 +387,12 @@ class GlyphsTest {
 
         /** How many extra times one letter is written over itself: enough to be past its budget. */
         const val TIMES_OVER = 4
+
+        /**
+         * How near a template point of the accent a stroke has to pass for that stroke to *be* the
+         * accent, as a fraction of the letter's height. A twentieth: the mark is a blob of its own
+         * with the body of the letter well clear of it.
+         */
+        const val ACCENT_REACH = 0.05f
     }
 }

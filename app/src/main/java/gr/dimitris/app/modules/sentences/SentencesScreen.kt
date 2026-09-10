@@ -25,10 +25,8 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.Backspace
-import androidx.compose.material.icons.rounded.Image
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
@@ -41,23 +39,20 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.graphics.vector.rememberVectorPainter
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
-import coil3.compose.AsyncImage
 import gr.dimitris.app.LocalAppGraph
 import gr.dimitris.app.ui.components.BigButton
 import gr.dimitris.app.ui.components.ButtonTone
 import gr.dimitris.app.ui.components.DimitrisScreen
 import gr.dimitris.app.ui.components.ListenButton
 import gr.dimitris.app.ui.components.PictureCard
+import gr.dimitris.app.ui.components.Pictogram
 import gr.dimitris.app.ui.components.QuietButton
 import gr.dimitris.app.ui.components.SuccessMark
 import gr.dimitris.app.ui.theme.LocalFeedback
@@ -422,24 +417,6 @@ private fun ChosenStrip(chosen: List<Tile>, done: Boolean, picture: (Tile) -> Fi
                 }
             }
             SuccessMark(visible = done, size = Sizes.stripPicture)
-        }
-    }
-}
-
-/** A picture that was deleted or moved falls back to the placeholder, so the word still works. */
-@Composable
-private fun Pictogram(file: File?, size: Dp = Sizes.stripPicture) {
-    Box(Modifier.size(size), contentAlignment = Alignment.Center) {
-        if (file != null && file.exists()) {
-            AsyncImage(
-                model = file, contentDescription = null, contentScale = ContentScale.Fit,
-                error = rememberVectorPainter(Icons.Rounded.Image), modifier = Modifier.size(size),
-            )
-        } else {
-            Icon(
-                Icons.Rounded.Image, contentDescription = null, modifier = Modifier.size(size),
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
         }
     }
 }

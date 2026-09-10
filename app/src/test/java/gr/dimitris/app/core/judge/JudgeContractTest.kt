@@ -32,7 +32,11 @@ class JudgeContractTest {
         assertEquals("πινω καφε", o.get("heard").asString)
         assertEquals(4, o.get("difficulty").asInt)
         assertTrue("intent key missing", o.has("intent"))
-        assertTrue("a sentence has no intent of its own", o.get("intent").isJsonNull)
+        // Written out as null rather than left off: a stable shape is one less thing for the model to
+        // interpret. An ask *built* without an intent sends none — which is every board of
+        // «Προτάσεις» (its own test pins that) — while «Γράψε»'s typed level does send one, and the
+        // SENTENCE rule reads it where it is there. See [Ask.intent].
+        assertTrue("an ask built without an intent invented one", o.get("intent").isJsonNull)
     }
 
     /**

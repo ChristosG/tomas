@@ -65,12 +65,16 @@ internal class TypedCheck(
         private set
 
     /**
-     * One press of «Έτοιμο». [prompt] is the whole instruction he was given —
-     * [gr.dimitris.app.modules.sentences.SentencesViewModel.asked], which is «Γράψε την πρόταση» or,
-     * at level 8, «Γράψε την ερώτηση», with the word under the picture in it — and it is the only
-     * hint the judge gets about what he was looking at and what was wanted of him. It says the
-     * *kind* of thing too, which a bare word cannot: a question asked for and a sentence given back
-     * is not the same answer. [target] is the sentence the board was built from.
+     * One press of «Έτοιμο». [prompt] is what he was reading when he wrote it, and it is the only
+     * hint the judge gets about what he was looking at.
+     *
+     * On this module's own boards that is the whole instruction —
+     * [gr.dimitris.app.modules.sentences.SentencesViewModel.asked], «Γράψε την πρόταση» or, at level
+     * 8, «Γράψε την ερώτηση», with the word under the picture in it — because there the instruction
+     * says the *kind* of thing wanted, which a bare word cannot: a question asked for and a sentence
+     * given back is not the same answer. «Γράψε»'s typed level sends the word alone and says what it
+     * wants in the [intent] instead, which is the more honest place for it when any correct sentence
+     * about the word will do. [target] is the sentence the board was built from.
      *
      * [intent] is what a good answer has to **convey**, where the board can say it — see
      * [Ask.intent]. This module's own boards pass none: a gap in the sentence and a sentence to build

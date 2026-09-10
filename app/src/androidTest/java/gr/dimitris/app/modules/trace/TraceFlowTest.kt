@@ -27,6 +27,7 @@ import gr.dimitris.app.core.judge.JudgeClient
 import gr.dimitris.app.core.judge.TurnJudge
 import gr.dimitris.app.today.MODULE_GRID_TAG
 import gr.dimitris.app.ui.components.LISTEN_TAG
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.After
@@ -65,9 +66,13 @@ class TraceFlowTest {
         since = System.currentTimeMillis()
     }
 
-    /** His level is his; a test that borrows it puts it back, and so is the judge. */
+    /** How hard he is marked, where a case borrowed it: a caregiver's setting, not a test's. */
+    private var strictnessBefore: TraceStrictness? = null
+
+    /** His level is his; a test that borrows it puts it back, and so are the strictness and the judge. */
     @After fun restoreLevel() = runBlocking<Unit> {
         graph.settings.setTraceLevel(levelBefore)
+        strictnessBefore?.let { graph.settings.setTraceStrictness(it) }
         realJudge?.let { graph.judge = it }
     }
 
@@ -382,7 +387,14 @@ class TraceFlowTest {
      */
     @Test fun aDictatedWordIsWrittenLetterByLetterAndAMissRevealsTheLetter() {
         waitForVocabulary()
-        runBlocking { graph.settings.setTraceLevel(4) }
+        // The strictness is a caregiver's, not this test's: borrowed here so the hand-like traces
+        // below are marked at the line the module is designed around, and put back in `restoreLevel`.
+        // Left at «Αυστηρό» this case would have timed out rather than said what went wrong.
+        runBlocking {
+            strictnessBefore = graph.settings.traceStrictness.first()
+            graph.settings.setTraceStrictness(TraceStrictness.NORMAL)
+            graph.settings.setTraceLevel(4)
+        }
         lateinit var vm: TraceViewModel
         compose.runOnUiThread { vm = TraceViewModel(graph, sessionId = null) }
         try {
@@ -390,6 +402,10 @@ class TraceFlowTest {
             compose.waitUntil(TIMEOUT_MS) { vm.state.value.dictation?.expected != null && vm.state.value.target.points.isNotEmpty() }
             val word = vm.state.value.dictation!!.word
             assertTrue("nothing to dictate", word.isNotEmpty())
+            // Nothing he cannot hear: a capital is unknowable from the sound, so the level never
+            // dictates a word that starts with one — the seed's day names, and every name a caregiver
+            // adds, are WORD items like any other.
+            assertTrue("«$word» begins with a letter he cannot hear", TraceViewModel.dictatable(word))
             assertFalse("the word he is meant to hear was on the paper", vm.state.value.templateVisible)
 
             // The first letter, missed: a scribble across the middle of the paper is not a letter.
@@ -479,6 +495,41 @@ class TraceFlowTest {
         // The judge's one warm line about a sentence he got right is on the screen, not thrown away.
         compose.onNodeWithText("Ωραία πρόταση.").assertIsDisplayed()
         compose.onNodeWithText("Επόμενο").assertIsDisplayed()
+    }
+
+    /**
+     * He presses «Έτοιμο» and then, while the judge is still reading, «Παράλειψη».
+     *
+     * The judge takes seconds and «Παράλειψη» stays live through «Διαβάζω...», so the answer to board
+     * 1 can land after board 2 has opened. Before the guard it did: board 2 was marked finished,
+     * board 1's sentence was read out over it, and a row was written against a sentence he had never
+     * written on a board he had never answered. Passing on a board is a legal thing to do, so the fix
+     * is not to stop him — it is that a verdict is only ever applied to the board that asked for it.
+     */
+    @Test fun aVerdictThatArrivesAfterHeMovesOnIsNotAppliedToTheNextBoard() {
+        waitForVocabulary()
+        val held = CompletableDeferred<String>()
+        withHeldJudge(held)
+        openTyped()
+
+        compose.onNodeWithTag(TRACE_TYPED_TAG).performTextInput("ο μπαμπάς πίνει τον καφέ")
+        compose.onNodeWithText("Έτοιμο").performClick()
+        // Reading, and «Παράλειψη» is still his to press.
+        compose.waitUntil(TIMEOUT_MS) { compose.onAllNodes(hasText(READING)).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithText("Παράλειψη").performClick()
+        compose.waitUntil(TIMEOUT_MS) { attempts().any { it.outcome == Outcome.SKIPPED } }
+        assertEquals("passing on a board wrote more than one row", 1, attempts().size)
+
+        // And now the answer to the board he left arrives.
+        held.complete("""{"accept":true,"expanded":null,"feedback":"Ωραία πρόταση.","score":1}""")
+        compose.waitForIdle()
+        compose.onNodeWithText("Γράψε 2/6").assertIsDisplayed()
+
+        // The board he is on now is untouched: an empty field, no verdict, no row, and no «Επόμενο».
+        assertEquals("the verdict landed on a board he never answered", 1, attempts().size)
+        compose.onNodeWithText("Επόμενο").assertDoesNotExist()
+        compose.onNodeWithText("Ωραία πρόταση.").assertDoesNotExist()
+        compose.onNodeWithText("Έτοιμο").assertIsNotEnabled()
     }
 
     /**
@@ -575,6 +626,19 @@ class TraceFlowTest {
         )
     }
 
+    /**
+     * The same, with the one reply held until the test lets it go: a judge that is still thinking is
+     * the only way to be on the next board when the answer to the last one lands.
+     */
+    private fun withHeldJudge(held: CompletableDeferred<String>) {
+        realJudge = graph.judge
+        graph.judge = TurnJudge(
+            secrets = { KEY },
+            enabled = { true },
+            client = JudgeClient { _, _, _ -> held.await() },
+        )
+    }
+
     /** The default phone: «Έλεγχος με Claude» off, so nothing can read a sentence he types. */
     private fun withNoJudge() {
         realJudge = graph.judge
@@ -638,6 +702,9 @@ class TraceFlowTest {
 
         /** Never a real key: the judge's [TurnJudge.available] only asks whether there is one. */
         const val KEY = "sk-ant-test"
+
+        /** What the typed board says while the judge is reading, as `TraceScreen` writes it. */
+        const val READING = "Διαβάζω..."
         const val TIMEOUT_MS = 20_000L
     }
 }

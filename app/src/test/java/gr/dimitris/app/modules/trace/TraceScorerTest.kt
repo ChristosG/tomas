@@ -46,6 +46,20 @@ class TraceScorerTest {
     /** An «Ο»: a ring of ink, and the hole in the middle of it, which is not ink. */
     private val o = ring(cx = 400f, cy = 500f, outer = 400f, inner = 350f)
 
+    /**
+     * An «ί»: the stem of an «ι», and the tonos over it — a short stroke of its own, set to one side,
+     * the way the font draws it. Its outline is 173 px against a 90 px piece, so it is a mark on the
+     * letter rather than a stroke of it. See [TraceScorer.segments].
+     */
+    private val iotaWithTonos = glyph(
+        "ί",
+        Bar(Pt(400f, 250f), Pt(400f, 900f), STROKE),
+        Bar(Pt(470f, 170f), Pt(520f, 230f), STROKE * 0.6f),
+    )
+
+    /** The «ί» as he writes it from hearing: the stem, and no mark over it. */
+    private val handIota = listOf(wobbled(line(Pt(400f, 250f), Pt(400f, 900f))))
+
     // ---- how a hand writes them --------------------------------------------------------------
 
     /** The «Η» as a person writes it: down the middle of each stroke, with a hand's wobble. */
@@ -412,25 +426,94 @@ class TraceScorerTest {
     // ---- the pieces of a letter ---------------------------------------------------------------
 
     /**
-     * A contour is cut into pieces the length of a stroke, and never into fewer than eight: the ring
-     * of an «Ο» gone a third of the way round has to read as a third of a letter, not as one piece
-     * out of one.
+     * A contour long enough to be a stroke of the letter is cut into pieces a twelfth of the letter
+     * long: the ring of an «Ο» gone a third of the way round has to read as a third of a letter, not
+     * as one piece out of one. A contour too short to be a stroke is a **mark on** the letter — the
+     * tonos, the dialytika — and it is one piece, and a piece he does not have to go over.
      */
-    @Test fun `every contour is cut into pieces of a twelfth of the letter, at least eight of them`() {
+    @Test fun `a contour is pieces of a twelfth of the letter, and a mark on it is one piece`() {
         val height = 800f
-        // A line 1200 long: 1200 / (800 * 0.12) = 12.5 → 13 pieces.
+        // A line 1200 long: 1200 / (800 * 0.12) = 12.5 → 13 pieces, and every one of them his to write.
         val long = line(Pt(0f, 0f), Pt(1200f, 0f), step = 6f)
-        assertEquals(13, TraceScorer.segments(listOf(long), height).map { it.segment }.distinct().size)
+        val pieces = TraceScorer.segments(listOf(long), height)
+        assertEquals(13, pieces.map { it.segment }.distinct().size)
+        assertTrue("a stroke of the letter was read as a mark on it", pieces.none { it.accent })
 
-        // A line 100 long is one piece and a bit, so the eight-piece floor holds: a third of a ring
-        // has to read as a third of a letter.
-        val ring = line(Pt(0f, 0f), Pt(100f, 0f), step = 6f)
-        assertEquals(TraceScorer.MIN_SEGMENTS, TraceScorer.segments(listOf(ring), height).map { it.segment }.distinct().size)
+        // Eight pieces is the line: at 768 (= 8 × 96) it is still a stroke, cut into its eight.
+        val shortest = line(Pt(0f, 0f), Pt(768f, 0f), step = 6f)
+        val cut = TraceScorer.segments(listOf(shortest), height)
+        assertEquals(TraceScorer.MIN_SEGMENTS, cut.map { it.segment }.distinct().size)
+        assertTrue("the shortest real stroke was read as a mark", cut.none { it.accent })
 
-        // A mark shorter than one piece — the tonos over an «ή» — is one piece, not eight. Eight
-        // would make an accent a third of the word, and a word written without it would fail.
-        val accent = line(Pt(0f, 0f), Pt(60f, 0f), step = 6f)
-        assertEquals(1, TraceScorer.segments(listOf(accent), height).map { it.segment }.distinct().size)
+        // Under it, whether it is a tonos or a hundred points on one pixel: one piece, and a mark.
+        for (length in listOf(60f, 400f, 700f)) {
+            val mark = TraceScorer.segments(listOf(line(Pt(0f, 0f), Pt(length, 0f), step = 6f)), height)
+            assertEquals("a $length-long contour", 1, mark.map { it.segment }.distinct().size)
+            assertTrue("a mark on the letter was read as a stroke of it", mark.all { it.accent })
+        }
+    }
+
+    /**
+     * The letters the reviewer measured, so the new rule cannot quietly reclassify a stroke as a
+     * mark: an «Ο»'s ring and its hole, and the stem of an «ι», are all far above the eight-piece
+     * line and every one of their pieces stays his to write.
+     */
+    @Test fun `the strokes of a real letter are strokes, not marks`() {
+        for (point in TraceScorer.segments(o.contours, o.height)) {
+            assertFalse("a piece of the «Ο» was read as a mark on it", point.accent)
+        }
+        // The «ι»: one stem, and 1300 px of outline against a 96 px piece.
+        val stem = glyph("ι", Bar(Pt(400f, 100f), Pt(400f, 900f), STROKE))
+        val cut = TraceScorer.segments(stem.contours, stem.height)
+        assertTrue("the stem of an «ι» was read as a mark", cut.none { it.accent })
+        assertTrue("the stem of an «ι» is not a letter to go over: $cut", cut.map { it.segment }.distinct().size >= TraceScorer.MIN_SEGMENTS)
+    }
+
+    // ---- the accent ---------------------------------------------------------------------------
+
+    /**
+     * A letter written without its tonos is the letter.
+     *
+     * This is the whole of what the dictation level rests on. Every word in the pool his talk board
+     * gives him carries one accented vowel — εγώ, αυγό, γάλα, μάτι, μήλο, μετά — and at that level
+     * there is nothing on the paper to copy the mark from: he hears «μάτι» and writes it. Phase 11
+     * cut the tonos into eight *required* pieces, which measured out at a fifth of an «ί», so a
+     * correctly formed letter scored 0.65 and was refused with a bare «Ξανά» — and then filed as a
+     * letter he could not write. The accent is spelling; these two lines are about shape.
+     */
+    @Test fun `a letter written without its tonos is that letter, at every strictness`() {
+        for (level in TraceStrictness.entries) {
+            val s = score(handIota, iotaWithTonos, level)
+            assertTrue("«ί» written without its tonos was refused at $level: $s", s.passed)
+            assertEquals("the letter is one letter, however many contours it has", 1, s.letters.size)
+            assertEquals("a mark he did not write was recorded as one he did", false, s.letters.single().accent)
+        }
+    }
+
+    /** And when he does write it, the row says so — which is the only thing the mark is for. */
+    @Test fun `the tonos he did write is on the row, and nothing turns on it`() {
+        val withMark = handIota + listOf(wobbled(line(Pt(470f, 170f), Pt(520f, 230f))))
+        val s = score(withMark, iotaWithTonos, TraceStrictness.NORMAL)
+        assertTrue("«ί» written whole was refused: $s", s.passed)
+        assertEquals(true, s.letters.single().accent)
+        // The same letter, marked to the same two lines either way: the accent buys him nothing.
+        val without = score(handIota, iotaWithTonos, TraceStrictness.NORMAL)
+        assertEquals("the accent moved the coverage", without.coverage, s.coverage, 0.001f)
+    }
+
+    /** A letter with no mark on it says nothing about one, rather than saying he missed it. */
+    @Test fun `a letter with no accent has nothing to say about one`() {
+        assertEquals(null, score(handH, h, TraceStrictness.NORMAL).letters.single().accent)
+    }
+
+    /**
+     * The mark is not a way in either: the tonos alone is a mark on a letter he has not written, and
+     * the letter is what the two lines are about.
+     */
+    @Test fun `the tonos on its own is not the letter`() {
+        val onlyMark = listOf(wobbled(line(Pt(470f, 170f), Pt(520f, 230f))))
+        val s = score(onlyMark, iotaWithTonos, TraceStrictness.LOOSE)
+        assertFalse("a tonos passed as an «ί»: $s", s.passed)
     }
 
     /** The hole in an «Ο» is pieces of its own, or going round the outside would be the whole letter. */
@@ -692,7 +775,9 @@ private fun word(vararg glyphs: TestGlyph): Target {
     val letters = mutableListOf<GlyphLetter>()
     var next = 0
     for ((i, g) in glyphs.withIndex()) {
-        for (t in g.template) points += TemplatePoint(t.pt, next + t.segment, i)
+        // The mark on a letter stays a mark once the pieces are renumbered into the word, exactly
+        // as [Glyphs] carries it: see [TemplatePoint.accent].
+        for (t in g.template) points += TemplatePoint(t.pt, next + t.segment, i, t.accent)
         next += (g.template.maxOfOrNull { it.segment } ?: -1) + 1
         letters += GlyphLetter(g.text, g.height, g.left, g.right, g.skeleton, inside = g.inside)
     }

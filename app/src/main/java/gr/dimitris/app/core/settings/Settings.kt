@@ -22,6 +22,7 @@ import gr.dimitris.app.modules.singsay.Key
 import gr.dimitris.app.modules.sql.SqlPuzzles
 import gr.dimitris.app.modules.singsay.Tempo
 import gr.dimitris.app.modules.trace.TraceStrictness
+import gr.dimitris.app.modules.trace.TraceViewModel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
@@ -118,6 +119,50 @@ class Settings(private val store: DataStore<Preferences>) {
             val n = level.coerceIn(Difficulty.MIN, Difficulty.MAX)
             p[TRACE_LEVEL] = n
             followLevel(p, ModuleId.TRACE, Difficulty.traceDot(n))
+        }
+    }
+
+    /**
+     * The one-time renumbering of «Γράψε», for a phone that was practising before phase 13.
+     *
+     * The five levels are five different exercises, and phase 13 changed which is which: 3 was his own
+     * name and is now words, 4 was words and is now **dictation** — a word said and never shown — and
+     * 5 was words from memory and is now **a whole sentence on the keyboard**. Nothing in the store
+     * says what a level *means*, so without this a man who left the app on level 4 would open it on an
+     * exercise nobody had ever shown him, and one on level 5 would meet a keyboard — or, with
+     * «Έλεγχος με Claude» off, which is the default, a word level and a Greek line about Claude.
+     *
+     * So both land on [gr.dimitris.app.modules.trace.TraceViewModel.WORD_LEVEL], which is where the
+     * work he was actually doing now lives: level 4's words are level 3's words, and level 5's words
+     * from memory are reachable inside level 3 as that level's own progression. From there the two
+     * new exercises are one tap of his own dots away, which is the whole point of the dots.
+     *
+     * The caregiver's bounds move with it, and they are the reason this is not one line. A floor of 4
+     * or 5 would pin him *on* an exercise she never chose, so it comes down to 3 as well. A ceiling of
+     * 4 meant "not the hardest thing there is" and still does, so it comes down; a ceiling of 5 meant
+     * "everything", and everything is still everything, so it stays.
+     *
+     * Once, ever, behind [TRACE_RENUMBERED] — and a phone with no `trace_level` at all has nothing to
+     * renumber, so a fresh install is untouched by everything but the flag.
+     */
+    suspend fun renumberTraceForPhase13() {
+        store.edit { p ->
+            if (p[TRACE_RENUMBERED] == true) return@edit
+            p[TRACE_RENUMBERED] = true
+            // Her fence first, so the dot that follows the level below is clamped into the new one.
+            p[floorKey(ModuleId.TRACE)]?.let { if (it >= TraceViewModel.DICTATION_LEVEL) p[floorKey(ModuleId.TRACE)] = TraceViewModel.WORD_LEVEL }
+            p[ceilingKey(ModuleId.TRACE)]?.let {
+                if (it == TraceViewModel.DICTATION_LEVEL) p[ceilingKey(ModuleId.TRACE)] = TraceViewModel.WORD_LEVEL
+            }
+            // A phone that never opened «Γράψε» has no level to move and no dot that was derived from
+            // one: leaving it alone is the difference between a migration and a decision.
+            val stored = p[TRACE_LEVEL] ?: return@edit
+            if (stored < TraceViewModel.DICTATION_LEVEL) return@edit
+            p[TRACE_LEVEL] = TraceViewModel.WORD_LEVEL
+            // Through the same door his own tap uses, so the dot follows the level into the bounds:
+            // a level of 3 under a dot still saying 5 would be clamped straight back up by
+            // [Difficulty.levelAtLoad] the next time the module opened.
+            followLevel(p, ModuleId.TRACE, Difficulty.traceDot(TraceViewModel.WORD_LEVEL))
         }
     }
 
@@ -685,6 +730,13 @@ class Settings(private val store: DataStore<Preferences>) {
         private val SQL_LEVEL = intPreferencesKey("sql_level")
         private val TRACE_HAND = stringPreferencesKey("trace_hand")
         private val TRACE_STRICTNESS = stringPreferencesKey("trace_strictness")
+
+        /**
+         * Whether «Γράψε»'s levels have been renumbered for phase 13 on this phone. Its own key
+         * and never cleared: it is a fact about the store's shape, not about him, and running it
+         * twice would step a man who has since chosen the dictation back down to words.
+         */
+        private val TRACE_RENUMBERED = booleanPreferencesKey("trace_renumbered_13")
         private val MELODY_TEMPO = stringPreferencesKey("melody_tempo")
         private val MELODY_KEY = stringPreferencesKey("melody_key")
         private val CLAUDE_MODEL = stringPreferencesKey("claude_model")

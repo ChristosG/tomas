@@ -99,6 +99,29 @@ class TraceTypedTest {
     }
 
     /**
+     * «Άκου» before he has answered says the **word**, and after a refusal says the sentence he has
+     * been shown — as often as he wants it.
+     *
+     * The two halves are one rule apart. Before he answers, reading the target out would be handing
+     * him one of the many correct sentences the board accepts, and the exercise is producing one of
+     * his own. After a refusal the whole form is already on the screen and has already been said
+     * once, and once is not enough for a man who loses the front of a long sentence — which is phase
+     * 12's own ruling for the sibling typed board (f666d9f, «he can hear the whole sentence as often
+     * as he needs it»). A different rule on the same screen in a different tile would be a difference
+     * he has to learn for nothing.
+     */
+    @Test fun `Akou says the word until a sentence of his has been answered, and the answer after`() {
+        val board = TraceState(text = word, variant = TraceVariant.TYPED, sentence = null)
+        assertEquals("the word under the picture", word, TraceViewModel.listened(board))
+
+        val refused = board.copy(whole = "Ο μπαμπάς πίνει τον καφέ.")
+        assertEquals(
+            "the correction, said as the screen shows it",
+            "${TraceViewModel.CORRECTION} Ο μπαμπάς πίνει τον καφέ.", TraceViewModel.listened(refused),
+        )
+    }
+
+    /**
      * The toggle went off between the sitting being planned and «Έτοιμο». The phase-11 comparison is
      * not a judgement of his grammar, but it is honest about the one thing it can see — and it asks
      * nobody, because there is nobody to ask.

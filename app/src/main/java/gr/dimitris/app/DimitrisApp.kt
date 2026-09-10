@@ -29,6 +29,12 @@ class DimitrisApp : Application() {
             // is not empty yet. See [Settings.grandfatherNewlyDefaultOff].
             runCatching { graph.settings.grandfatherNewlyDefaultOff() }
                 .onFailure { graph.errors.record("modules grandfather", it) }
+            // Straight after it, and before anything reads a level: phase 13 renumbered «Γράψε»'s
+            // five exercises, and a phone that was left on the old level 4 or 5 would otherwise open
+            // on an exercise nobody has ever shown him. It must come *after* the grandfathering,
+            // which tells a fresh install from an old one by the store being empty.
+            runCatching { graph.settings.renumberTraceForPhase13() }
+                .onFailure { graph.errors.record("trace renumber", it) }
             SeedImporter(graph).importIfNeeded()
             ScriptSeedImporter(graph).importIfNeeded()
             // Where his five dots start, on a phone that was already being practised with before

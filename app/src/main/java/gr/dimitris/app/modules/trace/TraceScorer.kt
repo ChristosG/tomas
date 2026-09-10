@@ -17,8 +17,12 @@ data class Pt(val x: Float, val y: Float)
  * [letter] is which letter of the word this point belongs to. A word is marked letter by letter —
  * eight Greek letters fill the same eight places whatever they are, so a word taken as one shape
  * cannot tell «Δημήτρης» from «Καλημέρα» — and every point has to know whose it is.
+ *
+ * [accent] is true on the points of a **mark on** the letter rather than a stroke of it: the tonos
+ * over an «ή», the two dots of an «ϊ». Those pieces are drawn and they are measured, but they are
+ * not pieces he has to go over — see [TraceScorer.segments].
  */
-data class TemplatePoint(val pt: Pt, val segment: Int, val letter: Int = 0)
+data class TemplatePoint(val pt: Pt, val segment: Int, val letter: Int = 0, val accent: Boolean = false)
 
 /**
  * One letter of what he was asked to write, as everything but the font sees it: the character
@@ -56,6 +60,16 @@ data class LetterScore(
     val precision: Float,
     val passed: Boolean,
     val ink: Float = 0f,
+    /**
+     * Whether he put ink on the letter's accent — null on a letter that has none.
+     *
+     * Nothing is decided by it: a tonos is spelling and not shape, and refusing a correctly formed
+     * «ι» because he did not put the mark over it would fail almost every word of the dictation
+     * level, where he has nothing on the paper to copy the mark from. It is here because
+     * `docs/ADAPTATION.md` has a real question to ask of it — whether he *writes* the accents once
+     * he can hear the words — and that question cannot be asked of a row that never recorded it.
+     */
+    val accent: Boolean? = null,
 )
 
 /**
@@ -224,10 +238,14 @@ object TraceScorer {
     const val SEGMENT_FRACTION = 0.12f
 
     /**
-     * A contour at least one segment long is cut into this many pieces however short it is, so that
-     * the ring of an «Ο» gone a third of the way round reads as a third of a letter and not as one
-     * piece out of one. A contour *shorter* than a segment — the tonos over an «ή», a dot — is one
-     * piece: eight pieces of an accent would make the accent a third of the word.
+     * How many pieces long a contour has to be before it counts as a stroke of the letter at all.
+     *
+     * Eight, which for every Greek letter is the line between a **stroke** and a **mark**: the
+     * shortest real contour in the alphabet — the middle bar of a «Ξ», the stem of an «ι» — is
+     * seventeen pieces or more, and the only things below the line are the diacritics (the tonos,
+     * the dialytika). Above it a contour is cut into pieces of a twelfth of the letter, so the ring
+     * of an «Ο» gone a third of the way round reads as a third of a letter; below it a contour is
+     * one piece, and one he does not have to go over. See [segments].
      */
     const val MIN_SEGMENTS = 8
 
@@ -257,7 +275,16 @@ object TraceScorer {
     /**
      * The letter's outline, cut into pieces. [contours] is every closed line of the glyph in walk
      * order — the outside of an «Ο» and then the hole in it — and each is split by arc length into
-     * `ceil(length / (height * SEGMENT_FRACTION))` pieces, never fewer than [MIN_SEGMENTS].
+     * `ceil(length / (height * SEGMENT_FRACTION))` pieces.
+     *
+     * A contour shorter than [MIN_SEGMENTS] pieces is not a stroke of the letter at all — in Greek it
+     * is a **diacritic**, the tonos over an «ή» or the two dots of an «ϊ» — and it is cut into one
+     * piece and marked [TemplatePoint.accent]. The mark is still drawn on the paper and his ink on it
+     * is still measured; what it is not is a piece he has to go over. Phase 11's floor made it eight
+     * required pieces, which measured out at a fifth of an «ί», so a correctly formed letter written
+     * without its accent scored 0.65 and was refused — and at the dictation level, where the letter
+     * is not on the paper to copy the mark from, that is almost every word in his vocabulary. The
+     * accent is spelling; the two lines this scorer holds him to are about shape.
      *
      * The ids run on across contours, so the hole in an «Ο» is pieces of its own to be gone over and
      * not more of the outside. Kept here, away from the font, so the rule can be read and tested
@@ -274,12 +301,13 @@ object TraceScorer {
             val at = FloatArray(contour.size)
             for (i in 1 until contour.size) at[i] = at[i - 1] + dist(contour[i - 1], contour[i])
             val length = at.last()
-            // A contour shorter than one segment — an accent, a dot, or a hundred points on the
-            // same pixel — is one piece: it is a mark on the letter, not eight pieces of it.
-            val pieces = if (length < target) 1 else maxOf(MIN_SEGMENTS, ceil(length / target).toInt())
+            // Too short to be a stroke of the letter — a tonos, a dot, or a hundred points on the
+            // same pixel: one piece, and a mark rather than a piece of the letter.
+            val accent = length < target * MIN_SEGMENTS
+            val pieces = if (accent) 1 else ceil(length / target).toInt()
             for (i in contour.indices) {
                 val piece = if (length <= 0f) 0 else ((at[i] / length) * pieces).toInt().coerceIn(0, pieces - 1)
-                out += TemplatePoint(contour[i], next + piece)
+                out += TemplatePoint(contour[i], next + piece, accent = accent)
             }
             next += pieces
         }
@@ -404,7 +432,7 @@ object TraceScorer {
         var presentAll = 0
         var onLetterAll = 0
         var distanceAll = 0.0
-        val marks = ArrayList<LetterScore>(letters.size)
+        val scores = ArrayList<LetterScore>(letters.size)
         for (i in letters.indices) {
             val outline = outlines[i]
             // A letter with nothing to trace — a space between two words — is not one he can miss.
@@ -417,17 +445,29 @@ object TraceScorer {
             // is what every target built by hand has.
             val ink = letters[i].inside ?: target.inside
 
+            // The pieces of the letter he has to go over, and the marks *on* it that he does not.
+            // A shape made of nothing but marks is not a letter with nothing to trace, it is a
+            // caller with a very short contour: hold him to it rather than divide by zero.
             val present = HashSet<Int>()
-            for (t in outline) present += t.segment
+            val marks = HashSet<Int>()
+            for (t in outline) if (t.accent) marks += t.segment else present += t.segment
+            if (present.isEmpty()) { present += marks; marks.clear() }
             val covered = HashSet<Int>()
             val away = FloatArray(outline.size)
             var onLetter = 0
             var total = 0.0
+            // Whether any of his ink is really *on the mark* rather than merely within reach of it.
+            // The reach is a fingertip wide by design, and on an «ί» the tonos sits a fingertip above
+            // the stem — so "covered" would say he wrote the accent every time he wrote the letter.
+            // What answers it honestly is whose piece his ink is nearest to: the stem's ink is nearer
+            // the stem, the tonos's ink is nearer the tonos, and that holds however close they sit.
+            var onMark = false
 
             for (p in mine) {
                 // On the ink costs nothing: a line down the middle of a stroke is the letter, written.
                 val onInk = ink(p)
                 var best = Float.MAX_VALUE
+                var nearest = -1
                 if (onInk) {
                     // The radius is measured from the edge of the letter, not from the middle of it:
                     // a man told «γράψε Η» draws one line down the middle of the stem, and the *far*
@@ -439,48 +479,54 @@ object TraceScorer {
                     for (j in outline.indices) {
                         val d = dist(p, outline[j].pt)
                         away[j] = d
-                        if (d < best) best = d
+                        if (d < best) { best = d; nearest = j }
                     }
                     val reach = best + bar.coverRadiusPx
                     for (j in outline.indices) if (away[j] <= reach) covered += outline[j].segment
                     onLetter++
                 } else {
                     // Off the letter: the reach is the plain radius, so one pass answers both.
-                    for (t in outline) {
-                        val d = dist(p, t.pt)
-                        if (d < best) best = d
-                        if (d <= bar.coverRadiusPx) covered += t.segment
+                    for (j in outline.indices) {
+                        val d = dist(p, outline[j].pt)
+                        if (d < best) { best = d; nearest = j }
+                        if (d <= bar.coverRadiusPx) covered += outline[j].segment
                     }
                     total += best
                     if (best <= bar.tolerancePx) onLetter++
                 }
+                if (!onMark && nearest >= 0 && best <= bar.coverRadiusPx && outline[nearest].accent) onMark = true
             }
 
-            // No ink at all on this letter is not a letter he wrote.
-            val coverage = covered.size.toFloat() / present.size
+            // No ink at all on this letter is not a letter he wrote. Only the pieces he *has* to go
+            // over are counted, on both sides of the fraction: the tonos is measured and reported,
+            // never required, so a coverage can never come out above 1 either.
+            val went = covered.count { it in present }
+            val coverage = went.toFloat() / present.size
             val precision = if (mine.isEmpty()) 0f else onLetter.toFloat() / mine.size
-            marks += LetterScore(
+            scores += LetterScore(
                 text = letters[i].text,
                 coverage = coverage,
                 precision = precision,
                 passed = coverage >= bar.minCoverage && precision >= bar.minPrecision,
                 ink = used[i],
+                // Only where there is one to hit. See [LetterScore.accent].
+                accent = if (marks.isEmpty()) null else onMark,
             )
-            coveredAll += covered.size
+            coveredAll += went
             presentAll += present.size
             onLetterAll += onLetter
             distanceAll += total
         }
 
-        if (marks.isEmpty()) return NOTHING
+        if (scores.isEmpty()) return NOTHING
         return TraceScore(
             coverage = coveredAll.toFloat() / presentAll,
             precision = onLetterAll.toFloat() / walked.size,
             meanDistance = (distanceAll / walked.size).toFloat(),
             // The worst letter, not the average of them: seven letters right out of eight is seven
             // letters right, and the eighth is the one he is practising.
-            passed = marks.all { it.passed },
-            letters = marks,
+            passed = scores.all { it.passed },
+            letters = scores,
             inkRatio = ratio,
         )
     }

@@ -12,6 +12,7 @@ import gr.dimitris.app.modules.arcade.ArcadeGame
 import gr.dimitris.app.modules.singsay.Key
 import gr.dimitris.app.modules.singsay.Tempo
 import gr.dimitris.app.modules.trace.TraceStrictness
+import gr.dimitris.app.modules.trace.TraceViewModel
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -569,6 +570,78 @@ class SettingsTest {
         s.setTraceLevel(5)
         assertEquals(5, s.difficulty(ModuleId.TRACE).first())
         assertEquals(5, s.traceLevel.first())
+    }
+
+    // ------------------------------------------------- the phase-13 renumbering of «Γράψε»
+
+    /**
+     * A phone that was practising before phase 13 renumbered the writing levels.
+     *
+     * Old 4 was words and old 5 was words from memory; new 4 is a word said and never shown, and new
+     * 5 is a whole sentence on a keyboard. Nothing in the store says what a level *means*, so a man
+     * left on either would have opened the app on an exercise nobody had ever shown him. Both land on
+     * the word level, which is where the work he was actually doing now lives — and the dot has to
+     * come with the level, or [Difficulty.levelAtLoad] would clamp him straight back up.
+     */
+    @Test fun `an upgrading phone comes off the two levels that changed exercise`() = runBlocking {
+        for (before in listOf(TraceViewModel.DICTATION_LEVEL, TraceViewModel.TYPED_LEVEL)) {
+            val s = newSettings()
+            s.setTraceLevel(before)
+            s.renumberTraceForPhase13()
+            assertEquals("level $before", TraceViewModel.WORD_LEVEL, s.traceLevel.first())
+            assertEquals("the dot has to come with it", TraceViewModel.WORD_LEVEL, s.difficulty(ModuleId.TRACE).first())
+            // Once, ever: a man who has since tapped his way to the dictation is not stepped back.
+            s.setTraceLevel(TraceViewModel.DICTATION_LEVEL)
+            s.renumberTraceForPhase13()
+            assertEquals(TraceViewModel.DICTATION_LEVEL, s.traceLevel.first())
+        }
+    }
+
+    /** The three levels whose exercise did not change are left exactly where they were. */
+    @Test fun `the levels that still mean what they meant are not moved`() = runBlocking {
+        for (before in 1..TraceViewModel.WORD_LEVEL) {
+            val s = newSettings()
+            s.setTraceLevel(before)
+            s.renumberTraceForPhase13()
+            assertEquals("level $before", before, s.traceLevel.first())
+        }
+    }
+
+    /**
+     * A fresh install has nothing to renumber and is left alone: no level written, so no dot derived
+     * from one, and «Γράψε» opens at level 1 exactly as it did before this migration existed.
+     */
+    @Test fun `a fresh install is untouched by the renumbering`() = runBlocking {
+        val s = newSettings()
+        s.renumberTraceForPhase13()
+        assertEquals(1, s.traceLevel.first())
+        assertTrue("the migration decided a dot nobody had set", s.difficultyNeedsInit(ModuleId.TRACE).first())
+        // And it still runs for the first phone that *does* have something, which is the flag's job.
+        s.setTraceLevel(TraceViewModel.TYPED_LEVEL)
+        s.renumberTraceForPhase13()
+        assertEquals("the flag was spent on an empty store", TraceViewModel.TYPED_LEVEL, s.traceLevel.first())
+    }
+
+    /**
+     * Her fence moves with the levels it was drawn around. A floor of 4 or 5 would pin him *on* an
+     * exercise she never chose; a ceiling of 4 meant "not the hardest thing there is" and still does;
+     * a ceiling of 5 meant "everything", and everything is still everything.
+     */
+    @Test fun `the caregiver's bounds are renumbered with the levels`() = runBlocking {
+        val floors = newSettings()
+        floors.setDifficultyFloor(ModuleId.TRACE, TraceViewModel.TYPED_LEVEL)
+        floors.renumberTraceForPhase13()
+        assertEquals(TraceViewModel.WORD_LEVEL, floors.difficultyFloor(ModuleId.TRACE).first())
+
+        val capped = newSettings()
+        capped.setDifficultyCeiling(ModuleId.TRACE, TraceViewModel.DICTATION_LEVEL)
+        capped.renumberTraceForPhase13()
+        assertEquals(TraceViewModel.WORD_LEVEL, capped.difficultyCeiling(ModuleId.TRACE).first())
+
+        val open = newSettings()
+        open.setDifficultyCeiling(ModuleId.TRACE, Difficulty.MAX)
+        open.renumberTraceForPhase13()
+        assertEquals("«everything» is still everything", Difficulty.MAX, open.difficultyCeiling(ModuleId.TRACE).first())
     }
 
     /** …but never past the fence: a level the bounds refuse is pulled back into the band. */
