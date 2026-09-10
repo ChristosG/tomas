@@ -357,21 +357,42 @@ class Settings(private val store: DataStore<Preferences>) {
      * read off, so touching it would be the migration overwriting its own source.
      *
      * [derived] null means "work it out from what this store already holds" ([derivedFromStore]),
-     * which is the answer for the four modules whose progress *is* a preference. A module with
-     * nothing to read — a phone installed today — lands on [Difficulty.DEFAULT], which is the right
-     * answer for somebody the app has never met.
+     * which is the answer for the four modules whose progress *is* a preference.
+     *
+     * [whenNothing] is where a module with nothing at all to read lands. It is [Difficulty.DEFAULT]
+     * — "the app exactly as it was the day before" — for a phone that has been used, because a
+     * module nobody has opened on a phone that *has* a history says nothing either way and the
+     * upgrade must not quietly narrow «Λέξεις», whose dot is never derived from anything. On a phone
+     * with no history at all the honest answer is [Difficulty.MIN], and the caller is the one that
+     * can tell the two apart: [gr.dimitris.app.core.difficulty.DifficultyInit.run], which can also
+     * see the database. See [noStoredProgress].
      *
      * Re-checked under the edit, so two callers racing at startup still write once.
      */
-    suspend fun initialiseDifficulty(module: ModuleId, derived: Int? = null) {
+    suspend fun initialiseDifficulty(
+        module: ModuleId,
+        derived: Int? = null,
+        whenNothing: Int = Difficulty.DEFAULT,
+    ) {
         store.edit { p ->
             if (derivedAlready(p, module)) return@edit
             val (floor, ceiling) = bounds(p, module)
-            val value = derived ?: derivedFromStore(p, module) ?: Difficulty.DEFAULT
+            val value = derived ?: derivedFromStore(p, module) ?: whenNothing
             p[difficultyKey(module)] = Difficulty.clamp(value, floor, ceiling)
             p[initialisedKey(module)] = true
         }
     }
+
+    /**
+     * True while no module's progress has been written here yet: nothing for [derivedFromStore] to
+     * read, for any of them.
+     *
+     * Half of "has this phone ever been practised on". The other half is the database — the schedule
+     * rows «Τραγούδα και πες το» and «Διάλογοι» are graded from — and only
+     * [gr.dimitris.app.core.difficulty.DifficultyInit] can see both.
+     */
+    val noStoredProgress: Flow<Boolean> =
+        store.data.map { p -> ModuleId.entries.none { derivedFromStore(p, it) != null } }
 
     /**
      * Forget that these modules' dots were ever derived, so the next

@@ -609,11 +609,41 @@ class SettingsTest {
         assertEquals(120f, s.arcadeTargetDp(ArcadeGame.PINCH).first(), 0.01f)
     }
 
-    /** A phone installed this morning has nothing to read, and starts everyone where the spec says. */
-    @Test fun `a phone with no stored progress starts at the default`() = runBlocking {
+    /**
+     * A module with nothing to read on a phone that *has* a history: the app exactly as it was the
+     * day before. «Λέξεις» is the one this is really for — its dot is derived from nothing at all,
+     * so this is the only value it can ever take, and at dot 1 it would lose its phrases.
+     */
+    @Test fun `a module with nothing to read on a used phone starts at the default`() = runBlocking {
         val s = newSettings()
         ModuleId.entries.forEach { s.initialiseDifficulty(it) }
         ModuleId.entries.forEach { assertEquals("$it", Difficulty.DEFAULT, s.difficulty(it).first()) }
+    }
+
+    /**
+     * A phone the app has never met. `DifficultyInit` decides which of the two answers this is —
+     * it is the only caller that can see the database as well — and hands it down.
+     *
+     * Dot 1 and not dot 2, because dot 2 is a band whose *floor* is level 3 in both «Αριθμοί» and
+     * «Προτάσεις»: a phone installed this morning would have opened them a third of the way up two
+     * ladders, for somebody it has never met.
+     */
+    @Test fun `a phone with no stored progress at all starts everyone at one`() = runBlocking {
+        val s = newSettings()
+        assertEquals(true, s.noStoredProgress.first())
+        ModuleId.entries.forEach { s.initialiseDifficulty(it, whenNothing = Difficulty.MIN) }
+
+        ModuleId.entries.forEach { assertEquals("$it", Difficulty.MIN, s.difficulty(it).first()) }
+        assertEquals(1, Difficulty.numbers(s.difficulty(ModuleId.NUMBERS).first()).first)
+        assertEquals(1, Difficulty.sentences(s.difficulty(ModuleId.SENTENCES).first()).first)
+    }
+
+    /** And a phone with any progress at all is not that phone, whichever module wrote it. */
+    @Test fun `one stored level is enough to make a phone an old one`() = runBlocking {
+        val s = newSettings()
+        assertEquals(true, s.noStoredProgress.first())
+        s.setTraceLevel(3)
+        assertEquals(false, s.noStoredProgress.first())
     }
 
     /** Once, and only once: the second run is his own setting, not the migration's. */

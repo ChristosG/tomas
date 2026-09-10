@@ -21,8 +21,9 @@ import kotlinx.coroutines.flow.first
  * doing, once, per module, and after that it is his.
  *
  * Only what is really written counts as evidence. A phone installed this morning has no stored level
- * and no schedule rows, so every module lands on [Difficulty.DEFAULT] — which is the honest answer
- * for somebody the app has never met, and keeps a first run exactly as it was.
+ * and no schedule rows, so every module lands on [Difficulty.MIN] — see [neverPractised]: the app has
+ * never met him, and the first screen of «Αριθμοί» and of «Προτάσεις» is then level 1, exactly where
+ * it was before the dots existed.
  *
  * Runs on the app's own scope at startup, after the seed importers, so the vocabulary and the
  * dialogues the two DB-backed derivations read are on the device. It is safe to run again: each
@@ -39,6 +40,9 @@ object DifficultyInit {
 
     /** Every module that has a row of dots, in Today order. The talk board has none. */
     suspend fun run(graph: AppGraph) {
+        val fresh = runCatching { neverPractised(graph.settings.noStoredProgress.first(), graph.db.schedules()) }
+            .getOrElse { graph.errors.record("difficulty init evidence", it); false }
+        val whenNothing = if (fresh) Difficulty.MIN else Difficulty.DEFAULT
         for (module in graph.modules.map { it.id }) {
             val needed = runCatching { graph.settings.difficultyNeedsInit(module).first() }
                 .getOrElse { graph.errors.record("difficulty init $module", it); false }
@@ -49,10 +53,32 @@ object DifficultyInit {
             // which is what already happens when the flag itself cannot be read.
             val derived = runCatching { derive(graph, module) }
                 .getOrElse { graph.errors.record("difficulty derive $module", it); continue }
-            runCatching { graph.settings.initialiseDifficulty(module, derived) }
+            runCatching { graph.settings.initialiseDifficulty(module, derived, whenNothing) }
                 .onFailure { graph.errors.record("difficulty init write $module", it) }
         }
     }
+
+    /**
+     * True on a phone that has never been practised on: no module's level or target size in the
+     * preference store, and not one schedule row in the database.
+     *
+     * It is the difference between the two honest answers for a module with nothing to read. A
+     * phone with a history gets [Difficulty.DEFAULT] — the app exactly as it was the day before —
+     * because a module nobody happened to open there says nothing, and «Λέξεις», whose dot is
+     * derived from nothing at all, must not lose its phrases to that silence. A phone the app has
+     * never met gets [Difficulty.MIN]: the first screen of «Αριθμοί» is then level 1 and the first
+     * screen of «Προτάσεις» is level 1, exactly as they were before the dots existed. At
+     * [Difficulty.DEFAULT] they would have opened at 3 — the floor of dot 2's band — which is the
+     * app deciding, for somebody it has never met, that he is a third of the way up two ladders.
+     *
+     * Both halves are needed. Word-coach practice writes no preference at all, so the store alone
+     * would call a phone that has done nothing but «Λέξεις» for months a new one; and a schedule row
+     * is written by every module the first time it grades anything, which is what practice *is*.
+     *
+     * Anything that throws answers "practised", which is the side that changes nothing.
+     */
+    internal suspend fun neverPractised(noStoredProgress: Boolean, schedules: ScheduleDao): Boolean =
+        noStoredProgress && schedules.allRows().isEmpty()
 
     /**
      * And again, whenever the database is replaced underneath the app.

@@ -107,6 +107,35 @@ class DifficultyInitTest {
         assertEquals(Difficulty.DEFAULT, DifficultyInit.scriptsDot(scripts, schedules))
     }
 
+    // ------------------------------------------------- a phone the app has never met
+
+    /**
+     * The two answers for a module with nothing to read, and what separates them.
+     *
+     * A phone installed this morning has no stored level and not one schedule row, and its dots
+     * start at 1: «Αριθμοί» and «Προτάσεις» then open at level 1, exactly where they opened before
+     * the dots existed. At [Difficulty.DEFAULT] they would have opened at 3 — dot 2's band starts
+     * there — which is the app deciding, about somebody it has never met, that he is a third of the
+     * way up two ladders.
+     */
+    @Test fun `a phone with nothing stored and nothing practised has never been practised on`() = runTest {
+        assertEquals(true, DifficultyInit.neverPractised(noStoredProgress = true, schedules = schedules))
+    }
+
+    /**
+     * Both halves are needed. A stored level is the obvious history; a schedule row is the other,
+     * and it is the one that matters — word-coach practice writes no preference at all, so a phone
+     * that has done nothing but «Λέξεις» for months would otherwise be read as brand new and
+     * «Λέξεις» itself, whose dot is derived from nothing, would drop to 1 and lose its phrases.
+     */
+    @Test fun `a level or a single schedule row is enough to say it has`() = runTest {
+        assertEquals(false, DifficultyInit.neverPractised(noStoredProgress = false, schedules = schedules))
+
+        val word = phrase("καλημέρα")
+        practised(word.id, ModuleId.WORDCOACH)
+        assertEquals(false, DifficultyInit.neverPractised(noStoredProgress = true, schedules = schedules))
+    }
+
     // ------------------------------------------- when the database arrives after the app does
 
     /**
