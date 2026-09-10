@@ -1,62 +1,142 @@
-{"version": 2, "scripts": [
- {"title": "Στην καφετέρια", "lines": [
+{"version": 3, "scripts": [
+ {"title": "Στην καφετέρια", "tier": 1, "lines": [
   {"speaker": "OTHER", "text": "Καλημέρα! Τι θα πάρετε;"},
-  {"speaker": "DIMITRIS", "text": "Έναν καφέ, παρακαλώ."},
+  {"speaker": "DIMITRIS", "text": "Έναν καφέ, παρακαλώ.", "intent": "λέει τι θέλει να πιει"},
   {"speaker": "OTHER", "text": "Τι καφέ θέλετε;"},
-  {"speaker": "DIMITRIS", "text": "Φραπέ μέτριο με γάλα."},
+  {"speaker": "DIMITRIS", "text": "Φραπέ μέτριο με γάλα.", "intent": "λέει τι καφέ θέλει"},
   {"speaker": "OTHER", "text": "Κάτι άλλο;"},
-  {"speaker": "DIMITRIS", "text": "Όχι, ευχαριστώ."},
+  {"speaker": "DIMITRIS", "text": "Όχι, ευχαριστώ.", "intent": "λέει ότι δεν θέλει κάτι άλλο"},
   {"speaker": "OTHER", "text": "Τρία ευρώ."},
-  {"speaker": "DIMITRIS", "text": "Ορίστε."}
+  {"speaker": "DIMITRIS", "text": "Ορίστε.", "intent": "δίνει τα χρήματα"}
  ]},
- {"title": "Στον φούρνο", "lines": [
+ {"title": "Στον φούρνο", "tier": 1, "lines": [
   {"speaker": "OTHER", "text": "Καλημέρα! Τι θα θέλατε;"},
-  {"speaker": "DIMITRIS", "text": "Ένα ψωμί, παρακαλώ."},
+  {"speaker": "DIMITRIS", "text": "Ένα ψωμί, παρακαλώ.", "intent": "λέει τι θέλει"},
   {"speaker": "OTHER", "text": "Μεγάλο ή μικρό;"},
-  {"speaker": "DIMITRIS", "text": "Μεγάλο."},
+  {"speaker": "DIMITRIS", "text": "Μεγάλο.", "intent": "διαλέγει ένα από τα δύο"},
   {"speaker": "OTHER", "text": "Κάτι άλλο;"},
-  {"speaker": "DIMITRIS", "text": "Δύο τυρόπιτες."},
+  {"speaker": "DIMITRIS", "text": "Δύο τυρόπιτες.", "intent": "λέει τι άλλο θέλει και πόσα"},
   {"speaker": "OTHER", "text": "Τέσσερα ευρώ."},
-  {"speaker": "DIMITRIS", "text": "Ορίστε. Ευχαριστώ."}
+  {"speaker": "DIMITRIS", "text": "Ορίστε. Ευχαριστώ.", "intent": "πληρώνει και ευχαριστεί"}
  ]},
- {"title": "Τηλέφωνο στον πατέρα", "lines": [
-  {"speaker": "OTHER", "text": "Ναι, Δημήτρη. Πώς πάει;"},
-  {"speaker": "DIMITRIS", "text": "Γεια σου μπαμπά. Καλά."},
-  {"speaker": "OTHER", "text": "Τι έκανες σήμερα;"},
-  {"speaker": "DIMITRIS", "text": "Πήγα φυσικοθεραπεία."},
-  {"speaker": "OTHER", "text": "Ωραία. Θα σε δω το βράδυ;"},
-  {"speaker": "DIMITRIS", "text": "Ναι, θα έρθω."},
-  {"speaker": "OTHER", "text": "Εντάξει, σε περιμένω."},
-  {"speaker": "DIMITRIS", "text": "Τα λέμε. Γεια."}
- ]},
- {"title": "Στη φυσικοθεραπεία", "lines": [
-  {"speaker": "OTHER", "text": "Καλημέρα Δημήτρη. Πώς είσαι σήμερα;"},
-  {"speaker": "DIMITRIS", "text": "Καλά. Λίγο κουρασμένος."},
-  {"speaker": "OTHER", "text": "Πονάει το χέρι;"},
-  {"speaker": "DIMITRIS", "text": "Όχι, δεν πονάει."},
-  {"speaker": "OTHER", "text": "Ξεκινάμε με το χέρι."},
-  {"speaker": "DIMITRIS", "text": "Εντάξει."},
-  {"speaker": "OTHER", "text": "Μπράβο, τελειώσαμε."},
-  {"speaker": "DIMITRIS", "text": "Ευχαριστώ. Τα λέμε την Τρίτη."}
- ]},
- {"title": "Με έναν φίλο", "lines": [
+ {"title": "Με έναν φίλο", "tier": 1, "lines": [
   {"speaker": "OTHER", "text": "Γεια σου Δημήτρη! Τι κάνεις;"},
-  {"speaker": "DIMITRIS", "text": "Γεια! Καλά, εσύ;"},
+  {"speaker": "DIMITRIS", "text": "Γεια! Καλά, εσύ;", "intent": "χαιρετάει και ρωτάει κι αυτός"},
   {"speaker": "OTHER", "text": "Μια χαρά. Πάμε για καφέ;"},
-  {"speaker": "DIMITRIS", "text": "Ναι, πάμε."},
+  {"speaker": "DIMITRIS", "text": "Ναι, πάμε.", "intent": "δέχεται την πρόταση"},
   {"speaker": "OTHER", "text": "Πού θέλεις;"},
-  {"speaker": "DIMITRIS", "text": "Στη θάλασσα."},
+  {"speaker": "DIMITRIS", "text": "Στη θάλασσα.", "intent": "λέει πού θέλει να πάνε"},
   {"speaker": "OTHER", "text": "Τέλεια, πάμε."},
-  {"speaker": "DIMITRIS", "text": "Πάμε!"}
+  {"speaker": "DIMITRIS", "text": "Πάμε!", "intent": "συμφωνεί"}
  ]},
- {"title": "Στο ταξί", "lines": [
+ {"title": "Τηλέφωνο στον πατέρα", "tier": 2, "lines": [
+  {"speaker": "OTHER", "text": "Ναι, Δημήτρη. Πώς πάει;"},
+  {"speaker": "DIMITRIS", "text": "Γεια σου μπαμπά. Καλά.", "intent": "χαιρετάει και λέει πώς είναι"},
+  {"speaker": "OTHER", "text": "Τι έκανες σήμερα;"},
+  {"speaker": "DIMITRIS", "text": "Πήγα φυσικοθεραπεία.", "intent": "λέει τι έκανε σήμερα"},
+  {"speaker": "OTHER", "text": "Ωραία. Θα σε δω το βράδυ;"},
+  {"speaker": "DIMITRIS", "text": "Ναι, θα έρθω.", "intent": "απαντάει αν θα πάει"},
+  {"speaker": "OTHER", "text": "Εντάξει, σε περιμένω."},
+  {"speaker": "DIMITRIS", "text": "Τα λέμε. Γεια.", "intent": "κλείνει το τηλέφωνο"}
+ ]},
+ {"title": "Στη φυσικοθεραπεία", "tier": 2, "lines": [
+  {"speaker": "OTHER", "text": "Καλημέρα Δημήτρη. Πώς είσαι σήμερα;"},
+  {"speaker": "DIMITRIS", "text": "Καλά. Λίγο κουρασμένος.", "intent": "λέει πώς είναι σήμερα"},
+  {"speaker": "OTHER", "text": "Πονάει το χέρι;"},
+  {"speaker": "DIMITRIS", "text": "Όχι, δεν πονάει.", "intent": "απαντάει αν πονάει"},
+  {"speaker": "OTHER", "text": "Ξεκινάμε με το χέρι."},
+  {"speaker": "DIMITRIS", "text": "Εντάξει.", "intent": "δείχνει ότι είναι έτοιμος"},
+  {"speaker": "OTHER", "text": "Μπράβο, τελειώσαμε."},
+  {"speaker": "DIMITRIS", "text": "Ευχαριστώ. Τα λέμε την Τρίτη.", "intent": "ευχαριστεί και λέει πότε θα ξανάρθει"}
+ ]},
+ {"title": "Στο ταξί", "tier": 2, "lines": [
   {"speaker": "OTHER", "text": "Καλησπέρα. Πού πάτε;"},
-  {"speaker": "DIMITRIS", "text": "Στην πλατεία, παρακαλώ."},
+  {"speaker": "DIMITRIS", "text": "Στην πλατεία, παρακαλώ.", "intent": "λέει πού πάει"},
   {"speaker": "OTHER", "text": "Από ποιον δρόμο να πάμε;"},
-  {"speaker": "DIMITRIS", "text": "Όπως θέλετε εσείς."},
+  {"speaker": "DIMITRIS", "text": "Όπως θέλετε εσείς.", "intent": "απαντάει για τον δρόμο"},
   {"speaker": "OTHER", "text": "Εντάξει, φτάσαμε."},
-  {"speaker": "DIMITRIS", "text": "Πόσο κάνει;"},
+  {"speaker": "DIMITRIS", "text": "Πόσο κάνει;", "intent": "ρωτάει πόσο κάνει"},
   {"speaker": "OTHER", "text": "Επτά ευρώ."},
-  {"speaker": "DIMITRIS", "text": "Ορίστε. Ευχαριστώ."}
+  {"speaker": "DIMITRIS", "text": "Ορίστε. Ευχαριστώ.", "intent": "πληρώνει και ευχαριστεί"}
+ ]},
+ {"title": "Τηλεφώνημα σε φίλο", "tier": 3, "lines": [
+  {"speaker": "OTHER", "text": "Εμπρός, ναι;"},
+  {"speaker": "DIMITRIS", "text": "Γεια σου Νίκο, ο Δημήτρης είμαι.", "intent": "λέει ποιος είναι"},
+  {"speaker": "OTHER", "text": "Δημήτρη! Τι κάνεις, πού είσαι;"},
+  {"speaker": "DIMITRIS", "text": "Καλά είμαι, στο σπίτι.", "intent": "λέει πώς είναι και πού είναι"},
+  {"speaker": "OTHER", "text": "Θέλεις να περάσω το απόγευμα;"},
+  {"speaker": "DIMITRIS", "text": "Ναι, έλα κατά τις έξι.", "intent": "δέχεται και λέει ώρα"},
+  {"speaker": "OTHER", "text": "Εντάξει, τα λέμε τότε."},
+  {"speaker": "DIMITRIS", "text": "Τα λέμε. Γεια σου.", "intent": "κλείνει το τηλέφωνο"}
+ ]},
+ {"title": "Ραντεβού στον γιατρό", "tier": 3, "lines": [
+  {"speaker": "OTHER", "text": "Ιατρείο, καλημέρα σας."},
+  {"speaker": "DIMITRIS", "text": "Καλημέρα. Θέλω ένα ραντεβού.", "intent": "λέει τι θέλει"},
+  {"speaker": "OTHER", "text": "Βεβαίως. Για ποια μέρα και τι ώρα;"},
+  {"speaker": "DIMITRIS", "text": "Την Πέμπτη το πρωί, αν γίνεται.", "intent": "λέει μέρα και ώρα μαζί"},
+  {"speaker": "OTHER", "text": "Πέμπτη στις δέκα. Το όνομά σας;"},
+  {"speaker": "DIMITRIS", "text": "Δημήτρης, ευχαριστώ.", "intent": "λέει το όνομά του"},
+  {"speaker": "OTHER", "text": "Το έγραψα. Φέρτε και τις εξετάσεις σας."},
+  {"speaker": "DIMITRIS", "text": "Εντάξει, θα τις φέρω.", "intent": "δείχνει ότι κατάλαβε τι να φέρει"}
+ ]},
+ {"title": "Τι θα κάνω αύριο", "tier": 3, "lines": [
+  {"speaker": "OTHER", "text": "Τι θα κάνεις αύριο;"},
+  {"speaker": "DIMITRIS", "text": "Το πρωί έχω φυσικοθεραπεία.", "intent": "λέει τι θα κάνει το πρωί"},
+  {"speaker": "OTHER", "text": "Και μετά; Θα προλάβεις την αγορά;"},
+  {"speaker": "DIMITRIS", "text": "Ναι, θα πάω το μεσημέρι.", "intent": "λέει αν προλαβαίνει και πότε"},
+  {"speaker": "OTHER", "text": "Θέλεις κάτι από εμένα;"},
+  {"speaker": "DIMITRIS", "text": "Πάρε με το βράδυ, να μιλήσουμε.", "intent": "ζητάει κάτι συγκεκριμένο"},
+  {"speaker": "OTHER", "text": "Εντάξει, θα σε πάρω."},
+  {"speaker": "DIMITRIS", "text": "Ωραία. Καληνύχτα.", "intent": "κλείνει τη συζήτηση"}
+ ]},
+ {"title": "Παράπονο στο μαγαζί", "tier": 4, "lines": [
+  {"speaker": "OTHER", "text": "Ορίστε, τι θα θέλατε;"},
+  {"speaker": "DIMITRIS", "text": "Αγόρασα χθες αυτό και δεν δουλεύει.", "intent": "λέει τι αγόρασε και τι πρόβλημα έχει"},
+  {"speaker": "OTHER", "text": "Έχετε την απόδειξη μαζί σας;"},
+  {"speaker": "DIMITRIS", "text": "Ναι, ορίστε η απόδειξη.", "intent": "απαντάει και δίνει την απόδειξη"},
+  {"speaker": "OTHER", "text": "Θέλετε να το αλλάξουμε ή τα χρήματά σας πίσω;"},
+  {"speaker": "DIMITRIS", "text": "Προτιμώ να το αλλάξετε.", "intent": "διαλέγει ένα από τα δύο και το λέει καθαρά"},
+  {"speaker": "OTHER", "text": "Πολύ ωραία, σας φέρνω καινούριο."},
+  {"speaker": "DIMITRIS", "text": "Σας ευχαριστώ πολύ.", "intent": "ευχαριστεί"}
+ ]},
+ {"title": "Δίνω οδηγίες", "tier": 4, "lines": [
+  {"speaker": "OTHER", "text": "Συγγνώμη, ξέρετε πού είναι το φαρμακείο;"},
+  {"speaker": "DIMITRIS", "text": "Ναι, είναι εδώ κοντά.", "intent": "λέει ότι ξέρει και ότι είναι κοντά"},
+  {"speaker": "OTHER", "text": "Πώς πάω; Είναι μακριά με τα πόδια;"},
+  {"speaker": "DIMITRIS", "text": "Πέντε λεπτά. Ευθεία και μετά δεξιά.", "intent": "λέει πόσο κάνει και από πού να πάει"},
+  {"speaker": "OTHER", "text": "Δεξιά στο δεύτερο στενό;"},
+  {"speaker": "DIMITRIS", "text": "Στο πρώτο, δίπλα στον φούρνο.", "intent": "διορθώνει και δίνει σημείο για να το βρει"},
+  {"speaker": "OTHER", "text": "Σας ευχαριστώ πολύ!"},
+  {"speaker": "DIMITRIS", "text": "Τίποτα. Καλή σας μέρα.", "intent": "απαντάει στην ευχαριστία"}
+ ]},
+ {"title": "Τι έκανα χθες", "tier": 4, "lines": [
+  {"speaker": "OTHER", "text": "Πώς πέρασες χθες;"},
+  {"speaker": "DIMITRIS", "text": "Πολύ καλά πέρασα.", "intent": "λέει πώς πέρασε"},
+  {"speaker": "OTHER", "text": "Τι έκανες το πρωί και τι το απόγευμα;"},
+  {"speaker": "DIMITRIS", "text": "Το πρωί περπάτησα, το απόγευμα είδα τη Μαρία.", "intent": "λέει δύο πράγματα, στη σειρά"},
+  {"speaker": "OTHER", "text": "Τι κάνει η Μαρία;"},
+  {"speaker": "DIMITRIS", "text": "Καλά είναι. Ήπιαμε καφέ μαζί.", "intent": "λέει νέα της και τι κάνατε"},
+  {"speaker": "OTHER", "text": "Χαίρομαι που βγήκες."},
+  {"speaker": "DIMITRIS", "text": "Κι εγώ χάρηκα πολύ.", "intent": "λέει πώς ένιωσε"}
+ ]},
+ {"title": "Παραγγελία για δύο", "tier": 5, "lines": [
+  {"speaker": "OTHER", "text": "Καλησπέρα σας. Τι θα πάρετε;"},
+  {"speaker": "DIMITRIS", "text": "Δύο καφέδες, παρακαλώ.", "intent": "λέει τι θέλει και πόσα"},
+  {"speaker": "OTHER", "text": "Τι καφέ; Και για τους δύο το ίδιο;"},
+  {"speaker": "DIMITRIS", "text": "Έναν φραπέ μέτριο κι έναν ελληνικό σκέτο.", "intent": "λέει δύο διαφορετικές παραγγελίες μαζί"},
+  {"speaker": "OTHER", "text": "Θα πάρετε και κάτι να φάτε;"},
+  {"speaker": "DIMITRIS", "text": "Ναι, δύο κρουασάν και ένα νερό.", "intent": "προσθέτει φαγητό και νερό"},
+  {"speaker": "OTHER", "text": "Όλα μαζί δώδεκα ευρώ."},
+  {"speaker": "DIMITRIS", "text": "Ορίστε είκοσι, ευχαριστώ.", "intent": "πληρώνει και λέει με τι"}
+ ]},
+ {"title": "Βοήθεια με ένα χαρτί", "tier": 5, "lines": [
+  {"speaker": "OTHER", "text": "Καλημέρα. Πώς μπορώ να βοηθήσω;"},
+  {"speaker": "DIMITRIS", "text": "Έχω ένα χαρτί και θέλω βοήθεια.", "intent": "λέει τι έχει και τι ζητάει"},
+  {"speaker": "OTHER", "text": "Τι χαρτί είναι και τι πρέπει να γίνει;"},
+  {"speaker": "DIMITRIS", "text": "Είναι μια αίτηση. Πρέπει να τη συμπληρώσω.", "intent": "λέει τι είναι και τι πρέπει να γίνει"},
+  {"speaker": "OTHER", "text": "Μπορείτε να τη γράψετε μόνος σας;"},
+  {"speaker": "DIMITRIS", "text": "Δυσκολεύομαι. Θα με βοηθήσετε;", "intent": "λέει τη δυσκολία του και ζητάει βοήθεια"},
+  {"speaker": "OTHER", "text": "Φυσικά. Θα τη συμπληρώσουμε μαζί."},
+  {"speaker": "DIMITRIS", "text": "Σας ευχαριστώ πολύ.", "intent": "ευχαριστεί"}
  ]}
 ]}

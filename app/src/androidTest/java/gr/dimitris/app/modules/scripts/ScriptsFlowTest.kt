@@ -26,6 +26,8 @@ import gr.dimitris.app.core.data.ModuleId
 import gr.dimitris.app.core.data.Outcome
 import gr.dimitris.app.core.data.ScriptWithLines
 import gr.dimitris.app.core.data.Speaker
+import gr.dimitris.app.core.judge.JudgeClient
+import gr.dimitris.app.core.judge.TurnJudge
 import gr.dimitris.app.core.speech.FakeSpeechToText
 import gr.dimitris.app.core.speech.OnDeviceSupport
 import gr.dimitris.app.core.speech.SpeechToText
@@ -68,9 +70,16 @@ class ScriptsFlowTest {
     private val fake = FakeSpeechToText()
     private var realStt: SpeechToText? = null
 
+    /** The judge the open-dialogue cases run against: the emulator can reach the API no more than the recogniser. */
+    private var realJudge: TurnJudge? = null
+
+    /** What the fake client answers, reply by reply. */
+    private val replies = ArrayDeque<String>()
+
     @After fun removeWhatWasWritten() = runBlocking {
         written.forEach { graph.scripts.delete(it) }
         realStt?.let { graph.stt = it }
+        realJudge?.let { graph.judge = it }
         graph.settings.setSttEnabled(false)
     }
 
@@ -80,6 +89,22 @@ class ScriptsFlowTest {
         runBlocking { graph.settings.setSttEnabled(true) }
         graph.stt = fake
         return fake
+    }
+
+    /**
+     * A judge that answers with canned verdicts, one per turn, with a key behind it so that
+     * [TurnJudge.available] says yes. The secret store is not touched: the key is the judge's own,
+     * which is what the seam is for.
+     */
+    private fun withJudge(vararg json: String) {
+        realJudge = graph.judge
+        replies.clear()
+        replies += json
+        graph.judge = TurnJudge(
+            secrets = { KEY },
+            enabled = { true },
+            client = JudgeClient { _, _, _ -> replies.removeFirstOrNull() },
+        )
     }
 
     @Test fun aTurnHeSaysIsOneAttemptCarryingItsDialogue() {
@@ -271,6 +296,68 @@ class ScriptsFlowTest {
         compose.runOnUiThread { vm.leave {} }
     }
 
+    /**
+     * The wall this phase removes, on a device.
+     *
+     * Chris' report: Dimitris answers the question at once and to the point — «στο σπίτι» to «πού
+     * είσαι;» — and the phone, comparing his answer with the line the caregiver happened to script,
+     * told him he had got it wrong. With the judge on, the question is whether the answer makes
+     * sense, and the scripted line is only an example. The turn is his, and the row says who decided
+     * it and what the dialogue was asking for.
+     */
+    @Test fun anAnswerInHisOwnWordsIsTheTurnDoneAndTheRowSaysWhoDecided() {
+        withRecognition().willHear("στο σπίτι")
+        withJudge("""{"accept":true,"expanded":null,"feedback":null,"score":0.9}""")
+        val script = dialogue(Speaker.OTHER to "Πού είσαι;", Speaker.DIMITRIS to "Στο σπίτι είμαι.")
+        val before = attempts()
+        val vm = viewModel(script)
+
+        compose.runOnUiThread { vm.listen() }
+
+        compose.waitUntil(TIMEOUT_MS) { attempts().size == before.size + 1 }
+        val row = (attempts() - before.toSet()).single()
+        assertEquals("a relevant answer is the turn done", Outcome.CORRECT, row.outcome)
+        assertTrue("a judge decided it: ${row.detail}", row.detail.contains("\"source\":\"JUDGE\""))
+        assertTrue("and it accepted: ${row.detail}", row.detail.contains("\"accept\":true"))
+        assertTrue("the row carries what the turn asked of him: ${row.detail}", row.detail.contains("\"tier\":1"))
+        compose.runOnUiThread { vm.leave {} }
+    }
+
+    /**
+     * And when the answer did not land: the whole sentence, on the card and out loud, once — then
+     * one more «Μίλα» and the turn is his. It is work done with help, because the words were read to
+     * him first, which is exactly what the row has to say.
+     */
+    @Test fun anAnswerThatMissedIsGivenTheWholeSentenceToRepeat() {
+        val whole = "Είμαι στο σπίτι μου."
+        withRecognition().willHear("καλημέρα").willHear(whole)
+        withJudge(
+            """{"accept":false,"expanded":"$whole","feedback":"Πες μου πού είσαι.","score":0.2}""",
+            """{"accept":true,"expanded":null,"feedback":null,"score":1}""",
+        )
+        val script = dialogue(Speaker.OTHER to "Πού είσαι;", Speaker.DIMITRIS to "Στο σπίτι είμαι.")
+        val before = attempts()
+        val vm = viewModel(script)
+
+        compose.runOnUiThread { vm.listen() }
+        compose.waitUntil(TIMEOUT_MS) { vm.state.value.expanded != null }
+        assertEquals("the whole sentence, to repeat", whole, vm.state.value.expanded)
+        assertEquals("in his own language, and warm", "Πες μου πού είσαι.", vm.state.value.feedback)
+        assertEquals("one miss is one nudge", true, vm.state.value.nudge)
+        assertEquals("nothing has been written", before.size, attempts().size)
+
+        compose.runOnUiThread { vm.listen() }
+        compose.waitUntil(TIMEOUT_MS) { attempts().size == before.size + 1 }
+        val row = (attempts() - before.toSet()).single()
+        assertEquals("the sentence was said to him first", Outcome.ASSISTED, row.outcome)
+        assertTrue("which is level 3's worth of help: ${row.cueLevel}", (row.cueLevel ?: 0) >= 3)
+        // The verdict that ended the turn is the one the row carries — the second one, which
+        // accepted his repeat. What he was handed is in the cue level, not in this key.
+        assertTrue("the judge decided the turn: ${row.detail}", row.detail.contains("\"source\":\"JUDGE\""))
+        assertTrue("and he repeated it: ${row.detail}", row.detail.contains("\"sttMatched\":true"))
+        compose.runOnUiThread { vm.leave {} }
+    }
+
     /** A take with nothing in it is deleted and said aloud; the turn stays open and unwritten. */
     @Test fun aSilentTakeIsCaughtAndTheTurnStaysOpen() {
         val script = dialogue(Speaker.DIMITRIS to "Γεια σου.")
@@ -438,6 +525,9 @@ class ScriptsFlowTest {
         const val THE_END = "Τέλος διαλόγου!"
         const val GONE = "Ο διάλογος δεν είναι πια εδώ."
         const val OK = "Εντάξει"
+
+        /** Never a real key: the judge's [TurnJudge.available] only asks whether there is one. */
+        const val KEY = "sk-δοκιμή"
         const val TIMEOUT_MS = 20_000L
 
         /** Longer: the first utterance of a run also waits for the speech engine to come up. */

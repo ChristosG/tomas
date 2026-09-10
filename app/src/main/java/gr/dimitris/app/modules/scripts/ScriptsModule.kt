@@ -9,6 +9,7 @@ import gr.dimitris.app.core.data.Item
 import gr.dimitris.app.core.data.ModuleId
 import gr.dimitris.app.core.data.ScheduleDao
 import gr.dimitris.app.core.data.ScriptDao
+import gr.dimitris.app.core.data.ScriptLine
 import gr.dimitris.app.core.data.Speaker
 import gr.dimitris.app.core.data.now
 import gr.dimitris.app.core.difficulty.Difficulty
@@ -76,26 +77,35 @@ object ScriptsModule : Module {
      * Reads the lines rather than the whole [gr.dimitris.app.core.data.ScriptRepository.load], so
      * planning a session costs one query per script instead of one per line.
      *
-     * [difficulty] caps how many turns a dialogue may ask of him ([Difficulty.turnCeiling]) — a
-     * stand-in until Task 6 gives `scripts` a real `tier` column, and a crude one: the six dialogues
-     * the app ships all give him four turns, so they are all in reach from dot 2 up.
+     * [difficulty] caps how hard a dialogue may be ([Difficulty.scriptTier]): dot n takes every
+     * dialogue of tier n and below. A dialogue is as hard as its hardest line ([tierOf]), which is
+     * what the seed writes and what the caregiver's editor sets for the whole conversation at once.
      *
-     * A **ceiling** and not a window. A shorter conversation than the dot asks for is still worth
+     * A **ceiling** and not a window. An easier conversation than the dot asks for is still worth
      * having — the two-turn exchange at the bakery is a real errand — and dropping it would strand
      * whatever a caregiver had written and left its Leitner row overdue for ever. A ceiling no
      * dialogue is under still widens back to all of them, because a conversation *is* this module:
      * "nothing for you today" for having asked for harder work is not an answer.
      */
     internal suspend fun practisable(scripts: ScriptDao, difficulty: Int = Difficulty.DEFAULT): List<String> {
-        val turns = scripts.activeScripts().associate { script ->
-            script.id to scripts.linesFor(script.id).count { it.speaker == Speaker.DIMITRIS }
-        }
-        val ready = turns.filterValues { it > 0 }
-        val ceiling = Difficulty.turnCeiling(difficulty)
-        val wanted = ready.filterValues { it <= ceiling }
+        val lines = scripts.activeScripts().associate { script -> script.id to scripts.linesFor(script.id) }
+        // A dialogue of nothing but the other person's lines would produce no attempt at all.
+        val ready = lines.filterValues { l -> l.any { it.speaker == Speaker.DIMITRIS } }
+        val ceiling = Difficulty.scriptTier(difficulty)
+        val wanted = ready.filterValues { tierOf(it) <= ceiling }
         // The map keeps `activeScripts()`'s order — soonest-due ties are broken by it downstream.
         return (if (wanted.isEmpty()) ready else wanted).keys.toList()
     }
+
+    /**
+     * How hard one dialogue is: the hardest of its turns.
+     *
+     * Held to 1..5 line by line, because a line can arrive over sync from a phone that predates the
+     * column at all and carries a plain zero. A dialogue with no lines left is the easiest thing
+     * there is, which keeps it in reach of every dot rather than hiding it at the top.
+     */
+    internal fun tierOf(lines: List<ScriptLine>): Int =
+        lines.maxOfOrNull { Difficulty.clamp(it.tier) } ?: Difficulty.MIN
 
     /** A dialogue nobody has ever opened has no schedule row at all, and goes first. */
     private suspend fun leastRecentlyPractised(schedules: ScheduleDao, ids: List<String>): String {

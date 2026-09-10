@@ -131,8 +131,12 @@ fun ScriptsScreen(items: List<Item>, sessionId: String?, onDone: () -> Unit, onL
                         // pressed into the wrong mode before the settings have been read.
                         GentleCheck.Primary.WAITING ->
                             BigButton("Το είπα!", onClick = {}, tone = ButtonTone.Success, enabled = false)
+                        // Greyed while the judge is deciding the answer he has just given: the
+                        // buttons stay exactly where they are — a layout that jumped under his thumb
+                        // would be worse than a beat's wait — and a second window cannot open over a
+                        // turn that is about to be confirmed.
                         GentleCheck.Primary.SPEAK ->
-                            BigButton(SPEAK, onClick = { askListen.launch(Manifest.permission.RECORD_AUDIO) }, icon = Icons.Rounded.Mic, tone = ButtonTone.Success)
+                            BigButton(SPEAK, onClick = { askListen.launch(Manifest.permission.RECORD_AUDIO) }, icon = Icons.Rounded.Mic, tone = ButtonTone.Success, enabled = !s.thinking)
                         GentleCheck.Primary.CONFIRM ->
                             BigButton("Το είπα!", onClick = vm::confirm, tone = ButtonTone.Success)
                     }
@@ -177,6 +181,11 @@ fun ScriptsScreen(items: List<Item>, sessionId: String?, onDone: () -> Unit, onL
                         nudge = s.sttOn && s.nudge,
                         heard = if (s.sttOn) s.heard else null,
                         heardMatched = s.heardMatched,
+                        // The judge's warm line, and the whole sentence to repeat. Both live here,
+                        // in the content area: the bottom row stays «Μίλα»/«Άκου»/«Παράλειψη».
+                        feedback = s.feedback,
+                        expanded = s.expanded,
+                        thinking = s.thinking,
                         // The take button survives only where the recogniser does not keep his own
                         // audio; «Μίλα» has already done its job on the other path.
                         showsRecord = !s.oneControl,
@@ -261,6 +270,9 @@ private fun TurnCard(
     nudge: Boolean,
     heard: String?,
     heardMatched: Boolean,
+    feedback: String?,
+    expanded: String?,
+    thinking: Boolean,
     showsRecord: Boolean,
     showsSpeakAgain: Boolean,
     onHint: () -> Unit,
@@ -305,10 +317,37 @@ private fun TurnCard(
                 if (heard != null) {
                     Spacer(Modifier.height(Sizes.gapSmall))
                     Text(
-                        // A miss is the phone's uncertainty, never a verdict on how he said it.
-                        if (heardMatched) "Άκουσα «$heard». Μπράβο!" else "Άκουσα «$heard». Το τηλέφωνο δεν είναι σίγουρο.",
+                        when {
+                            heardMatched -> "Άκουσα «$heard». Μπράβο!"
+                            // The judge has its own line about this answer, and two sentences saying
+                            // the same thing twice over is one more than he needs to read.
+                            feedback != null -> "Άκουσα «$heard»."
+                            // A miss is the phone's uncertainty, never a verdict on how he said it.
+                            else -> "Άκουσα «$heard». Το τηλέφωνο δεν είναι σίγουρο."
+                        },
                         style = MaterialTheme.typography.bodyLarge,
                         color = MaterialTheme.colorScheme.onSecondaryContainer,
+                    )
+                }
+                if (feedback != null) {
+                    Spacer(Modifier.height(Sizes.gapSmall))
+                    Text(
+                        feedback, style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSecondaryContainer,
+                    )
+                }
+                // The whole sentence for the answer he gave, to hear once and say back. Not a
+                // correction: he answered the question, and these are the words for it.
+                if (expanded != null) {
+                    Spacer(Modifier.height(Sizes.gapSmall))
+                    Text(
+                        ScriptsViewModel.SAY_IT_LIKE, style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSecondaryContainer,
+                    )
+                    Text(
+                        expanded, style = MaterialTheme.typography.headlineMedium,
+                        color = MaterialTheme.colorScheme.onSecondaryContainer,
+                        modifier = Modifier.fillMaxWidth(),
                     )
                 }
                 Spacer(Modifier.height(Sizes.gapSmall))
@@ -316,7 +355,7 @@ private fun TurnCard(
                 // what Chris found in the field. It is gone: the one «Άκου» this screen has is the
                 // big one in the bottom row, live from the first second of the turn, and it plays
                 // his own take after the line once he has made one. «Βοήθεια» took its place.
-                QuietButton("Βοήθεια", onClick = onHint, enabled = canHint && !listening)
+                QuietButton("Βοήθεια", onClick = onHint, enabled = canHint && !listening && !thinking)
                 if (showsRecord) {
                     Spacer(Modifier.height(Sizes.gapSmall))
                     QuietButton(
@@ -327,12 +366,12 @@ private fun TurnCard(
                         // then plays back to him as his, and which his caregiver hears in the word's
                         // recordings. «Στοπ» stays live, or a take could not be closed. Nor while
                         // the recogniser has the microphone: two mouths on one microphone.
-                        enabled = recording || (!modelPlaying && !listening),
+                        enabled = recording || (!modelPlaying && !listening && !thinking),
                     )
                 }
                 if (showsSpeakAgain && !recording && !listening) {
                     Spacer(Modifier.height(Sizes.gapSmall))
-                    QuietButton(SPEAK, onClick = onSpeak, icon = Icons.Rounded.Mic, enabled = !modelPlaying)
+                    QuietButton(SPEAK, onClick = onSpeak, icon = Icons.Rounded.Mic, enabled = !modelPlaying && !thinking)
                 }
             }
         }

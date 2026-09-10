@@ -13,12 +13,11 @@ import gr.dimitris.app.core.data.Speaker
 import gr.dimitris.app.core.data.Who
 import gr.dimitris.app.core.data.now
 import gr.dimitris.app.core.audio.Recorded
-import gr.dimitris.app.core.speech.GentleCheck
+import gr.dimitris.app.core.difficulty.Difficulty
 import gr.dimitris.app.core.speech.OnDeviceSupport
 import gr.dimitris.app.core.speech.Recognition
 import gr.dimitris.app.core.speech.RecognizerIntents
 import gr.dimitris.app.core.speech.SpeechFailure
-import gr.dimitris.app.core.speech.SpeechMatch
 import gr.dimitris.app.core.speech.take
 import gr.dimitris.app.modules.wordcoach.CueLadder
 import kotlinx.coroutines.CancellationException
@@ -56,6 +55,12 @@ internal fun scriptsDetail(
     ms: Long,
     hintMsFirst: Long?,
     takeMs: Long?,
+    /** How hard the dialogue said it was ([gr.dimitris.app.core.data.ScriptLine.tier]). */
+    tier: Int = ScriptLine.DEFAULT_TIER,
+    /** What a good answer to this turn had to convey, as the caregiver or the seed wrote it. */
+    intent: String? = null,
+    /** What the judge decided, in [gr.dimitris.app.core.judge.Verdict.detail]'s shape. Empty when it was not asked. */
+    judge: Map<String, Any?> = emptyMap(),
 ): String = Adapt.detail {
     kept("scriptId", scriptId)
     put("position", position)
@@ -71,6 +76,10 @@ internal fun scriptsDetail(
     put("takeMs", takeMs)
     put("sttOn", sttOn)
     if (sttOn) put("sttWaitMs", RecognizerIntents.COMPLETE_SILENCE_MS)
+    // Phase 12, and last, so every row written before it stays byte-identical.
+    put("tier", tier)
+    put("intent", intent)
+    put("judge", judge)
 }
 
 enum class ScriptPhase { LOADING, OTHER_SPEAKING, WAITING_FOR_DIMITRIS, FINISHED }
@@ -108,12 +117,25 @@ data class ScriptsState(
     val listening: Boolean = false,
     /** How loud he is, 0..1, while the window is open. Drawn by the listening indicator. */
     val listenLevel: Float = 0f,
+    /**
+     * The window has closed and the judge has not answered yet. Nothing is asked of him — the card
+     * and the three buttons stay exactly where they are — but «Μίλα» is greyed for the moment it
+     * takes, or a second tap would open a window over a turn that is about to be confirmed.
+     */
+    val thinking: Boolean = false,
     val heard: String? = null,
     val heardMatched: Boolean = false,
     /** How many windows he has used on this turn. */
     val sttTries: Int = 0,
     /** «Δοκίμασε ξανά» is on the screen: one miss, and nothing else has changed. */
     val nudge: Boolean = false,
+    /**
+     * The full grammatical form of his answer, when the judge sent one back for him to repeat. Shown
+     * in the turn card and said out loud once — the bottom row stays «Μίλα»/«Άκου»/«Παράλειψη».
+     */
+    val expanded: String? = null,
+    /** The judge's one warm Greek line about this turn, or nothing. Never a verdict on him. */
+    val feedback: String? = null,
     /**
      * Whether «Το είπα!» is his to press. Always true with recognition off; with it on, once the
      * phone has agreed with him or has asked him twice.
@@ -210,10 +232,23 @@ class ScriptsViewModel(
     private var onScreen = true
 
     /**
-     * The gentle check for the turn he is on: what the phone heard, how many times it has asked, and
-     * whether «Το είπα!» is his to press yet. One per turn of his.
+     * The check for the turn he is on: what the phone made of his answer, how many times it has
+     * asked, and whether «Το είπα!» is his to press yet. One per turn of his.
      */
-    private var check = GentleCheck()
+    private var check = newCheck()
+
+    /**
+     * Whether the judge will really be asked — «Έλεγχος με Claude» on and a key saved — read once
+     * when the screen opens. False until it lands, which is the phase-11 behaviour, so the first
+     * turn of a run can never wait on a keystore read.
+     */
+    private var judgeReady = false
+
+    /** His own dot row for this module, read once. It says how much grammar the judge insists on. */
+    private var dots = Difficulty.DEFAULT
+
+    /** What the judge decided about the turn he is on, for the attempt row. Cleared with the turn. */
+    private var judgeDetail: Map<String, Any?> = emptyMap()
 
     /**
      * The loudest sample of his last take. It rides along in the attempt's detail so that
@@ -249,12 +284,26 @@ class ScriptsViewModel(
 
     init {
         load()
+        // A new screen is a new run: the judge writes one row per failure class per run, and a
+        // dialogue run on an offline phone must not fill «Σφάλματα» with one row per turn.
+        graph.judge.newRun()
         viewModelScope.launch {
             // isAvailable asks the package manager across a binder: not on the thread drawing the turn.
             val on = graph.settings.sttEnabled.first() && withContext(Dispatchers.Default) { graph.stt.isAvailable }
             // Which engine will answer decides how many microphone buttons the turn has: one when the
             // recogniser hands his own audio back, the old pair when it does not.
             val one = on && graph.stt.engine() == OnDeviceSupport.Engine.ON_DEVICE
+            // The two reads the judge needs, in the same breath and before the button is live:
+            // `available()` opens the encrypted key file, and a dialogue is four of his turns — the
+            // first of them must be weighed the same way as the last, not left to phase 11's
+            // comparison because a keystore read had not landed yet. It is one file read long, and
+            // the screen already waits for the settings before offering him anything.
+            dots = runCatching { graph.settings.difficulty(ModuleId.SCRIPTS).first() }
+                .onFailure { graph.errors.record("scripts difficulty", it) }
+                .getOrDefault(Difficulty.DEFAULT)
+            judgeReady = runCatching { graph.judge.available() }
+                .onFailure { graph.errors.record(TurnCheck.WHERE, it) }
+                .getOrDefault(false)
             // With recognition off nothing about this screen changes, «Το είπα!» included.
             _state.update { it.copy(sttOn = on, oneControl = one, sttResolved = true, canConfirm = !on || check.canConfirm) }
         }
@@ -297,7 +346,8 @@ class ScriptsViewModel(
         lastPeak = null
         lastTakeMs = null
         firstHintAt = null
-        check = GentleCheck()
+        check = newCheck()
+        judgeDetail = emptyMap()
         stopCue()
         stopRecogniser()
         val (line, item) = lines[i]
@@ -308,6 +358,7 @@ class ScriptsViewModel(
                     index = i, phase = ScriptPhase.OTHER_SPEAKING, level = 0, cueText = null, showsWord = false,
                     canHint = false, isRecording = false, modelPlaying = false, selfRecordingPath = null,
                     heard = null, heardMatched = false, sttTries = 0, nudge = false,
+                    thinking = false, expanded = null, feedback = null,
                     // A recogniser that broke stays broken: the confirm it opened is not taken back.
                     canConfirm = !it.sttOn || recogniserBroke,
                 )
@@ -323,12 +374,25 @@ class ScriptsViewModel(
                     level = next.level, cueText = next.cueText(), showsWord = next.showsWord, canHint = next.canHint,
                     isRecording = false, modelPlaying = false, selfRecordingPath = null,
                     heard = null, heardMatched = false, sttTries = 0, nudge = false,
+                    thinking = false, expanded = null, feedback = null,
                     // A recogniser that broke stays broken: the confirm it opened is not taken back.
                     canConfirm = !it.sttOn || recogniserBroke,
                 )
             }
         }
     }
+
+    /**
+     * The check for one turn of his. The two reads it needs are taken as they stand when the window
+     * closes rather than when the turn opened: the Greek pack, the key and the toggle can all land
+     * mid-dialogue, and the turn after that should be judged.
+     */
+    private fun newCheck() = TurnCheck(
+        judged = { judgeReady },
+        difficulty = { dots },
+        askJudge = { ask -> graph.judge.judge(ask) },
+        record = { where, e -> graph.errors.record(where, e) },
+    )
 
     /**
      * The screen has drawn the turn at the current index, so it may now be answered. This is what
@@ -568,7 +632,7 @@ class ScriptsViewModel(
      */
     fun listen() {
         val s = _state.value
-        if (!s.sttOn || s.listening || s.isRecording || finishing) return
+        if (!s.sttOn || s.listening || s.thinking || s.isRecording || finishing) return
         if (s.phase != ScriptPhase.WAITING_FOR_DIMITRIS) return
         // The microphone is about to open: whatever was being said stops here, or the recogniser
         // hears the model line and answers «Μπράβο!» to the phone's own voice.
@@ -578,7 +642,7 @@ class ScriptsViewModel(
             val heard = graph.stt.listen()
             heard.take?.let { keep(it) }
             heard.fold(
-                onSuccess = { t -> judge(t.text.takeIf { it.isNotBlank() }) },
+                onSuccess = { t -> weigh(t.text.takeIf { it.isNotBlank() }) },
                 onFailure = { e -> recogniserFailed(e) },
             )
             // Which engine answered, read *after* the window rather than before it. Asking first
@@ -601,27 +665,63 @@ class ScriptsViewModel(
     }
 
     /**
-     * What the phone heard, weighed against his line — the gentle check of spec §12, on a whole
-     * turn rather than a word, so [SpeechMatch.phraseMatches] is what decides: «θέλω καφέ» for
-     * «θέλω έναν καφέ» is the man having the conversation, not failing it.
+     * What the phone made of his answer, and what the turn does about it — spec §13's open dialogue.
      *
-     * A match confirms the turn for him at the cue level he was on. A miss buys one «Δοκίμασε ξανά»
-     * with the cue untouched and «Άκου» still there; after the second, «Το είπα!» comes back and
-     * confirms exactly as it did before. A window that heard nothing counts as one of the two — a
-     * dead recogniser must not be able to lock him out of a turn he really took.
+     * The rules are [TurnCheck]'s, so that they can be argued with off a phone; this is what the
+     * screen does with them. An answer that counts confirms the turn for him at the cue level he was
+     * on — being made to press a button to agree with the phone is one step too many for a man who
+     * has just done the hard part. One that did not buys the judge's warm line and, when there is a
+     * full form to hand him, that form: shown in the card and said once, so his next «Μίλα» has
+     * something to repeat rather than a wall. After two goes «Το είπα!» comes back and confirms
+     * exactly as it did before any of this existed.
+     *
+     * A window that heard nothing costs him no try and still counts as one of his two goes: a dead
+     * recogniser must not be able to lock him out of a turn he really took.
      */
-    private fun judge(text: String?) {
-        val line = lines.getOrNull(_state.value.index)?.second?.text.orEmpty()
-        val matched = text != null && SpeechMatch.phraseMatches(text, line)
-        val verdict = check.record(text, matched)
+    private suspend fun weigh(text: String?) {
+        val i = _state.value.index
+        val target = lines.getOrNull(i)?.second?.text.orEmpty()
+        // The question he is answering: the other person's last line before this turn. Null when his
+        // turn opens the dialogue, which is a conversation he is starting rather than answering.
+        val prompt = lines.take(i).lastOrNull { it.first.speaker == Speaker.OTHER }?.second?.text
+        // The window has closed; the judge may take a moment. Nothing moves on the screen but the
+        // green button, which greys rather than opening a second window over a decided turn.
+        val asking = judgeReady && text != null
+        if (asking) _state.update { it.copy(listening = false, listenLevel = 0f, thinking = true) }
+        val weighed = check.weigh(text, prompt, target)
+        judgeDetail = weighed.judge
         _state.update {
             it.copy(
-                listening = false, listenLevel = 0f, heard = text, heardMatched = matched,
-                sttTries = check.tries, nudge = check.nudging, canConfirm = check.canConfirm || recogniserBroke,
-                error = if (text == null) HEARD_NOTHING else null,
+                listening = false, listenLevel = 0f, thinking = false,
+                heard = weighed.heard, heardMatched = weighed.accepted,
+                sttTries = weighed.tries, nudge = weighed.nudging,
+                canConfirm = weighed.canConfirm || recogniserBroke,
+                feedback = weighed.feedback,
+                // The form he was given stays on the card until the turn moves on, so a second miss
+                // does not take away the sentence he was about to repeat.
+                expanded = weighed.expanded ?: it.expanded,
+                error = if (weighed.heard == null) HEARD_NOTHING else null,
             )
         }
-        if (verdict == GentleCheck.Verdict.MATCHED) confirm() else graph.feedback.nudge()
+        if (weighed.accepted) {
+            confirm()
+            return
+        }
+        graph.feedback.nudge()
+        weighed.expanded?.let { sayExpanded(it) }
+    }
+
+    /**
+     * The full form, said to him once so he can repeat it.
+     *
+     * It goes through [CueLadder.listened] for the same reason «Άκου» does: the phone has just said a
+     * whole line of his out loud, which is level 3's worth of help, and a row that did not carry that
+     * would claim he found the sentence himself. The hint sequence does not move, so «Βοήθεια»
+     * carries on from exactly where it was.
+     */
+    private fun sayExpanded(whole: String) {
+        ladder?.listened()
+        cue { report(graph.speaker.speakText("$SAY_IT_LIKE $whole")) }
     }
 
     /**
@@ -633,9 +733,9 @@ class ScriptsViewModel(
      * So it costs him nothing: no try is spent, the confirm opens at once and stays open, and the
      * caregiver gets one line that points at the settings rather than a red word about his voice.
      */
-    private fun recogniserFailed(e: Throwable) {
+    private suspend fun recogniserFailed(e: Throwable) {
         if (e !is SpeechFailure.NotWorking) {
-            judge(null)
+            weigh(null)
             return
         }
         // The line names the real trouble — no connection, no Greek, busy — rather than saying only
@@ -648,7 +748,7 @@ class ScriptsViewModel(
         recogniserBroke = true
         _state.update {
             it.copy(
-                listening = false, listenLevel = 0f, heard = null, heardMatched = false,
+                listening = false, listenLevel = 0f, thinking = false, heard = null, heardMatched = false,
                 nudge = false, canConfirm = true, error = klass.line,
             )
         }
@@ -661,7 +761,9 @@ class ScriptsViewModel(
         // Only a window that is actually open is closed: «Στοπ» is his word, and a stop sent for a
         // window nobody opened would be one more thing happening that he never asked for.
         if (_state.value.listening) graph.stt.stop()
-        _state.update { it.copy(listening = false, listenLevel = 0f) }
+        // The job that was cancelled may have been waiting on the judge: nothing is coming back, so
+        // the button he is looking at may not stay greyed for a verdict that will never arrive.
+        _state.update { it.copy(listening = false, listenLevel = 0f, thinking = false) }
     }
 
     fun confirm() {
@@ -706,6 +808,11 @@ class ScriptsViewModel(
             ms = now() - began,
             hintMsFirst = firstHintAt?.let { it - began },
             takeMs = lastTakeMs,
+            // What the turn asked of him, and what decided it. Held to 1..5 for the same reason
+            // [ScriptsModule.tierOf] holds it: a line synced from a phone that predates tiers is a 0.
+            tier = Difficulty.clamp(line.tier),
+            intent = line.intent,
+            judge = judgeDetail,
         )
         worstCue = maxOf(worstCue, level)
         if (!confirmed) skipped = true
@@ -853,6 +960,12 @@ class ScriptsViewModel(
 
         /** Recognition came back with nothing. Never a verdict on him: the invitation stays open. */
         const val HEARD_NOTHING = "Δεν άκουσα τίποτα. Δοκίμασε ξανά αν θέλεις."
+
+        /**
+         * Over the full form the judge sent back, on the card and out loud. An offer of the words,
+         * not a correction of his: he answered the question, and this is the whole sentence for it.
+         */
+        const val SAY_IT_LIKE = "Πες το έτσι:"
 
         /** Spoken at the end of the dialogue, before the module hands back. */
         const val THE_END = "Μπράβο! Τέλος διαλόγου."

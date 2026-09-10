@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -47,6 +48,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import gr.dimitris.app.LocalAppGraph
 import gr.dimitris.app.core.data.Speaker
+import gr.dimitris.app.core.difficulty.Difficulty
 import gr.dimitris.app.ui.components.BigButton
 import gr.dimitris.app.ui.components.ButtonTone
 import gr.dimitris.app.ui.components.DimitrisScreen
@@ -106,6 +108,22 @@ fun ScriptEditScreen(scriptId: String?, onClose: () -> Unit, onTry: (String) -> 
                 )
                 Spacer(Modifier.height(Sizes.gap))
 
+                // How hard the whole conversation is, against the five dots he sets himself in the
+                // module. One row for the dialogue and not one per line: he practises a conversation,
+                // not a turn, and the module plans on the hardest line anyway.
+                Text("Δυσκολία", style = MaterialTheme.typography.bodyLarge)
+                Text(
+                    "Ο Δημήτρης βλέπει τους διαλόγους ως τη δυσκολία που έχει διαλέξει.",
+                    style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Row {
+                    (Difficulty.MIN..Difficulty.MAX).forEach { tier ->
+                        TierChip(tier, selected = s.tier == tier, enabled = s.recordingIndex == null) { vm.setTier(tier) }
+                        if (tier < Difficulty.MAX) Spacer(Modifier.width(Sizes.gapSmall))
+                    }
+                }
+                Spacer(Modifier.height(Sizes.gap))
+
                 s.lines.forEachIndexed { i, line ->
                     LineCard(
                         line = line,
@@ -116,6 +134,7 @@ fun ScriptEditScreen(scriptId: String?, onClose: () -> Unit, onTry: (String) -> 
                         locked = s.recordingIndex != null && s.recordingIndex != i,
                         onSpeaker = { vm.toggleSpeaker(i) },
                         onText = { vm.setLineText(i, it) },
+                        onIntent = { vm.setLineIntent(i, it) },
                         // Stopping is not a permission question: it goes straight to the ViewModel,
                         // so a second launcher round trip can never close the take onto another line.
                         onRecord = {
@@ -177,6 +196,7 @@ private fun LineCard(
     locked: Boolean,
     onSpeaker: () -> Unit,
     onText: (String) -> Unit,
+    onIntent: (String) -> Unit,
     onRecord: () -> Unit,
     onPlay: () -> Unit,
     onUp: () -> Unit,
@@ -200,6 +220,18 @@ private fun LineCard(
                 label = { Text("Γραμμή ${index + 1}") }, textStyle = MaterialTheme.typography.bodyLarge,
                 enabled = !locked, modifier = Modifier.fillMaxWidth(),
             )
+            // Only on his own turns. His line is an example answer and not the answer — many replies
+            // to a question are right — so this is what a good one has to say, and it is what the
+            // caregiver writes when the words she typed are not the point.
+            if (line.speaker == Speaker.DIMITRIS) {
+                Spacer(Modifier.height(Sizes.gapSmall))
+                OutlinedTextField(
+                    value = line.intent, onValueChange = onIntent,
+                    label = { Text("Σκοπός, π.χ. λέει τι θέλει και πόσο") },
+                    textStyle = MaterialTheme.typography.bodyLarge,
+                    enabled = !locked, modifier = Modifier.fillMaxWidth(),
+                )
+            }
             Spacer(Modifier.height(Sizes.gapSmall))
             Text(
                 if (line.speaker == Speaker.OTHER) "Η φωνή σου, όπως θα την ακούσει" else "Η φωνή σου, ως πρότυπο για τη σειρά του",
@@ -227,6 +259,16 @@ private fun LineCard(
             }
         }
     }
+}
+
+/** One of the five dots, as a chip: 72dp tall like every other thing a thumb has to find. */
+@Composable
+private fun TierChip(tier: Int, selected: Boolean, enabled: Boolean, onClick: () -> Unit) {
+    FilterChip(
+        selected = selected, onClick = onClick, enabled = enabled,
+        label = { Text("$tier", style = MaterialTheme.typography.titleLarge) },
+        modifier = Modifier.heightIn(min = Sizes.touchMin).widthIn(min = Sizes.touchMin),
+    )
 }
 
 @Composable

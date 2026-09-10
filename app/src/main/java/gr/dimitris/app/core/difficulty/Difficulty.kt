@@ -198,6 +198,20 @@ object Difficulty {
     /** The dot a dialogue of [turns] turns belongs to: the easiest one that still admits it. */
     fun turnDot(turns: Int): Int = (MIN..MAX).firstOrNull { turns <= turnCeiling(it) } ?: MAX
 
+    /**
+     * The hardest dialogue this dot admits, as a tier of
+     * [gr.dimitris.app.core.data.ScriptLine.tier]: one dot, one tier, and dot n takes every dialogue
+     * of tier n **and below**. Cumulative like [wordCoachKinds] and [syllableCeiling], for the same
+     * reason — the errand at the bakery is still worth having on the day he asked for hard work.
+     *
+     * This is what [gr.dimitris.app.modules.scripts.ScriptsModule.practisable] now plans on, in place
+     * of [turnCeiling]: a tier is what the dialogue itself says about its difficulty, where the number
+     * of turns was only ever a stand-in for it. [turns] stays for
+     * [DifficultyInit.scriptsDot], which has to guess where a phone already was from dialogues written
+     * before any of them carried a tier.
+     */
+    fun scriptTier(d: Int): Int = clamp(d)
+
     // -------------------------------------------------------------- «Δεξί χέρι»
 
     /**

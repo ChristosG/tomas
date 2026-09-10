@@ -236,6 +236,29 @@ class TelemetryTest {
         assertEquals("script-1", o["scriptId"].asString)
         listOf("position", "listened", "peak", "ms", "hintMsFirst", "takeMs").forEach { assertNumber(o, it) }
         assertFalse("a run with recognition off must not claim a wait: $o", o.has("sttWaitMs"))
+        assertFalse("a turn nobody judged says nothing about a judge: $o", o.has("judge"))
+        assertFalse("and a turn with no purpose written on it says nothing either: $o", o.has("intent"))
+    }
+
+    /**
+     * Phase 12: how hard the dialogue said it was, what a good answer had to convey, and what
+     * decided the turn. The three keys are last, so every row written before them is byte-identical.
+     */
+    @Test fun `a judged dialogue turn says what it asked of him and who decided it`() {
+        val json = scriptsDetail(
+            scriptId = "script-1", position = 3, listened = 0, sttOn = true, heard = "στο σπίτι", matched = true,
+            sttTries = 0, peak = 400, ms = 7_000, hintMsFirst = null, takeMs = 1_100,
+            tier = 4, intent = "λέει πού είναι",
+            judge = mapOf("source" to "JUDGE", "accept" to true, "ms" to 900L, "expanded" to "Είμαι στο σπίτι μου."),
+        )
+        val o = parse(json)
+        assertEquals(4, o["tier"].asInt)
+        assertEquals("λέει πού είναι", o["intent"].asString)
+        val judge = o["judge"].asJsonObject
+        assertEquals("JUDGE", judge["source"].asString)
+        assertTrue(judge["accept"].asBoolean)
+        assertEquals(900L, judge["ms"].asLong)
+        assertEquals("Είμαι στο σπίτι μου.", judge["expanded"].asString)
     }
 
     // ---------------------------------------------------------------- Numbers

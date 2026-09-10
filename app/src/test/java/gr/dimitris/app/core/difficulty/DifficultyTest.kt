@@ -228,6 +228,24 @@ class DifficultyTest {
         assertEquals(5, Difficulty.turnDot(40))
     }
 
+    /**
+     * What the module actually plans on since phase 12 gave a dialogue line a tier of its own: one
+     * dot, one tier, and the dot admits everything at or below it. Cumulative, like the phrases and
+     * like the word coach's kinds — an easier conversation is still worth having on a hard day, and
+     * the six dialogues the app shipped with (tiers 1 and 2) stay in reach at every dot from the
+     * default up.
+     */
+    @Test fun `each dot admits its own tier of dialogue and every easier one`() {
+        (Difficulty.MIN..Difficulty.MAX).forEach { d -> assertEquals(d, Difficulty.scriptTier(d)) }
+        val ceilings = (1..5).map { Difficulty.scriptTier(it) }
+        ceilings.zipWithNext { a, b -> assertTrue(a < b) }
+        assertTrue("the shipped dialogues stay in reach at the default dot", 2 <= Difficulty.scriptTier(Difficulty.DEFAULT))
+        assertTrue("and the hardest eight are not, at dot 1", 3 > Difficulty.scriptTier(1))
+        // Out of range from a backup or a half-written edit is held, never an empty ceiling.
+        assertEquals(Difficulty.MIN, Difficulty.scriptTier(0))
+        assertEquals(Difficulty.MAX, Difficulty.scriptTier(9))
+    }
+
     // -------------------------------------------------------------- «Δεξί χέρι»
 
     @Test fun `the arcade bands cover what the games can draw, hardest last`() {

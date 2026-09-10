@@ -4,15 +4,29 @@ import com.google.gson.Gson
 import gr.dimitris.app.AppGraph
 import gr.dimitris.app.core.data.LineDraft
 import gr.dimitris.app.core.data.Script
+import gr.dimitris.app.core.data.ScriptLine
 import gr.dimitris.app.core.data.Source
 import gr.dimitris.app.core.data.Speaker
+import gr.dimitris.app.core.difficulty.Difficulty
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 
-data class SeedLine(val speaker: String, val text: String)
-data class SeedScript(val title: String, val lines: List<SeedLine>)
+/**
+ * One bundled turn. [intent] is what a good answer has to convey and is written on his own lines
+ * only — the other person's are said, not judged.
+ */
+data class SeedLine(val speaker: String, val text: String, val intent: String? = null)
+
+/**
+ * One bundled dialogue. [tier] is how hard it is, 1 to 5, and it goes onto every one of its lines:
+ * a dialogue is as hard as its hardest turn, and the seed has no reason to grade them apart.
+ *
+ * Zero when the manifest left it out — Gson fills a JVM zero rather than the default declared here —
+ * which [gr.dimitris.app.core.difficulty.Difficulty.clamp] reads as the easiest tier.
+ */
+data class SeedScript(val title: String, val lines: List<SeedLine>, val tier: Int = ScriptLine.DEFAULT_TIER)
 data class ScriptSeedManifest(val version: Int, val scripts: List<SeedScript>) {
     companion object { fun parse(json: String): ScriptSeedManifest = Gson().fromJson(json, ScriptSeedManifest::class.java) }
 }
@@ -28,9 +42,10 @@ class ScriptSeedImporter(private val graph: AppGraph) {
                 // Fixed ids, derived from the dialogue and the turn's place in it: two phones that
                 // import the same bundled dialogue write the same rows, so sync merges them instead
                 // of leaving Dimitris «Στην καφετέρια» three times over. See SeedIds.
+                val tier = Difficulty.clamp(s.tier)
                 graph.scripts.save(
                     SeedIds.script(s.title), s.title,
-                    s.lines.map { LineDraft(speakerOf(it.speaker), it.text) },
+                    s.lines.map { LineDraft(speakerOf(it.speaker), it.text, tier = tier, intent = it.intent) },
                     source = Source.SEED,
                     seedIds = { i -> SeedIds.line(s.title, i) to SeedIds.lineItem(s.title, i) },
                     // Not the clock: a second install's copies must not out-rank the first

@@ -6,7 +6,10 @@ import gr.dimitris.app.AppGraph
 import gr.dimitris.app.core.audio.CaregiverTake
 import gr.dimitris.app.core.audio.Recorded
 import gr.dimitris.app.core.data.LineDraft
+import gr.dimitris.app.core.data.ScriptLine
 import gr.dimitris.app.core.data.Speaker
+import gr.dimitris.app.core.difficulty.Difficulty
+import gr.dimitris.app.modules.scripts.ScriptsModule
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -27,6 +30,13 @@ data class EditLine(
     val recordingPath: String? = null,
     val recordingMs: Long = 0,
     val newRecording: Recorded? = null,
+    /**
+     * «Σκοπός»: what a good answer to this turn has to convey, on one of *his* lines. The line she
+     * types is only ever an example — an open question has no single right answer (spec §13) — and
+     * this is where she says what she is really after. Kept on the other person's lines too rather
+     * than dropped, so a speaker toggled by mistake and back does not lose what she wrote.
+     */
+    val intent: String = "",
 ) {
     val hasVoice: Boolean get() = newRecording != null || recordingPath != null
 }
@@ -35,6 +45,11 @@ data class ScriptEditState(
     val id: String? = null,
     val title: String = "",
     val lines: List<EditLine> = listOf(EditLine(Speaker.OTHER, ""), EditLine(Speaker.DIMITRIS, "")),
+    /**
+     * How hard the dialogue is, 1 to 5, against his own dot row. One number for the whole
+     * conversation: it is written onto every line, and a dialogue is as hard as its hardest turn.
+     */
+    val tier: Int = ScriptLine.DEFAULT_TIER,
     /** Which line the microphone is open for, or null. One take at a time, like everywhere else. */
     val recordingIndex: Int? = null,
     val loading: Boolean = false,
@@ -96,9 +111,11 @@ class ScriptEditViewModel(private val graph: AppGraph, private val scriptId: Str
                 // cue ladder plays at levels 3–4 for his own lines. Either way it belongs to the
                 // line and has to survive a re-save.
                 val recording = runCatching { graph.items.modelRecording(item) }.getOrNull()
-                EditLine(line.speaker, item.text, recording?.path, recording?.durationMs ?: 0)
+                EditLine(line.speaker, item.text, recording?.path, recording?.durationMs ?: 0, intent = line.intent.orEmpty())
             }
-            _state.value = ScriptEditState(id = loaded.script.id, title = loaded.script.title, lines = lines)
+            // The dialogue's tier is the hardest of its lines', which is what the module plans on.
+            val tier = ScriptsModule.tierOf(loaded.lines.map { it.first })
+            _state.value = ScriptEditState(id = loaded.script.id, title = loaded.script.title, tier = tier, lines = lines)
         }
     }
 
@@ -114,6 +131,12 @@ class ScriptEditViewModel(private val graph: AppGraph, private val scriptId: Str
     }
 
     fun setLineText(index: Int, text: String) = edit(index) { it.copy(text = text) }
+
+    /** «Σκοπός»: what a good answer to his turn has to convey. See [EditLine.intent]. */
+    fun setLineIntent(index: Int, intent: String) = edit(index) { it.copy(intent = intent) }
+
+    /** The dots of the whole dialogue. Held to 1..5 so nothing outside the row can be stored. */
+    fun setTier(tier: Int) = _state.update { it.copy(tier = Difficulty.clamp(tier), dirty = true, error = null) }
 
     fun toggleSpeaker(index: Int) = edit(index) {
         it.copy(speaker = if (it.speaker == Speaker.OTHER) Speaker.DIMITRIS else Speaker.OTHER)
@@ -251,12 +274,20 @@ class ScriptEditViewModel(private val graph: AppGraph, private val scriptId: Str
             try {
                 val saved = graph.scripts.save(
                     s.id, s.title,
-                    lines.map { LineDraft(it.speaker, it.text, fileOf(it), it.newRecording?.durationMs ?: it.recordingMs) },
+                    lines.map {
+                        LineDraft(
+                            it.speaker, it.text, fileOf(it), it.newRecording?.durationMs ?: it.recordingMs,
+                            tier = s.tier,
+                            // Only on his own turns: the other person's lines are said, not judged,
+                            // and an intent left behind by a speaker toggle would be told to nobody.
+                            intent = it.intent.takeIf { _ -> it.speaker == Speaker.DIMITRIS },
+                        )
+                    },
                 )
                 // Every take is now a row in the database, so none of them may be deleted on the way
                 // out. The saved list replaces the edited one: what was blank was never written.
                 _state.value = ScriptEditState(
-                    id = saved.id, title = saved.title,
+                    id = saved.id, title = saved.title, tier = s.tier,
                     lines = lines.map { line ->
                         line.copy(
                             recordingPath = line.newRecording?.let { graph.files.relativize(it.file) } ?: line.recordingPath,

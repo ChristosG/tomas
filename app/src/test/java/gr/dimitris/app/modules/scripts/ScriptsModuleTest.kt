@@ -152,44 +152,42 @@ class ScriptsModuleTest {
 
     // ---- the difficulty he sets himself (spec §13) --------------------------------------------
 
-    /** A dialogue with [turns] of his own and one of the other person's before each. */
-    private suspend fun longDialogue(title: String, turns: Int): String {
+    /** A dialogue of two turns each, graded [tier] — what the seed writes and the editor sets. */
+    private suspend fun graded(title: String, tier: Int, hisTier: Int = tier): String {
         val script = Script(title = title)
         scripts.upsertScript(script)
         scripts.upsertLines(
-            (0 until turns).flatMap { i ->
-                listOf(
-                    ScriptLine(scriptId = script.id, position = i * 2, speaker = Speaker.OTHER, itemId = "${script.id}-${i * 2}"),
-                    ScriptLine(scriptId = script.id, position = i * 2 + 1, speaker = Speaker.DIMITRIS, itemId = "${script.id}-${i * 2 + 1}"),
-                )
-            },
+            listOf(
+                ScriptLine(scriptId = script.id, position = 0, speaker = Speaker.OTHER, itemId = "${script.id}-0", tier = tier),
+                ScriptLine(scriptId = script.id, position = 1, speaker = Speaker.DIMITRIS, itemId = "${script.id}-1", tier = hisTier),
+            ),
         )
         return script.id
     }
 
     /**
-     * Until Task 6 gives `scripts` a `tier` column, the only thing a dialogue carries that is honestly
-     * about effort is how many times he has to speak. A crude mapping, and a real one: a two-turn
-     * exchange at the bakery and a ten-turn phone call are not the same afternoon.
+     * The dots he sets himself, against the tier the dialogue carries: dot n takes every dialogue of
+     * tier n and below. Dimitris told us the app was too easy; the eight harder dialogues phase 12
+     * ships are tiers 3 to 5, and dot 1 is not the day for the one about the form at the office.
      */
-    @Test fun `the difficulty he set caps how many turns a dialogue may ask of him`() = runTest {
-        val short = longDialogue("Σύντομος", turns = 2)
-        val long = longDialogue("Μεγάλος", turns = 10)
-        assertEquals("dot 1 is two turns, and the ten-turn call is not his today", listOf(short), ScriptsModule.practisable(scripts, difficulty = 1))
-        assertEquals(short, ScriptsModule.choose(scripts, schedules, now, difficulty = 1))
-        assertEquals(setOf(short, long), ScriptsModule.practisable(scripts, difficulty = 5).toSet())
+    @Test fun `the difficulty he set caps how hard a dialogue may be`() = runTest {
+        val easy = graded("Στον φούρνο", tier = 1)
+        val hard = graded("Βοήθεια με ένα χαρτί", tier = 5)
+        assertEquals("dot 1 is tier 1, and the hard one is not his today", listOf(easy), ScriptsModule.practisable(scripts, difficulty = 1))
+        assertEquals(easy, ScriptsModule.choose(scripts, schedules, now, difficulty = 1))
+        assertEquals(setOf(easy, hard), ScriptsModule.practisable(scripts, difficulty = 5).toSet())
     }
 
     /**
-     * A ceiling, not a window: a two-turn errand at the bakery is still worth having on the day he
-     * asked for hard work, and a caregiver who writes one must not have it silently dropped with its
-     * Leitner row left overdue for ever.
+     * A ceiling, not a window: the errand at the bakery is still worth having on the day he asked
+     * for hard work, and a caregiver who writes an easy one must not have it silently dropped with
+     * its Leitner row left overdue for ever.
      */
-    @Test fun `a shorter dialogue stays practisable at a harder dot`() = runTest {
-        val short = longDialogue("Στον φούρνο", turns = 2)
-        longDialogue("Μεγάλος", turns = 10)
-        assertTrue(short in ScriptsModule.practisable(scripts, difficulty = 5))
-        assertTrue(short in ScriptsModule.practisable(scripts, difficulty = 3))
+    @Test fun `an easier dialogue stays practisable at a harder dot`() = runTest {
+        val easy = graded("Στον φούρνο", tier = 1)
+        graded("Βοήθεια με ένα χαρτί", tier = 5)
+        assertTrue(easy in ScriptsModule.practisable(scripts, difficulty = 5))
+        assertTrue(easy in ScriptsModule.practisable(scripts, difficulty = 3))
     }
 
     /**
@@ -197,11 +195,27 @@ class ScriptsModuleTest {
      * "nothing for you today" for having asked for *easier* work is not an answer either.
      */
     @Test fun `a ceiling no dialogue is under widens back to all of them`() = runTest {
-        val only = longDialogue("Τέσσερις σειρές", turns = 4)
+        val only = graded("Παράπονο στο μαγαζί", tier = 4)
         assertEquals(listOf(only), ScriptsModule.practisable(scripts, difficulty = 1))
         assertEquals(only, ScriptsModule.choose(scripts, schedules, now, difficulty = 1))
-        // And from dot 2 up it is simply in reach, which is where the six shipped dialogues live.
-        assertEquals(listOf(only), ScriptsModule.practisable(scripts, difficulty = 2))
+        assertEquals(listOf(only), ScriptsModule.practisable(scripts, difficulty = 4))
+    }
+
+    /**
+     * A dialogue is as hard as its hardest turn, and a line that arrived over sync from a phone with
+     * no tiers at all — a plain zero — is the easiest thing there is rather than a hole.
+     */
+    @Test fun `a dialogue is as hard as its hardest turn`() = runTest {
+        val mixed = graded("Ραντεβού στον γιατρό", tier = 1, hisTier = 3)
+        // A second, easy one, or the ceiling would have nothing under it and widen back to both.
+        graded("Στον φούρνο", tier = 1)
+        assertEquals(3, ScriptsModule.tierOf(scripts.linesFor(mixed)))
+        assertTrue("his turn is the tier-3 one", mixed !in ScriptsModule.practisable(scripts, difficulty = 2))
+        assertTrue(mixed in ScriptsModule.practisable(scripts, difficulty = 3))
+
+        val old = graded("Πριν από τα tier", tier = 0)
+        assertEquals("a line written before tiers is tier 1", 1, ScriptsModule.tierOf(scripts.linesFor(old)))
+        assertTrue(old in ScriptsModule.practisable(scripts, difficulty = 1))
     }
 
     /** A dialogue of nothing but the other person's lines stays out, whatever the dots say. */
