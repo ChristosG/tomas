@@ -9,6 +9,7 @@ import gr.dimitris.app.core.data.Item
 import gr.dimitris.app.core.data.ModuleId
 import gr.dimitris.app.core.scheduler.ModuleRotation
 import gr.dimitris.app.modules.Module
+import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -99,5 +100,42 @@ class SessionPlanTest {
     /** Nothing to do is not a session. */
     @Test fun `nothing wanted is nothing planned`() {
         assertTrue(planToday(emptyList(), emptyMap()).isEmpty())
+    }
+
+    // ------------------------------------- the difficulty he set, on its way into the sitting
+
+    /**
+     * Every module is planned at **its own** difficulty (spec §13).
+     *
+     * This seam had no test at all: deleting the difficulty read from `SessionViewModel` left every
+     * test green, and «Λέξεις» would quietly have gone back to planning for everybody at once while
+     * the row of dots went on saying otherwise.
+     */
+    @Test fun `each module is planned at the difficulty he set for it`() = runTest {
+        val dots = mapOf(ModuleId.WORDCOACH to 1, ModuleId.NUMBERS to 4, ModuleId.TRACE to 5)
+        val asked = mutableMapOf<ModuleId, Int>()
+        val plan = planEach(
+            modules = dots.keys.map { FakeModule(it) },
+            difficultyOf = { dots.getValue(it) },
+            planOf = { m, d -> asked[m.id] = d; List(2) { Item(text = "$it") } },
+            onError = { where, _ -> error("nothing should have failed: $where") },
+        )
+        assertEquals(dots, asked)
+        assertEquals(dots.keys.toList(), plan.map { it.first.id })
+    }
+
+    /** A module with nothing to do today is left out, and a module that throws never breaks the day. */
+    @Test fun `a module that plans nothing or throws is left out of the sitting`() = runTest {
+        val failures = mutableListOf<String>()
+        val plan = planEach(
+            modules = listOf(FakeModule(ModuleId.WORDCOACH), FakeModule(ModuleId.NUMBERS), FakeModule(ModuleId.TRACE)),
+            difficultyOf = { if (it == ModuleId.NUMBERS) error("no store") else 3 },
+            planOf = { m, _ -> if (m.id == ModuleId.TRACE) emptyList() else List(2) { Item(text = "$it") } },
+            onError = { where, _ -> failures += where },
+        )
+        // «Αριθμοί» is still planned — a difficulty that cannot be read falls back to the default
+        // rather than costing him the module.
+        assertEquals(listOf(ModuleId.WORDCOACH, ModuleId.NUMBERS), plan.map { it.first.id })
+        assertEquals(listOf("difficulty ${ModuleId.NUMBERS}"), failures)
     }
 }

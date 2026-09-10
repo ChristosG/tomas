@@ -3,6 +3,7 @@ package gr.dimitris.app.today
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -11,6 +12,7 @@ import gr.dimitris.app.LocalAppGraph
 import gr.dimitris.app.core.data.ModuleId
 import gr.dimitris.app.ui.components.BigButton
 import gr.dimitris.app.ui.components.DimitrisScreen
+import gr.dimitris.app.ui.components.LocalSingleItemPractice
 
 /**
  * Free practice of one module from the Today grid: same screen, no session row.
@@ -40,12 +42,17 @@ fun PracticeScreen(moduleId: ModuleId, onDone: () -> Unit, itemId: String? = nul
     val items by vm.items.collectAsStateWithLifecycle()
     val module = vm.module
 
-    when (val list = items) {
-        null -> DimitrisScreen { Text("Ετοιμάζω...", style = MaterialTheme.typography.headlineMedium) }
-        else -> if (module == null || list.isEmpty()) DimitrisScreen(bottom = { BigButton("Εντάξει", onClick = onDone) }) {
-            // Every module lands here, and not all of them are made of words.
-            Text("Δεν υπάρχει υλικό ακόμα. Ζήτα από κάποιον να προσθέσει.", style = MaterialTheme.typography.headlineMedium)
-        // Free practice has nowhere to go next: finishing and leaving both pop back to Today.
-        } else module.Screen(items = list, sessionId = null, onDone = onDone, onLeave = onDone)
+    // «Δοκίμασέ το» and «Παίξ' το» look exactly like his own first screen — no session, first item —
+    // so the difficulty row would be drawn on them, and a caregiver's tap would write *his*
+    // difficulty for a module she is only sampling one word of. The row asks this and hides.
+    CompositionLocalProvider(LocalSingleItemPractice provides (itemId != null || scriptId != null)) {
+        when (val list = items) {
+            null -> DimitrisScreen { Text("Ετοιμάζω...", style = MaterialTheme.typography.headlineMedium) }
+            else -> if (module == null || list.isEmpty()) DimitrisScreen(bottom = { BigButton("Εντάξει", onClick = onDone) }) {
+                // Every module lands here, and not all of them are made of words.
+                Text("Δεν υπάρχει υλικό ακόμα. Ζήτα από κάποιον να προσθέσει.", style = MaterialTheme.typography.headlineMedium)
+            // Free practice has nowhere to go next: finishing and leaving both pop back to Today.
+            } else module.Screen(items = list, sessionId = null, onDone = onDone, onLeave = onDone)
+        }
     }
 }

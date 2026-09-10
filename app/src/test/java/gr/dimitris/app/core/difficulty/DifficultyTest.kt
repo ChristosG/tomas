@@ -161,6 +161,38 @@ class DifficultyTest {
         assertFalse(Difficulty.syllablesOf("θέλω καφέ") in Difficulty.syllables(5))
     }
 
+    /**
+     * The band is a **ceiling**, and this is the test that says so. The first cut was a window and it
+     * deleted half his vocabulary on upgrade: at the default dot «Ναι» and «Όχι» were no longer
+     * offered, their Leitner rows went overdue for ever, and no dot brought them back.
+     */
+    @Test fun `a phrase shorter than the dot asks for is still his to sing`() {
+        val short = Difficulty.syllablesOf("ναι")            // 1
+        val middle = Difficulty.syllablesOf("θέλω καφέ")      // 4
+        val long = Difficulty.syllablesOf("καλημέρα σας")     // 5
+        assertTrue("the easiest phrases vanish at the default dot", short <= Difficulty.syllableCeiling(Difficulty.DEFAULT))
+        assertTrue(middle <= Difficulty.syllableCeiling(Difficulty.DEFAULT))
+        assertFalse("dot 2 must not reach a five-syllable phrase", long <= Difficulty.syllableCeiling(Difficulty.DEFAULT))
+        // And every dot above it keeps everything the dots below it had.
+        (1..5).forEach { d -> assertTrue(short <= Difficulty.syllableCeiling(d)) }
+        assertTrue(long <= Difficulty.syllableCeiling(3))
+    }
+
+    @Test fun `the syllable ceilings rise with the dots and the top one takes anything`() {
+        val ceilings = (1..5).map { Difficulty.syllableCeiling(it) }
+        ceilings.zipWithNext { a, b -> assertTrue("$a is not below $b", a < b) }
+        assertEquals(Int.MAX_VALUE, ceilings.last())
+    }
+
+    /** Which dot a phrase belongs to: the easiest that still admits it. Used once, on the upgrade. */
+    @Test fun `a phrase names the easiest dot that admits it`() {
+        assertEquals(1, Difficulty.syllableDot(1))
+        assertEquals(1, Difficulty.syllableDot(2))
+        assertEquals(2, Difficulty.syllableDot(3))
+        assertEquals(3, Difficulty.syllableDot(6))
+        assertEquals(5, Difficulty.syllableDot(99))
+    }
+
     // --------------------------------------------------------------- «Διάλογοι»
 
     @Test fun `the turn bands are ascending, contiguous and open at the top`() {
@@ -175,6 +207,25 @@ class DifficultyTest {
         assertTrue(4 in Difficulty.turns(Difficulty.DEFAULT))
         assertFalse(4 in Difficulty.turns(1))
         assertFalse(4 in Difficulty.turns(3))
+    }
+
+    /**
+     * And a ceiling, like the phrases: a two-turn errand at the bakery is still worth having on the
+     * day he asked for hard work, and a caregiver who writes one must not have it silently dropped.
+     */
+    @Test fun `a shorter dialogue is still practisable at a harder dot`() {
+        assertTrue(4 <= Difficulty.turnCeiling(Difficulty.DEFAULT))
+        (2..5).forEach { d -> assertTrue("four turns unreachable at dot $d", 4 <= Difficulty.turnCeiling(d)) }
+        assertFalse("dot 1 is two turns, not four", 4 <= Difficulty.turnCeiling(1))
+        val ceilings = (1..5).map { Difficulty.turnCeiling(it) }
+        ceilings.zipWithNext { a, b -> assertTrue(a < b) }
+    }
+
+    @Test fun `a dialogue names the easiest dot that admits it`() {
+        assertEquals(1, Difficulty.turnDot(2))
+        assertEquals(2, Difficulty.turnDot(4))
+        assertEquals(4, Difficulty.turnDot(9))
+        assertEquals(5, Difficulty.turnDot(40))
     }
 
     // -------------------------------------------------------------- «Δεξί χέρι»
@@ -199,11 +250,93 @@ class DifficultyTest {
         assertTrue(Difficulty.arcadeStart(5) < Difficulty.arcadeStart(1))
     }
 
-    @Test fun `a stored arcade size is held inside the band and inside what the games can draw`() {
-        assertEquals(Difficulty.arcade(1).start, Difficulty.arcadeClamp(40f, 1), 0.01f)
-        assertEquals(Difficulty.arcade(5).endInclusive, Difficulty.arcadeClamp(130f, 5), 0.01f)
+    /**
+     * The stored size is the arcade's clinical measure, so the band is a **ceiling** on it and never
+     * a floor. A hand that has worked down to 50 dp over months of physiotherapy keeps its 50 dp
+     * whatever the dots say; being handed a 94 dp circle back because the dots defaulted to 2 is
+     * weeks of work undone by an upgrade.
+     */
+    @Test fun `a stored arcade size is never made easier by the dots`() {
+        assertEquals("50 dp earned is 50 dp kept", 50f, Difficulty.arcadeClamp(50f, Difficulty.DEFAULT), 0.01f)
+        assertEquals(Adaptive.MIN, Difficulty.arcadeClamp(40f, 1), 0.01f)
         assertEquals(Adaptive.START, Difficulty.arcadeClamp(Adaptive.START, Difficulty.DEFAULT), 0.01f)
+        // Bigger than the dot asks for is what does get pulled in — that is the dot doing its job.
+        assertEquals(Difficulty.arcadeStart(5), Difficulty.arcadeClamp(130f, 5), 0.01f)
         // NaN out of a corrupted store must not leave him aiming at nothing.
-        assertTrue(Difficulty.arcadeClamp(Float.NaN, 3) in Difficulty.arcade(3))
+        assertTrue(Difficulty.arcadeClamp(Float.NaN, 3) <= Difficulty.arcadeStart(3))
+        assertTrue(Difficulty.arcadeClamp(Float.NaN, 3) >= Adaptive.MIN)
+    }
+
+    /** Which dot a stored size names: the band it falls in. Used once, on the upgrade. */
+    @Test fun `a stored arcade size names the band it falls in`() {
+        assertEquals(1, Difficulty.arcadeDot(Adaptive.MAX))
+        assertEquals(Difficulty.DEFAULT, Difficulty.arcadeDot(Adaptive.START))
+        assertEquals(5, Difficulty.arcadeDot(Adaptive.MIN))
+        // And the derivation the migration uses is a fixed point: the dot a size names keeps it.
+        listOf(40f, 50f, 70f, 96f, 120f, 130f).forEach { size ->
+            assertEquals("$size moved on the upgrade", size, Difficulty.arcadeClamp(size, Difficulty.arcadeDot(size)), 0.01f)
+        }
+    }
+
+    // ------------------------------------------- the level, at both ends of a sitting
+
+    /**
+     * The jump happens before the work, not after it. Left to the progression, a stored level below
+     * the band made a **failed** sitting a promotion: dot 5 in «Αριθμοί» with the store on level 7,
+     * four of ten right, `next` returns 6 — and a clamp into 12..15 opened tomorrow on two-step word
+     * problems, with no tap of his own and nothing said.
+     */
+    @Test fun `the level a sitting runs at is inside the band`() {
+        assertEquals(12, Difficulty.levelAtLoad(7, Difficulty.numbers(5)))
+        assertEquals(4, Difficulty.levelAtLoad(14, Difficulty.numbers(2)))
+        assertEquals("a level already in the band does not move", 6, Difficulty.levelAtLoad(6, Difficulty.numbers(3)))
+        assertEquals(3, Difficulty.levelAtLoad(1, Difficulty.sentences(2)))
+    }
+
+    @Test fun `a sitting he got wrong can never raise the level`() {
+        val band = Difficulty.numbers(5)   // 12..15
+        // The scenario from the review, now impossible: he is at 12, the sitting goes badly, `next`
+        // says 11, and the answer is 12 — held, never pushed up into the band he is standing in.
+        assertEquals(12, Difficulty.levelAfterSitting(from = 12, next = 11, band = band))
+        // A level under the band only ever rises at load, never as a "progression".
+        assertEquals(7, Difficulty.levelAfterSitting(from = 7, next = 6, band = band))
+        assertEquals(7, Difficulty.levelAfterSitting(from = 7, next = 7, band = band))
+    }
+
+    @Test fun `a sitting he earned moves him one step, never past the band`() {
+        val band = Difficulty.numbers(3)   // 5..7
+        assertEquals(6, Difficulty.levelAfterSitting(from = 5, next = 6, band = band))
+        assertEquals("the band is the ceiling on a step up", 7, Difficulty.levelAfterSitting(from = 7, next = 8, band = band))
+        assertEquals("and a step down stops at its floor", 5, Difficulty.levelAfterSitting(from = 5, next = 4, band = band))
+    }
+
+    /** Reading a level back to the dot that owns it: the whole ladder, not the clamped one. */
+    @Test fun `a level names the dot whose band owns it`() {
+        assertEquals(1, Difficulty.numbersDot(1))
+        assertEquals(2, Difficulty.numbersDot(4))
+        assertEquals(3, Difficulty.numbersDot(7))
+        assertEquals(4, Difficulty.numbersDot(11))
+        assertEquals(5, Difficulty.numbersDot(15))
+        assertEquals(5, Difficulty.numbersDot(99))
+        // Sentences read off the full ladder, so the answer does not move when Task 7 builds 5..8.
+        assertEquals(1, Difficulty.sentencesDot(2))
+        assertEquals(2, Difficulty.sentencesDot(4))
+        assertEquals(3, Difficulty.sentencesDot(6))
+        assertEquals(5, Difficulty.sentencesDot(8))
+        // «Γράψε» has one level per dot.
+        (1..5).forEach { assertEquals(it, Difficulty.traceDot(it)) }
+    }
+
+    /**
+     * The property the whole upgrade rests on: the dot a level names is a dot whose band contains it,
+     * so [Difficulty.levelAtLoad] moves nothing on the first run after the migration.
+     */
+    @Test fun `the dot a level names keeps that level exactly where it is`() {
+        (1..NumberProgression.MAX_LEVEL).forEach { level ->
+            assertEquals("numbers level $level moved", level, Difficulty.levelAtLoad(level, Difficulty.numbers(Difficulty.numbersDot(level))))
+        }
+        (1..SentenceTemplates.MAX_LEVEL).forEach { level ->
+            assertEquals("sentence level $level moved", level, Difficulty.levelAtLoad(level, Difficulty.sentences(Difficulty.sentencesDot(level))))
+        }
     }
 }

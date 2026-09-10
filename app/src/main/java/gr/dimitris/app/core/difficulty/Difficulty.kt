@@ -121,13 +121,12 @@ object Difficulty {
     // ------------------------------------------------- «Τραγούδα και πες το»
 
     /**
-     * How long a phrase he sings, in syllables: 1 → 1–2, 2 → 3–4, 3 → 5–6, 4 → 7–8, 5 → nine and up.
+     * How long a phrase he sings, in syllables: 1 → up to 2, 2 → up to 4, 3 → up to 6, 4 → up to 8,
+     * 5 → any length. A **ceiling**, not a window — see [syllableCeiling].
      *
      * Syllables and not words, because a syllable is what melodic intonation therapy is made of —
      * one tapped beat each — so two syllables more is two more beats to hold, whether they arrive as
-     * one word or two. The seed's thirty-two phrases run from one syllable to seven, so the top dot
-     * has nothing of its own until a caregiver writes something longer; [gr.dimitris.app.modules.singsay.SingSayModule]
-     * falls back to the unfiltered plan rather than leaving him a module with nothing in it.
+     * one word or two.
      */
     fun syllables(d: Int): IntRange = when (clamp(d)) {
         1 -> 1..2
@@ -136,6 +135,24 @@ object Difficulty {
         4 -> 7..8
         else -> 9..Int.MAX_VALUE
     }
+
+    /**
+     * The longest phrase this dot admits. Everything **shorter stays in the pool**, which is what
+     * makes the dots a difficulty rather than a filter.
+     *
+     * The first cut of this was a window — only phrases *inside* the band — and it quietly deleted
+     * half his vocabulary on upgrade: at the default dot 2 «Ναι», «Όχι», «Ξανά» and «Τέλος» were
+     * suddenly not offered, their Leitner rows went overdue and stayed overdue for ever, and no dot
+     * setting brought them back. A difficulty is a ceiling on what he is *asked* for. «Λέξεις»
+     * already grades this way ([wordCoachKinds] is cumulative) and so does «Δεξί χέρι»
+     * ([arcadeClamp]); the short phrases keep the sitting's easy ends, which is what the sandwich in
+     * [gr.dimitris.app.core.scheduler.SessionBuilder] is for.
+     */
+    fun syllableCeiling(d: Int): Int = syllables(d).last
+
+    /** The dot a phrase of [syllables] syllables belongs to: the easiest one that still admits it. */
+    fun syllableDot(syllables: Int): Int =
+        (MIN..MAX).firstOrNull { syllables <= syllableCeiling(it) } ?: MAX
 
     /**
      * How many syllables a phrase is worth: every word of it, added up.
@@ -153,17 +170,14 @@ object Difficulty {
     // --------------------------------------------------------------- «Διάλογοι»
 
     /**
-     * How many turns of his own a dialogue gives him: 1 → 1–2, 2 → 3–4, 3 → 5–6, 4 → 7–9, 5 → ten
-     * and up.
+     * How many turns of his own a dialogue may ask for: 1 → up to 2, 2 → up to 4, 3 → up to 6,
+     * 4 → up to 9, 5 → any. A **ceiling**, not a window — see [turnCeiling].
      *
      * A stand-in, and deliberately a crude one. Task 6 gives `scripts` a `tier` column and the
      * dialogues a real grading — how much of the turn is handed to him, how far from the script an
      * answer may be — and this mapping is then replaced by it. Until then the only thing a dialogue
      * carries that is honestly about effort is how many times he has to speak: the six dialogues the
-     * app ships all give him four turns, so they all sit in band 2 and the dots change nothing until
-     * a caregiver writes a longer or a shorter conversation. [gr.dimitris.app.modules.scripts.ScriptsModule]
-     * falls back to every practisable dialogue when the band is empty, because a conversation is the
-     * module: there is nothing else for it to offer.
+     * app ships all give him four turns, so they are all in reach from dot 2 up.
      */
     fun turns(d: Int): IntRange = when (clamp(d)) {
         1 -> 1..2
@@ -172,6 +186,17 @@ object Difficulty {
         4 -> 7..9
         else -> 10..Int.MAX_VALUE
     }
+
+    /**
+     * The longest dialogue this dot admits, in turns of his own. Shorter conversations stay
+     * practisable at every dot above them: a two-turn exchange at the bakery is still worth having
+     * on the day he has asked for hard work, and a caregiver who writes one must not have it
+     * silently dropped. Same rule as [syllableCeiling], for the same reason.
+     */
+    fun turnCeiling(d: Int): Int = turns(d).last
+
+    /** The dot a dialogue of [turns] turns belongs to: the easiest one that still admits it. */
+    fun turnDot(turns: Int): Int = (MIN..MAX).firstOrNull { turns <= turnCeiling(it) } ?: MAX
 
     // -------------------------------------------------------------- «Δεξί χέρι»
 
@@ -199,10 +224,84 @@ object Difficulty {
     /** The easiest size in the band, which is the biggest: where a hand starts when the dots move. */
     fun arcadeStart(d: Int): Float = arcade(d).endInclusive
 
-    /** A stored size held inside the band the dots ask for, and inside what the games can draw. */
-    fun arcadeClamp(size: Float, d: Int): Float = Adaptive.clamp(size).coerceIn(arcade(d))
+    /**
+     * A stored size held to what this dot asks for: **never bigger** than the band's easiest target,
+     * and never outside what the games can draw.
+     *
+     * A ceiling and not a window, for the reason [syllableCeiling] gives and for one of the arcade's
+     * own: the stored size is the module's clinical measure. A hand that has worked its way down to
+     * 50 dp over months of physiotherapy must never be handed a 94 dp circle because the dots
+     * happened to say 2 — that is weeks of work undone by an upgrade, with no tap from him. Smaller
+     * than the band is him doing better than he asked for, and it stands.
+     */
+    fun arcadeClamp(size: Float, d: Int): Float = Adaptive.clamp(size).coerceAtMost(arcadeStart(d))
+
+    /**
+     * The dot a stored target size belongs to: the **hardest** one that still admits it, which is the
+     * band the size falls in. The dots run easiest-first while the sizes run biggest-first, so this
+     * is the last dot whose ceiling is still at or above the size, not the first.
+     *
+     * Used once, to work out where a hand that has been playing since before the dots existed
+     * already is. [DifficultyInit] hands it the **biggest** of the four stored sizes, because with
+     * [arcadeClamp] a ceiling that is the one derivation under which no game's target moves at all on
+     * the upgrade.
+     */
+    fun arcadeDot(sizeDp: Float): Int {
+        val size = Adaptive.clamp(sizeDp)
+        return (MIN..MAX).lastOrNull { size <= arcadeStart(it) } ?: MIN
+    }
+
+    // ------------------------------------------- the level, at both ends of a sitting
+
+    /**
+     * The level a sitting really runs at: the stored one, brought **into** the band the dots ask for.
+     *
+     * This happens once, when the module opens, and it is an honest jump — the level it returns is
+     * the level the exercises are built from and the level the attempt rows record, so a physio
+     * reading the database sees what he actually did rather than what the store happened to say.
+     *
+     * It exists because the alternative was worse in both directions. Leaving a stored level below
+     * the band alone meant the *progression* pulled it up at the end of the sitting instead, and
+     * that made a **failed** sitting a promotion: he taps dot 5 in «Αριθμοί», the store says level 7,
+     * he gets four of ten right, `next` returns 6, and a clamp into 12..15 opened tomorrow on
+     * two-step word problems. Now the jump happens before the work, where it is his own tap that
+     * caused it, and [levelAfterSitting] can never raise him for a bad morning.
+     */
+    fun levelAtLoad(stored: Int, band: IntRange): Int = stored.coerceIn(band)
+
+    /**
+     * What a finished sitting is allowed to leave behind: the progression's answer, held inside the
+     * band — and, when the sitting did **not** earn a step up, never above where it started.
+     *
+     * [from] is the level he actually practised ([levelAtLoad]), [next] what
+     * [gr.dimitris.app.core.scheduler.LevelProgression] or
+     * [gr.dimitris.app.modules.numbers.NumberProgression] made of it. A level below the band's floor
+     * only ever rises at load; nothing that happens *in* a sitting can push him up into a band he
+     * has not entered.
+     */
+    fun levelAfterSitting(from: Int, next: Int, band: IntRange): Int {
+        val held = next.coerceIn(band)
+        return if (next > from) held else held.coerceAtMost(from)
+    }
+
+    /** The dot whose band a number-sense level belongs to. The bands tile 1..15, so there is one. */
+    fun numbersDot(level: Int): Int = dotOf(NUMBERS_BANDS, level)
+
+    /** The dot whose band a sentence level belongs to. Read off the full ladder, not the clamped one. */
+    fun sentencesDot(level: Int): Int = dotOf(SENTENCES_BANDS, level)
+
+    /** «Γράψε» has one level per dot, so the level *is* the dot. */
+    fun traceDot(level: Int): Int = clamp(level)
 
     // ----------------------------------------------------------------- internals
+
+    /**
+     * Which dot owns [level], read off the **unclamped** ladder so that the answer does not change
+     * as Tasks 5 and 7 build the levels the top bands are waiting for. A level past the end of the
+     * ladder belongs to the hardest dot.
+     */
+    private fun dotOf(bands: List<IntRange>, level: Int): Int =
+        bands.indexOfFirst { level <= it.last }.let { if (it < 0) MAX else it + 1 }
 
     /**
      * One band out of [bands], with everything above [max] folded onto [max] — which is how a band

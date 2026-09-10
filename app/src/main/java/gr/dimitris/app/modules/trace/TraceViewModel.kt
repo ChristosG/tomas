@@ -205,10 +205,15 @@ class TraceViewModel(
 
     private fun load() {
         loadJob = viewModelScope.launch {
-            val level = runCatching { graph.settings.traceLevel.first() }
+            val stored = runCatching { graph.settings.traceLevel.first() }
                 .getOrElse { graph.errors.record("trace level read", it); MIN_LEVEL }
             val difficulty = runCatching { graph.settings.difficulty(ModuleId.TRACE).first() }
                 .getOrElse { graph.errors.record("trace difficulty read", it); Difficulty.DEFAULT }
+            // In «Γράψε» the dot *is* the level, and the store keeps them equal from both directions
+            // ([gr.dimitris.app.core.settings.Settings.setTraceLevel]). This is the same clamp the
+            // other two levelled modules do at load, stated rather than assumed: what he writes is
+            // what the row he is looking at says he writes.
+            val level = Difficulty.levelAtLoad(stored, Difficulty.trace(difficulty))
             val hand = runCatching { graph.settings.traceHand.first() }
                 .getOrElse { graph.errors.record("trace hand read", it); Settings.HAND_LEFT }
             val strictness = runCatching { graph.settings.traceStrictness.first() }

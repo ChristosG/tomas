@@ -405,7 +405,126 @@ class SettingsTest {
         s.setDifficulty(ModuleId.NUMBERS, 3)
         s.setDifficultyCeiling(ModuleId.NUMBERS, 1)
         assertEquals(1, s.difficulty(ModuleId.NUMBERS).first())
-        assertEquals(Difficulty.numbers(1).first, s.numbersLevel.first())
+        assertEquals(Difficulty.numbers(1).last, s.numbersLevel.first())
+    }
+
+    /**
+     * A caregiver's fence **clamps** his level; it does not send him back to the bottom of the band.
+     *
+     * He is on «Αριθμοί» dot 5 and has worked up to level 14; the therapist caps him at 3 to keep this
+     * month on change-making. Band 3 is 5..7, so 14 becomes 7 — the hardest the new fence allows,
+     * which is the whole of what the fence asked for. Resetting to 5 would take two more levels
+     * nobody asked him to give up, with nothing on any screen to say so.
+     */
+    @Test fun `a caregiver's bound clamps the level rather than resetting it`() = runBlocking {
+        val s = newSettings()
+        s.setDifficulty(ModuleId.NUMBERS, 5)
+        s.setNumbersLevel(14)
+        s.setDifficultyCeiling(ModuleId.NUMBERS, 3)
+        assertEquals(3, s.difficulty(ModuleId.NUMBERS).first())
+        assertEquals("the fence took more than it asked for", 7, s.numbersLevel.first())
+    }
+
+    /** A level already inside the new band is not moved at all. */
+    @Test fun `a bound that still contains his level leaves it exactly where it is`() = runBlocking {
+        val s = newSettings()
+        s.setDifficulty(ModuleId.NUMBERS, 5)
+        s.setNumbersLevel(6)              // the dot follows the level down to 3
+        assertEquals(3, s.difficulty(ModuleId.NUMBERS).first())
+        s.setDifficultyCeiling(ModuleId.NUMBERS, 3)
+        assertEquals(6, s.numbersLevel.first())
+    }
+
+    /** His own tap still jumps to the band's floor: harder work, met at its easiest end first. */
+    @Test fun `his own tap still jumps to the bottom of the band`() = runBlocking {
+        val s = newSettings()
+        s.setNumbersLevel(14)
+        s.setDifficulty(ModuleId.NUMBERS, 3)
+        assertEquals(Difficulty.numbers(3).first, s.numbersLevel.first())
+    }
+
+    /**
+     * The caregiver's own level stepper on the progress screen moves the dot with it. Otherwise the
+     * module would clamp her level straight back out of the band at load and her stepper would be a
+     * control that silently does nothing.
+     */
+    @Test fun `setting the level moves the dot to the band that owns it`() = runBlocking {
+        val s = newSettings()
+        s.setNumbersLevel(13)
+        assertEquals(Difficulty.numbersDot(13), s.difficulty(ModuleId.NUMBERS).first())
+        assertEquals(13, s.numbersLevel.first())
+
+        s.setSentencesLevel(4)
+        assertEquals(Difficulty.sentencesDot(4), s.difficulty(ModuleId.SENTENCES).first())
+
+        // «Γράψε»'s level *is* its dot, from both directions.
+        s.setTraceLevel(5)
+        assertEquals(5, s.difficulty(ModuleId.TRACE).first())
+        assertEquals(5, s.traceLevel.first())
+    }
+
+    /** …but never past the fence: a level the bounds refuse is pulled back into the band. */
+    @Test fun `a level above the caregiver's ceiling is pulled back into the band`() = runBlocking {
+        val s = newSettings()
+        s.setDifficultyCeiling(ModuleId.NUMBERS, 2)
+        s.setNumbersLevel(13)
+        assertEquals(2, s.difficulty(ModuleId.NUMBERS).first())
+        assertEquals(Difficulty.numbers(2).last, s.numbersLevel.first())
+    }
+
+    // ------------------------------------------- where the dots start on a phone already in use
+
+    /**
+     * The dots arrived on a device his family had been practising with for months. Reading them off
+     * his stored progress is the difference between "you are halfway down the ladder" and the truth —
+     * and, since a sitting now runs at a level held inside the band, between keeping level 14 and
+     * being quietly dropped to 4.
+     */
+    @Test fun `the first run derives each dot from the progress already stored`() = runBlocking {
+        val s = newSettings()
+        s.setNumbersLevel(13)
+        s.setSentencesLevel(4)
+        s.setTraceLevel(3)
+        // setNumbersLevel already marks those three as derived; the arcade has no level, so it is the
+        // one that proves the flag and the derivation on its own.
+        assertEquals(true, s.difficultyNeedsInit(ModuleId.ARCADE).first())
+        s.setArcadeTargetDp(ArcadeGame.TAP, 50f)
+        s.setArcadeTargetDp(ArcadeGame.PINCH, 120f)
+        s.initialiseDifficulty(ModuleId.ARCADE)
+
+        assertEquals(Difficulty.numbersDot(13), s.difficulty(ModuleId.NUMBERS).first())
+        assertEquals(Difficulty.sentencesDot(4), s.difficulty(ModuleId.SENTENCES).first())
+        assertEquals(3, s.difficulty(ModuleId.TRACE).first())
+        // Read off the *biggest* stored size, so the ceiling it implies moves none of the four.
+        assertEquals(Difficulty.arcadeDot(120f), s.difficulty(ModuleId.ARCADE).first())
+        assertEquals(50f, s.arcadeTargetDp(ArcadeGame.TAP).first(), 0.01f)
+        assertEquals(120f, s.arcadeTargetDp(ArcadeGame.PINCH).first(), 0.01f)
+    }
+
+    /** A phone installed this morning has nothing to read, and starts everyone where the spec says. */
+    @Test fun `a phone with no stored progress starts at the default`() = runBlocking {
+        val s = newSettings()
+        ModuleId.entries.forEach { s.initialiseDifficulty(it) }
+        ModuleId.entries.forEach { assertEquals("$it", Difficulty.DEFAULT, s.difficulty(it).first()) }
+    }
+
+    /** Once, and only once: the second run is his own setting, not the migration's. */
+    @Test fun `the derivation never runs twice`() = runBlocking {
+        val s = newSettings()
+        s.setNumbersLevel(13)
+        s.initialiseDifficulty(ModuleId.NUMBERS)
+        assertEquals(false, s.difficultyNeedsInit(ModuleId.NUMBERS).first())
+        s.setDifficulty(ModuleId.NUMBERS, 1)
+        s.initialiseDifficulty(ModuleId.NUMBERS)
+        assertEquals(1, s.difficulty(ModuleId.NUMBERS).first())
+    }
+
+    /** A derived dot the caregiver's fence refuses is still held to the fence. */
+    @Test fun `the derived dot obeys the caregiver's bounds`() = runBlocking {
+        val s = newSettings()
+        s.setDifficultyCeiling(ModuleId.SINGSAY, 2)
+        s.initialiseDifficulty(ModuleId.SINGSAY, derived = 5)
+        assertEquals(2, s.difficulty(ModuleId.SINGSAY).first())
     }
 
     /**
@@ -416,12 +535,13 @@ class SettingsTest {
     @Test fun `a tap or a bound that changes nothing leaves the level alone`() = runBlocking {
         val s = newSettings()
         s.setNumbersLevel(6)
+        val his = Difficulty.numbersDot(6)
         s.setDifficultyCeiling(ModuleId.NUMBERS, 5)
         s.setDifficultyFloor(ModuleId.NUMBERS, 1)
         assertEquals(6, s.numbersLevel.first())
-        s.setDifficulty(ModuleId.NUMBERS, Difficulty.DEFAULT)
+        s.setDifficulty(ModuleId.NUMBERS, his)
         assertEquals(6, s.numbersLevel.first())
-        s.setDifficulty(ModuleId.NUMBERS, Difficulty.DEFAULT)
+        s.setDifficulty(ModuleId.NUMBERS, his)
         assertEquals(6, s.numbersLevel.first())
     }
 

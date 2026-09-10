@@ -3,6 +3,10 @@ package gr.dimitris.app.ui
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.test.assertHeightIsAtLeast
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.assertIsNotSelected
+import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -60,6 +64,32 @@ class DifficultyRowTest {
         // And the other way, because "harder" is not the only direction he is allowed to go.
         compose.onNodeWithContentDescription("$DIFFICULTY_LABEL 1").performClick()
         assertEquals(1, picked)
+    }
+
+    /**
+     * Tapping the dot he is already on is not a change, and must not be reported as one.
+     *
+     * In four of the seven screens the callback rebuilds the sitting from scratch. In «Δεξί χέρι» the
+     * row is on screen for the whole of the first round, so brushing the dot he is already on
+     * mid-round ended the round with the hits lost; in «Γράψε» it wiped the strokes on the first
+     * letter. He re-reads this row more than once.
+     */
+    @Test fun tappingTheDotHeIsAlreadyOnDoesNothing() {
+        show(value = 3)
+        compose.onNodeWithContentDescription("$DIFFICULTY_LABEL 3").performClick()
+        assertNull("a re-read of the row must not rebuild the sitting", picked)
+        // …and the row still works for a dot that is a real change.
+        compose.onNodeWithContentDescription("$DIFFICULTY_LABEL 5").performClick()
+        assertEquals(5, picked)
+    }
+
+    /** Which dot is set, and which are not his today, said out loud as well as drawn. */
+    @Test fun theDotsSayWhichIsSetAndWhichAreFenced() {
+        show(value = 3, floor = 2, ceiling = 4)
+        compose.onNodeWithContentDescription("$DIFFICULTY_LABEL 3").assertIsSelected()
+        compose.onNodeWithContentDescription("$DIFFICULTY_LABEL 2").assertIsNotSelected()
+        compose.onNodeWithContentDescription("$DIFFICULTY_LABEL 5").assertIsNotEnabled()
+        compose.onNodeWithContentDescription("$DIFFICULTY_LABEL 4").assertIsEnabled()
     }
 
     /**

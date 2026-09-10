@@ -47,31 +47,45 @@ class SingSayModuleTest {
 
     /**
      * The dots, in the only unit this module's difficulty has: syllables. A syllable is one tapped
-     * beat of the melody, so the longer phrase is the harder sitting — and the dot he set is what
-     * decides which of the two he is handed.
+     * beat of the melody, so the longer phrase is the harder sitting — and the dot he set is the
+     * **longest** he is willing to be asked for.
      */
-    @Test fun `the difficulty he set decides how long a phrase he sings`() = runTest {
+    @Test fun `the difficulty he set caps how long a phrase he sings`() = runTest {
         phrase("ναι", createdAt = 1)                           // 1 syllable
         phrase("θέλω καφέ", createdAt = 2)                     // 4
         phrase("θέλω να πάω στο σπίτι μου", createdAt = 3)     // 9
         val easy = SingSayModule.plan(items, schedules, SingSayModule.MAX_PER_PRACTICE, difficulty = 1)
         assertEquals(listOf("ναι"), easy.map { it.text })
-        val middle = SingSayModule.plan(items, schedules, SingSayModule.MAX_PER_PRACTICE, difficulty = 2)
-        assertEquals(listOf("θέλω καφέ"), middle.map { it.text })
         val hard = SingSayModule.plan(items, schedules, SingSayModule.MAX_PER_PRACTICE, difficulty = 5)
-        assertEquals(listOf("θέλω να πάω στο σπίτι μου"), hard.map { it.text })
+        assertEquals(3, hard.size)
     }
 
     /**
-     * A band the vocabulary cannot fill must not leave him a module with nothing in it. The seed's
-     * phrases stop at seven syllables, so the top dot has nothing of its own until somebody writes
-     * something longer — and a man who taps the hardest dot and is told «δεν υπάρχει υλικό» has been
-     * punished for asking.
+     * The dot is a ceiling, not a window: the easiest phrases stay in the pool at every dot above
+     * them.
+     *
+     * The first cut of this dropped them, and it was a quiet disaster — at the default dot «Ναι» and
+     * «Όχι» were no longer offered, their Leitner rows went overdue and stayed overdue for ever, and
+     * no dot setting brought them back. Short phrases are also what the sandwich opens and closes a
+     * sitting with.
      */
-    @Test fun `a band nothing falls in widens back to the whole vocabulary`() = runTest {
-        phrase("θέλω καφέ", createdAt = 1)
-        val hard = SingSayModule.plan(items, schedules, SingSayModule.MAX_PER_PRACTICE, difficulty = 5)
-        assertEquals(listOf("θέλω καφέ"), hard.map { it.text })
+    @Test fun `dot two keeps the easiest phrases as well as its own`() = runTest {
+        phrase("ναι", createdAt = 1)                           // 1 syllable — below the band
+        phrase("θέλω καφέ", createdAt = 2)                     // 4 — in the band
+        phrase("καλημέρα σας", createdAt = 3)                  // 5 — above it
+        val plan = SingSayModule.plan(items, schedules, SingSayModule.MAX_PER_PRACTICE, difficulty = 2)
+        assertEquals(setOf("ναι", "θέλω καφέ"), plan.map { it.text }.toSet())
+    }
+
+    /**
+     * A ceiling nothing is under must not leave him a module with nothing in it: a device whose whole
+     * vocabulary is long phrases still answers the easiest dot with something, because a man who taps
+     * a dot and is told «δεν υπάρχει υλικό» has been punished for asking.
+     */
+    @Test fun `a ceiling no phrase is under widens back to the whole vocabulary`() = runTest {
+        phrase("θέλω να πάω στο σπίτι μου", createdAt = 1)     // 9 syllables
+        val easy = SingSayModule.plan(items, schedules, SingSayModule.MAX_PER_PRACTICE, difficulty = 1)
+        assertEquals(listOf("θέλω να πάω στο σπίτι μου"), easy.map { it.text })
     }
 
     /** Nobody's phone changes on upgrade: the default dot plans what it always planned. */

@@ -53,13 +53,19 @@ object SingSayModule : Module {
     /**
      * The DAOs rather than the graph, so a test can watch the cap hold over fakes.
      *
-     * [difficulty] is how long a phrase he asked for, in syllables ([Difficulty.syllables]): a
-     * syllable is one tapped beat of the melody, so two more of them is two more beats to hold.
+     * [difficulty] is how long a phrase he asked for, in syllables — a **ceiling**
+     * ([Difficulty.syllableCeiling]), so everything shorter stays in the pool. A syllable is one
+     * tapped beat of the melody, so two more of them is two more beats to hold; a dot says how much
+     * he is willing to be asked for, not which half of his vocabulary he is allowed to see.
      *
-     * A band the vocabulary cannot fill falls back to the unfiltered plan rather than to an empty
-     * module. The seed's phrases run from one syllable to seven, so the top dot has nothing of its
-     * own until a caregiver writes something longer — and a man who taps the hardest dot and gets a
-     * module that says «Δεν υπάρχει υλικό ακόμα» has been punished for asking.
+     * The first cut of this was a window, and it was a quiet disaster: at the default dot «Ναι»,
+     * «Όχι» and «Ξανά» stopped being offered, their Leitner rows went overdue and stayed overdue for
+     * ever, and no dot brought them back. Short phrases are also what the sandwich in
+     * [SessionBuilder] opens and closes a sitting with.
+     *
+     * A ceiling no phrase is under still falls back to the unfiltered plan rather than to an empty
+     * module: a device whose whole vocabulary is long phrases must not answer the easiest dot with
+     * «Δεν υπάρχει υλικό ακόμα».
      */
     internal suspend fun plan(
         items: ItemDao,
@@ -68,8 +74,8 @@ object SingSayModule : Module {
         focus: Focus? = null,
         difficulty: Int = Difficulty.DEFAULT,
     ): List<Item> {
-        val band = Difficulty.syllables(difficulty)
-        val wanted = build(items, schedules, maxItems, focus) { Difficulty.syllablesOf(it.text) in band }
+        val ceiling = Difficulty.syllableCeiling(difficulty)
+        val wanted = build(items, schedules, maxItems, focus) { Difficulty.syllablesOf(it.text) <= ceiling }
         return wanted.ifEmpty { build(items, schedules, maxItems, focus) { true } }
     }
 

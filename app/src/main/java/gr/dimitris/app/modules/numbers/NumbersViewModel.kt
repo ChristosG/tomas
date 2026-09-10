@@ -108,10 +108,19 @@ class NumbersViewModel(
      */
     private fun load() {
         loadJob = viewModelScope.launch {
-            val level = runCatching { graph.settings.numbersLevel.first() }
+            val stored = runCatching { graph.settings.numbersLevel.first() }
                 .getOrElse { graph.errors.record("numbers level read", it); NumberProgression.MIN_LEVEL }
             val difficulty = runCatching { graph.settings.difficulty(ModuleId.NUMBERS).first() }
                 .getOrElse { graph.errors.record("numbers difficulty read", it); Difficulty.DEFAULT }
+            // The sitting runs at a level inside the band the dots ask for, and the jump happens
+            // here, before any work: the exercises are generated from it and every row's
+            // `detail.level` records it. See [Difficulty.levelAtLoad] for what clamping at the other
+            // end instead did to a bad morning.
+            val level = Difficulty.levelAtLoad(stored, Difficulty.numbers(difficulty))
+            if (level != stored) {
+                runCatching { graph.settings.setNumbersLevel(level) }
+                    .onFailure { graph.errors.record("numbers level clamp", it) }
+            }
             val prices = runCatching { graph.db.items().withPrices().map { Price(it.text, it.priceCents!!) } }
                 .getOrElse { graph.errors.record("numbers prices", it); emptyList() }
             // Through the same rule the module used, so the list is never empty whatever it was handed.
@@ -225,10 +234,12 @@ class NumbersViewModel(
         viewModelScope.launch {
             write?.join()
             val level = _state.value.level
-            // The step the sitting earned, held inside the band the dots ask for (spec §13): the
-            // progression still decides *when* he moves, the dots decide how far it may take him.
+            // The step the sitting earned, held inside the band the dots ask for (spec §13), and
+            // never *up* unless the sitting earned it: the progression still decides when he moves,
+            // the dots decide how far it may take him, and ten questions he got wrong can only ever
+            // hold him or step him back. See [Difficulty.levelAfterSitting].
             val band = Difficulty.numbers(_state.value.difficulty)
-            val newLevel = NumberProgression.next(level, results).coerceIn(band)
+            val newLevel = Difficulty.levelAfterSitting(level, NumberProgression.next(level, results), band)
             // A settings write that fails must not strand him on a screen that never says "done".
             val moved = newLevel != level && runCatching { graph.settings.setNumbersLevel(newLevel) }
                 .onFailure { graph.errors.record("numbers level write", it) }.isSuccess

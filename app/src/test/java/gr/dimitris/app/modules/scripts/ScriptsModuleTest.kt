@@ -172,25 +172,36 @@ class ScriptsModuleTest {
      * about effort is how many times he has to speak. A crude mapping, and a real one: a two-turn
      * exchange at the bakery and a ten-turn phone call are not the same afternoon.
      */
-    @Test fun `the difficulty he set decides how many turns the dialogue asks of him`() = runTest {
+    @Test fun `the difficulty he set caps how many turns a dialogue may ask of him`() = runTest {
         val short = longDialogue("Σύντομος", turns = 2)
         val long = longDialogue("Μεγάλος", turns = 10)
-        assertEquals(listOf(short), ScriptsModule.practisable(scripts, difficulty = 1))
-        assertEquals(listOf(long), ScriptsModule.practisable(scripts, difficulty = 5))
+        assertEquals("dot 1 is two turns, and the ten-turn call is not his today", listOf(short), ScriptsModule.practisable(scripts, difficulty = 1))
         assertEquals(short, ScriptsModule.choose(scripts, schedules, now, difficulty = 1))
-        assertEquals(long, ScriptsModule.choose(scripts, schedules, now, difficulty = 5))
+        assertEquals(setOf(short, long), ScriptsModule.practisable(scripts, difficulty = 5).toSet())
     }
 
     /**
-     * A conversation *is* this module, so a band no dialogue falls in widens back to all of them:
-     * "nothing for you today" for having asked for harder work is not an answer. Every dialogue the
-     * app ships gives him four turns, which is why this is the common case and not the edge one.
+     * A ceiling, not a window: a two-turn errand at the bakery is still worth having on the day he
+     * asked for hard work, and a caregiver who writes one must not have it silently dropped with its
+     * Leitner row left overdue for ever.
      */
-    @Test fun `a band no dialogue falls in widens back to all of them`() = runTest {
+    @Test fun `a shorter dialogue stays practisable at a harder dot`() = runTest {
+        val short = longDialogue("Στον φούρνο", turns = 2)
+        longDialogue("Μεγάλος", turns = 10)
+        assertTrue(short in ScriptsModule.practisable(scripts, difficulty = 5))
+        assertTrue(short in ScriptsModule.practisable(scripts, difficulty = 3))
+    }
+
+    /**
+     * A conversation *is* this module, so a ceiling no dialogue is under widens back to all of them:
+     * "nothing for you today" for having asked for *easier* work is not an answer either.
+     */
+    @Test fun `a ceiling no dialogue is under widens back to all of them`() = runTest {
         val only = longDialogue("Τέσσερις σειρές", turns = 4)
-        assertEquals(listOf(only), ScriptsModule.practisable(scripts, difficulty = 5))
         assertEquals(listOf(only), ScriptsModule.practisable(scripts, difficulty = 1))
-        assertEquals(only, ScriptsModule.choose(scripts, schedules, now, difficulty = 5))
+        assertEquals(only, ScriptsModule.choose(scripts, schedules, now, difficulty = 1))
+        // And from dot 2 up it is simply in reach, which is where the six shipped dialogues live.
+        assertEquals(listOf(only), ScriptsModule.practisable(scripts, difficulty = 2))
     }
 
     /** A dialogue of nothing but the other person's lines stays out, whatever the dots say. */

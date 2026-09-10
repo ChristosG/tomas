@@ -54,6 +54,31 @@ internal fun planToday(
 }
 
 /**
+ * Every enabled module's plan, each asked for at **the difficulty he set for that module** (spec §13).
+ *
+ * The difficulty is read here and handed down rather than read inside each module, so the mixed
+ * sitting and the free practice of the same module can never disagree about what he asked for, and
+ * so a module stays testable without a DataStore.
+ *
+ * Free of the ViewModel because that seam had no test at all: deleting the difficulty read left every
+ * test green, and «Λέξεις» would quietly have gone back to planning for everybody at once. A module
+ * that throws, or that has nothing today, is left out and never breaks the sitting.
+ */
+internal suspend fun planEach(
+    modules: List<Module>,
+    difficultyOf: suspend (ModuleId) -> Int,
+    planOf: suspend (Module, Int) -> List<Item>,
+    onError: (String, Throwable) -> Unit,
+): List<Pair<Module, List<Item>>> = modules.mapNotNull { m ->
+    val difficulty = runCatching { difficultyOf(m.id) }
+        .getOrElse { onError("difficulty ${m.id}", it); Difficulty.DEFAULT }
+    runCatching { planOf(m, difficulty) }
+        .getOrElse { onError("plan ${m.id}", it); emptyList() }
+        .takeIf { it.isNotEmpty() }
+        ?.let { m to it }
+}
+
+/**
  * The sitting itself, as the one synthetic row at the end of it will carry it.
  *
  * Every module writes down what its own exercises cost him; nothing wrote down what the *sitting*
@@ -123,16 +148,12 @@ class SessionViewModel(private val graph: AppGraph) : ViewModel() {
             val enabled = graph.settings.enabledModules.first()
             // Switched everything off is a settings mistake, not a finished day: say which it is.
             val allOff = graph.modules.none { it.id in enabled }
-            // Each module at the difficulty he set for it (spec §13). Read here and handed down,
-            // rather than read inside each module, so the sitting and the free practice of the same
-            // module can never disagree about what he asked for — and so a module stays testable
-            // without a DataStore.
-            val wanted = graph.modules.filter { it.id in enabled }
-                .mapNotNull { m ->
-                    val difficulty = runCatching { graph.settings.difficulty(m.id).first() }
-                        .getOrElse { graph.errors.record("difficulty ${m.id}", it); Difficulty.DEFAULT }
-                    runCatching { m.planFor(graph, difficulty) }.getOrElse { graph.errors.record("plan ${m.id}", it); emptyList() }.takeIf { it.isNotEmpty() }?.let { m to it }
-                }
+            val wanted = planEach(
+                modules = graph.modules.filter { it.id in enabled },
+                difficultyOf = { graph.settings.difficulty(it).first() },
+                planOf = { m, difficulty -> m.planFor(graph, difficulty) },
+                onError = { where, e -> graph.errors.record(where, e) },
+            )
             if (wanted.isEmpty()) {
                 _state.value = SessionStep.Empty(allOff)
                 say(if (allOff) ALL_MODULES_OFF else NOTHING_TODAY)

@@ -1,6 +1,7 @@
 package gr.dimitris.app
 
 import android.app.Application
+import gr.dimitris.app.core.difficulty.DifficultyInit
 import gr.dimitris.app.core.log.CrashHandler
 import gr.dimitris.app.core.seed.ScriptSeedImporter
 import gr.dimitris.app.core.seed.SeedImporter
@@ -24,6 +25,11 @@ class DimitrisApp : Application() {
         graph.scope.launch {
             SeedImporter(graph).importIfNeeded()
             ScriptSeedImporter(graph).importIfNeeded()
+            // Where his five dots start, on a phone that was already being practised with before
+            // they existed (spec §13). After the two importers, because two of the seven modules
+            // read their answer out of the vocabulary and the dialogues; before the first sync, so a
+            // phone that has just merged somebody else's rows is not what he is measured by.
+            DifficultyInit.run(graph)
             // Last, and in the same coroutine: the seed has to be in the database before the first
             // sync reads it, or a fresh phone would push nothing and then merge the vocabulary it
             // was about to import anyway. Nothing waits for this — it is off the main thread, on the

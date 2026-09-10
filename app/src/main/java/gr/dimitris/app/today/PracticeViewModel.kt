@@ -10,7 +10,9 @@ import gr.dimitris.app.modules.scripts.ScriptsModule
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 
 /**
@@ -61,10 +63,11 @@ class PracticeViewModel(
                 _items.value = runCatching { named() }.getOrElse { graph.errors.record("practice ${m.id}", it); emptyList() }
                 return@launch
             }
-            graph.settings.difficulty(m.id).distinctUntilChanged().collect { difficulty ->
-                _items.value = runCatching { m.practiceFor(graph, difficulty) }
-                    .getOrElse { graph.errors.record("practice ${m.id}", it); emptyList() }
-            }
+            practicePlans(
+                difficulty = graph.settings.difficulty(m.id),
+                plan = { d -> m.practiceFor(graph, d) },
+                onError = { graph.errors.record("practice ${m.id}", it) },
+            ).collect { _items.value = it }
         }
     }
 
@@ -83,4 +86,24 @@ class PracticeViewModel(
         scriptId != null -> ScriptsModule.turnsOf(graph, scriptId)
         else -> emptyList()
     }
+}
+
+/**
+ * One plan per difficulty he actually settles on: the module's free-practice list, rebuilt every time
+ * the dots really move and never in between.
+ *
+ * Free of the ViewModel because this is the single most consequential piece of plumbing the dots
+ * have — it is what makes a tap answer him *now* rather than tomorrow — and an [AppGraph] cannot be
+ * built on the JVM, so inside the ViewModel it could only ever have been tested on a device.
+ *
+ * [distinctUntilChanged] is load-bearing rather than tidy: DataStore re-emits its whole map on every
+ * write to any key, so without it a caregiver saving a speech rate would re-plan the sitting he is in
+ * the middle of.
+ */
+internal fun practicePlans(
+    difficulty: Flow<Int>,
+    plan: suspend (Int) -> List<Item>,
+    onError: (Throwable) -> Unit,
+): Flow<List<Item>> = difficulty.distinctUntilChanged().map { d ->
+    runCatching { plan(d) }.getOrElse { onError(it); emptyList() }
 }

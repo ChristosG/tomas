@@ -136,7 +136,7 @@ class SentencesFlowTest {
             tapInOrder(listOf(label))
             if (answered()) break
         }
-        val shown = correction()
+        val shown = correction(board)
         if (shown == null) {
             // The board happened to be in the sentence's own order: that is an answer of his own.
             compose.waitUntil(TIMEOUT_MS) { attempts().any { it.itemId == LEVEL_4 && it.outcome == Outcome.CORRECT } }
@@ -200,12 +200,31 @@ class SentencesFlowTest {
 
     /** True once the sentence is finished, right or wrong. */
     private fun answered(): Boolean = compose.onAllNodes(hasText("Επόμενο")).fetchSemanticsNodes().isNotEmpty() ||
-        correction() != null
+        correctionText() != null
 
-    /** The sentence the screen is showing him to copy, or null while there is nothing to copy. */
-    private fun correction(): List<String>? = compose.onAllNodes(hasText(CORRECTION, substring = true)).fetchSemanticsNodes()
+    /** The sentence the screen is showing him to copy, as written, or null while there is none. */
+    private fun correctionText(): String? = compose.onAllNodes(hasText(CORRECTION, substring = true)).fetchSemanticsNodes()
         .firstNotNullOfOrNull { n -> n.config.getOrNull(SemanticsProperties.Text)?.joinToString("") { it.text } }
-        ?.substringAfter(CORRECTION)?.trim()?.split(" ")
+        ?.substringAfter(CORRECTION)?.trim()
+
+    /**
+     * The same sentence read back as the board's own **cards**.
+     *
+     * Not `split(" ")`: a card can be two words — «σούπερ μάρκετ» is one tile — so splitting on
+     * spaces counted four cards in a three-card sentence and the size assertion below failed
+     * whenever the templates happened to pick one. Longest label first, so one card is never
+     * mistaken for the beginning of another.
+     */
+    private fun correction(board: List<String>): List<String>? {
+        var rest = correctionText() ?: return null
+        val cards = mutableListOf<String>()
+        while (rest.isNotEmpty()) {
+            val card = board.filter { rest.startsWith(it) }.maxByOrNull { it.length } ?: break
+            cards += card
+            rest = rest.removePrefix(card).trimStart()
+        }
+        return cards
+    }
 
     private fun attempts(): List<Attempt> =
         runBlocking { graph.db.attempts().since(since) }.filter { it.module == ModuleId.SENTENCES }

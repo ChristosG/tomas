@@ -152,10 +152,19 @@ class SentencesViewModel(
 
     private fun load() {
         loadJob = viewModelScope.launch {
-            val level = runCatching { graph.settings.sentencesLevel.first() }
+            val stored = runCatching { graph.settings.sentencesLevel.first() }
                 .getOrElse { graph.errors.record("sentences level read", it); SentenceTemplates.MIN_LEVEL }
             val difficulty = runCatching { graph.settings.difficulty(ModuleId.SENTENCES).first() }
                 .getOrElse { graph.errors.record("sentences difficulty read", it); Difficulty.DEFAULT }
+            // The sitting runs at a level inside the band the dots ask for, and the jump happens
+            // *here*, before any work — so it is his own tap that caused it, the sentences are built
+            // from it and the attempt rows record it. Clamping at the other end instead made a bad
+            // morning a promotion; see [Difficulty.levelAtLoad].
+            val level = Difficulty.levelAtLoad(stored, Difficulty.sentences(difficulty))
+            if (level != stored) {
+                runCatching { graph.settings.setSentencesLevel(level) }
+                    .onFailure { graph.errors.record("sentences level clamp", it) }
+            }
             val pool = runCatching { graph.db.items().activeOfKinds(listOf(ItemKind.WORD)) }
                 .getOrElse { graph.errors.record("sentences pool", it); emptyList() }
             results.clear()
@@ -354,10 +363,11 @@ class SentencesViewModel(
             // a vocabulary too thin for level 3, a perfect sitting of level-1 sentences is evidence
             // about level 1. Promoting him off it would pin him at a level nothing can build.
             val played = sentences.minOfOrNull { it.level } ?: level
-            // Inside the band the dots ask for (spec §13): the sitting still decides *when* he moves,
-            // the dots decide how far it may take him.
+            // Inside the band the dots ask for (spec §13), and never *up* unless the sitting earned
+            // it: the sitting still decides when he moves, the dots decide how far it may take him,
+            // and a morning he got wrong can only ever hold him or step him back.
             val band = Difficulty.sentences(_state.value.difficulty)
-            val newLevel = LevelProgression.next(played, results, band.first, band.last)
+            val newLevel = Difficulty.levelAfterSitting(played, LevelProgression.next(played, results, band.first, band.last), band)
             // A settings write that fails must not strand him on a screen that never says "done".
             val moved = newLevel != level && runCatching { graph.settings.setSentencesLevel(newLevel) }
                 .onFailure { graph.errors.record("sentences level write", it) }.isSuccess

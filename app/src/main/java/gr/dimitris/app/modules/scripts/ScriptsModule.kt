@@ -76,11 +76,14 @@ object ScriptsModule : Module {
      * Reads the lines rather than the whole [gr.dimitris.app.core.data.ScriptRepository.load], so
      * planning a session costs one query per script instead of one per line.
      *
-     * [difficulty] narrows that to the dialogues that ask him to speak as often as he said he wanted
-     * to ([Difficulty.turns]) — a stand-in until Task 6 gives `scripts` a real `tier` column, and a
-     * crude one: the six dialogues the app ships all give him four turns, so they all sit in band 2
-     * and the dots change nothing until a caregiver writes a longer or a shorter conversation. A band
-     * no dialogue falls in widens back to all of them, because a conversation *is* this module:
+     * [difficulty] caps how many turns a dialogue may ask of him ([Difficulty.turnCeiling]) — a
+     * stand-in until Task 6 gives `scripts` a real `tier` column, and a crude one: the six dialogues
+     * the app ships all give him four turns, so they are all in reach from dot 2 up.
+     *
+     * A **ceiling** and not a window. A shorter conversation than the dot asks for is still worth
+     * having — the two-turn exchange at the bakery is a real errand — and dropping it would strand
+     * whatever a caregiver had written and left its Leitner row overdue for ever. A ceiling no
+     * dialogue is under still widens back to all of them, because a conversation *is* this module:
      * "nothing for you today" for having asked for harder work is not an answer.
      */
     internal suspend fun practisable(scripts: ScriptDao, difficulty: Int = Difficulty.DEFAULT): List<String> {
@@ -88,8 +91,8 @@ object ScriptsModule : Module {
             script.id to scripts.linesFor(script.id).count { it.speaker == Speaker.DIMITRIS }
         }
         val ready = turns.filterValues { it > 0 }
-        val band = Difficulty.turns(difficulty)
-        val wanted = ready.filterValues { it in band }
+        val ceiling = Difficulty.turnCeiling(difficulty)
+        val wanted = ready.filterValues { it <= ceiling }
         // The map keeps `activeScripts()`'s order — soonest-due ties are broken by it downstream.
         return (if (wanted.isEmpty()) ready else wanted).keys.toList()
     }

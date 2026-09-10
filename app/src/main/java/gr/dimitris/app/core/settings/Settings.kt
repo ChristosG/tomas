@@ -17,6 +17,7 @@ import gr.dimitris.app.core.difficulty.Difficulty
 import gr.dimitris.app.modules.arcade.Adaptive
 import gr.dimitris.app.modules.arcade.ArcadeGame
 import gr.dimitris.app.modules.numbers.NumberProgression
+import gr.dimitris.app.modules.sentences.SentenceTemplates
 import gr.dimitris.app.modules.singsay.Key
 import gr.dimitris.app.modules.singsay.Tempo
 import gr.dimitris.app.modules.trace.TraceStrictness
@@ -61,17 +62,58 @@ class Settings(private val store: DataStore<Preferences>) {
     val sttEnabled: Flow<Boolean> = store.data.map { it[STT_ENABLED] ?: false }
     suspend fun setSttEnabled(on: Boolean) { store.edit { it[STT_ENABLED] = on } }
 
-    /** Where he is in the number-sense levels. The numbers module moves it; nothing else does. */
+    /**
+     * Where he is in the number-sense levels. The numbers module moves it, and the caregiver's
+     * progress screen does; nothing else.
+     *
+     * Writing it also moves the dot to the band that owns the new level (see [followLevel]). The
+     * dots and the level are two views of one thing since spec §13, and a level the module then
+     * clamps back out of the band at load would be a caregiver's stepper that silently does nothing.
+     */
     val numbersLevel: Flow<Int> = store.data.map { it[NUMBERS_LEVEL] ?: 1 }
-    suspend fun setNumbersLevel(level: Int) { store.edit { it[NUMBERS_LEVEL] = level.coerceIn(NumberProgression.MIN_LEVEL, NumberProgression.MAX_LEVEL) } }
+    suspend fun setNumbersLevel(level: Int) {
+        store.edit { p ->
+            val n = level.coerceIn(NumberProgression.MIN_LEVEL, NumberProgression.MAX_LEVEL)
+            p[NUMBERS_LEVEL] = n
+            followLevel(p, ModuleId.NUMBERS, Difficulty.numbersDot(n))
+        }
+    }
 
-    /** How long a sentence he is building, 1..4. The sentence builder moves it; nothing else does. */
+    /** How long a sentence he is building, 1..4. See [numbersLevel] for why the dot follows it. */
     val sentencesLevel: Flow<Int> = store.data.map { it[SENTENCES_LEVEL] ?: 1 }
-    suspend fun setSentencesLevel(level: Int) { store.edit { it[SENTENCES_LEVEL] = level.coerceIn(1, 4) } }
+    suspend fun setSentencesLevel(level: Int) {
+        store.edit { p ->
+            val n = level.coerceIn(SentenceTemplates.MIN_LEVEL, SentenceTemplates.MAX_LEVEL)
+            p[SENTENCES_LEVEL] = n
+            followLevel(p, ModuleId.SENTENCES, Difficulty.sentencesDot(n))
+        }
+    }
 
     /** What he is writing, 1..5: capitals, small letters, his name, words, words from memory. */
     val traceLevel: Flow<Int> = store.data.map { it[TRACE_LEVEL] ?: 1 }
-    suspend fun setTraceLevel(level: Int) { store.edit { it[TRACE_LEVEL] = level.coerceIn(1, 5) } }
+    suspend fun setTraceLevel(level: Int) {
+        store.edit { p ->
+            val n = level.coerceIn(Difficulty.MIN, Difficulty.MAX)
+            p[TRACE_LEVEL] = n
+            followLevel(p, ModuleId.TRACE, Difficulty.traceDot(n))
+        }
+    }
+
+    /**
+     * The dot moved to wherever the level just written lives — inside the caregiver's bounds, and
+     * **without** touching the level again: this is the level leading and the dot following, which is
+     * the opposite direction from [setDifficulty].
+     *
+     * Where the bounds refuse the dot the level is pulled back to the band he is allowed, because a
+     * fence that the progress screen can climb over is not a fence.
+     */
+    private fun followLevel(p: MutablePreferences, module: ModuleId, dot: Int) {
+        val (floor, ceiling) = bounds(p, module)
+        val allowed = Difficulty.clamp(dot, floor, ceiling)
+        p[difficultyKey(module)] = allowed
+        p[initialisedKey(module)] = true
+        if (allowed != dot) clampLevelIntoBand(p, module, allowed)
+    }
 
     /**
      * Which hand he writes with, [HAND_LEFT] or [HAND_RIGHT]. It is the left one by default because
@@ -217,9 +259,16 @@ class Settings(private val store: DataStore<Preferences>) {
     }
 
     /**
-     * A bound has moved. Where that moves the effective difficulty too, the module's level follows it
-     * into the new band — the same jump a tap on a dot makes, because from his side of the screen the
-     * dots have moved either way.
+     * A bound has moved. Where that moves the effective difficulty too, the module's level is
+     * **clamped** into the new band — not reset to the bottom of it.
+     *
+     * The difference is somebody else's decision costing him work he did. He is on «Αριθμοί» dot 5,
+     * level 14; the therapist caps him at 3 to keep this month on change-making. Band 3 is 5..7, so
+     * 14 becomes 7 — the hardest level the new fence allows, which is the whole of what the fence
+     * asked for. Resetting to 5 would take two more levels the therapist never asked him to give up,
+     * with nothing on any screen to say so. A tap he makes himself ([setDifficulty]) still jumps to
+     * the band's floor: choosing harder work and being handed the easiest of it is a kindness, being
+     * *moved* and demoted is not.
      *
      * [before] is the effective value read *before* the bound was written, which is the only honest
      * comparison: a module he has never set reads as [Difficulty.DEFAULT], and a bound that leaves
@@ -229,7 +278,7 @@ class Settings(private val store: DataStore<Preferences>) {
         val after = readDifficulty(p, module)
         if (before == after) return
         p[difficultyKey(module)] = after
-        jumpToBandFloor(p, module, after)
+        clampLevelIntoBand(p, module, after)
     }
 
     /**
@@ -247,6 +296,84 @@ class Settings(private val store: DataStore<Preferences>) {
             ModuleId.ARCADE -> ArcadeGame.entries.forEach { p[arcadeKey(it)] = Difficulty.arcadeStart(difficulty) }
             else -> Unit
         }
+    }
+
+    /**
+     * The module's own level held to the band the dots now allow, keeping everything inside it
+     * exactly where it was. See [reclamp] for why a moved *bound* clamps where a moved *dot* jumps.
+     *
+     * «Δεξί χέρι» is a ceiling rather than a range ([Difficulty.arcadeClamp]): a target smaller than
+     * the band is a hand doing better than it was asked to, and no fence should give that back.
+     */
+    private fun clampLevelIntoBand(p: MutablePreferences, module: ModuleId, difficulty: Int) {
+        when (module) {
+            ModuleId.NUMBERS ->
+                p[NUMBERS_LEVEL] = (p[NUMBERS_LEVEL] ?: NumberProgression.MIN_LEVEL).coerceIn(Difficulty.numbers(difficulty))
+            ModuleId.SENTENCES ->
+                p[SENTENCES_LEVEL] = (p[SENTENCES_LEVEL] ?: SentenceTemplates.MIN_LEVEL).coerceIn(Difficulty.sentences(difficulty))
+            ModuleId.TRACE ->
+                p[TRACE_LEVEL] = (p[TRACE_LEVEL] ?: Difficulty.MIN).coerceIn(Difficulty.trace(difficulty))
+            ModuleId.ARCADE -> ArcadeGame.entries.forEach { g ->
+                p[arcadeKey(g)] = Difficulty.arcadeClamp(p[arcadeKey(g)] ?: Adaptive.START, difficulty)
+            }
+            else -> Unit
+        }
+    }
+
+    /**
+     * Whether this module's dot has ever been worked out for him, as opposed to defaulting to
+     * [Difficulty.DEFAULT] because nobody had asked yet.
+     *
+     * The dots arrived in phase 12 on a phone that had already been in use for months. A flat "start
+     * everybody at 2" would have told a man practising level 14 arithmetic that he was halfway down
+     * the ladder, and — worse — the first thing that clamped his level into band 2 would have thrown
+     * away everything he had climbed. [gr.dimitris.app.core.difficulty.DifficultyInit] therefore reads
+     * his stored progress once, per module, and writes the dot that already describes him.
+     */
+    fun difficultyNeedsInit(module: ModuleId): Flow<Boolean> = store.data.map { it[initialisedKey(module)] != true }
+
+    /**
+     * The one-time write. Sets the dot to [derived] — inside the caregiver's bounds — and marks the
+     * module done, and it deliberately moves **no level**: the level is the evidence this value was
+     * read off, so touching it would be the migration overwriting its own source.
+     *
+     * [derived] null means "work it out from what this store already holds" ([derivedFromStore]),
+     * which is the answer for the four modules whose progress *is* a preference. A module with
+     * nothing to read — a phone installed today — lands on [Difficulty.DEFAULT], which is the right
+     * answer for somebody the app has never met.
+     *
+     * Re-checked under the edit, so two callers racing at startup still write once.
+     */
+    suspend fun initialiseDifficulty(module: ModuleId, derived: Int? = null) {
+        store.edit { p ->
+            if (p[initialisedKey(module)] == true) return@edit
+            val (floor, ceiling) = bounds(p, module)
+            val value = derived ?: derivedFromStore(p, module) ?: Difficulty.DEFAULT
+            p[difficultyKey(module)] = Difficulty.clamp(value, floor, ceiling)
+            p[initialisedKey(module)] = true
+        }
+    }
+
+    /**
+     * Where the dots would already have been, read off the progress this store was keeping before
+     * they existed. Null when there is nothing written to read — the *absence* of the key and not
+     * its default value, which is the whole distinction: a phone that has never opened «Αριθμοί» has
+     * no `numbers_level`, and a man who never climbed past level 1 has one that says 1.
+     *
+     * «Δεξί χέρι» is read off the **biggest** of the four stored target sizes rather than the
+     * smallest. With [Difficulty.arcadeClamp] a ceiling, that is the one derivation under which no
+     * game's target moves at all on the upgrade: everything smaller than the band is a hand doing
+     * better than it was asked to, and it stands. Picking the smallest would have dragged the games
+     * he finds hardest — the pinch, always — down to a target he has never managed.
+     */
+    private fun derivedFromStore(p: Preferences, module: ModuleId): Int? = when (module) {
+        ModuleId.NUMBERS -> p[NUMBERS_LEVEL]?.let { Difficulty.numbersDot(it) }
+        ModuleId.SENTENCES -> p[SENTENCES_LEVEL]?.let { Difficulty.sentencesDot(it) }
+        ModuleId.TRACE -> p[TRACE_LEVEL]?.let { Difficulty.traceDot(it) }
+        ModuleId.ARCADE ->
+            (ArcadeGame.entries.mapNotNull { p[arcadeKey(it)] } + listOfNotNull(p[LEGACY_ARCADE_TARGET_DP]))
+                .maxOrNull()?.let { Difficulty.arcadeDot(it) }
+        else -> null
     }
 
     /**
@@ -407,6 +534,9 @@ class Settings(private val store: DataStore<Preferences>) {
         private fun difficultyKey(module: ModuleId) = intPreferencesKey("difficulty_${module.name}")
         private fun floorKey(module: ModuleId) = intPreferencesKey("difficulty_floor_${module.name}")
         private fun ceilingKey(module: ModuleId) = intPreferencesKey("difficulty_ceiling_${module.name}")
+
+        /** Set once, when this module's dot has been derived from what he was already doing. */
+        private fun initialisedKey(module: ModuleId) = booleanPreferencesKey("difficulty_ready_${module.name}")
 
         /**
          * The one size the arcade had before each game kept its own. Read as the starting point for

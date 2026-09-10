@@ -129,8 +129,10 @@ class ArcadeViewModel(
             for (game in games) {
                 val stored = runCatching { graph.settings.arcadeTargetDp(game).first() }
                     .getOrElse { graph.errors.record("arcade size read", it); Adaptive.START }
-                // Held inside the band on the way in as well as out: a hand that worked its way down
-                // to 50 dp and is then asked for an easier sitting starts the easier sitting.
+                // A ceiling, never a floor: the dots say how *big* a target he is willing to be given,
+                // and a hand that worked its way down to 50 dp over months keeps its 50 dp whatever
+                // they say. Handing that hand a 94 dp circle back because the dots defaulted to 2
+                // would be weeks of physiotherapy undone by an upgrade. See [Difficulty.arcadeClamp].
                 sizes[game] = Difficulty.arcadeClamp(stored, difficulty)
             }
             val photos = photos()
