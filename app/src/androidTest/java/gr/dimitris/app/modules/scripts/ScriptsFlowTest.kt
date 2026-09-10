@@ -41,6 +41,7 @@ import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
+import java.io.IOException
 import java.util.concurrent.atomic.AtomicInteger
 
 /**
@@ -306,8 +307,10 @@ class ScriptsFlowTest {
      * it and what the dialogue was asking for.
      */
     @Test fun anAnswerInHisOwnWordsIsTheTurnDoneAndTheRowSaysWhoDecided() {
-        withRecognition().willHear("στο σπίτι")
-        withJudge("""{"accept":true,"expanded":null,"feedback":null,"score":0.9}""")
+        withRecognition().willHear("σπίτι")
+        // Telegraphic and right, which is the common case: the turn counts *and* he is given the
+        // whole sentence to hear once (spec §13) before the conversation moves on.
+        withJudge("""{"accept":true,"expanded":"Είμαι στο σπίτι μου.","feedback":null,"score":0.9}""")
         val script = dialogue(Speaker.OTHER to "Πού είσαι;", Speaker.DIMITRIS to "Στο σπίτι είμαι.")
         val before = attempts()
         val vm = viewModel(script)
@@ -317,6 +320,7 @@ class ScriptsFlowTest {
         compose.waitUntil(TIMEOUT_MS) { attempts().size == before.size + 1 }
         val row = (attempts() - before.toSet()).single()
         assertEquals("a relevant answer is the turn done", Outcome.CORRECT, row.outcome)
+        assertEquals("a sentence he was given *after* answering is not help he needed", 0, row.cueLevel)
         assertTrue("a judge decided it: ${row.detail}", row.detail.contains("\"source\":\"JUDGE\""))
         assertTrue("and it accepted: ${row.detail}", row.detail.contains("\"accept\":true"))
         assertTrue("the row carries what the turn asked of him: ${row.detail}", row.detail.contains("\"tier\":1"))
@@ -355,6 +359,45 @@ class ScriptsFlowTest {
         // accepted his repeat. What he was handed is in the cue level, not in this key.
         assertTrue("the judge decided the turn: ${row.detail}", row.detail.contains("\"source\":\"JUDGE\""))
         assertTrue("and he repeated it: ${row.detail}", row.detail.contains("\"sttMatched\":true"))
+        compose.runOnUiThread { vm.leave {} }
+    }
+
+    /**
+     * The judge is on and cannot be reached — the bus with no signal, the timeout, the key that
+     * stopped working. It must not become a phone that says «Μπράβο» to everything.
+     *
+     * `TurnJudge` answers every failure with a `LocalJudge` verdict, and the dialogue reads that as
+     * "the judge was not there": the turn falls back to the phase-11 comparison with the line it
+     * has. So an answer that is not the line is a nudge, nothing is written, and «Το είπα!» comes
+     * back after his second go exactly as it always did — instead of a session of false CORRECTs
+     * going into his Leitner boxes.
+     */
+    @Test fun aJudgeThatCouldNotBeReachedFallsBackToTheLineInsteadOfSayingBravo() {
+        withRecognition().willHear("καλημέρα").willHear("πάμε σπίτι")
+        realJudge = graph.judge
+        graph.judge = TurnJudge(
+            secrets = { KEY },
+            enabled = { true },
+            client = JudgeClient { _, _, _ -> throw IOException("offline") },
+        )
+        val script = dialogue(Speaker.OTHER to "Πού είσαι;", Speaker.DIMITRIS to "Στο σπίτι είμαι.")
+        val before = attempts()
+        val vm = viewModel(script)
+
+        compose.runOnUiThread { vm.listen() }
+        compose.waitUntil(TIMEOUT_MS) { vm.state.value.sttTries == 1 }
+        assertEquals("a judge that was not there has not agreed with him", false, vm.state.value.heardMatched)
+        assertEquals("one miss is one nudge", true, vm.state.value.nudge)
+        assertEquals("nothing was written for an answer nobody weighed", before.size, attempts().size)
+        assertEquals("and nothing was invented to read to him", null, vm.state.value.expanded)
+
+        compose.runOnUiThread { vm.listen() }
+        compose.waitUntil(TIMEOUT_MS) { vm.state.value.canConfirm }
+        compose.runOnUiThread { vm.confirm() }
+        compose.waitUntil(TIMEOUT_MS) { attempts().size == before.size + 1 }
+        val row = (attempts() - before.toSet()).single()
+        assertEquals("the turn was still his to claim", Outcome.CORRECT, row.outcome)
+        assertTrue("the row says who decided it: ${row.detail}", row.detail.contains("\"source\":\"LOCAL\""))
         compose.runOnUiThread { vm.leave {} }
     }
 

@@ -175,11 +175,11 @@ object Difficulty {
      * How many turns of his own a dialogue may ask for: 1 → up to 2, 2 → up to 4, 3 → up to 6,
      * 4 → up to 9, 5 → any. A **ceiling**, not a window — see [turnCeiling].
      *
-     * A stand-in, and deliberately a crude one. Task 6 gives `scripts` a `tier` column and the
-     * dialogues a real grading — how much of the turn is handed to him, how far from the script an
-     * answer may be — and this mapping is then replaced by it. Until then the only thing a dialogue
-     * carries that is honestly about effort is how many times he has to speak: the six dialogues the
-     * app ships all give him four turns, so they are all in reach from dot 2 up.
+     * This was the stand-in the dialogue module planned on until a dialogue could say how hard it
+     * was. It no longer plans on it: [scriptTier] does, against the tier every line now carries.
+     * What is left here is the one thing this mapping is still good for — reading a *number of
+     * turns* back as a dot, for dialogues written before tiers existed, which is
+     * [DifficultyInit.scriptsDot]'s first-run guess and its only caller.
      */
     fun turns(d: Int): IntRange = when (clamp(d)) {
         1 -> 1..2
@@ -190,10 +190,9 @@ object Difficulty {
     }
 
     /**
-     * The longest dialogue this dot admits, in turns of his own. Shorter conversations stay
-     * practisable at every dot above them: a two-turn exchange at the bakery is still worth having
-     * on the day he has asked for hard work, and a caregiver who writes one must not have it
-     * silently dropped. Same rule as [syllableCeiling], for the same reason.
+     * The longest dialogue a dot would admit, in turns of his own — the shape [turns] is read
+     * through, and cumulative like [syllableCeiling]. Nothing plans on it any more; it exists so
+     * that [turnDot] can name the dot a length belongs to.
      */
     fun turnCeiling(d: Int): Int = turns(d).last
 

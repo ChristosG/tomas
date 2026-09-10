@@ -13,10 +13,12 @@ import gr.dimitris.app.core.speech.SpeechMatch
  *
  * Two rules about *not* disagreeing with him, both of them deliberate:
  *
- * * **No target, no opinion.** A DIALOGUE has no right answer and the phone cannot judge relevance,
- *   so anything he actually said is accepted. Refusing an open answer because a string did not match
- *   would be precisely the wall §13 removed — and the same holds for a WORD whose target somehow
- *   arrived blank.
+ * * **No target, no opinion.** Where the exercise handed over no words to compare with, anything he
+ *   actually said is accepted — a WORD or a DIALOGUE whose target arrived blank. Refusing him
+ *   because a string he was never given did not match would be precisely the wall §13 removed.
+ *   Where there *is* a line, a DIALOGUE is compared with it exactly as a SENTENCE is: this verdict
+ *   is what a judge that could not be reached falls back to, and a fallback that accepted everything
+ *   would have the phone congratulate him for every sound he made.
  * * **It never expands.** Building a grammatical Greek sentence out of content words is the one thing
  *   here that genuinely needs the model; a local attempt would be wrong often enough to teach him
  *   wrong forms. So EXPAND hands [Ask.heard] straight back, which is what the talk board and the
@@ -48,18 +50,31 @@ object LocalJudge {
                 accept = heard.isNotEmpty() && (target.isEmpty() || SpeechMatch.phraseMatches(heard, target)),
             )
 
-            // Any sensible reply counts and the phone cannot tell sensible from not. So: he spoke,
-            // it counts. The score is the one place the uncertainty is recorded — a full mark when
-            // the answer did happen to land on the example line, half when nobody can say.
-            Kind.DIALOGUE -> Verdict(
-                accept = heard.isNotEmpty(),
-                score = when {
-                    heard.isEmpty() -> 0f
-                    target.isNotEmpty() && SpeechMatch.phraseMatches(heard, target) -> 1f
-                    else -> UNJUDGED
-                },
-                source = Source.LOCAL,
-            )
+            // The example line, leniently — the same comparison the dialogue module made before any
+            // of this existed, and the same one SENTENCE makes.
+            //
+            // It used to accept anything he said, on the reasoning that the phone cannot tell a
+            // sensible reply from a silly one and must not refuse an open answer. True, and it was
+            // still the wrong answer: this verdict is what every *failed* judge falls back to — no
+            // network, a timeout, a key that stopped working — so a phone with the toggle on and no
+            // signal said «Μπράβο» to every sound he made and wrote a CORRECT row for each of them.
+            // A phone that agrees with everything is worth less to him than one that compares him
+            // with the line it has, which at least means something. Where there is genuinely nothing
+            // to compare with — no target at all — the old rule stands, and the uncertainty goes in
+            // the score.
+            Kind.DIALOGUE -> {
+                val onTarget = target.isNotEmpty() && SpeechMatch.phraseMatches(heard, target)
+                Verdict(
+                    accept = heard.isNotEmpty() && (target.isEmpty() || onTarget),
+                    score = when {
+                        heard.isEmpty() -> 0f
+                        onTarget -> 1f
+                        target.isEmpty() -> UNJUDGED
+                        else -> 0f
+                    },
+                    source = Source.LOCAL,
+                )
+            }
         }
     }
 

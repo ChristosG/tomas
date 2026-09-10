@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -116,9 +115,16 @@ fun ScriptEditScreen(scriptId: String?, onClose: () -> Unit, onTry: (String) -> 
                     "Ο Δημήτρης βλέπει τους διαλόγους ως τη δυσκολία που έχει διαλέξει.",
                     style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                Row {
+                // The five share the row's width, exactly as the dots he taps in the module do: five
+                // 72dp-wide chips plus their gaps is 392dp, which no phone this runs on has, and a
+                // fixed minimum inside a plain Row squeezes the last one under the touch floor
+                // instead of wrapping it.
+                Row(Modifier.fillMaxWidth()) {
                     (Difficulty.MIN..Difficulty.MAX).forEach { tier ->
-                        TierChip(tier, selected = s.tier == tier, enabled = s.recordingIndex == null) { vm.setTier(tier) }
+                        TierChip(
+                            tier, selected = s.tier == tier, enabled = s.recordingIndex == null,
+                            modifier = Modifier.weight(1f),
+                        ) { vm.setTier(tier) }
                         if (tier < Difficulty.MAX) Spacer(Modifier.width(Sizes.gapSmall))
                     }
                 }
@@ -261,13 +267,13 @@ private fun LineCard(
     }
 }
 
-/** One of the five dots, as a chip: 72dp tall like every other thing a thumb has to find. */
+/** One of the five dots, as a chip: 72dp tall, and its share of the row's width. */
 @Composable
-private fun TierChip(tier: Int, selected: Boolean, enabled: Boolean, onClick: () -> Unit) {
+private fun TierChip(tier: Int, selected: Boolean, enabled: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
     FilterChip(
         selected = selected, onClick = onClick, enabled = enabled,
         label = { Text("$tier", style = MaterialTheme.typography.titleLarge) },
-        modifier = Modifier.heightIn(min = Sizes.touchMin).widthIn(min = Sizes.touchMin),
+        modifier = modifier.heightIn(min = Sizes.touchMin),
     )
 }
 

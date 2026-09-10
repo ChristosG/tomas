@@ -40,6 +40,11 @@ enum class Source { JUDGE, LOCAL }
  * [prompt] is the question he was answering (a dialogue line), [target] the words the exercise was
  * after, [heard] what the recogniser or the keyboard produced. [difficulty] is his own 1–5 dot row;
  * it is sent so the model knows how much grammar to insist on, and for nothing else.
+ *
+ * [intent] is what a good answer has to *convey*, in Greek, as the caregiver or the seed wrote it:
+ * «λέει τι θέλει και πόσο». Only a [Kind.DIALOGUE] has one, and it is the difference between an open
+ * question and a guessing game — the [target] is one right answer out of many, and this says what
+ * they all have in common. It is written by a person about the exercise, never about him.
  */
 data class Ask(
     val kind: Kind,
@@ -47,6 +52,7 @@ data class Ask(
     val target: String? = null,
     val heard: String,
     val difficulty: Int = 1,
+    val intent: String? = null,
 )
 
 /**
@@ -133,18 +139,22 @@ object JudgeContract {
 
         Μιλάς σε έναν ενήλικα. Τίποτα παιδικό, τίποτα που να τον υποτιμά.
 
-        Θα λάβεις ένα αντικείμενο JSON με πέντε πεδία: kind, prompt, target, heard, difficulty.
+        Θα λάβεις ένα αντικείμενο JSON με έξι πεδία: kind, prompt, target, heard, difficulty, intent.
         Το heard είναι αυτό που είπε, όπως το έγραψε η αναγνώριση φωνής ή το πληκτρολόγιο. Το
         difficulty είναι 1 έως 5 και λέει πόση γραμματική να απαιτήσεις: στο 1 ελάχιστη, στο 5
-        ολόκληρη πρόταση.
+        ολόκληρη πρόταση. Το intent είναι ο στόχος της γραμμής — τι πρέπει να πετύχει η απάντησή του,
+        γραμμένο από τη φροντίστρια — και μπορεί να είναι null.
 
         Κρίνε ανάλογα με το kind:
 
         DIALOGUE: ανοιχτή ερώτηση, ανοιχτή απάντηση. Δέξου ΟΠΟΙΑΔΗΠΟΤΕ σχετική και λογική απάντηση
         στο prompt — δεν υπάρχει μία σωστή, πολλές είναι σωστές, και το target (αν υπάρχει) είναι
-        απλώς ένα παράδειγμα. Αν η απάντησή του είναι σχετική αλλά τηλεγραφική, βάλε accept true ΚΑΙ
-        στο expanded ολόκληρη τη σωστή πρόταση, για να την επαναλάβει. Βάλε accept false μόνο όταν η
-        απάντηση δεν έχει καμία σχέση με την ερώτηση.
+        απλώς ένα παράδειγμα. Αν υπάρχει intent, δέξου κάθε απάντηση που πετυχαίνει αυτόν τον στόχο,
+        όπως κι αν είναι διατυπωμένη. Αν η απάντησή του είναι σχετική αλλά τηλεγραφική, βάλε accept
+        true ΚΑΙ στο expanded ολόκληρη τη σωστή πρόταση, για να την επαναλάβει. Βάλε accept false
+        μόνο όταν η απάντηση δεν έχει καμία σχέση με την ερώτηση· και τότε βάλε στο expanded μια
+        σωστή, ολόκληρη απάντηση στην ερώτηση, για να την επαναλάβει — ποτέ accept false χωρίς
+        expanded.
 
         WORD: δέξου το target, ή μια κοντινή προφορά ή κλίση του. Μικρές διαφορές ήχων, ένα χαμένο
         τελικό «ς», έναν τόνο αλλού: δεν είναι λάθος. Το expanded είναι null.
@@ -169,7 +179,7 @@ object JudgeContract {
     """.trimIndent()
 
     /**
-     * The ask as one JSON object. All five keys always, nulls written out rather than left off: a
+     * The ask as one JSON object. All six keys always, nulls written out rather than left off: a
      * stable shape is one less thing for the model to interpret, and «target: null» is itself the
      * information that there is no single right answer.
      */
@@ -178,6 +188,7 @@ object JudgeContract {
         o.addProperty("kind", ask.kind.name)
         o.addProperty("prompt", ask.prompt?.trim()?.takeIf { it.isNotEmpty() })
         o.addProperty("target", ask.target?.trim()?.takeIf { it.isNotEmpty() })
+        o.addProperty("intent", ask.intent?.trim()?.takeIf { it.isNotEmpty() })
         o.addProperty("heard", ask.heard.trim())
         // Clamped, because the prompt promises the model a 1–5 scale and a caller that passed 0 or 7
         // would be quietly asking it to interpret a number the prompt never described.

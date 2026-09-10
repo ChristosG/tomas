@@ -4,6 +4,7 @@ import gr.dimitris.app.core.data.now
 import gr.dimitris.app.core.judge.Ask
 import gr.dimitris.app.core.judge.Kind
 import gr.dimitris.app.core.judge.LocalJudge
+import gr.dimitris.app.core.judge.Source
 import gr.dimitris.app.core.judge.Verdict
 import gr.dimitris.app.core.speech.GentleCheck
 import gr.dimitris.app.core.speech.SpeechMatch
@@ -23,7 +24,14 @@ internal data class Weighed(
     val accepted: Boolean,
     /** The judge's one warm Greek line, or null. Never «λάθος»: `JudgeContract.warm` has seen it first. */
     val feedback: String?,
-    /** The full form, the first time there is one on this turn. Null afterwards: it is said once. */
+    /**
+     * The full form, the first time there is one on this turn. Null afterwards: it is said once.
+     *
+     * On an **accepted** turn as often as on a refused one, because a telegraphic answer to «πού
+     * είσαι;» is a right answer *and* a sentence worth hearing whole — spec §13 calls that expansion
+     * the core therapy. What the screen does with it differs: on a refusal it is what his next
+     * «Μίλα» repeats, on an accepted turn it is said once as the conversation moves on.
+     */
     val expanded: String?,
     val tries: Int,
     val nudging: Boolean,
@@ -42,11 +50,13 @@ internal data class Weighed(
  * the judge on, the question asked is [Kind.DIALOGUE]: is this a sensible reply to what was asked?
  * The scripted line goes up as an example and nothing more.
  *
- * With the judge off — no key, «Έλεγχος με Claude» off, no network on the turn before — nothing
- * changes at all: the phase-11 gentle check against the scripted line, exactly as it was. That is
- * deliberate and not a fallback oversight. [LocalJudge] accepts *anything* he says to an open
- * question, which is right for a judge that cannot tell relevance from nonsense but would mean the
- * offline app agreeing with every sound he made; the local comparison at least means something.
+ * With the judge off — no key, «Έλεγχος με Claude» off — nothing changes at all: the phase-11 gentle
+ * check against the scripted line, exactly as it was. **A judge that was on and could not be reached
+ * lands in the same place**, by the [Source.LOCAL] test in [weigh]: no network, a timeout, a key that
+ * stopped working, the toggle turned off mid-run. The alternative was a phone that answered «Μπράβο»
+ * to every sound he made for a whole session on a bus, and wrote a CORRECT row for each of them —
+ * which is worse for him than having the judge switched off, where the comparison at least means
+ * something.
  *
  * Everything it needs is a function value, for the reason
  * [gr.dimitris.app.modules.talkboard.ExpansionFlow] is built the same way: the dialogue's ViewModel
@@ -79,10 +89,11 @@ internal class TurnCheck(
 
     /**
      * One window's worth. [prompt] is the other person's last line — the question he is answering —
-     * and [target] the line the caregiver scripted for him, which is an example answer and not the
-     * answer.
+     * [target] the line the caregiver scripted for him, which is an example answer and not the
+     * answer, and [intent] what any good answer has to convey, which is the thing that makes the
+     * question open without making it a guessing game.
      */
-    suspend fun weigh(heard: String?, prompt: String?, target: String): Weighed {
+    suspend fun weigh(heard: String?, prompt: String?, target: String, intent: String? = null): Weighed {
         // Nothing was heard. The phone did not disagree with him; it did not hear him, and it costs
         // him no try. No judge is asked about an empty string either — the fallback would refuse it
         // anyway, up to eight seconds later, for a window that said nothing about him.
@@ -97,28 +108,40 @@ internal class TurnCheck(
             check.record(heard, matched)
             return weighed(heard, accepted = matched)
         }
-        val ask = Ask(kind = Kind.DIALOGUE, prompt = prompt, target = target, heard = heard, difficulty = difficulty())
+        val ask = Ask(
+            kind = Kind.DIALOGUE, prompt = prompt, target = target, heard = heard,
+            difficulty = difficulty(), intent = intent,
+        )
         val began = now()
         val verdict = try {
             askJudge(ask)
         } catch (ce: CancellationException) {
             throw ce
         } catch (e: Throwable) {
-            // The judge's own contract is that it never throws; if one ever does, his answer still
-            // counts rather than the turn dying on him.
+            // The judge's own contract is that it never throws; if one ever does, the turn does not
+            // die on him — the line he has is compared with what he said, exactly as below.
             record(WHERE, e)
             LocalJudge.judge(ask)
         }
-        check.record(heard, verdict.accept)
+        // A LOCAL verdict is not a judgement of an open answer: it is the judge saying it was not
+        // there. No network, a timeout, a key that stopped working, the toggle turned off mid-run —
+        // [TurnJudge] answers all of them with [LocalJudge], and this turn falls back to the phase-11
+        // comparison rather than taking «accept» from a fallback that never saw the question. Without
+        // this, a phone on a bus with no signal answered «Μπράβο» to every sound he made and wrote a
+        // CORRECT row for each of them, which is worse for him than having the judge switched off.
+        val local = verdict.source == Source.LOCAL
+        val accepted = if (local) SpeechMatch.phraseMatches(heard, target) else verdict.accept
+        check.record(heard, accepted)
         return weighed(
             heard = heard,
-            accepted = verdict.accept,
-            // Both only on a turn that did not land. An accepted answer moves the conversation on —
-            // stopping it to read him a better sentence would be the phone marking work it had just
-            // called good. What the model wrote is kept in the row either way: `Verdict.detail`
-            // carries `expanded` whenever there was one.
-            feedback = if (verdict.accept) null else verdict.feedback,
-            expanded = if (verdict.accept) null else expansion(verdict.expanded),
+            accepted = accepted,
+            // Nothing a fallback wrote is shown or said: [LocalJudge] has no feedback and never
+            // builds a Greek sentence, and anything that arrived with a LOCAL verdict is not his.
+            feedback = if (local || accepted) null else verdict.feedback,
+            // On both branches, and once. A telegraphic answer that *counts* is still an answer worth
+            // hearing whole (spec §13) — the screen says it and moves on — and a refused turn needs
+            // something for his next «Μίλα» to repeat.
+            expanded = if (local) null else expansion(verdict.expanded),
             judge = verdict.detail(ms = now() - began),
         )
     }

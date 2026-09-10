@@ -107,6 +107,39 @@ class ScriptRepositoryTest {
         assertEquals(before[1].second, itemDao.get(before[1].second.id))
     }
 
+    /**
+     * The tier and the «Σκοπός» are the two things she can change *without* touching a word of the
+     * dialogue — «this one is harder than I thought», «what I really want here is the price» — and
+     * that is exactly the save that keeps every row it had. So they are written onto the kept rows,
+     * not only onto new ones, and `updatedAt` moves so the other phones see the change.
+     *
+     * Without this, a re-save of an existing dialogue would freeze its grading at whatever the first
+     * save wrote, silently, including on the seed importer's own re-import path — and every other
+     * test here would still pass.
+     */
+    @Test fun `a turn she did not reword still takes a new tier and a new intent`() = runTest {
+        val s = repo.save(null, "Καφές", coffee.map { it.copy(tier = 2, intent = "λέει τι θέλει") })
+        val before = repo.load(s.id)!!.lines
+        val itemsAfterFirst = itemDao.rows.value.size
+        clock = 9_000L
+
+        repo.save(s.id, "Καφές", coffee.map { it.copy(tier = 4, intent = "απαντάει αν θέλει κάτι άλλο") })
+
+        val after = repo.load(s.id)!!.lines
+        assertEquals("the rows are the same rows", before.map { it.first.id }, after.map { it.first.id })
+        assertEquals("no new items for a re-grading", itemsAfterFirst, itemDao.rows.value.size)
+        assertEquals(listOf(4, 4, 4, 4), after.map { it.first.tier })
+        assertEquals(List(4) { "απαντάει αν θέλει κάτι άλλο" }, after.map { it.first.intent })
+        assertEquals("the other phones have to see it", listOf(9_000L, 9_000L, 9_000L, 9_000L), after.map { it.first.updatedAt })
+    }
+
+    /** A «Σκοπός» nobody filled in is nothing to say, not an empty demand on his answer. */
+    @Test fun `a blank intent is stored as nothing`() = runTest {
+        val s = repo.save(null, "Καφές", coffee.map { it.copy(intent = "   ") })
+        assertTrue(repo.load(s.id)!!.lines.all { it.first.intent == null })
+        assertEquals("and the default tier is the easiest", listOf(1, 1, 1, 1), repo.load(s.id)!!.lines.map { it.first.tier })
+    }
+
     @Test fun `delete is soft and hides the script`() = runTest {
         val s = repo.save(null, "Ταξί", coffee.take(1))
         repo.delete(s.id)

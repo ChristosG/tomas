@@ -69,29 +69,33 @@ class LocalJudgeTest {
     // --- an open answer -------------------------------------------------------------------------
 
     /**
-     * The wall §13 removed. The phone cannot tell a sensible answer from a silly one, so an answer he
-     * gave counts — refusing it because a string did not match is the one thing this must never do.
+     * This verdict is what **every failed judge** falls back to — no network, a timeout, a key that
+     * stopped working — so it may not accept anything he says.
+     *
+     * It used to, on the reasoning that an open question has no single right answer and the phone
+     * cannot tell a sensible reply from a silly one. Both true, and the result was a phone on a bus
+     * with no signal answering «Μπράβο» to every sound he made and writing a CORRECT row for each of
+     * them, all session. Compared with the example line he has, exactly as a SENTENCE is: a phone
+     * that at least means something is worth more to him than one that agrees with everything.
      */
-    @Test fun `any answer he actually gave is accepted in a dialogue`() {
-        val v = LocalJudge.judge(
+    @Test fun `a dialogue answer is weighed against the line, because this is what a broken judge falls back to`() {
+        val other = LocalJudge.judge(
             Ask(Kind.DIALOGUE, prompt = "Τι θα πάρεις;", target = "Θέλω έναν καφέ", heard = "τσάι")
         )
-        assertTrue(v.accept)
-    }
-
-    /** The uncertainty is recorded in the score, not paid for by him. */
-    @Test fun `a dialogue answer nobody can judge scores half, one on the example line`() {
-        val unknown = LocalJudge.judge(
-            Ask(Kind.DIALOGUE, prompt = "Τι θα πάρεις;", target = "Θέλω έναν καφέ", heard = "τσάι")
-        )
-        assertEquals(LocalJudge.UNJUDGED, unknown.score, 0.001f)
+        assertFalse("a fallback may not rubber-stamp an answer nobody judged", other.accept)
+        assertEquals(0f, other.score, 0.001f)
 
         val onTarget = LocalJudge.judge(
             Ask(Kind.DIALOGUE, prompt = "Τι θα πάρεις;", target = "Θέλω έναν καφέ", heard = "θέλω καφέ")
         )
+        assertTrue("most of the line is the line", onTarget.accept)
         assertEquals(1f, onTarget.score, 0.001f)
+    }
 
+    /** No line to compare with is the one case where anything he said still counts — and says so. */
+    @Test fun `a dialogue with no example line at all still takes what he said`() {
         val noTarget = LocalJudge.judge(Ask(Kind.DIALOGUE, prompt = "Τι θα πάρεις;", heard = "καφέ"))
+        assertTrue(noTarget.accept)
         assertEquals(LocalJudge.UNJUDGED, noTarget.score, 0.001f)
     }
 

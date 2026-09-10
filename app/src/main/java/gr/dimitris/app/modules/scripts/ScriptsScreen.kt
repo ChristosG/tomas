@@ -143,7 +143,7 @@ fun ScriptsScreen(items: List<Item>, sessionId: String?, onDone: () -> Unit, onL
                     Spacer(Modifier.height(Sizes.gapSmall))
                     // One «Άκου», and what it plays grows with what there is to hear: his line
                     // before he has spoken, his line and then his own take afterwards.
-                    ListenButton(onClick = vm::listenModel, enabled = !s.modelPlaying && !s.isRecording)
+                    ListenButton(onClick = vm::listenModel, enabled = !s.modelPlaying && !s.isRecording && !s.thinking)
                     Spacer(Modifier.height(Sizes.gapSmall))
                     QuietButton("Παράλειψη", onClick = vm::skip)
                 }

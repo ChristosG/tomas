@@ -33,12 +33,33 @@ data class EditLine(
     /**
      * «Σκοπός»: what a good answer to this turn has to convey, on one of *his* lines. The line she
      * types is only ever an example — an open question has no single right answer (spec §13) — and
-     * this is where she says what she is really after. Kept on the other person's lines too rather
-     * than dropped, so a speaker toggled by mistake and back does not lose what she wrote.
+     * this is where she says what she is really after. It is what the judge is told the turn is
+     * asking for.
+     *
+     * Kept, and saved, on the other person's lines too. The field is only shown on his, and nothing
+     * ever reads an intent off a line the other person says; but a speaker toggled by mistake, saved
+     * and re-opened used to lose what she had written, and a form that quietly drops typing is worse
+     * than a column with an unused value in it.
      */
     val intent: String = "",
 ) {
     val hasVoice: Boolean get() = newRecording != null || recordingPath != null
+
+    /**
+     * This turn as the repository takes it. [tier] is the dialogue's, written onto every line, and a
+     * blank «Σκοπός» is nothing to say rather than an empty demand.
+     *
+     * Pure, and out here rather than inside [ScriptEditViewModel.save], so `ScriptEditStateTest` can
+     * argue with what a save really writes without an Android context.
+     */
+    fun draft(tier: Int, file: File?): LineDraft = LineDraft(
+        speaker = speaker,
+        text = text,
+        recordingFile = file,
+        recordingMs = newRecording?.durationMs ?: recordingMs,
+        tier = tier,
+        intent = intent.trim().takeIf { it.isNotEmpty() },
+    )
 }
 
 data class ScriptEditState(
@@ -272,18 +293,7 @@ class ScriptEditViewModel(private val graph: AppGraph, private val scriptId: Str
         _state.update { it.copy(saving = true, error = null) }
         viewModelScope.launch {
             try {
-                val saved = graph.scripts.save(
-                    s.id, s.title,
-                    lines.map {
-                        LineDraft(
-                            it.speaker, it.text, fileOf(it), it.newRecording?.durationMs ?: it.recordingMs,
-                            tier = s.tier,
-                            // Only on his own turns: the other person's lines are said, not judged,
-                            // and an intent left behind by a speaker toggle would be told to nobody.
-                            intent = it.intent.takeIf { _ -> it.speaker == Speaker.DIMITRIS },
-                        )
-                    },
-                )
+                val saved = graph.scripts.save(s.id, s.title, lines.map { it.draft(s.tier, fileOf(it)) })
                 // Every take is now a row in the database, so none of them may be deleted on the way
                 // out. The saved list replaces the edited one: what was blank was never written.
                 _state.value = ScriptEditState(

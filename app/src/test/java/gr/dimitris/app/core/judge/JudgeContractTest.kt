@@ -21,7 +21,7 @@ class JudgeContractTest {
 
     // --- what goes up ---------------------------------------------------------------------------
 
-    @Test fun `the ask goes up as one JSON object with all five fields`() {
+    @Test fun `the ask goes up as one JSON object with all six fields`() {
         val json = JudgeContract.userMessage(
             Ask(Kind.SENTENCE, prompt = "Τι κάνεις;", target = "Πίνω καφέ", heard = "πινω καφε", difficulty = 4)
         )
@@ -31,6 +31,35 @@ class JudgeContractTest {
         assertEquals("Πίνω καφέ", o.get("target").asString)
         assertEquals("πινω καφε", o.get("heard").asString)
         assertEquals(4, o.get("difficulty").asInt)
+        assertTrue("intent key missing", o.has("intent"))
+        assertTrue("a sentence has no intent of its own", o.get("intent").isJsonNull)
+    }
+
+    /**
+     * What makes an open question open without making it a guessing game: the target is one right
+     * answer, the intent is what they all have in common. It is written by a caregiver about the
+     * *exercise* — «λέει τι θέλει και πόσο» — never about him, so §13's privacy rule is untouched.
+     */
+    @Test fun `a dialogue sends what a good answer has to convey`() {
+        val o = JsonParser.parseString(
+            JudgeContract.userMessage(
+                Ask(
+                    Kind.DIALOGUE, prompt = "Πού είσαι;", target = "Στο σπίτι είμαι.", heard = "σπίτι",
+                    intent = "  λέει πού είναι  ",
+                )
+            )
+        ).asJsonObject
+        assertEquals("λέει πού είναι", o.get("intent").asString)
+        // And the prompt has to describe the field, or the model is being sent a key it never met.
+        assertTrue("the prompt does not describe intent", JudgeContract.SYSTEM_PROMPT.contains("intent"))
+    }
+
+    /** Blank is absent here too: a «Σκοπός» nobody filled in is nothing to say, not an empty demand. */
+    @Test fun `a blank intent goes up as null`() {
+        val o = JsonParser.parseString(
+            JudgeContract.userMessage(Ask(Kind.DIALOGUE, target = "Ναι", heard = "ναι", intent = "   "))
+        ).asJsonObject
+        assertTrue(o.get("intent").isJsonNull)
     }
 
     /** A stable shape: an absent prompt or target is JSON null, never a missing key. */
@@ -77,6 +106,25 @@ class JudgeContractTest {
             .forEach { word ->
                 assertFalse("the prompt mentions «$word»", JudgeContract.SYSTEM_PROMPT.contains(word))
             }
+    }
+
+    /**
+     * A refused turn has to come back with something for him to say.
+     *
+     * The dialogue screen shows the `expanded` and says it once, and that sentence is the whole of
+     * what his next «Μίλα» has to go on. Before this clause the prompt asked for an expansion only
+     * on an *accepted* telegraphic answer, so the refusal branch — the one that needs it most — was
+     * the branch the model was never asked to fill: he answered «καλημέρα» to «πού είσαι;», got a
+     * warm line and «Δοκίμασε ξανά», and his second go had no more to go on than his first.
+     */
+    @Test fun `the prompt asks for a whole sentence on a refused dialogue too`() {
+        val dialogueParagraph = JudgeContract.SYSTEM_PROMPT
+            .substringAfter("DIALOGUE:").substringBefore("WORD:")
+        assertTrue("a refused dialogue is not asked for an expansion", dialogueParagraph.contains("accept false"))
+        assertTrue(
+            "the refusal clause does not ask for expanded",
+            dialogueParagraph.substringAfter("Βάλε accept false").contains("expanded"),
+        )
     }
 
     /** Never «λάθος», never «όχι» — the rule the prompt has to carry, stated in the prompt. */

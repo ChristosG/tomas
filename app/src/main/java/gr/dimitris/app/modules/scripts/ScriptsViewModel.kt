@@ -467,7 +467,12 @@ class ScriptsViewModel(
         // [s.listening] is the recogniser holding the microphone open. Speaking the line into it
         // would have the phone hear its own model, match it, and congratulate him for a turn he
         // never took — the same dishonesty this button exists to remove, pointing the other way.
-        if (s.phase != ScriptPhase.WAITING_FOR_DIMITRIS || s.isRecording || s.modelPlaying || s.listening) return
+        //
+        // [s.thinking] is the beat between his answer and the verdict, and it is shut for a different
+        // reason: the answer is already given. A listen landing here would mark the ladder for help
+        // that arrived *after* the work, writing ASSISTED over a turn he did himself — and the accept
+        // that follows would cut the line off mid-word. The screen greys it; the guard belongs here.
+        if (s.phase != ScriptPhase.WAITING_FOR_DIMITRIS || s.isRecording || s.modelPlaying || s.listening || s.thinking) return
         val item = lines.getOrNull(s.index)?.second ?: return
         listens++
         l.listened()
@@ -680,6 +685,7 @@ class ScriptsViewModel(
      */
     private suspend fun weigh(text: String?) {
         val i = _state.value.index
+        val line = lines.getOrNull(i)?.first
         val target = lines.getOrNull(i)?.second?.text.orEmpty()
         // The question he is answering: the other person's last line before this turn. Null when his
         // turn opens the dialogue, which is a conversation he is starting rather than answering.
@@ -688,7 +694,7 @@ class ScriptsViewModel(
         // green button, which greys rather than opening a second window over a decided turn.
         val asking = judgeReady && text != null
         if (asking) _state.update { it.copy(listening = false, listenLevel = 0f, thinking = true) }
-        val weighed = check.weigh(text, prompt, target)
+        val weighed = check.weigh(text, prompt, target, line?.intent)
         judgeDetail = weighed.judge
         _state.update {
             it.copy(
@@ -704,6 +710,15 @@ class ScriptsViewModel(
             )
         }
         if (weighed.accepted) {
+            // The whole sentence for the answer he just gave — «φάρμακα πρέπει πάρω» was a right
+            // answer and «Πρέπει να πάρω τα φάρμακα» is what he wanted to have said (spec §13). It is
+            // said out loud *before* the conversation moves on, and waited for: confirming would
+            // start the other person's next line over the top of it.
+            //
+            // The ladder is not marked for it. He produced this answer himself and the sentence
+            // arrived afterwards, so the row stays CORRECT — help he was given after he had already
+            // done the work is not help he needed.
+            weighed.expanded?.let { sayAndWait(it) }
             confirm()
             return
         }
@@ -712,16 +727,32 @@ class ScriptsViewModel(
     }
 
     /**
-     * The full form, said to him once so he can repeat it.
+     * The full form, said to him once so he can repeat it on his next «Μίλα».
      *
      * It goes through [CueLadder.listened] for the same reason «Άκου» does: the phone has just said a
-     * whole line of his out loud, which is level 3's worth of help, and a row that did not carry that
-     * would claim he found the sentence himself. The hint sequence does not move, so «Βοήθεια»
-     * carries on from exactly where it was.
+     * whole line of his out loud *before* his next go, which is level 3's worth of help, and a row
+     * that did not carry that would claim he found the sentence himself. The hint sequence does not
+     * move, so «Βοήθεια» carries on from exactly where it was.
      */
     private fun sayExpanded(whole: String) {
         ladder?.listened()
         cue { report(graph.speaker.speakText("$SAY_IT_LIKE $whole")) }
+    }
+
+    /**
+     * The same sentence, on the turn that is about to end: said here rather than handed to [cue], so
+     * that the utterance is finished before the dialogue advances. A cancelled listen job — «Στοπ»,
+     * back, the session moving on — cancels this with it.
+     */
+    private suspend fun sayAndWait(whole: String) {
+        stopCue()
+        val token = ++cueToken
+        _state.update { it.copy(modelPlaying = true) }
+        try {
+            report(graph.speaker.speakText("$SAY_IT_LIKE $whole"))
+        } finally {
+            if (cueToken == token) _state.update { it.copy(modelPlaying = false) }
+        }
     }
 
     /**

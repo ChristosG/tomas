@@ -1,10 +1,14 @@
 package gr.dimitris.app.core.seed
 
+import gr.dimitris.app.core.data.Item
+import gr.dimitris.app.core.data.ItemKind
 import gr.dimitris.app.core.data.Script
+import gr.dimitris.app.core.data.ScriptLine
 import gr.dimitris.app.core.data.Source
 import gr.dimitris.app.core.data.Speaker
 import gr.dimitris.app.core.difficulty.Difficulty
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -145,6 +149,81 @@ class ScriptSeedTest {
             Script(title = "Στην καφετέρια", source = Source.SEED),
         )
         assertEquals(listOf("Στο ταξί"), ScriptSeedImporter.newScripts(m, ScriptSeedImporter.onDevice(rows)).map { it.title })
+    }
+
+    // --- what a bump owes a dialogue that is already here ------------------------------------------
+
+    private val bumped = SeedScript(
+        "Στην καφετέρια", tier = 3,
+        lines = listOf(
+            SeedLine("OTHER", "Καλημέρα! Τι θα πάρετε;"),
+            SeedLine("DIMITRIS", "Έναν καφέ, παρακαλώ.", intent = "λέει τι θέλει να πιει"),
+        ),
+    )
+
+    /** The id of his turn in [bumped] — the one the cases below make hers, one way at a time. */
+    private val hisLine = SeedIds.line("Στην καφετέρια", 1)
+
+    /** The rows a first import wrote, as they sit on a phone that has been in use since. */
+    private fun seeded(
+        text: String = "Έναν καφέ, παρακαλώ.",
+        tier: Int = 1,
+        intent: String? = null,
+        at: Long = SeedIds.stamp(2),
+        deleted: Boolean = false,
+    ): List<Pair<ScriptLine, Item>> {
+        val title = bumped.title
+        return listOf(
+            ScriptLine(id = SeedIds.line(title, 0), scriptId = SeedIds.script(title), position = 0,
+                speaker = Speaker.OTHER, itemId = SeedIds.lineItem(title, 0), tier = tier,
+                createdAt = at, updatedAt = at)
+                to Item(id = SeedIds.lineItem(title, 0), text = "Καλημέρα! Τι θα πάρετε;", kind = ItemKind.SCRIPT_LINE),
+            ScriptLine(id = SeedIds.line(title, 1), scriptId = SeedIds.script(title), position = 1,
+                speaker = Speaker.DIMITRIS, itemId = SeedIds.lineItem(title, 1), tier = tier, intent = intent,
+                createdAt = at, updatedAt = at, deleted = deleted)
+                to Item(id = SeedIds.lineItem(title, 1), text = text, kind = ItemKind.SCRIPT_LINE),
+        )
+    }
+
+    /**
+     * Phase 12 gave every bundled dialogue a tier and every turn of his an intent. A device that
+     * already had «Στην καφετέρια» is not sent the dialogue again — its words may be hers now — but
+     * it is owed the grading, or the six that shipped before this phase stay tier 1 with nothing
+     * said about what their turns are after, on every phone in use, for ever.
+     */
+    @Test fun `a bump re-grades the seeded lines it still recognises`() {
+        val stamp = SeedIds.stamp(3)
+        val rows = ScriptSeedImporter.regraded(bumped.title, bumped.tier, bumped.lines, seeded(), stamp)
+
+        assertEquals(2, rows.size)
+        assertEquals(listOf(3, 3), rows.map { it.tier })
+        assertEquals(listOf(null, "λέει τι θέλει να πιει"), rows.map { it.intent })
+        assertTrue("the stamp is the manifest's, never the clock", rows.all { it.updatedAt == stamp })
+    }
+
+    /** Re-importing what is already there writes nothing, so no row's `updatedAt` moves for nothing. */
+    @Test fun `a re-import of what is already there writes nothing`() {
+        val stamp = SeedIds.stamp(3)
+        val settled = seeded(tier = 3, intent = "λέει τι θέλει να πιει", at = stamp)
+        assertEquals(emptyList<ScriptLine>(), ScriptSeedImporter.regraded(bumped.title, bumped.tier, bumped.lines, settled, stamp))
+    }
+
+    /**
+     * And the ways a line stops being ours. Each of them is a caregiver's work, and none of them may
+     * be touched by a version bump — the rest of the dialogue is re-graded around it.
+     */
+    @Test fun `a bump never touches a line she has made her own`() {
+        val stamp = SeedIds.stamp(3)
+        fun touched(rows: List<Pair<ScriptLine, Item>>) =
+            ScriptSeedImporter.regraded(bumped.title, bumped.tier, bumped.lines, rows, stamp).map { it.id }
+
+        assertFalse("she reworded the turn", hisLine in touched(seeded(text = "Έναν καφέ χωρίς ζάχαρη.")))
+        assertFalse("she edited it, so its stamp is a real clock", hisLine in touched(seeded(at = 1_757_000_000_000L)))
+        assertFalse("she deleted the turn", hisLine in touched(seeded(deleted = true)))
+        // A dialogue she wrote herself and happened to give the same title: different row ids, so
+        // this never sees it at all.
+        val hers = seeded().map { (row, item) -> row.copy(id = "hers-${row.position}") to item }
+        assertEquals(emptyList<String>(), touched(hers))
     }
 
     @Test fun `the same title twice in one manifest is imported once`() {
