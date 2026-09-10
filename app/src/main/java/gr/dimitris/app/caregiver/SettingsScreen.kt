@@ -496,6 +496,35 @@ private fun ClaudeSection() {
     }
     if (note.isNotEmpty()) Text(note, style = MaterialTheme.typography.bodyMedium)
 
+    // Per-turn judging (spec §13). Its own consent, separate from the key: a caregiver may well want
+    // the weekly advice and not want every sentence he speaks leaving the phone, and the key alone
+    // must not be read as having agreed to both.
+    Spacer(Modifier.height(Sizes.gapSmall))
+    val judging by graph.settings.claudeJudging.collectAsStateWithLifecycle(initialValue = false)
+    // Null until the encrypted store has been read, which reads as "no key" — the same first frame
+    // the line above shows «Δεν υπάρχει κλειδί.» for. A switch that was live before the key is known
+    // could be turned on by a caregiver who has not saved one yet.
+    val hasKey = saved != null
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        // The whole row is the target, not just the switch: one thumb, 72dp, like the lock above.
+        modifier = Modifier.fillMaxWidth().heightIn(min = Sizes.touchMin)
+            .clickable(enabled = hasKey) { scope.launch { graph.settings.setClaudeJudging(!judging) } },
+    ) {
+        Text("Έλεγχος με Claude", style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+        // `judging && hasKey`: the stored flag survives a deleted key, and the judge falls back to
+        // local matching without one. Drawing it on while nothing is being sent would be a lie.
+        Switch(checked = judging && hasKey, enabled = hasKey,
+            onCheckedChange = { on -> scope.launch { graph.settings.setClaudeJudging(on) } })
+    }
+    Text(
+        // Exactly what leaves the phone, in words a caregiver can picture. «Μόνο κείμενο» is the
+        // whole of the promise: no recording, no photo, nothing about his health.
+        if (hasKey) "Στέλνει μόνο κείμενο: την ερώτηση, τον στόχο και ό,τι είπε." else "Βάλε κλειδί πρώτα.",
+        style = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+
     Spacer(Modifier.height(Sizes.gapSmall))
     OutlinedTextField(
         value = modelDraft ?: storedModel,

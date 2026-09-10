@@ -17,6 +17,7 @@ import gr.dimitris.app.core.data.Advice as AdviceRow
 import gr.dimitris.app.core.data.ItemRepository
 import gr.dimitris.app.core.data.ScriptRepository
 import gr.dimitris.app.core.data.now as systemNow
+import gr.dimitris.app.core.judge.TurnJudge
 import gr.dimitris.app.core.log.ErrorReporter
 import gr.dimitris.app.core.scheduler.Scheduler
 import gr.dimitris.app.core.secrets.SecretStore
@@ -90,6 +91,22 @@ class AppGraph(context: Context) {
      * anything outside the phone, and only when someone taps the button on the advice screen.
      */
     val advisor = ClaudeAdvisor(secrets) { settings.claudeModel.first() }
+
+    /**
+     * Every judgement of what he said, through one place (spec §13). Off by default twice over — the
+     * toggle starts false and there is no key until a caregiver saves one — and in that state it is
+     * the same local matching the three speech modules have always used, with no network at all.
+     *
+     * Held for the life of the app rather than built per turn because it remembers which failures it
+     * has already written down: a phone that lost its connection fails on every word of a session,
+     * and the error log a caregiver reads must not fill up with three hundred copies of one fact.
+     */
+    val judge = TurnJudge(
+        secrets = secrets,
+        // Read per turn, not captured: a caregiver switching it off mid-session stops the next word.
+        enabled = { settings.claudeJudging.first() },
+        record = { where, e -> errors.record(where, e) },
+    )
 
     /**
      * The one question in flight and the last answer, held here rather than in the advice screen's

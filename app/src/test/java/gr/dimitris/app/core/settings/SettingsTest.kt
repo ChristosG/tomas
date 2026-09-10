@@ -275,6 +275,21 @@ class SettingsTest {
         assertEquals(DeviceRole.CAREGIVER, s.rolePick.first().role)
     }
 
+    /**
+     * Spec §13: per-turn judging is opt-in. Off is the default and the default is the consent, so a
+     * fresh install judges every word on the phone and touches nothing outside it.
+     */
+    @Test fun `judging with Claude is off until a caregiver turns it on`() = runBlocking {
+        val s = newSettings()
+        assertEquals(false, s.claudeJudging.first())
+        s.setClaudeJudging(true)
+        assertEquals(true, s.claudeJudging.first())
+        s.setClaudeJudging(false)
+        assertEquals(false, s.claudeJudging.first())
+        // Its own key: the advisor's model is untouched by it either way.
+        assertEquals(Settings.DEFAULT_CLAUDE_MODEL, s.claudeModel.first())
+    }
+
     @Test fun `both sync cursors start at zero and persist`() = runBlocking {
         val s = newSettings()
         assertEquals(0L, s.syncCursor.first())

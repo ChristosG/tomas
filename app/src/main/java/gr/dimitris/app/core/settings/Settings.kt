@@ -148,6 +148,22 @@ class Settings(private val store: DataStore<Preferences>) {
     }
 
     /**
+     * Whether a turn he has just spoken is judged by Claude or by the phone (spec §13).
+     *
+     * Off until a caregiver deliberately turns it on, and that is the whole of the consent: with it
+     * off — or with no key saved — [gr.dimitris.app.core.judge.TurnJudge] never touches the network
+     * and every turn is matched locally, exactly as it was before phase 12.
+     *
+     * What goes up when it is on is three strings: the question, the target and what the recogniser
+     * heard. Never the audio, never a photo, never a name, never anything about his health beyond the
+     * three sentences of [gr.dimitris.app.core.judge.JudgeContract.SYSTEM_PROMPT]. The settings line
+     * under the toggle says so in those words, because a caregiver consenting to "AI" has consented
+     * to nothing they can picture.
+     */
+    val claudeJudging: Flow<Boolean> = store.data.map { it[CLAUDE_JUDGING] ?: false }
+    suspend fun setClaudeJudging(on: Boolean) { store.edit { it[CLAUDE_JUDGING] = on } }
+
+    /**
      * Where the sync server lives, e.g. `https://sync.example.com`. Empty until a caregiver types
      * it in, and empty means the app never touches the network by itself.
      *
@@ -253,6 +269,7 @@ class Settings(private val store: DataStore<Preferences>) {
         private val MELODY_TEMPO = stringPreferencesKey("melody_tempo")
         private val MELODY_KEY = stringPreferencesKey("melody_key")
         private val CLAUDE_MODEL = stringPreferencesKey("claude_model")
+        private val CLAUDE_JUDGING = booleanPreferencesKey("claude_judging")
         private val SYNC_URL = stringPreferencesKey("sync_url")
         private val DEVICE_ROLE = stringPreferencesKey("device_role")
         private val SYNC_CURSOR = longPreferencesKey("sync_cursor")
