@@ -6,8 +6,11 @@ import gr.dimitris.app.core.data.ModuleId
 import gr.dimitris.app.core.data.Outcome
 import gr.dimitris.app.core.data.Schedule
 import gr.dimitris.app.core.data.Session
+import gr.dimitris.app.modules.talkboard.EXPAND_CUE_LEVEL
+import gr.dimitris.app.modules.talkboard.EXPAND_ITEM
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.time.LocalDate
@@ -498,6 +501,37 @@ class ProgressStatsTest {
             listOf(startOf("2026-08-31") to 2.5f, startOf("2026-09-14") to 4f),
             h.levels.map { it.weekStart to it.level },
         )
+    }
+
+    /**
+     * The talk board says nothing about how much help he needs until there is something that
+     * measured it, and then says only what that measured.
+     *
+     * Every tap on the board writes no cue level at all — it is him speaking, not him being marked —
+     * so «μέση βοήθεια» is «—» for as long as the board is only tapped. The sentence expansion of
+     * spec §13 is the one row that carries one, at
+     * [gr.dimitris.app.modules.talkboard.EXPAND_CUE_LEVEL], because the phone said the sentence
+     * before he repeated it. The mean is then over the expansions **alone**, which is the honest
+     * reading: a hundred taps beside it are not evidence that he needed no help, and averaging them
+     * in as zeroes would have been.
+     */
+    @Test fun `the talk board's mean help is about its expansions and nothing else`() {
+        val taps = listOf(
+            attempt("2026-09-01", module = ModuleId.TALKBOARD),
+            attempt("2026-09-01", module = ModuleId.TALKBOARD, hour = 10),
+            attempt("2026-09-02", module = ModuleId.TALKBOARD),
+        )
+        assertNull(
+            "nothing measured his help, so the report must not claim a number",
+            ProgressStats.moduleHistory(taps, zone = zone).single().meanCue,
+        )
+
+        val withExpansion = taps + attempt(
+            "2026-09-03", module = ModuleId.TALKBOARD, itemId = EXPAND_ITEM, cue = EXPAND_CUE_LEVEL,
+        )
+        val h = ProgressStats.moduleHistory(withExpansion, zone = zone).single()
+        assertEquals("the expansion, and not the taps beside it", 3f, h.meanCue!!, 0.001f)
+        assertEquals("every tap is still an exercise he did", 4, h.attempts)
     }
 
     @Test fun `a module that writes no level says nothing about levels`() {

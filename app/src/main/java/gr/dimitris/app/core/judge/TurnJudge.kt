@@ -92,6 +92,24 @@ class TurnJudge(
      */
     fun newRun() = reported.clear()
 
+    /**
+     * Whether a turn asked of this judge would reach Claude at all: «Έλεγχος με Claude» on **and** a
+     * key saved. The same two reads [judge] makes, in the same order and for the same reasons — the
+     * toggle first because reading the key opens an encrypted file and touches the keystore, and the
+     * whole thing off [Dispatchers.IO] because of that file.
+     *
+     * It exists for the one screen that must not offer a button at all rather than offer it and fall
+     * back: the talk board's «Ολόκληρη» (spec §13). [LocalJudge] deliberately cannot expand — a local
+     * attempt at Greek grammar would teach him wrong forms — so a button with only the fallback
+     * behind it would hand him his own words back every time he pressed it. Every *other* caller
+     * should simply call [judge] and let the fallback do its work: it is not a gate, and asking it
+     * before each turn would double the keystore reads for nothing.
+     *
+     * Racy by nature and harmless: a key deleted between this and the tap lands in [LocalJudge],
+     * which is exactly what the fallback is for.
+     */
+    suspend fun available(): Boolean = withContext(Dispatchers.IO) { on() && key() != null }
+
     /** Never throws. Every failure is a [LocalJudge] verdict and at most one row in the error log. */
     suspend fun judge(ask: Ask): Verdict = withContext(Dispatchers.IO) {
         // Nothing heard is not a turn to judge. The on-device Greek recogniser comes back empty often
@@ -116,6 +134,11 @@ class TurnJudge(
         // An EXPAND asks exactly one thing, and a verdict without it answered nothing — so his own
         // words come back instead. Logged as its own class rather than as an unreadable reply, because
         // «δεν διαβάστηκε» would send whoever is debugging this after a parser that worked fine.
+        //
+        // Only a reply that carried no sentence at all reaches this. A sentence that is nearly his
+        // own words back — «θέλω καφέ» → «Θέλω καφέ.» — is the model saying the words were already
+        // whole, which is an answer and not a failure; [JudgeContract.parse] keeps it for EXPAND and
+        // it never gets here.
         if (ask.kind == Kind.EXPAND && verdict.expanded == null) {
             return@withContext fallback(ask, WHERE_NO_EXPANSION, NO_EXPANSION)
         }

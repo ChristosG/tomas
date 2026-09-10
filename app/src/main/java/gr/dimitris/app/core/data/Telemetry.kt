@@ -124,6 +124,13 @@ object Adapt {
          *
          * The same absence rule as [put], one level down and one level up: a key inside with nothing
          * to say is dropped, and an object with nothing left in it is absent rather than `{}`.
+         *
+         * What it does **not** do is cap the strings inside it at [MAX_TEXT], the way `put(String)`
+         * caps its own — the value is written as it was handed over, exactly as [kept] writes one.
+         * That cap is the caller's, and for the one shape this exists for it is already applied
+         * where the shape is built: see [gr.dimitris.app.core.judge.Verdict.detail], which takes
+         * `expanded` down to [MAX_TEXT] before it ever reaches here. Anything new that writes a
+         * nested object owes the row the same.
          */
         fun put(key: String, v: Map<String, Any?>?) {
             val said = v?.filterValues { it != null }

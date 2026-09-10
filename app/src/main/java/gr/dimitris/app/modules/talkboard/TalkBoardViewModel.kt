@@ -130,8 +130,21 @@ const val EXPAND_ITEM = "talkboard:expand"
  * is nothing behind it — [LocalJudge] cannot build a Greek sentence out of content words and must
  * not pretend to (see its KDoc). Two words is the floor because one word is not a sentence to expand.
  */
-internal fun showsExpand(stripLen: Int, judgeReady: Boolean): Boolean =
-    judgeReady && stripLen >= EXPAND_WORDS_MIN
+internal fun showsExpand(words: Int, judgeReady: Boolean): Boolean =
+    judgeReady && words >= EXPAND_WORDS_MIN
+
+/**
+ * How many *words* stand on the strip, which is not how many chips do.
+ *
+ * A vocabulary item can be a whole phrase — «θέλω νερό», «δώσε μου νερό» are single cards on this
+ * board — so one chip is often two or three words, and counting chips would hide «Ολόκληρη» from
+ * exactly the sentences that are most worth expanding.
+ */
+internal fun stripWords(items: List<Item>): Int = items.sumOf { wordsIn(it.text) }
+
+private fun wordsIn(text: String): Int = text.trim().split(WHITESPACE).count { it.isNotEmpty() }
+
+private val WHITESPACE = Regex("\\s+")
 
 /** Fewer than this and there is no sentence to make. */
 const val EXPAND_WORDS_MIN = 2
@@ -239,7 +252,11 @@ class ExpansionFlow(
     private val askJudge: suspend (Ask) -> Verdict,
     /** His own 1–5 dot row, once Task 4 has one. */
     private val difficulty: suspend () -> Int,
-    /** The phone saying the sentence. A failure is his to be told about, not to be swallowed. */
+    /**
+     * The phone saying the sentence. A failure is his to be told about, not to be swallowed, and it
+     * silences whatever was sounding first — [sayAgain] can arrive in the middle of the utterance it
+     * is about to repeat.
+     */
     private val speakOut: suspend (String) -> Result<Unit>,
     /** Whether recognition is on and available. One settings read, taken while the judge is thinking. */
     private val sttOn: suspend () -> Boolean,
@@ -281,7 +298,9 @@ class ExpansionFlow(
     fun open(words: String, len: Int) {
         if (_state.value != null) return
         val line = words.trim()
-        if (line.isEmpty() || len < EXPAND_WORDS_MIN) return
+        // The words, not the chips: [len] is how many cards he tapped and goes in the row as it
+        // always did, but one card can be a whole phrase and the floor is about the sentence.
+        if (wordsIn(line) < EXPAND_WORDS_MIN) return
         written = false
         broke = false
         check = GentleCheck()
@@ -364,6 +383,36 @@ class ExpansionFlow(
             }
             resolve(heard, sentence)
         }
+    }
+
+    /**
+     * The board's own «Πες το», while an expansion is open: the sentence again, out loud.
+     *
+     * This is the whole of the fix for the hole the first round left. He hears a seven-word sentence
+     * once, loses the front of it — which is the deficit the feature exists for — and reaches for the
+     * one control on this board that has ever made it talk. Before this, that button read his three
+     * telegraphic words instead, closed the sentence and wrote it off as skipped. Now it repeats what
+     * is on the screen, changes no state and writes nothing, so he can hear it as many times as he
+     * needs to before «Μίλα» — and after a «Δοκίμασε ξανά» as well, so his second go is not from
+     * memory.
+     *
+     * Returns whether the tap belonged to the expansion at all; false leaves the board's ordinary
+     * behaviour alone. While the window is open it is consumed and nothing is said: the recogniser
+     * would otherwise hear the phone.
+     */
+    fun sayAgain(): Boolean {
+        val s = _state.value ?: return false
+        if (s.listening) return true
+        // Consumed but silent while the judge is still being asked: there is no sentence to repeat
+        // yet, and the one job in flight is the ask itself, which must not be cancelled to read out
+        // words that are about to be replaced.
+        val line = s.sentence ?: return true
+        job?.cancel()
+        job = scope.launch {
+            val said = speakOut(line)
+            _state.update { it?.copy(error = if (said.isFailure) SPEECH_FAILED else null) }
+        }
+        return true
     }
 
     /** «Στοπ»: the window closes now, and what it had heard still comes back through [sayIt]. */
@@ -493,7 +542,7 @@ class TalkBoardViewModel(private val graph: AppGraph) : ViewModel() {
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     /** Room re-emits this on every attempt insert, so a tap re-ranks favourites with no nudging. */
-    private val usage: Flow<List<ItemCount>> = graph.db.attempts().mostUsed(ModuleId.TALKBOARD, USAGE_LIMIT)
+    private val usage: Flow<List<ItemCount>> = graph.db.attempts().mostUsed(ModuleId.TALKBOARD, USAGE_LIMIT, EXPAND_ITEM)
         .catch { graph.errors.record("talkboard usage", it); emit(emptyList()) }
 
     private val pinnedIds: StateFlow<Set<String>> = graph.db.items().observePinned().map { l -> l.map { it.id }.toSet() }
@@ -534,22 +583,23 @@ class TalkBoardViewModel(private val graph: AppGraph) : ViewModel() {
     private val _spoken = MutableStateFlow(false)
     val spoken: StateFlow<Boolean> = _spoken.asStateFlow()
 
+    /** Which classes of recogniser trouble have already reached «Σφάλματα» from this board. */
+    private val reportedRecogniser = mutableSetOf<Recognition.ErrorClass>()
+
     /**
      * Whether «Ολόκληρη» has anything behind it: the caregiver's toggle on, and a key saved.
      *
-     * Asked here rather than of [gr.dimitris.app.core.judge.TurnJudge], which has no way to be asked
-     * — by design it never reports being unavailable, it simply answers locally — and a local answer
-     * to an EXPAND is his own words back. That is the right behaviour for a judged turn that failed
-     * *mid-flow* (he still gets his sentence read to him) and the wrong thing to offer as a button,
-     * so the button is gated on the two reads the judge itself makes first, in the same order it
-     * makes them: the toggle before the key, because reading the key opens an encrypted file and
-     * touches the keystore.
+     * The question is [gr.dimitris.app.core.judge.TurnJudge.available]'s to answer — it makes those
+     * two reads for every turn anyway — and it is asked because the judge never *reports* being
+     * unavailable: by design it answers locally instead, and a local answer to an EXPAND is his own
+     * words back. That is the right behaviour for a judged turn that failed mid-flow (he still gets
+     * his sentence read to him) and the wrong thing to put behind a button.
      *
-     * Re-read on every emission of the toggle, so a caregiver who saves a key and switches it on
-     * changes the next screen he opens rather than the next time the app starts.
+     * The toggle is the trigger and the judge is the answer, so a caregiver who saves a key and
+     * switches it on changes the next screen he opens rather than the next time the app starts.
      */
     val judgeReady: StateFlow<Boolean> = graph.settings.claudeJudging
-        .map { on -> on && withContext(Dispatchers.IO) { hasKey() } }
+        .map { graph.judge.available() }
         .catch { e -> graph.errors.record("talkboard judge", e); emit(false) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
 
@@ -559,7 +609,9 @@ class TalkBoardViewModel(private val graph: AppGraph) : ViewModel() {
         askJudge = { ask -> graph.judge.judge(ask) },
         // Task 4's dot row replaces this with settings.difficulty(ModuleId.TALKBOARD).
         difficulty = { EXPAND_DIFFICULTY },
-        speakOut = { text -> graph.speaker.speakText(text) },
+        // Silence first: «Πες το» can arrive in the middle of the sentence it is about to repeat,
+        // and two overlapping Greek sentences are worse than none.
+        speakOut = { text -> graph.voice.quiet(); graph.speaker.speakText(text) },
         // isAvailable asks the package manager across a binder: not on the thread drawing the board.
         sttOn = { graph.settings.sttEnabled.first() && withContext(Dispatchers.Default) { graph.stt.isAvailable } },
         openWindow = {
@@ -621,8 +673,14 @@ class TalkBoardViewModel(private val graph: AppGraph) : ViewModel() {
         viewModelScope.launch { heard(graph.speaker.speak(item)); log(item, inStrip = false) }
     }
 
+    /**
+     * «Πες το», the board's own: the strip read out loud — or, with an expansion open, the sentence
+     * read out loud again. See [ExpansionFlow.sayAgain]: it is the only control on this board he has
+     * ever used to make it talk, so while there is a sentence on the screen it belongs to that
+     * sentence, and it neither closes the flow nor writes a row.
+     */
     fun speakStrip() {
-        flow.close()
+        if (flow.sayAgain()) return
         val snapshot = strip.items.value
         if (snapshot.isEmpty()) return
         viewModelScope.launch {
@@ -665,8 +723,16 @@ class TalkBoardViewModel(private val graph: AppGraph) : ViewModel() {
      * but an expansion is written against [EXPAND_ITEM], which is no item, so there would be nothing
      * to attach it to and the file would sit in the recordings folder with no row pointing at it.
      */
-    private fun heardOf(result: Result<Transcript>): Heard {
-        result.take?.file?.delete()
+    private suspend fun heardOf(result: Result<Transcript>): Heard {
+        // Off the drawing thread, and a delete that failed is said out loud in the error list rather
+        // than leaving exactly the orphan this is here to prevent.
+        result.take?.file?.let { file ->
+            withContext(Dispatchers.IO) {
+                if (file.exists() && !file.delete()) {
+                    graph.errors.record(WHERE_EXPAND, IllegalStateException("take not deleted: ${file.name}"))
+                }
+            }
+        }
         return result.fold(
             onSuccess = { t -> t.text.trim().takeIf { it.isNotEmpty() }?.let { Heard.Words(it) } ?: Heard.Silence },
             onFailure = { e ->
@@ -681,9 +747,6 @@ class TalkBoardViewModel(private val graph: AppGraph) : ViewModel() {
             },
         )
     }
-
-    /** Which classes of recogniser trouble have already reached «Σφάλματα» from this board. */
-    private val reportedRecogniser = mutableSetOf<Recognition.ErrorClass>()
 
     /** Records the outcome of one speak attempt and reports whether anything was actually heard. */
     private fun heard(result: Result<*>): Boolean {
@@ -703,9 +766,6 @@ class TalkBoardViewModel(private val graph: AppGraph) : ViewModel() {
             )
         }.onFailure { graph.errors.record("talkboard log", it) }
     }
-
-    private fun hasKey(): Boolean =
-        runCatching { !graph.secrets.claudeKey().isNullOrBlank() }.getOrDefault(false)
 
     /**
      * He is leaving the board with an expansion open. It ends the way «Κλείσε» ends it — the window

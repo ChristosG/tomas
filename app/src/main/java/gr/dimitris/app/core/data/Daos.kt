@@ -154,9 +154,22 @@ interface AttemptDao {
 
     @Query("SELECT COUNT(*) FROM attempts WHERE deleted = 0 AND itemId = :itemId AND module = :module")
     suspend fun countFor(itemId: String, module: ModuleId): Int
-    /** A Flow, so favourites re-rank themselves the moment an attempt is inserted. */
-    @Query("SELECT itemId, COUNT(*) AS n FROM attempts WHERE deleted = 0 AND module = :module GROUP BY itemId ORDER BY n DESC LIMIT :limit")
-    fun mostUsed(module: ModuleId, limit: Int): Flow<List<ItemCount>>
+    /**
+     * A Flow, so favourites re-rank themselves the moment an attempt is inserted.
+     *
+     * [synthetic] is an item id that is not a word and must never take one of the [limit] places the
+     * favourites are ranked from — the talk board's own
+     * [gr.dimitris.app.modules.talkboard.EXPAND_ITEM], written once per sentence expansion and
+     * therefore climbing this list faster than any real word. The same rule
+     * [lastUsePerModule] applies to the sitting's summary row, and for the same reason: a made-up id
+     * counted here is a favourite nobody can tap.
+     */
+    @Query(
+        "SELECT itemId, COUNT(*) AS n FROM attempts " +
+            "WHERE deleted = 0 AND module = :module AND itemId != :synthetic " +
+            "GROUP BY itemId ORDER BY n DESC LIMIT :limit"
+    )
+    fun mostUsed(module: ModuleId, limit: Int, synthetic: String): Flow<List<ItemCount>>
 
     /**
      * The last time each module was really practised. A module with no rows at all is simply absent,

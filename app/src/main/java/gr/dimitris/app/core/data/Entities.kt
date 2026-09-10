@@ -90,7 +90,16 @@ data class Attempt(
     val startedAt: Long,
     val durationMs: Long,
     val outcome: Outcome,
-    /** 0..4 for cue-ladder modules, null where the ladder does not apply (talk board). */
+    /**
+     * 0..4 for cue-ladder modules, null where the ladder does not apply — every talk-board tap, which
+     * is him speaking rather than him being marked.
+     *
+     * One talk-board row does carry a level: the sentence expansion of spec §13
+     * ([gr.dimitris.app.modules.talkboard.EXPAND_ITEM]) is written at
+     * [gr.dimitris.app.modules.talkboard.EXPAND_CUE_LEVEL], because the phone said the sentence to
+     * him before he repeated it. So a mean taken over this column for the talk board is a mean over
+     * expansions alone — see [gr.dimitris.app.caregiver.progress.ProgressStats.moduleHistory].
+     */
     val cueLevel: Int? = null,
     val selfRecordingId: String? = null,
     /** Module-specific JSON. "{}" when there is nothing to say. */

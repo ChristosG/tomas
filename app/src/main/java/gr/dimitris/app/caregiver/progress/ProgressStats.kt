@@ -92,6 +92,16 @@ data class ModuleHistory(
     val assisted: Int,
     val skipped: Int,
     val meanMs: Long,
+    /**
+     * How much help he needed, over the attempts that carry a cue level **at all** — never over the
+     * ones that do not, which would read as "no help needed" for exercises nobody measured.
+     *
+     * For the talk board that means: null («—») for as long as he only taps words, and once he has
+     * used «Ολόκληρη», the mean over those sentence expansions alone. Three, for a single expansion,
+     * is the honest number — he heard the sentence before he said it, which is what
+     * [gr.dimitris.app.modules.talkboard.EXPAND_CUE_LEVEL] records — and it is a statement about the
+     * expansions, not about the hundreds of taps beside them.
+     */
     val meanCue: Float?,
     val firstAt: Long,
     val lastAt: Long,
@@ -427,11 +437,11 @@ object ProgressStats {
             .mapValues { (_, rows) -> rows.groupingBy { it.module }.eachCount().toSortedMap(compareBy { it.ordinal }) }
 
     /**
-     * The item ids that were never a word: a level, a game, a sitting — `numbers:level:3`,
-     * `arcade:tap`, `trace:level:1`, `session:summary`. Nothing can look them up in the vocabulary
-     * and nothing should try.
+     * The item ids that were never a word: a level, a game, a sitting, a sentence he was given —
+     * `numbers:level:3`, `arcade:tap`, `trace:level:1`, `session:summary`, `talkboard:expand`.
+     * Nothing can look them up in the vocabulary and nothing should try.
      */
-    val SYNTHETIC_PREFIXES = listOf("numbers:", "sentences:", "trace:", "arcade:", "session:")
+    val SYNTHETIC_PREFIXES = listOf("numbers:", "sentences:", "trace:", "arcade:", "session:", "talkboard:")
 
     /** Whether an attempt was about no word at all: a made-up id, or one nothing ever wrote. */
     fun wordless(itemId: String, known: Set<String>): Boolean =

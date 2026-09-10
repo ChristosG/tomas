@@ -97,6 +97,23 @@ class TurnJudgeTest {
         assertEquals(0, blank.calls)
     }
 
+    /**
+     * The same two reads, asked as a question instead of answered as a turn.
+     *
+     * One screen needs to know before it draws: the talk board's «Ολόκληρη» is absent rather than
+     * greyed when there is nothing behind it, because [LocalJudge] cannot expand and a button that
+     * only ever handed him his own words back is a promise the app breaks every time he presses it.
+     * Nothing here touches the network either.
+     */
+    @Test fun `available says whether a turn would reach Claude at all`() = runBlocking {
+        val client = FakeClient { error("the network must not be touched") }
+        assertTrue(judge(client).available())
+        assertFalse("the caregiver's consent is missing", judge(client, on = false).available())
+        assertFalse("nothing to send it with", judge(client, key = null).available())
+        assertFalse("a key of spaces is no key", judge(client, key = "  ").available())
+        assertEquals(0, client.calls)
+    }
+
     /** Neither of those is a fault. A caregiver reading the error list must not find them there. */
     @Test fun `off and no key are not written to the error log`() = runBlocking {
         val rows = Rows()
@@ -149,14 +166,22 @@ class TurnJudgeTest {
         assertEquals(listOf(TurnJudge.NO_EXPANSION), rows.messages)
     }
 
-    /** An echo of his own words is not an expansion either, and lands on the same path. */
-    @Test fun `an expansion that is only an echo falls back too`() = runBlocking {
+    /**
+     * The words were already a sentence, and that is an answer rather than a failure.
+     *
+     * «θέλω» + «καφέ» really does make «Θέλω καφέ.», so the model's reply is nearly what it was
+     * given. The echo rule that protects a DIALOGUE from «here is the full form, say it again» over
+     * a sentence he has just said must not fire here: this used to throw the expansion away, show
+     * the row as LOCAL when Claude had in fact answered, and tell the caregiver in «Σφάλματα» that
+     * the model had failed. Now it is shown as it came — accents, capital and full stop included.
+     */
+    @Test fun `an expansion that is nearly his own words is the sentence, not a failure`() = runBlocking {
         val rows = Rows()
-        val v = judge(FakeClient { """{"accept":true,"expanded":"Φάρμακα πρέπει πάρω","score":1}""" }, rows)
-            .judge(expand)
-        assertEquals(Source.LOCAL, v.source)
-        assertEquals("φάρμακα πρέπει πάρω", v.expanded)
-        assertEquals(listOf(TurnJudge.WHERE_NO_EXPANSION), rows.where)
+        val already = Ask(Kind.EXPAND, heard = "θέλω καφέ")
+        val v = judge(FakeClient { """{"accept":true,"expanded":"Θέλω καφέ.","score":1}""" }, rows).judge(already)
+        assertEquals("Claude answered, and the row must say so", Source.JUDGE, v.source)
+        assertEquals("Θέλω καφέ.", v.expanded)
+        assertEquals("and nothing goes in the caregiver's list", emptyList<String>(), rows.where)
     }
 
     /** Only EXPAND is held to that: the other three never asked for a sentence. */

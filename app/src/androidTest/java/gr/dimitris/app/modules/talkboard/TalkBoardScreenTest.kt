@@ -15,6 +15,10 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollToNode
+import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.ViewModelStore
+import androidx.lifecycle.viewmodel.initializer
+import androidx.lifecycle.viewmodel.viewModelFactory
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.rule.GrantPermissionRule
 import gr.dimitris.app.DimitrisApp
@@ -30,6 +34,7 @@ import gr.dimitris.app.core.speech.FakeSpeechToText
 import gr.dimitris.app.core.speech.SpeechToText
 import gr.dimitris.app.ui.theme.DimitrisTheme
 import gr.dimitris.app.ui.theme.LocalFeedback
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -50,21 +55,33 @@ class TalkBoardScreenTest {
     private lateinit var realStt: SpeechToText
     private lateinit var realJudge: TurnJudge
     private var realKey: String? = null
+    private var realJudging = false
+    private var realSttEnabled = false
     private val seeded = mutableListOf<Item>()
 
-    @Before fun rememberWhatWasHere() {
+    /** So a view model this test builds is really cleared afterwards, `onCleared` and all. */
+    private val store = ViewModelStore()
+
+    @Before fun rememberWhatWasHere() = runBlocking<Unit> {
         realStt = graph.stt
         realJudge = graph.judge
         realKey = graph.secrets.getClaudeKey()
+        realJudging = graph.settings.claudeJudging.first()
+        realSttEnabled = graph.settings.sttEnabled.first()
     }
 
-    /** The words, the recogniser, the judge and the key were ours. Every one of them goes back. */
+    /**
+     * The words, the recogniser, the judge, the key and the two settings were ours. Every one of them
+     * goes back to what it was — put back rather than switched off, because this phone is also
+     * somebody's phone and the next case must find it as it was.
+     */
     @After fun putItAllBack() = runBlocking<Unit> {
+        compose.runOnUiThread { store.clear() }
         graph.stt = realStt
         graph.judge = realJudge
         graph.secrets.setClaudeKey(realKey)
-        graph.settings.setClaudeJudging(false)
-        graph.settings.setSttEnabled(false)
+        graph.settings.setClaudeJudging(realJudging)
+        graph.settings.setSttEnabled(realSttEnabled)
         seeded.forEach { graph.items.delete(it.id) }
     }
 
@@ -130,6 +147,30 @@ class TalkBoardScreenTest {
         assertTrue("and that the phone agreed: ${row.detail}", row.detail.contains("\"sttMatched\":true"))
     }
 
+    /**
+     * The board's own «Πες το», with a sentence on the screen, says the sentence again — and only
+     * that. It does not read out his three telegraphic words, it does not close the sentence, and it
+     * writes no row: he can hear it as many times as he needs to before «Μίλα».
+     */
+    @Test fun theBoardsOwnButtonSaysTheSentenceAgainAndKeepsIt() {
+        withJudge(WHOLE_SENTENCE)
+        val words = seed(FIRST, SECOND)
+        val before = expansions()
+        show()
+
+        words.forEach { tapCard(it.text) }
+        compose.waitUntil(UI_TIMEOUT_MS) { exists(EXPAND_TAG) }
+        compose.onNodeWithTag(EXPAND_TAG).performClick()
+        compose.waitUntil(UI_TIMEOUT_MS) { compose.onAllNodesWithText(WHOLE_SENTENCE).fetchSemanticsNodes().isNotEmpty() }
+
+        compose.onNodeWithText(SPEAK_STRIP).performClick()
+        compose.waitForIdle()
+
+        compose.onNodeWithTag(EXPAND_SENTENCE_TAG).assertTextEquals(WHOLE_SENTENCE)
+        compose.onNodeWithTag(EXPAND_SAY_TAG).assertIsDisplayed()
+        assertEquals("hearing it again is not an answer, so nothing is written", before.size, expansions().size)
+    }
+
     /** Without a key and the toggle there is no button at all — not a greyed one, none. */
     @Test fun withoutTheJudgeThereIsNoWholeSentenceButton() {
         val words = seed(FIRST, SECOND)
@@ -157,8 +198,7 @@ class TalkBoardScreenTest {
         val words = seed(FIRST, SECOND)
         val before = expansions()
 
-        lateinit var vm: TalkBoardViewModel
-        compose.runOnUiThread { vm = TalkBoardViewModel(graph) }
+        val vm = viewModel()
         compose.runOnUiThread { words.forEach { vm.tap(it) } }
         compose.runOnUiThread { vm.expand() }
 
@@ -207,6 +247,15 @@ class TalkBoardScreenTest {
 
     private fun exists(tag: String) = compose.onAllNodesWithTag(tag).fetchSemanticsNodes().isNotEmpty()
 
+    /** Built through a store of our own, so [putItAllBack] really clears it when the case is over. */
+    private fun viewModel(): TalkBoardViewModel {
+        lateinit var vm: TalkBoardViewModel
+        compose.runOnUiThread {
+            vm = ViewModelProvider(store, viewModelFactory { initializer { TalkBoardViewModel(graph) } })[TalkBoardViewModel::class.java]
+        }
+        return vm
+    }
+
     private fun expansions(): List<Attempt> =
         runBlocking { graph.db.attempts().since(0).filter { it.itemId == EXPAND_ITEM } }
 
@@ -229,6 +278,9 @@ class TalkBoardScreenTest {
         const val FIRST = "φάρμακα"
         const val SECOND = "πρέπει"
         const val WHOLE_SENTENCE = "Πρέπει να πάρω τα φάρμακα."
+
+        /** The board's own bottom button: the phone reading out what is on the strip area. */
+        const val SPEAK_STRIP = "Πες το"
         const val KEY = "δοκιμαστικό-κλειδί"
         const val SEED_TIMEOUT_MS = 30_000L
         const val UI_TIMEOUT_MS = 20_000L

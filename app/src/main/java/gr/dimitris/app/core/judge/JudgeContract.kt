@@ -192,6 +192,14 @@ object JudgeContract {
      * an expansion, and handing it on would put «the full form, say it again» on the screen over the
      * sentence he has just said.
      *
+     * **[Kind.EXPAND] is exempt from that rule**, and the exemption is the whole difference between
+     * the two kinds of turn. A DIALOGUE or a SENTENCE was *judged*, and an echo there is the model
+     * finding nothing to add to something he already got out. An EXPAND asked one question — "what
+     * whole sentence do these words make?" — and «θέλω» + «καφέ» really does make «Θέλω καφέ.»: the
+     * answer being nearly his own words back means the words were already a sentence, which is a
+     * success and belongs on the screen as it came. Dropping it there cost the caregiver a row in
+     * «Σφάλματα» saying Claude had failed, and him the tidied form.
+     *
      * Whether a verdict is *usable* is [TurnJudge]'s question, not this one — see its EXPAND check.
      */
     fun parse(reply: String, ask: Ask): Verdict? {
@@ -202,7 +210,7 @@ object JudgeContract {
         val accept = bool(o, "accept") ?: return null
         return Verdict(
             accept = accept,
-            expanded = str(o, "expanded")?.takeIf { !echoes(it, ask.heard) },
+            expanded = str(o, "expanded")?.takeIf { ask.kind == Kind.EXPAND || !echoes(it, ask.heard) },
             feedback = warm(str(o, "feedback")),
             // A reply that judged the turn but forgot to score it is still a verdict; the score is
             // for a progress screen, not for him, so it is derived rather than thrown away.

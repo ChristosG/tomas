@@ -249,6 +249,20 @@ class JudgeContractTest {
         )
     }
 
+    /**
+     * And EXPAND is exempt, which is the whole difference between judging a turn and expanding one.
+     * Nothing was judged here: the question was "what sentence do these words make?", and «θέλω» +
+     * «καφέ» really does make «Θέλω καφέ.». The answer coming back nearly unchanged means the words
+     * were already whole — a success, and the tidied form is what he should see and hear.
+     */
+    @Test fun `an EXPAND keeps a sentence that is nearly the words it was given`() {
+        val expand = Ask(Kind.EXPAND, heard = "θέλω καφέ")
+        assertEquals(
+            "Θέλω καφέ.",
+            JudgeContract.parse("""{"accept":true,"expanded":"Θέλω καφέ."}""", expand)!!.expanded,
+        )
+    }
+
     // --- the feedback gate ----------------------------------------------------------------------
 
     /**

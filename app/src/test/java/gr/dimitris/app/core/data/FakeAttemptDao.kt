@@ -22,8 +22,8 @@ class FakeAttemptDao : AttemptDao {
     override suspend fun countFor(itemId: String, module: ModuleId): Int =
         active().count { it.itemId == itemId && it.module == module }
 
-    override fun mostUsed(module: ModuleId, limit: Int): Flow<List<ItemCount>> = rows.map { all ->
-        all.filter { !it.deleted && it.module == module }
+    override fun mostUsed(module: ModuleId, limit: Int, synthetic: String): Flow<List<ItemCount>> = rows.map { all ->
+        all.filter { !it.deleted && it.module == module && it.itemId != synthetic }
             .groupingBy { it.itemId }.eachCount()
             .map { ItemCount(it.key, it.value) }
             .sortedByDescending { it.n }

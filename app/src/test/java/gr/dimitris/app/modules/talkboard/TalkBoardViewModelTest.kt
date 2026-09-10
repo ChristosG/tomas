@@ -3,6 +3,7 @@ package gr.dimitris.app.modules.talkboard
 import com.google.gson.Gson
 import com.google.gson.JsonObject
 import gr.dimitris.app.core.data.Attempt
+import gr.dimitris.app.core.data.Item
 import gr.dimitris.app.core.data.ModuleId
 import gr.dimitris.app.core.data.Outcome
 import gr.dimitris.app.core.judge.Ask
@@ -162,6 +163,65 @@ class TalkBoardViewModelTest {
 
         assertEquals("silence is the one failure he cannot diagnose himself", SPEECH_FAILED, flow.state.value!!.error)
         assertEquals("and the sentence is still there to read and repeat", whole, flow.state.value!!.sentence)
+    }
+
+    /**
+     * The hole the first round left, closed: he can hear the sentence as many times as he needs to.
+     *
+     * A seven-word sentence read once to a man who has just lost the front of it is the deficit this
+     * feature exists for, and the only control on this board he has ever used to make it talk is the
+     * bottom «Πες το». Before this it read out his three telegraphic words instead, closed the
+     * sentence and wrote it off as skipped.
+     */
+    @Test fun `the board's own button says the sentence again, and changes nothing`() = runTest {
+        val flow = flow()
+        flow.open(words, len = 3)
+        advanceUntilIdle()
+
+        assertTrue("the tap belongs to the expansion while one is open", flow.sayAgain())
+        advanceUntilIdle()
+        assertEquals("said twice, both times the sentence", listOf(whole, whole), said)
+        assertEquals("and nothing was written for it", 0, rows.size)
+        assertEquals("the sentence is still there", whole, flow.state.value?.sentence)
+
+        // And after a miss, so his second go is not from memory.
+        windows += Heard.Words("κάτι άλλο")
+        flow.sayIt()
+        advanceUntilIdle()
+        assertTrue(flow.state.value!!.nudge)
+        flow.sayAgain()
+        advanceUntilIdle()
+        assertEquals(3, said.size)
+        assertTrue("the nudge is untouched", flow.state.value!!.nudge)
+        assertEquals(0, rows.size)
+    }
+
+    @Test fun `with no expansion open the board's own button is the board's own`() = runTest {
+        val flow = flow()
+        assertFalse("nothing to repeat: the strip is the board's business", flow.sayAgain())
+        assertEquals(0, said.size)
+    }
+
+    /** Nothing is said over an open microphone, and the ask is never cancelled to repeat a sentence
+     * that does not exist yet — both taps are simply consumed. */
+    @Test fun `the button says nothing into an open window, or before the sentence has arrived`() = runTest {
+        judgeGate = CompletableDeferred()
+        val flow = flow()
+        flow.open(words, len = 3)
+        advanceUntilIdle()
+
+        assertTrue("consumed while the judge is thinking", flow.sayAgain())
+        advanceUntilIdle()
+        assertEquals(0, said.size)
+
+        judgeGate!!.complete(Unit)
+        advanceUntilIdle()
+        assertEquals("and the ask it must not have cancelled still landed", whole, flow.state.value?.sentence)
+
+        windows += Heard.Words("πρέπει να πάρω τα φάρμακα")
+        flow.sayIt()
+        assertTrue("consumed while the window is open", flow.sayAgain())
+        assertEquals("nothing was said over the microphone", 1, said.size)
     }
 
     // ---------------------------------------------------------------- Saying it back
@@ -379,10 +439,10 @@ class TalkBoardViewModelTest {
      * own words back would be a promise the app breaks every time he presses it.
      */
     @Test fun `without the judge the button is not on the screen`() = runTest {
-        assertFalse("no toggle, no key, no button", showsExpand(stripLen = 3, judgeReady = false))
-        assertTrue(showsExpand(stripLen = 2, judgeReady = true))
-        assertFalse("one word is not a sentence to expand", showsExpand(stripLen = 1, judgeReady = true))
-        assertFalse(showsExpand(stripLen = 0, judgeReady = true))
+        assertFalse("no toggle, no key, no button", showsExpand(words = 3, judgeReady = false))
+        assertTrue(showsExpand(words = 2, judgeReady = true))
+        assertFalse("one word is not a sentence to expand", showsExpand(words = 1, judgeReady = true))
+        assertFalse(showsExpand(words = 0, judgeReady = true))
 
         // And the door behind the button keeps the same rule, for a tap that raced the strip emptying.
         val flow = flow()
@@ -391,6 +451,25 @@ class TalkBoardViewModelTest {
         assertNull(flow.state.value)
         assertEquals(0, asked.size)
     }
+
+    /**
+     * One card can be a whole phrase — «θέλω νερό» and «δώσε μου νερό» are single cards on this board
+     * — and counting cards hid «Ολόκληρη» from exactly the strips most worth expanding.
+     */
+    @Test fun `a card that carries two words is two words`() = runTest {
+        assertEquals(3, stripWords(listOf(item("θέλω νερό"), item("τώρα"))))
+        assertEquals(1, stripWords(listOf(item(" καφές "))))
+        assertTrue(showsExpand(stripWords(listOf(item("θέλω νερό"))), judgeReady = true))
+
+        // And the door agrees: one chip, two words, one expansion.
+        val flow = flow()
+        flow.open("θέλω νερό", len = 1)
+        advanceUntilIdle()
+        assertEquals(1, asked.size)
+        assertEquals("θέλω νερό", asked.single().heard)
+    }
+
+    private fun item(text: String) = Item(text = text)
 
     private companion object {
         const val JUDGE_MS = 640L

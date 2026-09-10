@@ -66,17 +66,19 @@ import java.io.File
 /** The scrolling grid of pictures. Tagged so a test can scroll to a word that starts below the fold. */
 const val BOARD_GRID_TAG = "board-grid"
 
-/** «Ολόκληρη», and the two controls the expansion puts in its place. Tagged because «Πες το» is a word
- * the board already uses at the bottom for the other thing a sentence can do: be read out to him. */
+/**
+ * «Ολόκληρη», the sentence it makes, and the two primaries that can stand under it. Two tags and not
+ * one, because «Μίλα» and «Το είπα!» are different actions with different rows behind them and a test
+ * that presses "the primary" must be able to say which of them it pressed.
+ */
 const val EXPAND_TAG = "expand-whole"
 const val EXPAND_SAY_TAG = "expand-say"
+const val EXPAND_SAID_TAG = "expand-said"
 const val EXPAND_SENTENCE_TAG = "expand-sentence"
 
 /** The one new button: the content words he tapped, as one whole Greek sentence. */
 const val WHOLE = "Ολόκληρη"
 
-/** «Πες το» here is him saying it, not the phone — hence the microphone on it. */
-const val SAY_IT_BACK = "Πες το"
 const val CLOSE_EXPANSION = "Κλείσε"
 const val SAID_IT = "Το είπα!"
 
@@ -129,7 +131,7 @@ fun TalkBoardScreen(onBack: () -> Unit) {
             items = strip,
             full = stripFull,
             spoken = spoken,
-            showsExpand = showsExpand(strip.size, judgeReady),
+            showsExpand = showsExpand(stripWords(strip), judgeReady),
             expansion = expansion,
             listenLevel = listenLevel,
             onExpand = vm::expand,
@@ -212,9 +214,17 @@ private fun StripRow(
             if (expansion != null) {
                 // The sentence is the thing on the screen while this is open: he reads it, hears it,
                 // and says it back. Never an empty line — while the judge is being asked it says so.
+                //
+                // Bigger than the chips under it and in the app's own blue, because on the fallback
+                // path the two lines carry the *same words* — his own, handed back — and a man who
+                // reads Greek slowly must be able to see at a glance that the top line is a
+                // different kind of thing from the labels, not a stutter. headlineMedium rather than
+                // the Material headlineSmall this app never sizes: it is the only line here that has
+                // to be read as a sentence.
                 Text(
                     expansion.sentence ?: MAKING_SENTENCE,
-                    style = MaterialTheme.typography.titleLarge,
+                    style = MaterialTheme.typography.headlineMedium,
+                    color = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.fillMaxWidth().testTag(EXPAND_SENTENCE_TAG),
                 )
                 Spacer(Modifier.height(Sizes.gapSmall))
@@ -295,9 +305,12 @@ private fun ExpansionControls(
     // Nothing to repeat yet, or it is done: «Κλείσε» alone, so there is one thing to press.
     if (!expansion.thinking && !expansion.done) {
         if (expansion.canConfirm) {
-            BigButton(SAID_IT, onClick = onConfirm, tone = ButtonTone.Success, modifier = Modifier.testTag(EXPAND_SAY_TAG))
+            BigButton(SAID_IT, onClick = onConfirm, tone = ButtonTone.Success, modifier = Modifier.testTag(EXPAND_SAID_TAG))
         } else {
-            BigButton(SAY_IT_BACK, onClick = onSay, icon = Icons.Rounded.Mic, tone = ButtonTone.Primary,
+            // «Μίλα», the same word and the same microphone the three speech modules put over a
+            // recogniser they are about to open — and not «Πες το», which on this board has always
+            // meant the phone speaking and still does, at the bottom.
+            BigButton(GentleCheck.SPEAK, onClick = onSay, icon = Icons.Rounded.Mic, tone = ButtonTone.Primary,
                 modifier = Modifier.testTag(EXPAND_SAY_TAG))
         }
         Spacer(Modifier.height(Sizes.gapSmall))
