@@ -1,10 +1,12 @@
 {
- "version": 2,
+ "version": 3,
  "items": [
   {
    "text": "θέλω καφέ",
    "kind": "PHRASE",
    "category": "FOOD",
+   "tier": 2,
+   "gender": null,
    "image": "2296.png",
    "arasaacId": 2296,
    "via": "el"
@@ -13,6 +15,8 @@
    "text": "πάμε σπίτι",
    "kind": "PHRASE",
    "category": "PLACES",
+   "tier": 2,
+   "gender": null,
    "image": "2317.png",
    "arasaacId": 2317,
    "via": "el"
@@ -21,6 +25,8 @@
    "text": "καλημέρα σας",
    "kind": "PHRASE",
    "category": "QUICK",
+   "tier": 2,
+   "gender": null,
    "image": "6944.png",
    "arasaacId": 6944,
    "via": "en"
@@ -29,6 +35,8 @@
    "text": "τι κάνεις",
    "kind": "PHRASE",
    "category": "QUICK",
+   "tier": 2,
+   "gender": null,
    "image": "39109.png",
    "arasaacId": 39109,
    "via": "en"
@@ -37,6 +45,8 @@
    "text": "πεινάω πολύ",
    "kind": "PHRASE",
    "category": "FOOD",
+   "tier": 2,
+   "gender": null,
    "image": "4962.png",
    "arasaacId": 4962,
    "via": "en"
@@ -45,6 +55,8 @@
    "text": "δώσε μου νερό",
    "kind": "PHRASE",
    "category": "FOOD",
+   "tier": 2,
+   "gender": null,
    "image": "2248.png",
    "arasaacId": 2248,
    "via": "el"
@@ -53,6 +65,8 @@
    "text": "πάμε βόλτα",
    "kind": "PHRASE",
    "category": "PLACES",
+   "tier": 2,
+   "gender": null,
    "image": "3251.png",
    "arasaacId": 3251,
    "via": "en"
@@ -61,6 +75,8 @@
    "text": "είμαι καλά",
    "kind": "PHRASE",
    "category": "FEELINGS",
+   "tier": 2,
+   "gender": null,
    "image": "5397.png",
    "arasaacId": 5397,
    "via": "en"
@@ -69,6 +85,8 @@
    "text": "ευχαριστώ πολύ",
    "kind": "PHRASE",
    "category": "QUICK",
+   "tier": 2,
+   "gender": null,
    "image": "8129.png",
    "arasaacId": 8129,
    "via": "en"
@@ -77,6 +95,8 @@
    "text": "τα λέμε αύριο",
    "kind": "PHRASE",
    "category": "TIME",
+   "tier": 2,
+   "gender": null,
    "image": "7152.png",
    "arasaacId": 7152,
    "via": "en"
@@ -85,6 +105,8 @@
    "text": "θέλω ύπνο",
    "kind": "PHRASE",
    "category": "VERBS",
+   "tier": 2,
+   "gender": null,
    "image": "2369.png",
    "arasaacId": 2369,
    "via": "en"
@@ -93,6 +115,8 @@
    "text": "πονάει το χέρι",
    "kind": "PHRASE",
    "category": "BODY",
+   "tier": 2,
+   "gender": null,
    "image": "2669.png",
    "arasaacId": 2669,
    "via": "en"
@@ -101,6 +125,8 @@
    "text": "άνοιξε την πόρτα",
    "kind": "PHRASE",
    "category": "THINGS",
+   "tier": 2,
+   "gender": null,
    "image": "6875.png",
    "arasaacId": 6875,
    "via": "en"
@@ -109,6 +135,8 @@
    "text": "κλείσε το φως",
    "kind": "PHRASE",
    "category": "THINGS",
+   "tier": 2,
+   "gender": null,
    "image": "8027.png",
    "arasaacId": 8027,
    "via": "en"
@@ -117,6 +145,8 @@
    "text": "πάμε για φαγητό",
    "kind": "PHRASE",
    "category": "FOOD",
+   "tier": 2,
+   "gender": null,
    "image": "4610.png",
    "arasaacId": 4610,
    "via": "en"
@@ -125,6 +155,8 @@
    "text": "θέλω μπάνιο",
    "kind": "PHRASE",
    "category": "PLACES",
+   "tier": 2,
+   "gender": null,
    "image": "5921.png",
    "arasaacId": 5921,
    "via": "en"
@@ -133,6 +165,8 @@
    "text": "καλή όρεξη",
    "kind": "PHRASE",
    "category": "FOOD",
+   "tier": 2,
+   "gender": null,
    "image": "35917.png",
    "arasaacId": 35917,
    "via": "en"
@@ -141,6 +175,8 @@
    "text": "καληνύχτα",
    "kind": "PHRASE",
    "category": "TIME",
+   "tier": 2,
+   "gender": null,
    "image": "6942.png",
    "arasaacId": 6942,
    "via": "en"
@@ -149,6 +185,8 @@
    "text": "πού είναι το κινητό",
    "kind": "PHRASE",
    "category": "THINGS",
+   "tier": 2,
+   "gender": null,
    "image": "2586.png",
    "arasaacId": 2586,
    "via": "en"
@@ -157,6 +195,8 @@
    "text": "έλα εδώ",
    "kind": "PHRASE",
    "category": "VERBS",
+   "tier": 2,
+   "gender": null,
    "image": "11708.png",
    "arasaacId": 11708,
    "via": "en"
@@ -165,6 +205,8 @@
    "text": "Ναι",
    "kind": "PHRASE",
    "category": "QUICK",
+   "tier": 2,
+   "gender": null,
    "image": "5583.png",
    "arasaacId": 5583,
    "via": "en"
@@ -173,6 +215,8 @@
    "text": "Όχι",
    "kind": "PHRASE",
    "category": "QUICK",
+   "tier": 2,
+   "gender": null,
    "image": "5525.png",
    "arasaacId": 5525,
    "via": "en"
@@ -181,6 +225,8 @@
    "text": "Περίμενε",
    "kind": "PHRASE",
    "category": "QUICK",
+   "tier": 2,
+   "gender": null,
    "image": "8109.png",
    "arasaacId": 8109,
    "via": "en"
@@ -189,6 +235,8 @@
    "text": "Βοήθεια",
    "kind": "PHRASE",
    "category": "QUICK",
+   "tier": 2,
+   "gender": null,
    "image": "4570.png",
    "arasaacId": 4570,
    "via": "en"
@@ -197,6 +245,8 @@
    "text": "Πονάω",
    "kind": "PHRASE",
    "category": "QUICK",
+   "tier": 2,
+   "gender": null,
    "image": "2367.png",
    "arasaacId": 2367,
    "via": "el"
@@ -205,6 +255,8 @@
    "text": "Τουαλέτα",
    "kind": "PHRASE",
    "category": "QUICK",
+   "tier": 2,
+   "gender": null,
    "image": "2430.png",
    "arasaacId": 2430,
    "via": "en"
@@ -213,6 +265,8 @@
    "text": "Ευχαριστώ",
    "kind": "PHRASE",
    "category": "QUICK",
+   "tier": 2,
+   "gender": null,
    "image": "8129.png",
    "arasaacId": 8129,
    "via": "en"
@@ -221,6 +275,8 @@
    "text": "Παρακαλώ",
    "kind": "PHRASE",
    "category": "QUICK",
+   "tier": 2,
+   "gender": null,
    "image": "8194.png",
    "arasaacId": 8194,
    "via": "en"
@@ -229,6 +285,8 @@
    "text": "Δεν ξέρω",
    "kind": "PHRASE",
    "category": "QUICK",
+   "tier": 2,
+   "gender": null,
    "image": "7180.png",
    "arasaacId": 7180,
    "via": "en"
@@ -237,6 +295,8 @@
    "text": "Δεν καταλαβαίνω",
    "kind": "PHRASE",
    "category": "QUICK",
+   "tier": 2,
+   "gender": null,
    "image": "27363.png",
    "arasaacId": 27363,
    "via": "en"
@@ -245,6 +305,8 @@
    "text": "Ξανά",
    "kind": "PHRASE",
    "category": "QUICK",
+   "tier": 2,
+   "gender": null,
    "image": "37163.png",
    "arasaacId": 37163,
    "via": "en"
@@ -253,6 +315,8 @@
    "text": "Τέλος",
    "kind": "PHRASE",
    "category": "QUICK",
+   "tier": 2,
+   "gender": null,
    "image": "28429.png",
    "arasaacId": 28429,
    "via": "en"
@@ -261,6 +325,8 @@
    "text": "καφές",
    "kind": "WORD",
    "category": "FOOD",
+   "tier": 1,
+   "gender": "M",
    "image": "2296.png",
    "arasaacId": 2296,
    "via": "el"
@@ -269,6 +335,8 @@
    "text": "νερό",
    "kind": "WORD",
    "category": "FOOD",
+   "tier": 1,
+   "gender": "N",
    "image": "2248.png",
    "arasaacId": 2248,
    "via": "el"
@@ -277,6 +345,8 @@
    "text": "ψωμί",
    "kind": "WORD",
    "category": "FOOD",
+   "tier": 1,
+   "gender": "N",
    "image": "2494.png",
    "arasaacId": 2494,
    "via": "en"
@@ -285,6 +355,8 @@
    "text": "τυρί",
    "kind": "WORD",
    "category": "FOOD",
+   "tier": 1,
+   "gender": "N",
    "image": "2541.png",
    "arasaacId": 2541,
    "via": "en"
@@ -293,6 +365,8 @@
    "text": "γάλα",
    "kind": "WORD",
    "category": "FOOD",
+   "tier": 1,
+   "gender": "N",
    "image": "2445.png",
    "arasaacId": 2445,
    "via": "el"
@@ -301,6 +375,8 @@
    "text": "τσάι",
    "kind": "WORD",
    "category": "FOOD",
+   "tier": 1,
+   "gender": "N",
    "image": "29802.png",
    "arasaacId": 29802,
    "via": "en"
@@ -309,6 +385,8 @@
    "text": "μπύρα",
    "kind": "WORD",
    "category": "FOOD",
+   "tier": 1,
+   "gender": "F",
    "image": "2330.png",
    "arasaacId": 2330,
    "via": "el"
@@ -317,6 +395,8 @@
    "text": "κρασί",
    "kind": "WORD",
    "category": "FOOD",
+   "tier": 1,
+   "gender": "N",
    "image": "2614.png",
    "arasaacId": 2614,
    "via": "en"
@@ -325,6 +405,8 @@
    "text": "χυμός",
    "kind": "WORD",
    "category": "FOOD",
+   "tier": 1,
+   "gender": "M",
    "image": "11461.png",
    "arasaacId": 11461,
    "via": "en"
@@ -333,6 +415,8 @@
    "text": "σουβλάκι",
    "kind": "WORD",
    "category": "FOOD",
+   "tier": 1,
+   "gender": "N",
    "image": "36171.png",
    "arasaacId": 36171,
    "via": "en"
@@ -341,6 +425,8 @@
    "text": "πίτσα",
    "kind": "WORD",
    "category": "FOOD",
+   "tier": 1,
+   "gender": "F",
    "image": "2527.png",
    "arasaacId": 2527,
    "via": "en"
@@ -349,6 +435,8 @@
    "text": "σαλάτα",
    "kind": "WORD",
    "category": "FOOD",
+   "tier": 1,
+   "gender": "F",
    "image": "2377.png",
    "arasaacId": 2377,
    "via": "el"
@@ -357,6 +445,8 @@
    "text": "μακαρόνια",
    "kind": "WORD",
    "category": "FOOD",
+   "tier": 1,
+   "gender": "N",
    "image": "2383.png",
    "arasaacId": 2383,
    "via": "el"
@@ -365,6 +455,8 @@
    "text": "ρύζι",
    "kind": "WORD",
    "category": "FOOD",
+   "tier": 1,
+   "gender": "N",
    "image": "6911.png",
    "arasaacId": 6911,
    "via": "en"
@@ -373,6 +465,8 @@
    "text": "κρέας",
    "kind": "WORD",
    "category": "FOOD",
+   "tier": 1,
+   "gender": "N",
    "image": "2316.png",
    "arasaacId": 2316,
    "via": "el"
@@ -381,6 +475,8 @@
    "text": "κοτόπουλο",
    "kind": "WORD",
    "category": "FOOD",
+   "tier": 1,
+   "gender": "N",
    "image": "2404.png",
    "arasaacId": 2404,
    "via": "en"
@@ -389,6 +485,8 @@
    "text": "ψάρι",
    "kind": "WORD",
    "category": "FOOD",
+   "tier": 1,
+   "gender": "N",
    "image": "2519.png",
    "arasaacId": 2519,
    "via": "en"
@@ -397,6 +495,8 @@
    "text": "αυγό",
    "kind": "WORD",
    "category": "FOOD",
+   "tier": 1,
+   "gender": "N",
    "image": "2427.png",
    "arasaacId": 2427,
    "via": "en"
@@ -405,6 +505,8 @@
    "text": "μήλο",
    "kind": "WORD",
    "category": "FOOD",
+   "tier": 1,
+   "gender": "N",
    "image": "2462.png",
    "arasaacId": 2462,
    "via": "en"
@@ -413,6 +515,8 @@
    "text": "μπανάνα",
    "kind": "WORD",
    "category": "FOOD",
+   "tier": 1,
+   "gender": "F",
    "image": "2530.png",
    "arasaacId": 2530,
    "via": "en"
@@ -421,6 +525,8 @@
    "text": "πορτοκάλι",
    "kind": "WORD",
    "category": "FOOD",
+   "tier": 1,
+   "gender": "N",
    "image": "2483.png",
    "arasaacId": 2483,
    "via": "en"
@@ -429,6 +535,8 @@
    "text": "σοκολάτα",
    "kind": "WORD",
    "category": "FOOD",
+   "tier": 1,
+   "gender": "F",
    "image": "2334.png",
    "arasaacId": 2334,
    "via": "el"
@@ -437,6 +545,8 @@
    "text": "παγωτό",
    "kind": "WORD",
    "category": "FOOD",
+   "tier": 1,
+   "gender": "N",
    "image": "3348.png",
    "arasaacId": 3348,
    "via": "en"
@@ -445,6 +555,8 @@
    "text": "γλυκό",
    "kind": "WORD",
    "category": "FOOD",
+   "tier": 1,
+   "gender": "N",
    "image": "2686.png",
    "arasaacId": 2686,
    "via": "en"
@@ -453,6 +565,8 @@
    "text": "σούπα",
    "kind": "WORD",
    "category": "FOOD",
+   "tier": 1,
+   "gender": "F",
    "image": "2573.png",
    "arasaacId": 2573,
    "via": "en"
@@ -461,6 +575,8 @@
    "text": "πατάτες",
    "kind": "WORD",
    "category": "FOOD",
+   "tier": 1,
+   "gender": "F",
    "image": "2503.png",
    "arasaacId": 2503,
    "via": "en"
@@ -469,6 +585,8 @@
    "text": "ζάχαρη",
    "kind": "WORD",
    "category": "FOOD",
+   "tier": 1,
+   "gender": "F",
    "image": "25560.png",
    "arasaacId": 25560,
    "via": "en"
@@ -477,6 +595,8 @@
    "text": "αλάτι",
    "kind": "WORD",
    "category": "FOOD",
+   "tier": 1,
+   "gender": "N",
    "image": "5579.png",
    "arasaacId": 5579,
    "via": "en"
@@ -485,6 +605,8 @@
    "text": "πρωινό",
    "kind": "WORD",
    "category": "FOOD",
+   "tier": 1,
+   "gender": "N",
    "image": "4625.png",
    "arasaacId": 4625,
    "via": "en"
@@ -493,6 +615,8 @@
    "text": "μεσημεριανό",
    "kind": "WORD",
    "category": "FOOD",
+   "tier": 1,
+   "gender": "N",
    "image": "4609.png",
    "arasaacId": 4609,
    "via": "en"
@@ -501,6 +625,8 @@
    "text": "βραδινό",
    "kind": "WORD",
    "category": "FOOD",
+   "tier": 1,
+   "gender": "N",
    "image": "4592.png",
    "arasaacId": 4592,
    "via": "en"
@@ -509,6 +635,8 @@
    "text": "φρούτα",
    "kind": "WORD",
    "category": "FOOD",
+   "tier": 1,
+   "gender": "N",
    "image": "28339.png",
    "arasaacId": 28339,
    "via": "en"
@@ -517,6 +645,8 @@
    "text": "σπίτι",
    "kind": "WORD",
    "category": "PLACES",
+   "tier": 1,
+   "gender": "N",
    "image": "2317.png",
    "arasaacId": 2317,
    "via": "el"
@@ -525,6 +655,8 @@
    "text": "καφετέρια",
    "kind": "WORD",
    "category": "PLACES",
+   "tier": 1,
+   "gender": "F",
    "image": "28889.png",
    "arasaacId": 28889,
    "via": "en"
@@ -533,6 +665,8 @@
    "text": "νοσοκομείο",
    "kind": "WORD",
    "category": "PLACES",
+   "tier": 1,
+   "gender": "N",
    "image": "3116.png",
    "arasaacId": 3116,
    "via": "en"
@@ -541,6 +675,8 @@
    "text": "φαρμακείο",
    "kind": "WORD",
    "category": "PLACES",
+   "tier": 1,
+   "gender": "N",
    "image": "3313.png",
    "arasaacId": 3313,
    "via": "en"
@@ -549,6 +685,8 @@
    "text": "σούπερ μάρκετ",
    "kind": "WORD",
    "category": "PLACES",
+   "tier": 1,
+   "gender": "N",
    "image": "3389.png",
    "arasaacId": 3389,
    "via": "en"
@@ -557,6 +695,8 @@
    "text": "θάλασσα",
    "kind": "WORD",
    "category": "PLACES",
+   "tier": 1,
+   "gender": "F",
    "image": "2925.png",
    "arasaacId": 2925,
    "via": "en"
@@ -565,6 +705,8 @@
    "text": "πάρκο",
    "kind": "WORD",
    "category": "PLACES",
+   "tier": 1,
+   "gender": "N",
    "image": "5379.png",
    "arasaacId": 5379,
    "via": "en"
@@ -573,6 +715,8 @@
    "text": "γυμναστήριο",
    "kind": "WORD",
    "category": "PLACES",
+   "tier": 1,
+   "gender": "N",
    "image": "24785.png",
    "arasaacId": 24785,
    "via": "en"
@@ -581,6 +725,8 @@
    "text": "σχολείο",
    "kind": "WORD",
    "category": "PLACES",
+   "tier": 1,
+   "gender": "N",
    "image": "3082.png",
    "arasaacId": 3082,
    "via": "en"
@@ -589,6 +735,8 @@
    "text": "εκκλησία",
    "kind": "WORD",
    "category": "PLACES",
+   "tier": 1,
+   "gender": "F",
    "image": "3118.png",
    "arasaacId": 3118,
    "via": "en"
@@ -597,6 +745,8 @@
    "text": "τράπεζα",
    "kind": "WORD",
    "category": "PLACES",
+   "tier": 1,
+   "gender": "F",
    "image": "3062.png",
    "arasaacId": 3062,
    "via": "en"
@@ -605,6 +755,8 @@
    "text": "ταξί",
    "kind": "WORD",
    "category": "PLACES",
+   "tier": 1,
+   "gender": "N",
    "image": "2580.png",
    "arasaacId": 2580,
    "via": "en"
@@ -613,6 +765,8 @@
    "text": "λεωφορείο",
    "kind": "WORD",
    "category": "PLACES",
+   "tier": 1,
+   "gender": "N",
    "image": "2262.png",
    "arasaacId": 2262,
    "via": "el"
@@ -621,6 +775,8 @@
    "text": "αυτοκίνητο",
    "kind": "WORD",
    "category": "PLACES",
+   "tier": 1,
+   "gender": "N",
    "image": "2339.png",
    "arasaacId": 2339,
    "via": "el"
@@ -629,6 +785,8 @@
    "text": "δρόμος",
    "kind": "WORD",
    "category": "PLACES",
+   "tier": 1,
+   "gender": "M",
    "image": "2299.png",
    "arasaacId": 2299,
    "via": "el"
@@ -637,6 +795,8 @@
    "text": "ταβέρνα",
    "kind": "WORD",
    "category": "PLACES",
+   "tier": 1,
+   "gender": "F",
    "image": "10283.png",
    "arasaacId": 10283,
    "via": "en"
@@ -645,6 +805,8 @@
    "text": "μπάνιο",
    "kind": "WORD",
    "category": "PLACES",
+   "tier": 1,
+   "gender": "N",
    "image": "5921.png",
    "arasaacId": 5921,
    "via": "en"
@@ -653,6 +815,8 @@
    "text": "κουζίνα",
    "kind": "WORD",
    "category": "PLACES",
+   "tier": 1,
+   "gender": "F",
    "image": "5965.png",
    "arasaacId": 5965,
    "via": "en"
@@ -661,6 +825,8 @@
    "text": "κρεβάτι",
    "kind": "WORD",
    "category": "PLACES",
+   "tier": 1,
+   "gender": "N",
    "image": "2304.png",
    "arasaacId": 2304,
    "via": "el"
@@ -669,6 +835,8 @@
    "text": "δουλειά",
    "kind": "WORD",
    "category": "PLACES",
+   "tier": 1,
+   "gender": "F",
    "image": "2599.png",
    "arasaacId": 2599,
    "via": "en"
@@ -677,6 +845,8 @@
    "text": "γήπεδο",
    "kind": "WORD",
    "category": "PLACES",
+   "tier": 1,
+   "gender": "N",
    "image": "5993.png",
    "arasaacId": 5993,
    "via": "en"
@@ -685,6 +855,8 @@
    "text": "μπαλκόνι",
    "kind": "WORD",
    "category": "PLACES",
+   "tier": 1,
+   "gender": "N",
    "image": "8254.png",
    "arasaacId": 8254,
    "via": "en"
@@ -693,6 +865,8 @@
    "text": "μαμά",
    "kind": "WORD",
    "category": "PEOPLE",
+   "tier": 1,
+   "gender": "F",
    "image": "2458.png",
    "arasaacId": 2458,
    "via": "en"
@@ -701,6 +875,8 @@
    "text": "μπαμπάς",
    "kind": "WORD",
    "category": "PEOPLE",
+   "tier": 1,
+   "gender": "M",
    "image": "31146.png",
    "arasaacId": 31146,
    "via": "en"
@@ -709,6 +885,8 @@
    "text": "αδελφός",
    "kind": "WORD",
    "category": "PEOPLE",
+   "tier": 1,
+   "gender": "M",
    "image": "2423.png",
    "arasaacId": 2423,
    "via": "en"
@@ -717,6 +895,8 @@
    "text": "αδελφή",
    "kind": "WORD",
    "category": "PEOPLE",
+   "tier": 1,
+   "gender": "F",
    "image": "2422.png",
    "arasaacId": 2422,
    "via": "en"
@@ -725,6 +905,8 @@
    "text": "φίλος",
    "kind": "WORD",
    "category": "PEOPLE",
+   "tier": 1,
+   "gender": "M",
    "image": "8486.png",
    "arasaacId": 8486,
    "via": "en"
@@ -733,6 +915,8 @@
    "text": "φίλη",
    "kind": "WORD",
    "category": "PEOPLE",
+   "tier": 1,
+   "gender": "F",
    "image": "8486.png",
    "arasaacId": 8486,
    "via": "en"
@@ -741,6 +925,8 @@
    "text": "γιατρός",
    "kind": "WORD",
    "category": "PEOPLE",
+   "tier": 1,
+   "gender": "M",
    "image": "2467.png",
    "arasaacId": 2467,
    "via": "en"
@@ -749,6 +935,8 @@
    "text": "νοσοκόμα",
    "kind": "WORD",
    "category": "PEOPLE",
+   "tier": 1,
+   "gender": "F",
    "image": "2375.png",
    "arasaacId": 2375,
    "via": "en"
@@ -757,6 +945,8 @@
    "text": "λογοθεραπεύτρια",
    "kind": "WORD",
    "category": "PEOPLE",
+   "tier": 1,
+   "gender": "F",
    "image": "2454.png",
    "arasaacId": 2454,
    "via": "el"
@@ -765,6 +955,8 @@
    "text": "φυσιοθεραπευτής",
    "kind": "WORD",
    "category": "PEOPLE",
+   "tier": 1,
+   "gender": "M",
    "image": "2395.png",
    "arasaacId": 2395,
    "via": "en"
@@ -773,6 +965,8 @@
    "text": "γείτονας",
    "kind": "WORD",
    "category": "PEOPLE",
+   "tier": 1,
+   "gender": "M",
    "image": "37228.png",
    "arasaacId": 37228,
    "via": "en"
@@ -781,6 +975,8 @@
    "text": "παιδί",
    "kind": "WORD",
    "category": "PEOPLE",
+   "tier": 1,
+   "gender": "N",
    "image": "2485.png",
    "arasaacId": 2485,
    "via": "en"
@@ -789,6 +985,8 @@
    "text": "άντρας",
    "kind": "WORD",
    "category": "PEOPLE",
+   "tier": 1,
+   "gender": "M",
    "image": "4665.png",
    "arasaacId": 4665,
    "via": "en"
@@ -797,6 +995,8 @@
    "text": "γυναίκα",
    "kind": "WORD",
    "category": "PEOPLE",
+   "tier": 1,
+   "gender": "F",
    "image": "4703.png",
    "arasaacId": 4703,
    "via": "en"
@@ -805,6 +1005,8 @@
    "text": "εγώ",
    "kind": "WORD",
    "category": "PEOPLE",
+   "tier": 1,
+   "gender": null,
    "image": "2617.png",
    "arasaacId": 2617,
    "via": "en"
@@ -813,6 +1015,8 @@
    "text": "εσύ",
    "kind": "WORD",
    "category": "PEOPLE",
+   "tier": 1,
+   "gender": null,
    "image": "2608.png",
    "arasaacId": 2608,
    "via": "en"
@@ -821,6 +1025,8 @@
    "text": "θέλω",
    "kind": "WORD",
    "category": "VERBS",
+   "tier": 1,
+   "gender": null,
    "image": "5441.png",
    "arasaacId": 5441,
    "via": "en"
@@ -829,6 +1035,8 @@
    "text": "πάμε",
    "kind": "WORD",
    "category": "VERBS",
+   "tier": 1,
+   "gender": null,
    "image": "2432.png",
    "arasaacId": 2432,
    "via": "el"
@@ -837,6 +1045,8 @@
    "text": "τρώω",
    "kind": "WORD",
    "category": "VERBS",
+   "tier": 1,
+   "gender": null,
    "image": "2349.png",
    "arasaacId": 2349,
    "via": "el"
@@ -845,6 +1055,8 @@
    "text": "πίνω",
    "kind": "WORD",
    "category": "VERBS",
+   "tier": 1,
+   "gender": null,
    "image": "2276.png",
    "arasaacId": 2276,
    "via": "el"
@@ -853,6 +1065,8 @@
    "text": "κοιμάμαι",
    "kind": "WORD",
    "category": "VERBS",
+   "tier": 1,
+   "gender": null,
    "image": "2369.png",
    "arasaacId": 2369,
    "via": "el"
@@ -861,6 +1075,8 @@
    "text": "περπατάω",
    "kind": "WORD",
    "category": "VERBS",
+   "tier": 1,
+   "gender": null,
    "image": "3251.png",
    "arasaacId": 3251,
    "via": "en"
@@ -869,6 +1085,8 @@
    "text": "κάθομαι",
    "kind": "WORD",
    "category": "VERBS",
+   "tier": 1,
+   "gender": null,
    "image": "6611.png",
    "arasaacId": 6611,
    "via": "en"
@@ -877,6 +1095,8 @@
    "text": "βλέπω",
    "kind": "WORD",
    "category": "VERBS",
+   "tier": 1,
+   "gender": null,
    "image": "2474.png",
    "arasaacId": 2474,
    "via": "en"
@@ -885,6 +1105,8 @@
    "text": "ακούω",
    "kind": "WORD",
    "category": "VERBS",
+   "tier": 1,
+   "gender": null,
    "image": "2381.png",
    "arasaacId": 2381,
    "via": "el"
@@ -893,6 +1115,8 @@
    "text": "μιλάω",
    "kind": "WORD",
    "category": "VERBS",
+   "tier": 1,
+   "gender": null,
    "image": "3345.png",
    "arasaacId": 3345,
    "via": "en"
@@ -901,6 +1125,8 @@
    "text": "διαβάζω",
    "kind": "WORD",
    "category": "VERBS",
+   "tier": 1,
+   "gender": null,
    "image": "2387.png",
    "arasaacId": 2387,
    "via": "el"
@@ -909,6 +1135,8 @@
    "text": "γράφω",
    "kind": "WORD",
    "category": "VERBS",
+   "tier": 1,
+   "gender": null,
    "image": "2380.png",
    "arasaacId": 2380,
    "via": "el"
@@ -917,6 +1145,8 @@
    "text": "παίζω",
    "kind": "WORD",
    "category": "VERBS",
+   "tier": 1,
+   "gender": null,
    "image": "2439.png",
    "arasaacId": 2439,
    "via": "en"
@@ -925,6 +1155,8 @@
    "text": "τηλεφωνώ",
    "kind": "WORD",
    "category": "VERBS",
+   "tier": 1,
+   "gender": null,
    "image": "4686.png",
    "arasaacId": 4686,
    "via": "en"
@@ -933,6 +1165,8 @@
    "text": "αγοράζω",
    "kind": "WORD",
    "category": "VERBS",
+   "tier": 1,
+   "gender": null,
    "image": "6457.png",
    "arasaacId": 6457,
    "via": "en"
@@ -941,6 +1175,8 @@
    "text": "πληρώνω",
    "kind": "WORD",
    "category": "VERBS",
+   "tier": 1,
+   "gender": null,
    "image": "6457.png",
    "arasaacId": 6457,
    "via": "en"
@@ -949,6 +1185,8 @@
    "text": "ανοίγω",
    "kind": "WORD",
    "category": "VERBS",
+   "tier": 1,
+   "gender": null,
    "image": "4549.png",
    "arasaacId": 4549,
    "via": "en"
@@ -957,6 +1195,8 @@
    "text": "κλείνω",
    "kind": "WORD",
    "category": "VERBS",
+   "tier": 1,
+   "gender": null,
    "image": "2697.png",
    "arasaacId": 2697,
    "via": "en"
@@ -965,6 +1205,8 @@
    "text": "έρχομαι",
    "kind": "WORD",
    "category": "VERBS",
+   "tier": 1,
+   "gender": null,
    "image": "11708.png",
    "arasaacId": 11708,
    "via": "en"
@@ -973,6 +1215,8 @@
    "text": "φεύγω",
    "kind": "WORD",
    "category": "VERBS",
+   "tier": 1,
+   "gender": null,
    "image": "2806.png",
    "arasaacId": 2806,
    "via": "en"
@@ -981,6 +1225,8 @@
    "text": "βοηθάω",
    "kind": "WORD",
    "category": "VERBS",
+   "tier": 1,
+   "gender": null,
    "image": "4570.png",
    "arasaacId": 4570,
    "via": "en"
@@ -989,6 +1235,8 @@
    "text": "ξεκουράζομαι",
    "kind": "WORD",
    "category": "VERBS",
+   "tier": 1,
+   "gender": null,
    "image": "3299.png",
    "arasaacId": 3299,
    "via": "en"
@@ -997,6 +1245,8 @@
    "text": "τραγουδάω",
    "kind": "WORD",
    "category": "VERBS",
+   "tier": 1,
+   "gender": null,
    "image": "2315.png",
    "arasaacId": 2315,
    "via": "en"
@@ -1005,6 +1255,8 @@
    "text": "χαρούμενος",
    "kind": "WORD",
    "category": "FEELINGS",
+   "tier": 1,
+   "gender": null,
    "image": "3245.png",
    "arasaacId": 3245,
    "via": "en"
@@ -1013,6 +1265,8 @@
    "text": "λυπημένος",
    "kind": "WORD",
    "category": "FEELINGS",
+   "tier": 1,
+   "gender": null,
    "image": "2606.png",
    "arasaacId": 2606,
    "via": "en"
@@ -1021,6 +1275,8 @@
    "text": "θυμωμένος",
    "kind": "WORD",
    "category": "FEELINGS",
+   "tier": 1,
+   "gender": null,
    "image": "2374.png",
    "arasaacId": 2374,
    "via": "el"
@@ -1029,6 +1285,8 @@
    "text": "κουρασμένος",
    "kind": "WORD",
    "category": "FEELINGS",
+   "tier": 1,
+   "gender": null,
    "image": "2314.png",
    "arasaacId": 2314,
    "via": "el"
@@ -1037,6 +1295,8 @@
    "text": "φοβισμένος",
    "kind": "WORD",
    "category": "FEELINGS",
+   "tier": 1,
+   "gender": null,
    "image": "2261.png",
    "arasaacId": 2261,
    "via": "en"
@@ -1045,6 +1305,8 @@
    "text": "πεινάω",
    "kind": "WORD",
    "category": "FEELINGS",
+   "tier": 1,
+   "gender": null,
    "image": "4962.png",
    "arasaacId": 4962,
    "via": "en"
@@ -1053,6 +1315,8 @@
    "text": "διψάω",
    "kind": "WORD",
    "category": "FEELINGS",
+   "tier": 1,
+   "gender": null,
    "image": "4963.png",
    "arasaacId": 4963,
    "via": "en"
@@ -1061,6 +1325,8 @@
    "text": "κρυώνω",
    "kind": "WORD",
    "category": "FEELINGS",
+   "tier": 1,
+   "gender": null,
    "image": "4652.png",
    "arasaacId": 4652,
    "via": "en"
@@ -1069,6 +1335,8 @@
    "text": "ζεσταίνομαι",
    "kind": "WORD",
    "category": "FEELINGS",
+   "tier": 1,
+   "gender": null,
    "image": "2300.png",
    "arasaacId": 2300,
    "via": "en"
@@ -1077,6 +1345,8 @@
    "text": "βαριέμαι",
    "kind": "WORD",
    "category": "FEELINGS",
+   "tier": 1,
+   "gender": null,
    "image": "35531.png",
    "arasaacId": 35531,
    "via": "en"
@@ -1085,6 +1355,8 @@
    "text": "νευρικός",
    "kind": "WORD",
    "category": "FEELINGS",
+   "tier": 1,
+   "gender": null,
    "image": "11312.png",
    "arasaacId": 11312,
    "via": "en"
@@ -1093,6 +1365,8 @@
    "text": "ήρεμος",
    "kind": "WORD",
    "category": "FEELINGS",
+   "tier": 1,
+   "gender": null,
    "image": "31310.png",
    "arasaacId": 31310,
    "via": "en"
@@ -1101,6 +1375,8 @@
    "text": "καλά",
    "kind": "WORD",
    "category": "FEELINGS",
+   "tier": 1,
+   "gender": null,
    "image": "5397.png",
    "arasaacId": 5397,
    "via": "en"
@@ -1109,6 +1385,8 @@
    "text": "άσχημα",
    "kind": "WORD",
    "category": "FEELINGS",
+   "tier": 1,
+   "gender": null,
    "image": "4690.png",
    "arasaacId": 4690,
    "via": "en"
@@ -1117,6 +1395,8 @@
    "text": "κεφάλι",
    "kind": "WORD",
    "category": "BODY",
+   "tier": 1,
+   "gender": "N",
    "image": "2673.png",
    "arasaacId": 2673,
    "via": "en"
@@ -1125,6 +1405,8 @@
    "text": "χέρι",
    "kind": "WORD",
    "category": "BODY",
+   "tier": 1,
+   "gender": "N",
    "image": "2928.png",
    "arasaacId": 2928,
    "via": "en"
@@ -1133,6 +1415,8 @@
    "text": "πόδι",
    "kind": "WORD",
    "category": "BODY",
+   "tier": 1,
+   "gender": "N",
    "image": "2841.png",
    "arasaacId": 2841,
    "via": "en"
@@ -1141,6 +1425,8 @@
    "text": "μάτι",
    "kind": "WORD",
    "category": "BODY",
+   "tier": 1,
+   "gender": "N",
    "image": "6573.png",
    "arasaacId": 6573,
    "via": "en"
@@ -1149,6 +1435,8 @@
    "text": "αυτί",
    "kind": "WORD",
    "category": "BODY",
+   "tier": 1,
+   "gender": "N",
    "image": "2871.png",
    "arasaacId": 2871,
    "via": "en"
@@ -1157,6 +1445,8 @@
    "text": "στόμα",
    "kind": "WORD",
    "category": "BODY",
+   "tier": 1,
+   "gender": "N",
    "image": "2663.png",
    "arasaacId": 2663,
    "via": "en"
@@ -1165,6 +1455,8 @@
    "text": "μύτη",
    "kind": "WORD",
    "category": "BODY",
+   "tier": 1,
+   "gender": "F",
    "image": "2887.png",
    "arasaacId": 2887,
    "via": "en"
@@ -1173,6 +1465,8 @@
    "text": "δόντια",
    "kind": "WORD",
    "category": "BODY",
+   "tier": 1,
+   "gender": "N",
    "image": "2737.png",
    "arasaacId": 2737,
    "via": "en"
@@ -1181,6 +1475,8 @@
    "text": "στομάχι",
    "kind": "WORD",
    "category": "BODY",
+   "tier": 1,
+   "gender": "N",
    "image": "2786.png",
    "arasaacId": 2786,
    "via": "en"
@@ -1189,6 +1485,8 @@
    "text": "πλάτη",
    "kind": "WORD",
    "category": "BODY",
+   "tier": 1,
+   "gender": "F",
    "image": "2748.png",
    "arasaacId": 2748,
    "via": "en"
@@ -1197,6 +1495,8 @@
    "text": "καρδιά",
    "kind": "WORD",
    "category": "BODY",
+   "tier": 1,
+   "gender": "F",
    "image": "2715.png",
    "arasaacId": 2715,
    "via": "en"
@@ -1205,6 +1505,8 @@
    "text": "γόνατο",
    "kind": "WORD",
    "category": "BODY",
+   "tier": 1,
+   "gender": "N",
    "image": "2810.png",
    "arasaacId": 2810,
    "via": "en"
@@ -1213,6 +1515,8 @@
    "text": "δάχτυλο",
    "kind": "WORD",
    "category": "BODY",
+   "tier": 1,
+   "gender": "N",
    "image": "3298.png",
    "arasaacId": 3298,
    "via": "en"
@@ -1221,6 +1525,8 @@
    "text": "λαιμός",
    "kind": "WORD",
    "category": "BODY",
+   "tier": 1,
+   "gender": "M",
    "image": "2727.png",
    "arasaacId": 2727,
    "via": "en"
@@ -1229,6 +1535,8 @@
    "text": "ένα",
    "kind": "NUMBER",
    "category": "NUMBERS",
+   "tier": 1,
+   "gender": null,
    "image": "2627.png",
    "arasaacId": 2627,
    "via": "en"
@@ -1237,6 +1545,8 @@
    "text": "δύο",
    "kind": "NUMBER",
    "category": "NUMBERS",
+   "tier": 1,
+   "gender": null,
    "image": "2628.png",
    "arasaacId": 2628,
    "via": "en"
@@ -1245,6 +1555,8 @@
    "text": "τρία",
    "kind": "NUMBER",
    "category": "NUMBERS",
+   "tier": 1,
+   "gender": null,
    "image": "2629.png",
    "arasaacId": 2629,
    "via": "en"
@@ -1253,6 +1565,8 @@
    "text": "τέσσερα",
    "kind": "NUMBER",
    "category": "NUMBERS",
+   "tier": 1,
+   "gender": null,
    "image": "2630.png",
    "arasaacId": 2630,
    "via": "en"
@@ -1261,6 +1575,8 @@
    "text": "πέντε",
    "kind": "NUMBER",
    "category": "NUMBERS",
+   "tier": 1,
+   "gender": null,
    "image": "39311.png",
    "arasaacId": 39311,
    "via": "en"
@@ -1269,6 +1585,8 @@
    "text": "έξι",
    "kind": "NUMBER",
    "category": "NUMBERS",
+   "tier": 1,
+   "gender": null,
    "image": "2632.png",
    "arasaacId": 2632,
    "via": "en"
@@ -1277,6 +1595,8 @@
    "text": "επτά",
    "kind": "NUMBER",
    "category": "NUMBERS",
+   "tier": 1,
+   "gender": null,
    "image": "2633.png",
    "arasaacId": 2633,
    "via": "en"
@@ -1285,6 +1605,8 @@
    "text": "οκτώ",
    "kind": "NUMBER",
    "category": "NUMBERS",
+   "tier": 1,
+   "gender": null,
    "image": "2634.png",
    "arasaacId": 2634,
    "via": "en"
@@ -1293,6 +1615,8 @@
    "text": "εννέα",
    "kind": "NUMBER",
    "category": "NUMBERS",
+   "tier": 1,
+   "gender": null,
    "image": "2635.png",
    "arasaacId": 2635,
    "via": "en"
@@ -1301,6 +1625,8 @@
    "text": "δέκα",
    "kind": "NUMBER",
    "category": "NUMBERS",
+   "tier": 1,
+   "gender": null,
    "image": "7025.png",
    "arasaacId": 7025,
    "via": "en"
@@ -1309,6 +1635,8 @@
    "text": "τηλέφωνο",
    "kind": "WORD",
    "category": "THINGS",
+   "tier": 1,
+   "gender": "N",
    "image": "2791.png",
    "arasaacId": 2791,
    "via": "en"
@@ -1317,6 +1645,8 @@
    "text": "τηλεόραση",
    "kind": "WORD",
    "category": "THINGS",
+   "tier": 1,
+   "gender": "F",
    "image": "25498.png",
    "arasaacId": 25498,
    "via": "en"
@@ -1325,6 +1655,8 @@
    "text": "κλειδιά",
    "kind": "WORD",
    "category": "THINGS",
+   "tier": 1,
+   "gender": "N",
    "image": "2451.png",
    "arasaacId": 2451,
    "via": "el"
@@ -1333,6 +1665,8 @@
    "text": "πορτοφόλι",
    "kind": "WORD",
    "category": "THINGS",
+   "tier": 1,
+   "gender": "N",
    "image": "2689.png",
    "arasaacId": 2689,
    "via": "en"
@@ -1341,6 +1675,8 @@
    "text": "γυαλιά",
    "kind": "WORD",
    "category": "THINGS",
+   "tier": 1,
+   "gender": "N",
    "image": "3329.png",
    "arasaacId": 3329,
    "via": "en"
@@ -1349,6 +1685,8 @@
    "text": "ρούχα",
    "kind": "WORD",
    "category": "THINGS",
+   "tier": 1,
+   "gender": "N",
    "image": "7233.png",
    "arasaacId": 7233,
    "via": "en"
@@ -1357,6 +1695,8 @@
    "text": "παπούτσια",
    "kind": "WORD",
    "category": "THINGS",
+   "tier": 1,
+   "gender": "N",
    "image": "2622.png",
    "arasaacId": 2622,
    "via": "en"
@@ -1365,6 +1705,8 @@
    "text": "φάρμακα",
    "kind": "WORD",
    "category": "THINGS",
+   "tier": 1,
+   "gender": "N",
    "image": "8359.png",
    "arasaacId": 8359,
    "via": "en"
@@ -1373,6 +1715,8 @@
    "text": "χρήματα",
    "kind": "WORD",
    "category": "THINGS",
+   "tier": 1,
+   "gender": "N",
    "image": "4630.png",
    "arasaacId": 4630,
    "via": "en"
@@ -1381,6 +1725,8 @@
    "text": "ρολόι",
    "kind": "WORD",
    "category": "THINGS",
+   "tier": 1,
+   "gender": "N",
    "image": "5561.png",
    "arasaacId": 5561,
    "via": "en"
@@ -1389,6 +1735,8 @@
    "text": "τσάντα",
    "kind": "WORD",
    "category": "THINGS",
+   "tier": 1,
+   "gender": "F",
    "image": "2284.png",
    "arasaacId": 2284,
    "via": "el"
@@ -1397,6 +1745,8 @@
    "text": "ομπρέλα",
    "kind": "WORD",
    "category": "THINGS",
+   "tier": 1,
+   "gender": "F",
    "image": "2500.png",
    "arasaacId": 2500,
    "via": "en"
@@ -1405,6 +1755,8 @@
    "text": "καρέκλα",
    "kind": "WORD",
    "category": "THINGS",
+   "tier": 1,
+   "gender": "F",
    "image": "3155.png",
    "arasaacId": 3155,
    "via": "en"
@@ -1413,6 +1765,8 @@
    "text": "τραπέζι",
    "kind": "WORD",
    "category": "THINGS",
+   "tier": 1,
+   "gender": "N",
    "image": "3129.png",
    "arasaacId": 3129,
    "via": "en"
@@ -1421,6 +1775,8 @@
    "text": "πόρτα",
    "kind": "WORD",
    "category": "THINGS",
+   "tier": 1,
+   "gender": "F",
    "image": "3244.png",
    "arasaacId": 3244,
    "via": "en"
@@ -1429,6 +1785,8 @@
    "text": "παράθυρο",
    "kind": "WORD",
    "category": "THINGS",
+   "tier": 1,
+   "gender": "N",
    "image": "2611.png",
    "arasaacId": 2611,
    "via": "en"
@@ -1437,6 +1795,8 @@
    "text": "βιβλίο",
    "kind": "WORD",
    "category": "THINGS",
+   "tier": 1,
+   "gender": "N",
    "image": "2450.png",
    "arasaacId": 2450,
    "via": "el"
@@ -1445,6 +1805,8 @@
    "text": "μουσική",
    "kind": "WORD",
    "category": "THINGS",
+   "tier": 1,
+   "gender": "F",
    "image": "24795.png",
    "arasaacId": 24795,
    "via": "en"
@@ -1453,6 +1815,8 @@
    "text": "μπάλα",
    "kind": "WORD",
    "category": "THINGS",
+   "tier": 1,
+   "gender": "F",
    "image": "2269.png",
    "arasaacId": 2269,
    "via": "el"
@@ -1461,6 +1825,8 @@
    "text": "ήλιος",
    "kind": "WORD",
    "category": "THINGS",
+   "tier": 1,
+   "gender": "M",
    "image": "2798.png",
    "arasaacId": 2798,
    "via": "en"
@@ -1469,6 +1835,8 @@
    "text": "βροχή",
    "kind": "WORD",
    "category": "THINGS",
+   "tier": 1,
+   "gender": "F",
    "image": "3123.png",
    "arasaacId": 3123,
    "via": "en"
@@ -1477,6 +1845,8 @@
    "text": "σήμερα",
    "kind": "WORD",
    "category": "TIME",
+   "tier": 1,
+   "gender": null,
    "image": "7131.png",
    "arasaacId": 7131,
    "via": "en"
@@ -1485,6 +1855,8 @@
    "text": "αύριο",
    "kind": "WORD",
    "category": "TIME",
+   "tier": 1,
+   "gender": null,
    "image": "7152.png",
    "arasaacId": 7152,
    "via": "en"
@@ -1493,6 +1865,8 @@
    "text": "χθες",
    "kind": "WORD",
    "category": "TIME",
+   "tier": 1,
+   "gender": null,
    "image": "6926.png",
    "arasaacId": 6926,
    "via": "en"
@@ -1501,6 +1875,8 @@
    "text": "τώρα",
    "kind": "WORD",
    "category": "TIME",
+   "tier": 1,
+   "gender": null,
    "image": "13026.png",
    "arasaacId": 13026,
    "via": "en"
@@ -1509,6 +1885,8 @@
    "text": "μετά",
    "kind": "WORD",
    "category": "TIME",
+   "tier": 1,
+   "gender": null,
    "image": "13080.png",
    "arasaacId": 13080,
    "via": "en"
@@ -1517,6 +1895,8 @@
    "text": "πρωί",
    "kind": "WORD",
    "category": "TIME",
+   "tier": 1,
+   "gender": "N",
    "image": "25704.png",
    "arasaacId": 25704,
    "via": "en"
@@ -1525,6 +1905,8 @@
    "text": "μεσημέρι",
    "kind": "WORD",
    "category": "TIME",
+   "tier": 1,
+   "gender": "N",
    "image": null,
    "arasaacId": 4695,
    "via": null
@@ -1533,6 +1915,8 @@
    "text": "βράδυ",
    "kind": "WORD",
    "category": "TIME",
+   "tier": 1,
+   "gender": "N",
    "image": "38567.png",
    "arasaacId": 38567,
    "via": "en"
@@ -1541,6 +1925,8 @@
    "text": "Δευτέρα",
    "kind": "WORD",
    "category": "TIME",
+   "tier": 1,
+   "gender": "F",
    "image": "6554.png",
    "arasaacId": 6554,
    "via": "en"
@@ -1549,6 +1935,8 @@
    "text": "Σάββατο",
    "kind": "WORD",
    "category": "TIME",
+   "tier": 1,
+   "gender": "N",
    "image": "6605.png",
    "arasaacId": 6605,
    "via": "en"
@@ -1557,8 +1945,1710 @@
    "text": "Κυριακή",
    "kind": "WORD",
    "category": "TIME",
+   "tier": 1,
+   "gender": "F",
    "image": "6478.png",
    "arasaacId": 6478,
+   "via": "en"
+  },
+  {
+   "text": "ραντεβού",
+   "kind": "WORD",
+   "category": "TIME",
+   "tier": 3,
+   "gender": "N",
+   "image": "16165.png",
+   "arasaacId": 16165,
+   "via": "en"
+  },
+  {
+   "text": "παραγγελία",
+   "kind": "WORD",
+   "category": "THINGS",
+   "tier": 3,
+   "gender": "F",
+   "image": "11251.png",
+   "arasaacId": 11251,
+   "via": "en"
+  },
+  {
+   "text": "λογαριασμός",
+   "kind": "WORD",
+   "category": "THINGS",
+   "tier": 3,
+   "gender": "M",
+   "image": "5995.png",
+   "arasaacId": 5995,
+   "via": "en"
+  },
+  {
+   "text": "φυσικοθεραπεία",
+   "kind": "WORD",
+   "category": "BODY",
+   "tier": 3,
+   "gender": "F",
+   "image": "29562.png",
+   "arasaacId": 29562,
+   "via": "en"
+  },
+  {
+   "text": "εφημερίδα",
+   "kind": "WORD",
+   "category": "THINGS",
+   "tier": 3,
+   "gender": "F",
+   "image": "2845.png",
+   "arasaacId": 2845,
+   "via": "en"
+  },
+  {
+   "text": "συνταγή",
+   "kind": "WORD",
+   "category": "THINGS",
+   "tier": 3,
+   "gender": "F",
+   "image": "38606.png",
+   "arasaacId": 38606,
+   "via": "en"
+  },
+  {
+   "text": "ταυτότητα",
+   "kind": "WORD",
+   "category": "THINGS",
+   "tier": 3,
+   "gender": "F",
+   "image": "10274.png",
+   "arasaacId": 10274,
+   "via": "en"
+  },
+  {
+   "text": "απόδειξη",
+   "kind": "WORD",
+   "category": "THINGS",
+   "tier": 3,
+   "gender": "F",
+   "image": "9184.png",
+   "arasaacId": 9184,
+   "via": "en"
+  },
+  {
+   "text": "κάρτα",
+   "kind": "WORD",
+   "category": "THINGS",
+   "tier": 3,
+   "gender": "F",
+   "image": "17208.png",
+   "arasaacId": 17208,
+   "via": "en"
+  },
+  {
+   "text": "φορτιστής",
+   "kind": "WORD",
+   "category": "THINGS",
+   "tier": 3,
+   "gender": "M",
+   "image": "16597.png",
+   "arasaacId": 16597,
+   "via": "en"
+  },
+  {
+   "text": "υπολογιστής",
+   "kind": "WORD",
+   "category": "THINGS",
+   "tier": 3,
+   "gender": "M",
+   "image": "2487.png",
+   "arasaacId": 2487,
+   "via": "en"
+  },
+  {
+   "text": "μήνυμα",
+   "kind": "WORD",
+   "category": "THINGS",
+   "tier": 3,
+   "gender": "N",
+   "image": "37867.png",
+   "arasaacId": 37867,
+   "via": "en"
+  },
+  {
+   "text": "φωτογραφία",
+   "kind": "WORD",
+   "category": "THINGS",
+   "tier": 3,
+   "gender": "F",
+   "image": "7108.png",
+   "arasaacId": 7108,
+   "via": "en"
+  },
+  {
+   "text": "μπαστούνι",
+   "kind": "WORD",
+   "category": "THINGS",
+   "tier": 3,
+   "gender": "N",
+   "image": "5922.png",
+   "arasaacId": 5922,
+   "via": "en"
+  },
+  {
+   "text": "κουβέρτα",
+   "kind": "WORD",
+   "category": "THINGS",
+   "tier": 3,
+   "gender": "F",
+   "image": "2459.png",
+   "arasaacId": 2459,
+   "via": "en"
+  },
+  {
+   "text": "μαξιλάρι",
+   "kind": "WORD",
+   "category": "THINGS",
+   "tier": 3,
+   "gender": "N",
+   "image": "2250.png",
+   "arasaacId": 2250,
+   "via": "el"
+  },
+  {
+   "text": "πετσέτα",
+   "kind": "WORD",
+   "category": "THINGS",
+   "tier": 3,
+   "gender": "F",
+   "image": "2593.png",
+   "arasaacId": 2593,
+   "via": "en"
+  },
+  {
+   "text": "σαπούνι",
+   "kind": "WORD",
+   "category": "THINGS",
+   "tier": 3,
+   "gender": "N",
+   "image": "2964.png",
+   "arasaacId": 2964,
+   "via": "en"
+  },
+  {
+   "text": "οδοντόβουρτσα",
+   "kind": "WORD",
+   "category": "THINGS",
+   "tier": 3,
+   "gender": "F",
+   "image": "2694.png",
+   "arasaacId": 2694,
+   "via": "en"
+  },
+  {
+   "text": "ψυγείο",
+   "kind": "WORD",
+   "category": "THINGS",
+   "tier": 3,
+   "gender": "N",
+   "image": "3272.png",
+   "arasaacId": 3272,
+   "via": "en"
+  },
+  {
+   "text": "πλυντήριο",
+   "kind": "WORD",
+   "category": "THINGS",
+   "tier": 3,
+   "gender": "N",
+   "image": "2442.png",
+   "arasaacId": 2442,
+   "via": "el"
+  },
+  {
+   "text": "καθρέφτης",
+   "kind": "WORD",
+   "category": "THINGS",
+   "tier": 3,
+   "gender": "M",
+   "image": "2385.png",
+   "arasaacId": 2385,
+   "via": "el"
+  },
+  {
+   "text": "ασανσέρ",
+   "kind": "WORD",
+   "category": "THINGS",
+   "tier": 3,
+   "gender": "N",
+   "image": "2260.png",
+   "arasaacId": 2260,
+   "via": "el"
+  },
+  {
+   "text": "ταχυδρομείο",
+   "kind": "WORD",
+   "category": "PLACES",
+   "tier": 3,
+   "gender": "N",
+   "image": "3086.png",
+   "arasaacId": 3086,
+   "via": "en"
+  },
+  {
+   "text": "βιβλιοθήκη",
+   "kind": "WORD",
+   "category": "PLACES",
+   "tier": 3,
+   "gender": "F",
+   "image": "3065.png",
+   "arasaacId": 3065,
+   "via": "en"
+  },
+  {
+   "text": "κομμωτήριο",
+   "kind": "WORD",
+   "category": "PLACES",
+   "tier": 3,
+   "gender": "N",
+   "image": "2849.png",
+   "arasaacId": 2849,
+   "via": "en"
+  },
+  {
+   "text": "περίπτερο",
+   "kind": "WORD",
+   "category": "PLACES",
+   "tier": 3,
+   "gender": "N",
+   "image": "2956.png",
+   "arasaacId": 2956,
+   "via": "en"
+  },
+  {
+   "text": "αεροδρόμιο",
+   "kind": "WORD",
+   "category": "PLACES",
+   "tier": 3,
+   "gender": "N",
+   "image": "3053.png",
+   "arasaacId": 3053,
+   "via": "en"
+  },
+  {
+   "text": "πλατεία",
+   "kind": "WORD",
+   "category": "PLACES",
+   "tier": 3,
+   "gender": "F",
+   "image": "4616.png",
+   "arasaacId": 4616,
+   "via": "en"
+  },
+  {
+   "text": "παραλία",
+   "kind": "WORD",
+   "category": "PLACES",
+   "tier": 3,
+   "gender": "F",
+   "image": "2826.png",
+   "arasaacId": 2826,
+   "via": "en"
+  },
+  {
+   "text": "χωριό",
+   "kind": "WORD",
+   "category": "PLACES",
+   "tier": 3,
+   "gender": "N",
+   "image": "2823.png",
+   "arasaacId": 2823,
+   "via": "en"
+  },
+  {
+   "text": "πόλη",
+   "kind": "WORD",
+   "category": "PLACES",
+   "tier": 3,
+   "gender": "F",
+   "image": "2704.png",
+   "arasaacId": 2704,
+   "via": "en"
+  },
+  {
+   "text": "γειτονιά",
+   "kind": "WORD",
+   "category": "PLACES",
+   "tier": 3,
+   "gender": "F",
+   "image": "6241.png",
+   "arasaacId": 6241,
+   "via": "en"
+  },
+  {
+   "text": "ιατρείο",
+   "kind": "WORD",
+   "category": "PLACES",
+   "tier": 3,
+   "gender": "N",
+   "image": "25544.png",
+   "arasaacId": 25544,
+   "via": "en"
+  },
+  {
+   "text": "φούρνος",
+   "kind": "WORD",
+   "category": "PLACES",
+   "tier": 3,
+   "gender": "M",
+   "image": "2426.png",
+   "arasaacId": 2426,
+   "via": "el"
+  },
+  {
+   "text": "μανάβικο",
+   "kind": "WORD",
+   "category": "PLACES",
+   "tier": 3,
+   "gender": "N",
+   "image": "3328.png",
+   "arasaacId": 3328,
+   "via": "en"
+  },
+  {
+   "text": "κουρείο",
+   "kind": "WORD",
+   "category": "PLACES",
+   "tier": 3,
+   "gender": "N",
+   "image": "35897.png",
+   "arasaacId": 35897,
+   "via": "en"
+  },
+  {
+   "text": "γιαούρτι",
+   "kind": "WORD",
+   "category": "FOOD",
+   "tier": 3,
+   "gender": "N",
+   "image": "2618.png",
+   "arasaacId": 2618,
+   "via": "en"
+  },
+  {
+   "text": "μπριζόλα",
+   "kind": "WORD",
+   "category": "FOOD",
+   "tier": 3,
+   "gender": "F",
+   "image": "35147.png",
+   "arasaacId": 35147,
+   "via": "en"
+  },
+  {
+   "text": "σπανακόπιτα",
+   "kind": "WORD",
+   "category": "FOOD",
+   "tier": 3,
+   "gender": "F",
+   "image": "8311.png",
+   "arasaacId": 8311,
+   "via": "en"
+  },
+  {
+   "text": "λεμονάδα",
+   "kind": "WORD",
+   "category": "FOOD",
+   "tier": 3,
+   "gender": "F",
+   "image": "6551.png",
+   "arasaacId": 6551,
+   "via": "en"
+  },
+  {
+   "text": "πορτοκαλάδα",
+   "kind": "WORD",
+   "category": "FOOD",
+   "tier": 3,
+   "gender": "F",
+   "image": "2624.png",
+   "arasaacId": 2624,
+   "via": "en"
+  },
+  {
+   "text": "κουλούρι",
+   "kind": "WORD",
+   "category": "FOOD",
+   "tier": 3,
+   "gender": "N",
+   "image": "37881.png",
+   "arasaacId": 37881,
+   "via": "en"
+  },
+  {
+   "text": "μπισκότο",
+   "kind": "WORD",
+   "category": "FOOD",
+   "tier": 3,
+   "gender": "N",
+   "image": "8312.png",
+   "arasaacId": 8312,
+   "via": "en"
+  },
+  {
+   "text": "καρπούζι",
+   "kind": "WORD",
+   "category": "FOOD",
+   "tier": 3,
+   "gender": "N",
+   "image": "2557.png",
+   "arasaacId": 2557,
+   "via": "en"
+  },
+  {
+   "text": "σταφύλι",
+   "kind": "WORD",
+   "category": "FOOD",
+   "tier": 3,
+   "gender": "N",
+   "image": "9142.png",
+   "arasaacId": 9142,
+   "via": "en"
+  },
+  {
+   "text": "αγγούρι",
+   "kind": "WORD",
+   "category": "FOOD",
+   "tier": 3,
+   "gender": "N",
+   "image": "2847.png",
+   "arasaacId": 2847,
+   "via": "en"
+  },
+  {
+   "text": "ντομάτα",
+   "kind": "WORD",
+   "category": "FOOD",
+   "tier": 3,
+   "gender": "F",
+   "image": "2594.png",
+   "arasaacId": 2594,
+   "via": "en"
+  },
+  {
+   "text": "λεμόνι",
+   "kind": "WORD",
+   "category": "FOOD",
+   "tier": 3,
+   "gender": "N",
+   "image": "3022.png",
+   "arasaacId": 3022,
+   "via": "en"
+  },
+  {
+   "text": "ελαιόλαδο",
+   "kind": "WORD",
+   "category": "THINGS",
+   "tier": 3,
+   "gender": "N",
+   "image": "2246.png",
+   "arasaacId": 2246,
+   "via": "el"
+  },
+  {
+   "text": "εγγονός",
+   "kind": "WORD",
+   "category": "PEOPLE",
+   "tier": 3,
+   "gender": "M",
+   "image": "10343.png",
+   "arasaacId": 10343,
+   "via": "en"
+  },
+  {
+   "text": "εγγονή",
+   "kind": "WORD",
+   "category": "PEOPLE",
+   "tier": 3,
+   "gender": "F",
+   "image": "10342.png",
+   "arasaacId": 10342,
+   "via": "en"
+  },
+  {
+   "text": "οδηγός",
+   "kind": "WORD",
+   "category": "PEOPLE",
+   "tier": 3,
+   "gender": "M",
+   "image": "3019.png",
+   "arasaacId": 3019,
+   "via": "en"
+  },
+  {
+   "text": "σερβιτόρος",
+   "kind": "WORD",
+   "category": "PEOPLE",
+   "tier": 3,
+   "gender": "M",
+   "image": "6072.png",
+   "arasaacId": 6072,
+   "via": "en"
+  },
+  {
+   "text": "υπάλληλος",
+   "kind": "WORD",
+   "category": "PEOPLE",
+   "tier": 3,
+   "gender": "M",
+   "image": "37554.png",
+   "arasaacId": 37554,
+   "via": "en"
+  },
+  {
+   "text": "δάσκαλος",
+   "kind": "WORD",
+   "category": "PEOPLE",
+   "tier": 3,
+   "gender": "M",
+   "image": "2457.png",
+   "arasaacId": 2457,
+   "via": "en"
+  },
+  {
+   "text": "περιμένω",
+   "kind": "WORD",
+   "category": "VERBS",
+   "tier": 3,
+   "gender": null,
+   "image": "8109.png",
+   "arasaacId": 8109,
+   "via": "en"
+  },
+  {
+   "text": "ρωτάω",
+   "kind": "WORD",
+   "category": "VERBS",
+   "tier": 3,
+   "gender": null,
+   "image": "9840.png",
+   "arasaacId": 9840,
+   "via": "en"
+  },
+  {
+   "text": "απαντάω",
+   "kind": "WORD",
+   "category": "VERBS",
+   "tier": 3,
+   "gender": null,
+   "image": "9030.png",
+   "arasaacId": 9030,
+   "via": "en"
+  },
+  {
+   "text": "ψωνίζω",
+   "kind": "WORD",
+   "category": "VERBS",
+   "tier": 3,
+   "gender": null,
+   "image": "8986.png",
+   "arasaacId": 8986,
+   "via": "en"
+  },
+  {
+   "text": "μαγειρεύω",
+   "kind": "WORD",
+   "category": "VERBS",
+   "tier": 3,
+   "gender": null,
+   "image": "2342.png",
+   "arasaacId": 2342,
+   "via": "el"
+  },
+  {
+   "text": "καθαρίζω",
+   "kind": "WORD",
+   "category": "VERBS",
+   "tier": 3,
+   "gender": null,
+   "image": "3351.png",
+   "arasaacId": 3351,
+   "via": "en"
+  },
+  {
+   "text": "οδηγώ",
+   "kind": "WORD",
+   "category": "VERBS",
+   "tier": 3,
+   "gender": null,
+   "image": "2712.png",
+   "arasaacId": 2712,
+   "via": "en"
+  },
+  {
+   "text": "ταξιδεύω",
+   "kind": "WORD",
+   "category": "VERBS",
+   "tier": 3,
+   "gender": null,
+   "image": "4671.png",
+   "arasaacId": 4671,
+   "via": "en"
+  },
+  {
+   "text": "δουλεύω",
+   "kind": "WORD",
+   "category": "VERBS",
+   "tier": 3,
+   "gender": null,
+   "image": "2599.png",
+   "arasaacId": 2599,
+   "via": "en"
+  },
+  {
+   "text": "ξυπνάω",
+   "kind": "WORD",
+   "category": "VERBS",
+   "tier": 3,
+   "gender": null,
+   "image": "8988.png",
+   "arasaacId": 8988,
+   "via": "en"
+  },
+  {
+   "text": "ντύνομαι",
+   "kind": "WORD",
+   "category": "VERBS",
+   "tier": 3,
+   "gender": null,
+   "image": "2781.png",
+   "arasaacId": 2781,
+   "via": "en"
+  },
+  {
+   "text": "πλένομαι",
+   "kind": "WORD",
+   "category": "VERBS",
+   "tier": 3,
+   "gender": null,
+   "image": "2271.png",
+   "arasaacId": 2271,
+   "via": "el"
+  },
+  {
+   "text": "ψάχνω",
+   "kind": "WORD",
+   "category": "VERBS",
+   "tier": 3,
+   "gender": null,
+   "image": "6947.png",
+   "arasaacId": 6947,
+   "via": "en"
+  },
+  {
+   "text": "βρίσκω",
+   "kind": "WORD",
+   "category": "VERBS",
+   "tier": 3,
+   "gender": null,
+   "image": "5990.png",
+   "arasaacId": 5990,
+   "via": "en"
+  },
+  {
+   "text": "στέλνω",
+   "kind": "WORD",
+   "category": "VERBS",
+   "tier": 3,
+   "gender": null,
+   "image": "21828.png",
+   "arasaacId": 21828,
+   "via": "en"
+  },
+  {
+   "text": "φέρνω",
+   "kind": "WORD",
+   "category": "VERBS",
+   "tier": 3,
+   "gender": null,
+   "image": "7280.png",
+   "arasaacId": 7280,
+   "via": "en"
+  },
+  {
+   "text": "δείχνω",
+   "kind": "WORD",
+   "category": "VERBS",
+   "tier": 3,
+   "gender": null,
+   "image": "11308.png",
+   "arasaacId": 11308,
+   "via": "en"
+  },
+  {
+   "text": "ξεκινάω",
+   "kind": "WORD",
+   "category": "VERBS",
+   "tier": 3,
+   "gender": null,
+   "image": "5431.png",
+   "arasaacId": 5431,
+   "via": "en"
+  },
+  {
+   "text": "τελειώνω",
+   "kind": "WORD",
+   "category": "VERBS",
+   "tier": 3,
+   "gender": null,
+   "image": "5358.png",
+   "arasaacId": 5358,
+   "via": "en"
+  },
+  {
+   "text": "εβδομάδα",
+   "kind": "WORD",
+   "category": "TIME",
+   "tier": 3,
+   "gender": "F",
+   "image": "7244.png",
+   "arasaacId": 7244,
+   "via": "en"
+  },
+  {
+   "text": "μήνας",
+   "kind": "WORD",
+   "category": "TIME",
+   "tier": 3,
+   "gender": "M",
+   "image": "7161.png",
+   "arasaacId": 7161,
+   "via": "en"
+  },
+  {
+   "text": "απόγευμα",
+   "kind": "WORD",
+   "category": "TIME",
+   "tier": 3,
+   "gender": "N",
+   "image": "7268.png",
+   "arasaacId": 7268,
+   "via": "en"
+  },
+  {
+   "text": "Τρίτη",
+   "kind": "WORD",
+   "category": "TIME",
+   "tier": 3,
+   "gender": "F",
+   "image": "6557.png",
+   "arasaacId": 6557,
+   "via": "en"
+  },
+  {
+   "text": "Τετάρτη",
+   "kind": "WORD",
+   "category": "TIME",
+   "tier": 3,
+   "gender": "F",
+   "image": "6563.png",
+   "arasaacId": 6563,
+   "via": "en"
+  },
+  {
+   "text": "Πέμπτη",
+   "kind": "WORD",
+   "category": "TIME",
+   "tier": 3,
+   "gender": "F",
+   "image": "6536.png",
+   "arasaacId": 6536,
+   "via": "en"
+  },
+  {
+   "text": "Παρασκευή",
+   "kind": "WORD",
+   "category": "TIME",
+   "tier": 3,
+   "gender": "F",
+   "image": "6629.png",
+   "arasaacId": 6629,
+   "via": "en"
+  },
+  {
+   "text": "σκέφτομαι",
+   "kind": "WORD",
+   "category": "VERBS",
+   "tier": 4,
+   "gender": null,
+   "image": "8662.png",
+   "arasaacId": 8662,
+   "via": "en"
+  },
+  {
+   "text": "αποφασίζω",
+   "kind": "WORD",
+   "category": "VERBS",
+   "tier": 4,
+   "gender": null,
+   "image": "11694.png",
+   "arasaacId": 11694,
+   "via": "en"
+  },
+  {
+   "text": "εξηγώ",
+   "kind": "WORD",
+   "category": "VERBS",
+   "tier": 4,
+   "gender": null,
+   "image": "8579.png",
+   "arasaacId": 8579,
+   "via": "en"
+  },
+  {
+   "text": "θυμάμαι",
+   "kind": "WORD",
+   "category": "VERBS",
+   "tier": 4,
+   "gender": null,
+   "image": "11357.png",
+   "arasaacId": 11357,
+   "via": "en"
+  },
+  {
+   "text": "ξεχνάω",
+   "kind": "WORD",
+   "category": "VERBS",
+   "tier": 4,
+   "gender": null,
+   "image": "26258.png",
+   "arasaacId": 26258,
+   "via": "en"
+  },
+  {
+   "text": "καταλαβαίνω",
+   "kind": "WORD",
+   "category": "VERBS",
+   "tier": 4,
+   "gender": null,
+   "image": "11697.png",
+   "arasaacId": 11697,
+   "via": "en"
+  },
+  {
+   "text": "προσπαθώ",
+   "kind": "WORD",
+   "category": "VERBS",
+   "tier": 4,
+   "gender": null,
+   "image": "8148.png",
+   "arasaacId": 8148,
+   "via": "en"
+  },
+  {
+   "text": "συνεχίζω",
+   "kind": "WORD",
+   "category": "VERBS",
+   "tier": 4,
+   "gender": null,
+   "image": "24998.png",
+   "arasaacId": 24998,
+   "via": "en"
+  },
+  {
+   "text": "σταματάω",
+   "kind": "WORD",
+   "category": "VERBS",
+   "tier": 4,
+   "gender": null,
+   "image": "2499.png",
+   "arasaacId": 2499,
+   "via": "en"
+  },
+  {
+   "text": "διαλέγω",
+   "kind": "WORD",
+   "category": "VERBS",
+   "tier": 4,
+   "gender": null,
+   "image": "6483.png",
+   "arasaacId": 6483,
+   "via": "en"
+  },
+  {
+   "text": "συμφωνώ",
+   "kind": "WORD",
+   "category": "VERBS",
+   "tier": 4,
+   "gender": null,
+   "image": "37861.png",
+   "arasaacId": 37861,
+   "via": "en"
+  },
+  {
+   "text": "διαφωνώ",
+   "kind": "WORD",
+   "category": "VERBS",
+   "tier": 4,
+   "gender": null,
+   "image": "16000.png",
+   "arasaacId": 16000,
+   "via": "en"
+  },
+  {
+   "text": "υπόσχομαι",
+   "kind": "WORD",
+   "category": "VERBS",
+   "tier": 4,
+   "gender": null,
+   "image": "37046.png",
+   "arasaacId": 37046,
+   "via": "en"
+  },
+  {
+   "text": "φαντάζομαι",
+   "kind": "WORD",
+   "category": "VERBS",
+   "tier": 4,
+   "gender": null,
+   "image": null,
+   "arasaacId": null,
+   "via": null
+  },
+  {
+   "text": "ελπίζω",
+   "kind": "WORD",
+   "category": "VERBS",
+   "tier": 4,
+   "gender": null,
+   "image": "32564.png",
+   "arasaacId": 32564,
+   "via": "en"
+  },
+  {
+   "text": "ανησυχώ",
+   "kind": "WORD",
+   "category": "VERBS",
+   "tier": 4,
+   "gender": null,
+   "image": "26985.png",
+   "arasaacId": 26985,
+   "via": "en"
+  },
+  {
+   "text": "πιστεύω",
+   "kind": "WORD",
+   "category": "VERBS",
+   "tier": 4,
+   "gender": null,
+   "image": null,
+   "arasaacId": null,
+   "via": null
+  },
+  {
+   "text": "νιώθω",
+   "kind": "WORD",
+   "category": "VERBS",
+   "tier": 4,
+   "gender": null,
+   "image": "3293.png",
+   "arasaacId": 3293,
+   "via": "en"
+  },
+  {
+   "text": "προτιμώ",
+   "kind": "WORD",
+   "category": "VERBS",
+   "tier": 4,
+   "gender": null,
+   "image": "11694.png",
+   "arasaacId": 11694,
+   "via": "en"
+  },
+  {
+   "text": "αλλάζω",
+   "kind": "WORD",
+   "category": "VERBS",
+   "tier": 4,
+   "gender": null,
+   "image": "8053.png",
+   "arasaacId": 8053,
+   "via": "en"
+  },
+  {
+   "text": "επιστρέφω",
+   "kind": "WORD",
+   "category": "VERBS",
+   "tier": 4,
+   "gender": null,
+   "image": "6248.png",
+   "arasaacId": 6248,
+   "via": "en"
+  },
+  {
+   "text": "ετοιμάζω",
+   "kind": "WORD",
+   "category": "VERBS",
+   "tier": 4,
+   "gender": null,
+   "image": "6190.png",
+   "arasaacId": 6190,
+   "via": "en"
+  },
+  {
+   "text": "κανονίζω",
+   "kind": "WORD",
+   "category": "VERBS",
+   "tier": 4,
+   "gender": null,
+   "image": "2872.png",
+   "arasaacId": 2872,
+   "via": "en"
+  },
+  {
+   "text": "φροντίζω",
+   "kind": "WORD",
+   "category": "VERBS",
+   "tier": 4,
+   "gender": null,
+   "image": "30468.png",
+   "arasaacId": 30468,
+   "via": "en"
+  },
+  {
+   "text": "προσέχω",
+   "kind": "WORD",
+   "category": "VERBS",
+   "tier": 4,
+   "gender": null,
+   "image": "25618.png",
+   "arasaacId": 25618,
+   "via": "en"
+  },
+  {
+   "text": "συζητάω",
+   "kind": "WORD",
+   "category": "VERBS",
+   "tier": 4,
+   "gender": null,
+   "image": "6477.png",
+   "arasaacId": 6477,
+   "via": "en"
+  },
+  {
+   "text": "χρειάζομαι",
+   "kind": "WORD",
+   "category": "VERBS",
+   "tier": 4,
+   "gender": null,
+   "image": "37160.png",
+   "arasaacId": 37160,
+   "via": "en"
+  },
+  {
+   "text": "καταφέρνω",
+   "kind": "WORD",
+   "category": "VERBS",
+   "tier": 4,
+   "gender": null,
+   "image": null,
+   "arasaacId": null,
+   "via": null
+  },
+  {
+   "text": "δύσκολος",
+   "kind": "WORD",
+   "category": "FEELINGS",
+   "tier": 4,
+   "gender": null,
+   "image": "4629.png",
+   "arasaacId": 4629,
+   "via": "en"
+  },
+  {
+   "text": "εύκολος",
+   "kind": "WORD",
+   "category": "FEELINGS",
+   "tier": 4,
+   "gender": null,
+   "image": "4645.png",
+   "arasaacId": 4645,
+   "via": "en"
+  },
+  {
+   "text": "σημαντικός",
+   "kind": "WORD",
+   "category": "FEELINGS",
+   "tier": 4,
+   "gender": null,
+   "image": "11470.png",
+   "arasaacId": 11470,
+   "via": "en"
+  },
+  {
+   "text": "σίγουρος",
+   "kind": "WORD",
+   "category": "FEELINGS",
+   "tier": 4,
+   "gender": null,
+   "image": "2913.png",
+   "arasaacId": 2913,
+   "via": "en"
+  },
+  {
+   "text": "έτοιμος",
+   "kind": "WORD",
+   "category": "FEELINGS",
+   "tier": 4,
+   "gender": null,
+   "image": "17000.png",
+   "arasaacId": 17000,
+   "via": "en"
+  },
+  {
+   "text": "περήφανος",
+   "kind": "WORD",
+   "category": "FEELINGS",
+   "tier": 4,
+   "gender": null,
+   "image": "31408.png",
+   "arasaacId": 31408,
+   "via": "en"
+  },
+  {
+   "text": "ελεύθερος",
+   "kind": "WORD",
+   "category": "FEELINGS",
+   "tier": 4,
+   "gender": null,
+   "image": "11474.png",
+   "arasaacId": 11474,
+   "via": "en"
+  },
+  {
+   "text": "απαραίτητος",
+   "kind": "WORD",
+   "category": "FEELINGS",
+   "tier": 4,
+   "gender": null,
+   "image": null,
+   "arasaacId": null,
+   "via": null
+  },
+  {
+   "text": "επικίνδυνος",
+   "kind": "WORD",
+   "category": "FEELINGS",
+   "tier": 4,
+   "gender": null,
+   "image": null,
+   "arasaacId": null,
+   "via": null
+  },
+  {
+   "text": "υπεύθυνος",
+   "kind": "WORD",
+   "category": "FEELINGS",
+   "tier": 4,
+   "gender": null,
+   "image": "15531.png",
+   "arasaacId": 15531,
+   "via": "en"
+  },
+  {
+   "text": "ανυπόμονος",
+   "kind": "WORD",
+   "category": "FEELINGS",
+   "tier": 4,
+   "gender": null,
+   "image": null,
+   "arasaacId": null,
+   "via": null
+  },
+  {
+   "text": "μπερδεμένος",
+   "kind": "WORD",
+   "category": "FEELINGS",
+   "tier": 4,
+   "gender": null,
+   "image": "2352.png",
+   "arasaacId": 2352,
+   "via": "el"
+  },
+  {
+   "text": "απογοητευμένος",
+   "kind": "WORD",
+   "category": "FEELINGS",
+   "tier": 4,
+   "gender": null,
+   "image": null,
+   "arasaacId": null,
+   "via": null
+  },
+  {
+   "text": "ενθουσιασμένος",
+   "kind": "WORD",
+   "category": "FEELINGS",
+   "tier": 4,
+   "gender": null,
+   "image": "39090.png",
+   "arasaacId": 39090,
+   "via": "en"
+  },
+  {
+   "text": "τυχερός",
+   "kind": "WORD",
+   "category": "FEELINGS",
+   "tier": 4,
+   "gender": null,
+   "image": "11164.png",
+   "arasaacId": 11164,
+   "via": "en"
+  },
+  {
+   "text": "δυνατός",
+   "kind": "WORD",
+   "category": "FEELINGS",
+   "tier": 4,
+   "gender": null,
+   "image": "4655.png",
+   "arasaacId": 4655,
+   "via": "en"
+  },
+  {
+   "text": "αδύναμος",
+   "kind": "WORD",
+   "category": "FEELINGS",
+   "tier": 4,
+   "gender": null,
+   "image": "4620.png",
+   "arasaacId": 4620,
+   "via": "en"
+  },
+  {
+   "text": "ήσυχος",
+   "kind": "WORD",
+   "category": "FEELINGS",
+   "tier": 4,
+   "gender": null,
+   "image": "38050.png",
+   "arasaacId": 38050,
+   "via": "en"
+  },
+  {
+   "text": "ικανός",
+   "kind": "WORD",
+   "category": "FEELINGS",
+   "tier": 4,
+   "gender": null,
+   "image": null,
+   "arasaacId": null,
+   "via": null
+  },
+  {
+   "text": "ελπίδα",
+   "kind": "WORD",
+   "category": "FEELINGS",
+   "tier": 5,
+   "gender": "F",
+   "image": "32564.png",
+   "arasaacId": 32564,
+   "via": "en"
+  },
+  {
+   "text": "ιδέα",
+   "kind": "WORD",
+   "category": "FEELINGS",
+   "tier": 5,
+   "gender": "F",
+   "image": "6019.png",
+   "arasaacId": 6019,
+   "via": "en"
+  },
+  {
+   "text": "πρόβλημα",
+   "kind": "WORD",
+   "category": "FEELINGS",
+   "tier": 5,
+   "gender": "N",
+   "image": "5556.png",
+   "arasaacId": 5556,
+   "via": "en"
+  },
+  {
+   "text": "υπομονή",
+   "kind": "WORD",
+   "category": "FEELINGS",
+   "tier": 5,
+   "gender": "F",
+   "image": "27333.png",
+   "arasaacId": 27333,
+   "via": "en"
+  },
+  {
+   "text": "ελευθερία",
+   "kind": "WORD",
+   "category": "FEELINGS",
+   "tier": 5,
+   "gender": "F",
+   "image": "11484.png",
+   "arasaacId": 11484,
+   "via": "en"
+  },
+  {
+   "text": "ευθύνη",
+   "kind": "WORD",
+   "category": "FEELINGS",
+   "tier": 5,
+   "gender": "F",
+   "image": "37234.png",
+   "arasaacId": 37234,
+   "via": "en"
+  },
+  {
+   "text": "αλήθεια",
+   "kind": "WORD",
+   "category": "FEELINGS",
+   "tier": 5,
+   "gender": "F",
+   "image": "8715.png",
+   "arasaacId": 8715,
+   "via": "en"
+  },
+  {
+   "text": "λύση",
+   "kind": "WORD",
+   "category": "FEELINGS",
+   "tier": 5,
+   "gender": "F",
+   "image": "32802.png",
+   "arasaacId": 32802,
+   "via": "en"
+  },
+  {
+   "text": "απόφαση",
+   "kind": "WORD",
+   "category": "FEELINGS",
+   "tier": 5,
+   "gender": "F",
+   "image": "14670.png",
+   "arasaacId": 14670,
+   "via": "en"
+  },
+  {
+   "text": "γνώμη",
+   "kind": "WORD",
+   "category": "FEELINGS",
+   "tier": 5,
+   "gender": "F",
+   "image": null,
+   "arasaacId": null,
+   "via": null
+  },
+  {
+   "text": "ανάγκη",
+   "kind": "WORD",
+   "category": "FEELINGS",
+   "tier": 5,
+   "gender": "F",
+   "image": "37160.png",
+   "arasaacId": 37160,
+   "via": "en"
+  },
+  {
+   "text": "ευκαιρία",
+   "kind": "WORD",
+   "category": "FEELINGS",
+   "tier": 5,
+   "gender": "F",
+   "image": "11455.png",
+   "arasaacId": 11455,
+   "via": "en"
+  },
+  {
+   "text": "εμπειρία",
+   "kind": "WORD",
+   "category": "FEELINGS",
+   "tier": 5,
+   "gender": "F",
+   "image": null,
+   "arasaacId": null,
+   "via": null
+  },
+  {
+   "text": "κίνδυνος",
+   "kind": "WORD",
+   "category": "FEELINGS",
+   "tier": 5,
+   "gender": "M",
+   "image": "25315.png",
+   "arasaacId": 25315,
+   "via": "en"
+  },
+  {
+   "text": "ασφάλεια",
+   "kind": "WORD",
+   "category": "FEELINGS",
+   "tier": 5,
+   "gender": "F",
+   "image": "2247.png",
+   "arasaacId": 2247,
+   "via": "en"
+  },
+  {
+   "text": "ησυχία",
+   "kind": "WORD",
+   "category": "FEELINGS",
+   "tier": 5,
+   "gender": "F",
+   "image": "5936.png",
+   "arasaacId": 5936,
+   "via": "en"
+  },
+  {
+   "text": "δύναμη",
+   "kind": "WORD",
+   "category": "FEELINGS",
+   "tier": 5,
+   "gender": "F",
+   "image": "25638.png",
+   "arasaacId": 25638,
+   "via": "en"
+  },
+  {
+   "text": "θάρρος",
+   "kind": "WORD",
+   "category": "FEELINGS",
+   "tier": 5,
+   "gender": "N",
+   "image": null,
+   "arasaacId": null,
+   "via": null
+  },
+  {
+   "text": "φόβος",
+   "kind": "WORD",
+   "category": "FEELINGS",
+   "tier": 5,
+   "gender": "M",
+   "image": "10261.png",
+   "arasaacId": 10261,
+   "via": "en"
+  },
+  {
+   "text": "θυμός",
+   "kind": "WORD",
+   "category": "FEELINGS",
+   "tier": 5,
+   "gender": "M",
+   "image": "35567.png",
+   "arasaacId": 35567,
+   "via": "en"
+  },
+  {
+   "text": "χαρά",
+   "kind": "WORD",
+   "category": "FEELINGS",
+   "tier": 5,
+   "gender": "F",
+   "image": "8582.png",
+   "arasaacId": 8582,
+   "via": "en"
+  },
+  {
+   "text": "λύπη",
+   "kind": "WORD",
+   "category": "FEELINGS",
+   "tier": 5,
+   "gender": "F",
+   "image": "16371.png",
+   "arasaacId": 16371,
+   "via": "en"
+  },
+  {
+   "text": "αγάπη",
+   "kind": "WORD",
+   "category": "FEELINGS",
+   "tier": 5,
+   "gender": "F",
+   "image": "6600.png",
+   "arasaacId": 6600,
+   "via": "en"
+  },
+  {
+   "text": "φιλία",
+   "kind": "WORD",
+   "category": "FEELINGS",
+   "tier": 5,
+   "gender": "F",
+   "image": "8488.png",
+   "arasaacId": 8488,
+   "via": "en"
+  },
+  {
+   "text": "εμπιστοσύνη",
+   "kind": "WORD",
+   "category": "FEELINGS",
+   "tier": 5,
+   "gender": "F",
+   "image": "36694.png",
+   "arasaacId": 36694,
+   "via": "en"
+  },
+  {
+   "text": "σεβασμός",
+   "kind": "WORD",
+   "category": "FEELINGS",
+   "tier": 5,
+   "gender": "M",
+   "image": "11621.png",
+   "arasaacId": 11621,
+   "via": "en"
+  },
+  {
+   "text": "υγεία",
+   "kind": "WORD",
+   "category": "BODY",
+   "tier": 5,
+   "gender": "F",
+   "image": "14264.png",
+   "arasaacId": 14264,
+   "via": "en"
+  },
+  {
+   "text": "ζωή",
+   "kind": "WORD",
+   "category": "FEELINGS",
+   "tier": 5,
+   "gender": "F",
+   "image": "8717.png",
+   "arasaacId": 8717,
+   "via": "en"
+  },
+  {
+   "text": "μνήμη",
+   "kind": "WORD",
+   "category": "FEELINGS",
+   "tier": 5,
+   "gender": "F",
+   "image": "24679.png",
+   "arasaacId": 24679,
+   "via": "en"
+  },
+  {
+   "text": "σκέψη",
+   "kind": "WORD",
+   "category": "FEELINGS",
+   "tier": 5,
+   "gender": "F",
+   "image": null,
+   "arasaacId": null,
+   "via": null
+  },
+  {
+   "text": "πρόοδος",
+   "kind": "WORD",
+   "category": "FEELINGS",
+   "tier": 5,
+   "gender": "F",
+   "image": "11705.png",
+   "arasaacId": 11705,
+   "via": "en"
+  },
+  {
+   "text": "συνήθεια",
+   "kind": "WORD",
+   "category": "FEELINGS",
+   "tier": 5,
+   "gender": "F",
+   "image": "4595.png",
+   "arasaacId": 4595,
+   "via": "en"
+  },
+  {
+   "text": "τύχη",
+   "kind": "WORD",
+   "category": "FEELINGS",
+   "tier": 5,
+   "gender": "F",
+   "image": "11164.png",
+   "arasaacId": 11164,
+   "via": "en"
+  },
+  {
+   "text": "σκοπός",
+   "kind": "WORD",
+   "category": "FEELINGS",
+   "tier": 5,
+   "gender": "M",
+   "image": null,
+   "arasaacId": null,
+   "via": null
+  },
+  {
+   "text": "όνειρο",
+   "kind": "WORD",
+   "category": "FEELINGS",
+   "tier": 5,
+   "gender": "N",
+   "image": "5590.png",
+   "arasaacId": 5590,
+   "via": "en"
+  },
+  {
+   "text": "μέλλον",
+   "kind": "WORD",
+   "category": "TIME",
+   "tier": 5,
+   "gender": "N",
+   "image": "9829.png",
+   "arasaacId": 9829,
+   "via": "en"
+  },
+  {
+   "text": "παρελθόν",
+   "kind": "WORD",
+   "category": "TIME",
+   "tier": 5,
+   "gender": "N",
+   "image": "9839.png",
+   "arasaacId": 9839,
+   "via": "en"
+  },
+  {
+   "text": "κατάσταση",
+   "kind": "WORD",
+   "category": "FEELINGS",
+   "tier": 5,
+   "gender": "F",
+   "image": null,
+   "arasaacId": null,
+   "via": null
+  },
+  {
+   "text": "σχέση",
+   "kind": "WORD",
+   "category": "FEELINGS",
+   "tier": 5,
+   "gender": "F",
+   "image": null,
+   "arasaacId": null,
+   "via": null
+  },
+  {
+   "text": "ιστορία",
+   "kind": "WORD",
+   "category": "FEELINGS",
+   "tier": 5,
+   "gender": "F",
+   "image": "6469.png",
+   "arasaacId": 6469,
+   "via": "en"
+  },
+  {
+   "text": "φύση",
+   "kind": "WORD",
+   "category": "FEELINGS",
+   "tier": 5,
+   "gender": "F",
+   "image": "20389.png",
+   "arasaacId": 20389,
    "via": "en"
   }
  ]

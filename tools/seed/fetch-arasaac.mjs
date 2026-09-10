@@ -5,8 +5,16 @@
 import fs from 'node:fs/promises';
 
 // Bump when words.json changes: SeedImporter only looks at the manifest again when this is higher
-// than the version the device has, and then adds only the texts it does not already have.
-const VERSION = 2;
+// than the version the device has, and then adds only the texts it does not already have — and,
+// since phase 13, re-grades the tier and the gender of the bundled words it has not been edited.
+const VERSION = 3;
+
+// The two gradings every entry carries out of words.json and into the manifest. `tier` is how hard
+// the word is, 1 to 5 (the word coach's dots read it); `gender` is 'M', 'F' or 'N' on a noun and
+// absent on everything else (the sentence builder's articles read it). They are copied from
+// words.json on every run, pictogram or no pictogram, so re-grading a word that already has its
+// picture costs nothing and downloads nothing.
+const graded = (w) => ({ tier: w.tier ?? 1, gender: w.gender ?? null });
 
 const words = JSON.parse(await fs.readFile(new URL('./words.json', import.meta.url), 'utf8'));
 const outDir = new URL('../../app/src/main/assets/seed/', import.meta.url);
@@ -60,7 +68,7 @@ let reused = 0;
 for (const w of words) {
   const kept = await alreadyHave(w);
   if (kept) {
-    items.push({ text: w.text, kind: w.kind ?? 'WORD', category: w.category, image: kept.image, arasaacId: kept.arasaacId ?? null, via: kept.via ?? null });
+    items.push({ text: w.text, kind: w.kind ?? 'WORD', category: w.category, ...graded(w), image: kept.image, arasaacId: kept.arasaacId ?? null, via: kept.via ?? null });
     if (kept.via === 'en') viaEn++; else viaEl++;
     reused++;
     process.stdout.write('=');
@@ -112,7 +120,7 @@ for (const w of words) {
   } else if (via === 'en') {
     viaEn++;
   }
-  items.push({ text: w.text, kind: w.kind ?? 'WORD', category: w.category, image, arasaacId: pick?._id ?? null, via });
+  items.push({ text: w.text, kind: w.kind ?? 'WORD', category: w.category, ...graded(w), image, arasaacId: pick?._id ?? null, via });
   process.stdout.write(image ? (via === 'en' ? 'e' : '.') : 'x');
   await sleep(150);
 }

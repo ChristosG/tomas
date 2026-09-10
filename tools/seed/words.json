@@ -4,1060 +4,2488 @@
   "category": "FOOD",
   "kind": "PHRASE",
   "search": "καφές",
-  "en": "coffee"
+  "en": "coffee",
+  "tier": 2
  },
  {
   "text": "πάμε σπίτι",
   "category": "PLACES",
   "kind": "PHRASE",
   "search": "σπίτι",
-  "en": "house"
+  "en": "house",
+  "tier": 2
  },
  {
   "text": "καλημέρα σας",
   "category": "QUICK",
   "kind": "PHRASE",
   "search": "καλημέρα",
-  "en": "good morning"
+  "en": "good morning",
+  "tier": 2
  },
  {
   "text": "τι κάνεις",
   "category": "QUICK",
   "kind": "PHRASE",
   "search": "χαιρετισμός",
-  "en": "how are you"
+  "en": "how are you",
+  "tier": 2
  },
  {
   "text": "πεινάω πολύ",
   "category": "FOOD",
   "kind": "PHRASE",
   "search": "πεινάω",
-  "en": "hungry"
+  "en": "hungry",
+  "tier": 2
  },
  {
   "text": "δώσε μου νερό",
   "category": "FOOD",
   "kind": "PHRASE",
   "search": "νερό",
-  "en": "water"
+  "en": "water",
+  "tier": 2
  },
  {
   "text": "πάμε βόλτα",
   "category": "PLACES",
   "kind": "PHRASE",
   "search": "βόλτα",
-  "en": "walk"
+  "en": "walk",
+  "tier": 2
  },
  {
   "text": "είμαι καλά",
   "category": "FEELINGS",
   "kind": "PHRASE",
   "search": "καλά",
-  "en": "well"
+  "en": "well",
+  "tier": 2
  },
  {
   "text": "ευχαριστώ πολύ",
   "category": "QUICK",
   "kind": "PHRASE",
   "search": "ευχαριστώ",
-  "en": "thank you"
+  "en": "thank you",
+  "tier": 2
  },
  {
   "text": "τα λέμε αύριο",
   "category": "TIME",
   "kind": "PHRASE",
   "search": "αύριο",
-  "en": "tomorrow"
+  "en": "tomorrow",
+  "tier": 2
  },
  {
   "text": "θέλω ύπνο",
   "category": "VERBS",
   "kind": "PHRASE",
   "search": "ύπνος",
-  "en": "sleep"
+  "en": "sleep",
+  "tier": 2
  },
  {
   "text": "πονάει το χέρι",
   "category": "BODY",
   "kind": "PHRASE",
   "search": "χέρι",
-  "en": "arm"
+  "en": "arm",
+  "tier": 2
  },
  {
   "text": "άνοιξε την πόρτα",
   "category": "THINGS",
   "kind": "PHRASE",
   "search": "πόρτα",
-  "en": "open the door"
+  "en": "open the door",
+  "tier": 2
  },
  {
   "text": "κλείσε το φως",
   "category": "THINGS",
   "kind": "PHRASE",
   "search": "φως",
-  "en": "turn off the light"
+  "en": "turn off the light",
+  "tier": 2
  },
  {
   "text": "πάμε για φαγητό",
   "category": "FOOD",
   "kind": "PHRASE",
   "search": "φαγητό",
-  "en": "food"
+  "en": "food",
+  "tier": 2
  },
  {
   "text": "θέλω μπάνιο",
   "category": "PLACES",
   "kind": "PHRASE",
   "search": "μπάνιο",
-  "en": "bathroom"
+  "en": "bathroom",
+  "tier": 2
  },
  {
   "text": "καλή όρεξη",
   "category": "FOOD",
   "kind": "PHRASE",
   "search": "καλή όρεξη",
-  "en": "enjoy your meal"
+  "en": "enjoy your meal",
+  "tier": 2
  },
  {
   "text": "καληνύχτα",
   "category": "TIME",
   "kind": "PHRASE",
   "search": "καληνύχτα",
-  "en": "good night"
+  "en": "good night",
+  "tier": 2
  },
  {
   "text": "πού είναι το κινητό",
   "category": "THINGS",
   "kind": "PHRASE",
   "search": "κινητό",
-  "en": "mobile phone"
+  "en": "mobile phone",
+  "tier": 2
  },
  {
   "text": "έλα εδώ",
   "category": "VERBS",
   "kind": "PHRASE",
   "search": "έλα",
-  "en": "come"
+  "en": "come",
+  "tier": 2
  },
  {
   "text": "Ναι",
   "category": "QUICK",
   "kind": "PHRASE",
   "search": "ναι",
-  "en": "yes"
+  "en": "yes",
+  "tier": 2
  },
  {
   "text": "Όχι",
   "category": "QUICK",
   "kind": "PHRASE",
   "search": "όχι",
-  "en": "no"
+  "en": "no",
+  "tier": 2
  },
  {
   "text": "Περίμενε",
   "category": "QUICK",
   "kind": "PHRASE",
   "search": "περιμένω",
-  "en": "wait"
+  "en": "wait",
+  "tier": 2
  },
  {
   "text": "Βοήθεια",
   "category": "QUICK",
   "kind": "PHRASE",
   "search": "βοήθεια",
-  "en": "help"
+  "en": "help",
+  "tier": 2
  },
  {
   "text": "Πονάω",
   "category": "QUICK",
   "kind": "PHRASE",
   "search": "πόνος",
-  "en": "pain"
+  "en": "pain",
+  "tier": 2
  },
  {
   "text": "Τουαλέτα",
   "category": "QUICK",
   "kind": "PHRASE",
   "search": "τουαλέτα",
-  "en": "toilet"
+  "en": "toilet",
+  "tier": 2
  },
  {
   "text": "Ευχαριστώ",
   "category": "QUICK",
   "kind": "PHRASE",
   "search": "ευχαριστώ",
-  "en": "thank you"
+  "en": "thank you",
+  "tier": 2
  },
  {
   "text": "Παρακαλώ",
   "category": "QUICK",
   "kind": "PHRASE",
   "search": "παρακαλώ",
-  "en": "please"
+  "en": "please",
+  "tier": 2
  },
  {
   "text": "Δεν ξέρω",
   "category": "QUICK",
   "kind": "PHRASE",
   "search": "δεν ξέρω",
-  "en": "I don't know"
+  "en": "I don't know",
+  "tier": 2
  },
  {
   "text": "Δεν καταλαβαίνω",
   "category": "QUICK",
   "kind": "PHRASE",
   "search": "δεν καταλαβαίνω",
-  "en": "I don't understand"
+  "en": "I don't understand",
+  "tier": 2
  },
  {
   "text": "Ξανά",
   "category": "QUICK",
   "kind": "PHRASE",
   "search": "ξανά",
-  "en": "again"
+  "en": "again",
+  "tier": 2
  },
  {
   "text": "Τέλος",
   "category": "QUICK",
   "kind": "PHRASE",
   "search": "τέλος",
-  "en": "finished"
+  "en": "finished",
+  "tier": 2
  },
  {
   "text": "καφές",
   "category": "FOOD",
-  "en": "coffee"
+  "en": "coffee",
+  "tier": 1,
+  "gender": "M"
  },
  {
   "text": "νερό",
   "category": "FOOD",
-  "en": "water"
+  "en": "water",
+  "tier": 1,
+  "gender": "N"
  },
  {
   "text": "ψωμί",
   "category": "FOOD",
-  "en": "bread"
+  "en": "bread",
+  "tier": 1,
+  "gender": "N"
  },
  {
   "text": "τυρί",
   "category": "FOOD",
-  "en": "cheese"
+  "en": "cheese",
+  "tier": 1,
+  "gender": "N"
  },
  {
   "text": "γάλα",
   "category": "FOOD",
-  "en": "milk"
+  "en": "milk",
+  "tier": 1,
+  "gender": "N"
  },
  {
   "text": "τσάι",
   "category": "FOOD",
-  "en": "tea"
+  "en": "tea",
+  "tier": 1,
+  "gender": "N"
  },
  {
   "text": "μπύρα",
   "category": "FOOD",
-  "en": "beer"
+  "en": "beer",
+  "tier": 1,
+  "gender": "F"
  },
  {
   "text": "κρασί",
   "category": "FOOD",
-  "en": "wine"
+  "en": "wine",
+  "tier": 1,
+  "gender": "N"
  },
  {
   "text": "χυμός",
   "category": "FOOD",
-  "en": "juice"
+  "en": "juice",
+  "tier": 1,
+  "gender": "M"
  },
  {
   "text": "σουβλάκι",
   "category": "FOOD",
-  "en": "kebab"
+  "en": "kebab",
+  "tier": 1,
+  "gender": "N"
  },
  {
   "text": "πίτσα",
   "category": "FOOD",
-  "en": "pizza"
+  "en": "pizza",
+  "tier": 1,
+  "gender": "F"
  },
  {
   "text": "σαλάτα",
   "category": "FOOD",
-  "en": "salad"
+  "en": "salad",
+  "tier": 1,
+  "gender": "F"
  },
  {
   "text": "μακαρόνια",
   "category": "FOOD",
-  "en": "pasta"
+  "en": "pasta",
+  "tier": 1,
+  "gender": "N"
  },
  {
   "text": "ρύζι",
   "category": "FOOD",
-  "en": "rice"
+  "en": "rice",
+  "tier": 1,
+  "gender": "N"
  },
  {
   "text": "κρέας",
   "category": "FOOD",
-  "en": "meat"
+  "en": "meat",
+  "tier": 1,
+  "gender": "N"
  },
  {
   "text": "κοτόπουλο",
   "category": "FOOD",
-  "en": "chicken"
+  "en": "chicken",
+  "tier": 1,
+  "gender": "N"
  },
  {
   "text": "ψάρι",
   "category": "FOOD",
-  "en": "fish"
+  "en": "fish",
+  "tier": 1,
+  "gender": "N"
  },
  {
   "text": "αυγό",
   "category": "FOOD",
-  "en": "egg"
+  "en": "egg",
+  "tier": 1,
+  "gender": "N"
  },
  {
   "text": "μήλο",
   "category": "FOOD",
-  "en": "apple"
+  "en": "apple",
+  "tier": 1,
+  "gender": "N"
  },
  {
   "text": "μπανάνα",
   "category": "FOOD",
-  "en": "banana"
+  "en": "banana",
+  "tier": 1,
+  "gender": "F"
  },
  {
   "text": "πορτοκάλι",
   "category": "FOOD",
-  "en": "orange"
+  "en": "orange",
+  "tier": 1,
+  "gender": "N"
  },
  {
   "text": "σοκολάτα",
   "category": "FOOD",
-  "en": "chocolate"
+  "en": "chocolate",
+  "tier": 1,
+  "gender": "F"
  },
  {
   "text": "παγωτό",
   "category": "FOOD",
-  "en": "ice cream"
+  "en": "ice cream",
+  "tier": 1,
+  "gender": "N"
  },
  {
   "text": "γλυκό",
   "category": "FOOD",
-  "en": "sweet"
+  "en": "sweet",
+  "tier": 1,
+  "gender": "N"
  },
  {
   "text": "σούπα",
   "category": "FOOD",
-  "en": "soup"
+  "en": "soup",
+  "tier": 1,
+  "gender": "F"
  },
  {
   "text": "πατάτες",
   "category": "FOOD",
-  "en": "potatoes"
+  "en": "potatoes",
+  "tier": 1,
+  "gender": "F"
  },
  {
   "text": "ζάχαρη",
   "category": "FOOD",
-  "en": "sugar"
+  "en": "sugar",
+  "tier": 1,
+  "gender": "F"
  },
  {
   "text": "αλάτι",
   "category": "FOOD",
-  "en": "salt"
+  "en": "salt",
+  "tier": 1,
+  "gender": "N"
  },
  {
   "text": "πρωινό",
   "category": "FOOD",
-  "en": "breakfast"
+  "en": "breakfast",
+  "tier": 1,
+  "gender": "N"
  },
  {
   "text": "μεσημεριανό",
   "category": "FOOD",
-  "en": "lunch"
+  "en": "lunch",
+  "tier": 1,
+  "gender": "N"
  },
  {
   "text": "βραδινό",
   "category": "FOOD",
-  "en": "dinner"
+  "en": "dinner",
+  "tier": 1,
+  "gender": "N"
  },
  {
   "text": "φρούτα",
   "category": "FOOD",
-  "en": "fruit"
+  "en": "fruit",
+  "tier": 1,
+  "gender": "N"
  },
  {
   "text": "σπίτι",
   "category": "PLACES",
-  "en": "house"
+  "en": "house",
+  "tier": 1,
+  "gender": "N"
  },
  {
   "text": "καφετέρια",
   "category": "PLACES",
-  "en": "cafe"
+  "en": "cafe",
+  "tier": 1,
+  "gender": "F"
  },
  {
   "text": "νοσοκομείο",
   "category": "PLACES",
-  "en": "hospital"
+  "en": "hospital",
+  "tier": 1,
+  "gender": "N"
  },
  {
   "text": "φαρμακείο",
   "category": "PLACES",
-  "en": "pharmacy"
+  "en": "pharmacy",
+  "tier": 1,
+  "gender": "N"
  },
  {
   "text": "σούπερ μάρκετ",
   "category": "PLACES",
-  "en": "supermarket"
+  "en": "supermarket",
+  "tier": 1,
+  "gender": "N"
  },
  {
   "text": "θάλασσα",
   "category": "PLACES",
-  "en": "sea"
+  "en": "sea",
+  "tier": 1,
+  "gender": "F"
  },
  {
   "text": "πάρκο",
   "category": "PLACES",
-  "en": "park"
+  "en": "park",
+  "tier": 1,
+  "gender": "N"
  },
  {
   "text": "γυμναστήριο",
   "category": "PLACES",
-  "en": "gym"
+  "en": "gym",
+  "tier": 1,
+  "gender": "N"
  },
  {
   "text": "σχολείο",
   "category": "PLACES",
-  "en": "school"
+  "en": "school",
+  "tier": 1,
+  "gender": "N"
  },
  {
   "text": "εκκλησία",
   "category": "PLACES",
-  "en": "church"
+  "en": "church",
+  "tier": 1,
+  "gender": "F"
  },
  {
   "text": "τράπεζα",
   "category": "PLACES",
-  "en": "bank"
+  "en": "bank",
+  "tier": 1,
+  "gender": "F"
  },
  {
   "text": "ταξί",
   "category": "PLACES",
-  "en": "taxi"
+  "en": "taxi",
+  "tier": 1,
+  "gender": "N"
  },
  {
   "text": "λεωφορείο",
   "category": "PLACES",
-  "en": "bus"
+  "en": "bus",
+  "tier": 1,
+  "gender": "N"
  },
  {
   "text": "αυτοκίνητο",
   "category": "PLACES",
-  "en": "car"
+  "en": "car",
+  "tier": 1,
+  "gender": "N"
  },
  {
   "text": "δρόμος",
   "category": "PLACES",
-  "en": "street"
+  "en": "street",
+  "tier": 1,
+  "gender": "M"
  },
  {
   "text": "ταβέρνα",
   "category": "PLACES",
-  "en": "restaurant"
+  "en": "restaurant",
+  "tier": 1,
+  "gender": "F"
  },
  {
   "text": "μπάνιο",
   "category": "PLACES",
-  "en": "bathroom"
+  "en": "bathroom",
+  "tier": 1,
+  "gender": "N"
  },
  {
   "text": "κουζίνα",
   "category": "PLACES",
-  "en": "kitchen"
+  "en": "kitchen",
+  "tier": 1,
+  "gender": "F"
  },
  {
   "text": "κρεβάτι",
   "category": "PLACES",
-  "en": "bed"
+  "en": "bed",
+  "tier": 1,
+  "gender": "N"
  },
  {
   "text": "δουλειά",
   "category": "PLACES",
-  "en": "work"
+  "en": "work",
+  "tier": 1,
+  "gender": "F"
  },
  {
   "text": "γήπεδο",
   "category": "PLACES",
-  "en": "stadium"
+  "en": "stadium",
+  "tier": 1,
+  "gender": "N"
  },
  {
   "text": "μπαλκόνι",
   "category": "PLACES",
-  "en": "balcony"
+  "en": "balcony",
+  "tier": 1,
+  "gender": "N"
  },
  {
   "text": "μαμά",
   "category": "PEOPLE",
-  "en": "mom"
+  "en": "mom",
+  "tier": 1,
+  "gender": "F"
  },
  {
   "text": "μπαμπάς",
   "category": "PEOPLE",
-  "en": "dad"
+  "en": "dad",
+  "tier": 1,
+  "gender": "M"
  },
  {
   "text": "αδελφός",
   "category": "PEOPLE",
-  "en": "brother"
+  "en": "brother",
+  "tier": 1,
+  "gender": "M"
  },
  {
   "text": "αδελφή",
   "category": "PEOPLE",
-  "en": "sister"
+  "en": "sister",
+  "tier": 1,
+  "gender": "F"
  },
  {
   "text": "φίλος",
   "category": "PEOPLE",
-  "en": "friend"
+  "en": "friend",
+  "tier": 1,
+  "gender": "M"
  },
  {
   "text": "φίλη",
   "category": "PEOPLE",
-  "en": "friend"
+  "en": "friend",
+  "tier": 1,
+  "gender": "F"
  },
  {
   "text": "γιατρός",
   "category": "PEOPLE",
-  "en": "doctor"
+  "en": "doctor",
+  "tier": 1,
+  "gender": "M"
  },
  {
   "text": "νοσοκόμα",
   "category": "PEOPLE",
-  "en": "nurse"
+  "en": "nurse",
+  "tier": 1,
+  "gender": "F"
  },
  {
   "text": "λογοθεραπεύτρια",
   "category": "PEOPLE",
   "search": "λογοθεραπευτής",
-  "en": "speech therapist"
+  "en": "speech therapist",
+  "tier": 1,
+  "gender": "F"
  },
  {
   "text": "φυσιοθεραπευτής",
   "category": "PEOPLE",
-  "en": "physiotherapist"
+  "en": "physiotherapist",
+  "tier": 1,
+  "gender": "M"
  },
  {
   "text": "γείτονας",
   "category": "PEOPLE",
-  "en": "neighbor"
+  "en": "neighbor",
+  "tier": 1,
+  "gender": "M"
  },
  {
   "text": "παιδί",
   "category": "PEOPLE",
-  "en": "child"
+  "en": "child",
+  "tier": 1,
+  "gender": "N"
  },
  {
   "text": "άντρας",
   "category": "PEOPLE",
-  "en": "man"
+  "en": "man",
+  "tier": 1,
+  "gender": "M"
  },
  {
   "text": "γυναίκα",
   "category": "PEOPLE",
-  "en": "woman"
+  "en": "woman",
+  "tier": 1,
+  "gender": "F"
  },
  {
   "text": "εγώ",
   "category": "PEOPLE",
-  "en": "me"
+  "en": "me",
+  "tier": 1
  },
  {
   "text": "εσύ",
   "category": "PEOPLE",
-  "en": "you"
+  "en": "you",
+  "tier": 1
  },
  {
   "text": "θέλω",
   "category": "VERBS",
-  "en": "want"
+  "en": "want",
+  "tier": 1
  },
  {
   "text": "πάμε",
   "category": "VERBS",
   "search": "πηγαίνω",
-  "en": "go"
+  "en": "go",
+  "tier": 1
  },
  {
   "text": "τρώω",
   "category": "VERBS",
-  "en": "eat"
+  "en": "eat",
+  "tier": 1
  },
  {
   "text": "πίνω",
   "category": "VERBS",
-  "en": "drink"
+  "en": "drink",
+  "tier": 1
  },
  {
   "text": "κοιμάμαι",
   "category": "VERBS",
-  "en": "sleep"
+  "en": "sleep",
+  "tier": 1
  },
  {
   "text": "περπατάω",
   "category": "VERBS",
-  "en": "walk"
+  "en": "walk",
+  "tier": 1
  },
  {
   "text": "κάθομαι",
   "category": "VERBS",
-  "en": "sit"
+  "en": "sit",
+  "tier": 1
  },
  {
   "text": "βλέπω",
   "category": "VERBS",
-  "en": "see"
+  "en": "see",
+  "tier": 1
  },
  {
   "text": "ακούω",
   "category": "VERBS",
-  "en": "listen"
+  "en": "listen",
+  "tier": 1
  },
  {
   "text": "μιλάω",
   "category": "VERBS",
-  "en": "talk"
+  "en": "talk",
+  "tier": 1
  },
  {
   "text": "διαβάζω",
   "category": "VERBS",
-  "en": "read"
+  "en": "read",
+  "tier": 1
  },
  {
   "text": "γράφω",
   "category": "VERBS",
-  "en": "write"
+  "en": "write",
+  "tier": 1
  },
  {
   "text": "παίζω",
   "category": "VERBS",
-  "en": "play"
+  "en": "play",
+  "tier": 1
  },
  {
   "text": "τηλεφωνώ",
   "category": "VERBS",
-  "en": "call"
+  "en": "call",
+  "tier": 1
  },
  {
   "text": "αγοράζω",
   "category": "VERBS",
-  "en": "buy"
+  "en": "buy",
+  "tier": 1
  },
  {
   "text": "πληρώνω",
   "category": "VERBS",
-  "en": "pay"
+  "en": "pay",
+  "tier": 1
  },
  {
   "text": "ανοίγω",
   "category": "VERBS",
-  "en": "open"
+  "en": "open",
+  "tier": 1
  },
  {
   "text": "κλείνω",
   "category": "VERBS",
-  "en": "close"
+  "en": "close",
+  "tier": 1
  },
  {
   "text": "έρχομαι",
   "category": "VERBS",
-  "en": "come"
+  "en": "come",
+  "tier": 1
  },
  {
   "text": "φεύγω",
   "category": "VERBS",
-  "en": "leave"
+  "en": "leave",
+  "tier": 1
  },
  {
   "text": "βοηθάω",
   "category": "VERBS",
-  "en": "help"
+  "en": "help",
+  "tier": 1
  },
  {
   "text": "ξεκουράζομαι",
   "category": "VERBS",
-  "en": "rest"
+  "en": "rest",
+  "tier": 1
  },
  {
   "text": "τραγουδάω",
   "category": "VERBS",
-  "en": "sing"
+  "en": "sing",
+  "tier": 1
  },
  {
   "text": "χαρούμενος",
   "category": "FEELINGS",
-  "en": "happy"
+  "en": "happy",
+  "tier": 1
  },
  {
   "text": "λυπημένος",
   "category": "FEELINGS",
-  "en": "sad"
+  "en": "sad",
+  "tier": 1
  },
  {
   "text": "θυμωμένος",
   "category": "FEELINGS",
-  "en": "angry"
+  "en": "angry",
+  "tier": 1
  },
  {
   "text": "κουρασμένος",
   "category": "FEELINGS",
-  "en": "tired"
+  "en": "tired",
+  "tier": 1
  },
  {
   "text": "φοβισμένος",
   "category": "FEELINGS",
-  "en": "scared"
+  "en": "scared",
+  "tier": 1
  },
  {
   "text": "πεινάω",
   "category": "FEELINGS",
-  "en": "hungry"
+  "en": "hungry",
+  "tier": 1
  },
  {
   "text": "διψάω",
   "category": "FEELINGS",
-  "en": "thirsty"
+  "en": "thirsty",
+  "tier": 1
  },
  {
   "text": "κρυώνω",
   "category": "FEELINGS",
-  "en": "cold"
+  "en": "cold",
+  "tier": 1
  },
  {
   "text": "ζεσταίνομαι",
   "category": "FEELINGS",
-  "en": "hot"
+  "en": "hot",
+  "tier": 1
  },
  {
   "text": "βαριέμαι",
   "category": "FEELINGS",
-  "en": "bored"
+  "en": "bored",
+  "tier": 1
  },
  {
   "text": "νευρικός",
   "category": "FEELINGS",
-  "en": "nervous"
+  "en": "nervous",
+  "tier": 1
  },
  {
   "text": "ήρεμος",
   "category": "FEELINGS",
-  "en": "calm"
+  "en": "calm",
+  "tier": 1
  },
  {
   "text": "καλά",
   "category": "FEELINGS",
-  "en": "fine"
+  "en": "fine",
+  "tier": 1
  },
  {
   "text": "άσχημα",
   "category": "FEELINGS",
-  "en": "bad"
+  "en": "bad",
+  "tier": 1
  },
  {
   "text": "κεφάλι",
   "category": "BODY",
-  "en": "head"
+  "en": "head",
+  "tier": 1,
+  "gender": "N"
  },
  {
   "text": "χέρι",
   "category": "BODY",
-  "en": "hand"
+  "en": "hand",
+  "tier": 1,
+  "gender": "N"
  },
  {
   "text": "πόδι",
   "category": "BODY",
-  "en": "foot"
+  "en": "foot",
+  "tier": 1,
+  "gender": "N"
  },
  {
   "text": "μάτι",
   "category": "BODY",
-  "en": "eye"
+  "en": "eye",
+  "tier": 1,
+  "gender": "N"
  },
  {
   "text": "αυτί",
   "category": "BODY",
-  "en": "ear"
+  "en": "ear",
+  "tier": 1,
+  "gender": "N"
  },
  {
   "text": "στόμα",
   "category": "BODY",
-  "en": "mouth"
+  "en": "mouth",
+  "tier": 1,
+  "gender": "N"
  },
  {
   "text": "μύτη",
   "category": "BODY",
-  "en": "nose"
+  "en": "nose",
+  "tier": 1,
+  "gender": "F"
  },
  {
   "text": "δόντια",
   "category": "BODY",
-  "en": "teeth"
+  "en": "teeth",
+  "tier": 1,
+  "gender": "N"
  },
  {
   "text": "στομάχι",
   "category": "BODY",
-  "en": "stomach"
+  "en": "stomach",
+  "tier": 1,
+  "gender": "N"
  },
  {
   "text": "πλάτη",
   "category": "BODY",
-  "en": "back"
+  "en": "back",
+  "tier": 1,
+  "gender": "F"
  },
  {
   "text": "καρδιά",
   "category": "BODY",
-  "en": "heart"
+  "en": "heart",
+  "tier": 1,
+  "gender": "F"
  },
  {
   "text": "γόνατο",
   "category": "BODY",
-  "en": "knee"
+  "en": "knee",
+  "tier": 1,
+  "gender": "N"
  },
  {
   "text": "δάχτυλο",
   "category": "BODY",
-  "en": "finger"
+  "en": "finger",
+  "tier": 1,
+  "gender": "N"
  },
  {
   "text": "λαιμός",
   "category": "BODY",
-  "en": "neck"
+  "en": "neck",
+  "tier": 1,
+  "gender": "M"
  },
  {
   "text": "ένα",
   "category": "NUMBERS",
   "kind": "NUMBER",
   "search": "1",
-  "en": "one"
+  "en": "one",
+  "tier": 1
  },
  {
   "text": "δύο",
   "category": "NUMBERS",
   "kind": "NUMBER",
   "search": "2",
-  "en": "two"
+  "en": "two",
+  "tier": 1
  },
  {
   "text": "τρία",
   "category": "NUMBERS",
   "kind": "NUMBER",
   "search": "3",
-  "en": "three"
+  "en": "three",
+  "tier": 1
  },
  {
   "text": "τέσσερα",
   "category": "NUMBERS",
   "kind": "NUMBER",
   "search": "4",
-  "en": "four"
+  "en": "four",
+  "tier": 1
  },
  {
   "text": "πέντε",
   "category": "NUMBERS",
   "kind": "NUMBER",
   "search": "5",
-  "en": "five"
+  "en": "five",
+  "tier": 1
  },
  {
   "text": "έξι",
   "category": "NUMBERS",
   "kind": "NUMBER",
   "search": "6",
-  "en": "six"
+  "en": "six",
+  "tier": 1
  },
  {
   "text": "επτά",
   "category": "NUMBERS",
   "kind": "NUMBER",
   "search": "7",
-  "en": "seven"
+  "en": "seven",
+  "tier": 1
  },
  {
   "text": "οκτώ",
   "category": "NUMBERS",
   "kind": "NUMBER",
   "search": "8",
-  "en": "eight"
+  "en": "eight",
+  "tier": 1
  },
  {
   "text": "εννέα",
   "category": "NUMBERS",
   "kind": "NUMBER",
   "search": "9",
-  "en": "nine"
+  "en": "nine",
+  "tier": 1
  },
  {
   "text": "δέκα",
   "category": "NUMBERS",
   "kind": "NUMBER",
   "search": "10",
-  "en": "ten"
+  "en": "ten",
+  "tier": 1
  },
  {
   "text": "τηλέφωνο",
   "category": "THINGS",
-  "en": "phone"
+  "en": "phone",
+  "tier": 1,
+  "gender": "N"
  },
  {
   "text": "τηλεόραση",
   "category": "THINGS",
-  "en": "television"
+  "en": "television",
+  "tier": 1,
+  "gender": "F"
  },
  {
   "text": "κλειδιά",
   "category": "THINGS",
-  "en": "keys"
+  "en": "keys",
+  "tier": 1,
+  "gender": "N"
  },
  {
   "text": "πορτοφόλι",
   "category": "THINGS",
-  "en": "wallet"
+  "en": "wallet",
+  "tier": 1,
+  "gender": "N"
  },
  {
   "text": "γυαλιά",
   "category": "THINGS",
-  "en": "glasses"
+  "en": "glasses",
+  "tier": 1,
+  "gender": "N"
  },
  {
   "text": "ρούχα",
   "category": "THINGS",
-  "en": "clothes"
+  "en": "clothes",
+  "tier": 1,
+  "gender": "N"
  },
  {
   "text": "παπούτσια",
   "category": "THINGS",
-  "en": "shoes"
+  "en": "shoes",
+  "tier": 1,
+  "gender": "N"
  },
  {
   "text": "φάρμακα",
   "category": "THINGS",
-  "en": "medicine"
+  "en": "medicine",
+  "tier": 1,
+  "gender": "N"
  },
  {
   "text": "χρήματα",
   "category": "THINGS",
-  "en": "money"
+  "en": "money",
+  "tier": 1,
+  "gender": "N"
  },
  {
   "text": "ρολόι",
   "category": "THINGS",
-  "en": "clock"
+  "en": "clock",
+  "tier": 1,
+  "gender": "N"
  },
  {
   "text": "τσάντα",
   "category": "THINGS",
-  "en": "bag"
+  "en": "bag",
+  "tier": 1,
+  "gender": "F"
  },
  {
   "text": "ομπρέλα",
   "category": "THINGS",
-  "en": "umbrella"
+  "en": "umbrella",
+  "tier": 1,
+  "gender": "F"
  },
  {
   "text": "καρέκλα",
   "category": "THINGS",
-  "en": "chair"
+  "en": "chair",
+  "tier": 1,
+  "gender": "F"
  },
  {
   "text": "τραπέζι",
   "category": "THINGS",
-  "en": "table"
+  "en": "table",
+  "tier": 1,
+  "gender": "N"
  },
  {
   "text": "πόρτα",
   "category": "THINGS",
-  "en": "door"
+  "en": "door",
+  "tier": 1,
+  "gender": "F"
  },
  {
   "text": "παράθυρο",
   "category": "THINGS",
-  "en": "window"
+  "en": "window",
+  "tier": 1,
+  "gender": "N"
  },
  {
   "text": "βιβλίο",
   "category": "THINGS",
-  "en": "book"
+  "en": "book",
+  "tier": 1,
+  "gender": "N"
  },
  {
   "text": "μουσική",
   "category": "THINGS",
-  "en": "music"
+  "en": "music",
+  "tier": 1,
+  "gender": "F"
  },
  {
   "text": "μπάλα",
   "category": "THINGS",
-  "en": "ball"
+  "en": "ball",
+  "tier": 1,
+  "gender": "F"
  },
  {
   "text": "ήλιος",
   "category": "THINGS",
-  "en": "sun"
+  "en": "sun",
+  "tier": 1,
+  "gender": "M"
  },
  {
   "text": "βροχή",
   "category": "THINGS",
-  "en": "rain"
+  "en": "rain",
+  "tier": 1,
+  "gender": "F"
  },
  {
   "text": "σήμερα",
   "category": "TIME",
-  "en": "today"
+  "en": "today",
+  "tier": 1
  },
  {
   "text": "αύριο",
   "category": "TIME",
-  "en": "tomorrow"
+  "en": "tomorrow",
+  "tier": 1
  },
  {
   "text": "χθες",
   "category": "TIME",
-  "en": "yesterday"
+  "en": "yesterday",
+  "tier": 1
  },
  {
   "text": "τώρα",
   "category": "TIME",
-  "en": "now"
+  "en": "now",
+  "tier": 1
  },
  {
   "text": "μετά",
   "category": "TIME",
-  "en": "later"
+  "en": "later",
+  "tier": 1
  },
  {
   "text": "πρωί",
   "category": "TIME",
-  "en": "morning"
+  "en": "morning",
+  "tier": 1,
+  "gender": "N"
  },
  {
   "text": "μεσημέρι",
   "category": "TIME",
-  "en": "noon"
+  "en": "noon",
+  "tier": 1,
+  "gender": "N"
  },
  {
   "text": "βράδυ",
   "category": "TIME",
-  "en": "evening"
+  "en": "evening",
+  "tier": 1,
+  "gender": "N"
  },
  {
   "text": "Δευτέρα",
   "category": "TIME",
-  "en": "Monday"
+  "en": "Monday",
+  "tier": 1,
+  "gender": "F"
  },
  {
   "text": "Σάββατο",
   "category": "TIME",
-  "en": "Saturday"
+  "en": "Saturday",
+  "tier": 1,
+  "gender": "N"
  },
  {
   "text": "Κυριακή",
   "category": "TIME",
-  "en": "Sunday"
+  "en": "Sunday",
+  "tier": 1,
+  "gender": "F"
+ },
+ {
+  "text": "ραντεβού",
+  "category": "TIME",
+  "en": "appointment",
+  "tier": 3,
+  "gender": "N"
+ },
+ {
+  "text": "παραγγελία",
+  "category": "THINGS",
+  "en": "order",
+  "tier": 3,
+  "gender": "F"
+ },
+ {
+  "text": "λογαριασμός",
+  "category": "THINGS",
+  "en": "bill",
+  "tier": 3,
+  "gender": "M"
+ },
+ {
+  "text": "φυσικοθεραπεία",
+  "category": "BODY",
+  "en": "physiotherapy",
+  "tier": 3,
+  "gender": "F"
+ },
+ {
+  "text": "εφημερίδα",
+  "category": "THINGS",
+  "en": "newspaper",
+  "tier": 3,
+  "gender": "F"
+ },
+ {
+  "text": "συνταγή",
+  "category": "THINGS",
+  "en": "prescription",
+  "tier": 3,
+  "gender": "F"
+ },
+ {
+  "text": "ταυτότητα",
+  "category": "THINGS",
+  "en": "identity card",
+  "tier": 3,
+  "gender": "F"
+ },
+ {
+  "text": "απόδειξη",
+  "category": "THINGS",
+  "en": "receipt",
+  "tier": 3,
+  "gender": "F"
+ },
+ {
+  "text": "κάρτα",
+  "category": "THINGS",
+  "en": "card",
+  "tier": 3,
+  "gender": "F"
+ },
+ {
+  "text": "φορτιστής",
+  "category": "THINGS",
+  "en": "charger",
+  "tier": 3,
+  "gender": "M"
+ },
+ {
+  "text": "υπολογιστής",
+  "category": "THINGS",
+  "en": "computer",
+  "tier": 3,
+  "gender": "M"
+ },
+ {
+  "text": "μήνυμα",
+  "category": "THINGS",
+  "en": "message",
+  "tier": 3,
+  "gender": "N"
+ },
+ {
+  "text": "φωτογραφία",
+  "category": "THINGS",
+  "en": "photograph",
+  "tier": 3,
+  "gender": "F"
+ },
+ {
+  "text": "μπαστούνι",
+  "category": "THINGS",
+  "en": "walking stick",
+  "tier": 3,
+  "gender": "N"
+ },
+ {
+  "text": "κουβέρτα",
+  "category": "THINGS",
+  "en": "blanket",
+  "tier": 3,
+  "gender": "F"
+ },
+ {
+  "text": "μαξιλάρι",
+  "category": "THINGS",
+  "en": "pillow",
+  "tier": 3,
+  "gender": "N"
+ },
+ {
+  "text": "πετσέτα",
+  "category": "THINGS",
+  "en": "towel",
+  "tier": 3,
+  "gender": "F"
+ },
+ {
+  "text": "σαπούνι",
+  "category": "THINGS",
+  "en": "soap",
+  "tier": 3,
+  "gender": "N"
+ },
+ {
+  "text": "οδοντόβουρτσα",
+  "category": "THINGS",
+  "en": "toothbrush",
+  "tier": 3,
+  "gender": "F"
+ },
+ {
+  "text": "ψυγείο",
+  "category": "THINGS",
+  "en": "refrigerator",
+  "tier": 3,
+  "gender": "N"
+ },
+ {
+  "text": "πλυντήριο",
+  "category": "THINGS",
+  "en": "washing machine",
+  "tier": 3,
+  "gender": "N"
+ },
+ {
+  "text": "καθρέφτης",
+  "category": "THINGS",
+  "en": "mirror",
+  "tier": 3,
+  "gender": "M"
+ },
+ {
+  "text": "ασανσέρ",
+  "category": "THINGS",
+  "en": "elevator",
+  "tier": 3,
+  "gender": "N"
+ },
+ {
+  "text": "ταχυδρομείο",
+  "category": "PLACES",
+  "en": "post office",
+  "tier": 3,
+  "gender": "N"
+ },
+ {
+  "text": "βιβλιοθήκη",
+  "category": "PLACES",
+  "en": "library",
+  "tier": 3,
+  "gender": "F"
+ },
+ {
+  "text": "κομμωτήριο",
+  "category": "PLACES",
+  "en": "hairdresser",
+  "tier": 3,
+  "gender": "N"
+ },
+ {
+  "text": "περίπτερο",
+  "category": "PLACES",
+  "en": "kiosk",
+  "tier": 3,
+  "gender": "N"
+ },
+ {
+  "text": "αεροδρόμιο",
+  "category": "PLACES",
+  "en": "airport",
+  "tier": 3,
+  "gender": "N"
+ },
+ {
+  "text": "πλατεία",
+  "category": "PLACES",
+  "en": "square",
+  "tier": 3,
+  "gender": "F"
+ },
+ {
+  "text": "παραλία",
+  "category": "PLACES",
+  "en": "beach",
+  "tier": 3,
+  "gender": "F"
+ },
+ {
+  "text": "χωριό",
+  "category": "PLACES",
+  "en": "village",
+  "tier": 3,
+  "gender": "N"
+ },
+ {
+  "text": "πόλη",
+  "category": "PLACES",
+  "en": "city",
+  "tier": 3,
+  "gender": "F"
+ },
+ {
+  "text": "γειτονιά",
+  "category": "PLACES",
+  "en": "neighbourhood",
+  "tier": 3,
+  "gender": "F"
+ },
+ {
+  "text": "ιατρείο",
+  "category": "PLACES",
+  "en": "doctor's office",
+  "tier": 3,
+  "gender": "N"
+ },
+ {
+  "text": "φούρνος",
+  "category": "PLACES",
+  "en": "bakery",
+  "tier": 3,
+  "gender": "M"
+ },
+ {
+  "text": "μανάβικο",
+  "category": "PLACES",
+  "en": "greengrocer",
+  "tier": 3,
+  "gender": "N"
+ },
+ {
+  "text": "κουρείο",
+  "category": "PLACES",
+  "en": "barber",
+  "tier": 3,
+  "gender": "N"
+ },
+ {
+  "text": "γιαούρτι",
+  "category": "FOOD",
+  "en": "yogurt",
+  "tier": 3,
+  "gender": "N"
+ },
+ {
+  "text": "μπριζόλα",
+  "category": "FOOD",
+  "en": "steak",
+  "tier": 3,
+  "gender": "F"
+ },
+ {
+  "text": "σπανακόπιτα",
+  "category": "FOOD",
+  "en": "spinach pie",
+  "tier": 3,
+  "gender": "F"
+ },
+ {
+  "text": "λεμονάδα",
+  "category": "FOOD",
+  "en": "lemonade",
+  "tier": 3,
+  "gender": "F"
+ },
+ {
+  "text": "πορτοκαλάδα",
+  "category": "FOOD",
+  "en": "orange juice",
+  "tier": 3,
+  "gender": "F"
+ },
+ {
+  "text": "κουλούρι",
+  "category": "FOOD",
+  "en": "bread ring",
+  "tier": 3,
+  "gender": "N"
+ },
+ {
+  "text": "μπισκότο",
+  "category": "FOOD",
+  "en": "biscuit",
+  "tier": 3,
+  "gender": "N"
+ },
+ {
+  "text": "καρπούζι",
+  "category": "FOOD",
+  "en": "watermelon",
+  "tier": 3,
+  "gender": "N"
+ },
+ {
+  "text": "σταφύλι",
+  "category": "FOOD",
+  "en": "grape",
+  "tier": 3,
+  "gender": "N"
+ },
+ {
+  "text": "αγγούρι",
+  "category": "FOOD",
+  "en": "cucumber",
+  "tier": 3,
+  "gender": "N"
+ },
+ {
+  "text": "ντομάτα",
+  "category": "FOOD",
+  "en": "tomato",
+  "tier": 3,
+  "gender": "F"
+ },
+ {
+  "text": "λεμόνι",
+  "category": "FOOD",
+  "en": "lemon",
+  "tier": 3,
+  "gender": "N"
+ },
+ {
+  "text": "ελαιόλαδο",
+  "category": "THINGS",
+  "en": "olive oil",
+  "tier": 3,
+  "gender": "N"
+ },
+ {
+  "text": "εγγονός",
+  "category": "PEOPLE",
+  "en": "grandson",
+  "tier": 3,
+  "gender": "M"
+ },
+ {
+  "text": "εγγονή",
+  "category": "PEOPLE",
+  "en": "granddaughter",
+  "tier": 3,
+  "gender": "F"
+ },
+ {
+  "text": "οδηγός",
+  "category": "PEOPLE",
+  "en": "driver",
+  "tier": 3,
+  "gender": "M"
+ },
+ {
+  "text": "σερβιτόρος",
+  "category": "PEOPLE",
+  "en": "waiter",
+  "tier": 3,
+  "gender": "M"
+ },
+ {
+  "text": "υπάλληλος",
+  "category": "PEOPLE",
+  "en": "employee",
+  "tier": 3,
+  "gender": "M"
+ },
+ {
+  "text": "δάσκαλος",
+  "category": "PEOPLE",
+  "en": "teacher",
+  "tier": 3,
+  "gender": "M"
+ },
+ {
+  "text": "περιμένω",
+  "category": "VERBS",
+  "en": "wait",
+  "tier": 3
+ },
+ {
+  "text": "ρωτάω",
+  "category": "VERBS",
+  "en": "ask",
+  "tier": 3
+ },
+ {
+  "text": "απαντάω",
+  "category": "VERBS",
+  "en": "answer",
+  "tier": 3
+ },
+ {
+  "text": "ψωνίζω",
+  "category": "VERBS",
+  "en": "shop",
+  "tier": 3
+ },
+ {
+  "text": "μαγειρεύω",
+  "category": "VERBS",
+  "en": "cook",
+  "tier": 3
+ },
+ {
+  "text": "καθαρίζω",
+  "category": "VERBS",
+  "en": "clean",
+  "tier": 3
+ },
+ {
+  "text": "οδηγώ",
+  "category": "VERBS",
+  "en": "drive",
+  "tier": 3
+ },
+ {
+  "text": "ταξιδεύω",
+  "category": "VERBS",
+  "en": "travel",
+  "tier": 3
+ },
+ {
+  "text": "δουλεύω",
+  "category": "VERBS",
+  "en": "work",
+  "tier": 3
+ },
+ {
+  "text": "ξυπνάω",
+  "category": "VERBS",
+  "en": "wake up",
+  "tier": 3
+ },
+ {
+  "text": "ντύνομαι",
+  "category": "VERBS",
+  "en": "get dressed",
+  "tier": 3
+ },
+ {
+  "text": "πλένομαι",
+  "category": "VERBS",
+  "en": "wash",
+  "tier": 3
+ },
+ {
+  "text": "ψάχνω",
+  "category": "VERBS",
+  "en": "search",
+  "tier": 3
+ },
+ {
+  "text": "βρίσκω",
+  "category": "VERBS",
+  "en": "find",
+  "tier": 3
+ },
+ {
+  "text": "στέλνω",
+  "category": "VERBS",
+  "en": "send",
+  "tier": 3
+ },
+ {
+  "text": "φέρνω",
+  "category": "VERBS",
+  "en": "bring",
+  "tier": 3
+ },
+ {
+  "text": "δείχνω",
+  "category": "VERBS",
+  "en": "show",
+  "tier": 3
+ },
+ {
+  "text": "ξεκινάω",
+  "category": "VERBS",
+  "en": "start",
+  "tier": 3
+ },
+ {
+  "text": "τελειώνω",
+  "category": "VERBS",
+  "en": "finish",
+  "tier": 3
+ },
+ {
+  "text": "εβδομάδα",
+  "category": "TIME",
+  "en": "week",
+  "tier": 3,
+  "gender": "F"
+ },
+ {
+  "text": "μήνας",
+  "category": "TIME",
+  "en": "month",
+  "tier": 3,
+  "gender": "M"
+ },
+ {
+  "text": "απόγευμα",
+  "category": "TIME",
+  "en": "afternoon",
+  "tier": 3,
+  "gender": "N"
+ },
+ {
+  "text": "Τρίτη",
+  "category": "TIME",
+  "en": "Tuesday",
+  "tier": 3,
+  "gender": "F"
+ },
+ {
+  "text": "Τετάρτη",
+  "category": "TIME",
+  "en": "Wednesday",
+  "tier": 3,
+  "gender": "F"
+ },
+ {
+  "text": "Πέμπτη",
+  "category": "TIME",
+  "en": "Thursday",
+  "tier": 3,
+  "gender": "F"
+ },
+ {
+  "text": "Παρασκευή",
+  "category": "TIME",
+  "en": "Friday",
+  "tier": 3,
+  "gender": "F"
+ },
+ {
+  "text": "σκέφτομαι",
+  "category": "VERBS",
+  "en": "think",
+  "tier": 4
+ },
+ {
+  "text": "αποφασίζω",
+  "category": "VERBS",
+  "en": "decide",
+  "tier": 4
+ },
+ {
+  "text": "εξηγώ",
+  "category": "VERBS",
+  "en": "explain",
+  "tier": 4
+ },
+ {
+  "text": "θυμάμαι",
+  "category": "VERBS",
+  "en": "remember",
+  "tier": 4
+ },
+ {
+  "text": "ξεχνάω",
+  "category": "VERBS",
+  "en": "forget",
+  "tier": 4
+ },
+ {
+  "text": "καταλαβαίνω",
+  "category": "VERBS",
+  "en": "understand",
+  "tier": 4
+ },
+ {
+  "text": "προσπαθώ",
+  "category": "VERBS",
+  "en": "try",
+  "tier": 4
+ },
+ {
+  "text": "συνεχίζω",
+  "category": "VERBS",
+  "en": "continue",
+  "tier": 4
+ },
+ {
+  "text": "σταματάω",
+  "category": "VERBS",
+  "en": "stop",
+  "tier": 4
+ },
+ {
+  "text": "διαλέγω",
+  "category": "VERBS",
+  "en": "choose",
+  "tier": 4
+ },
+ {
+  "text": "συμφωνώ",
+  "category": "VERBS",
+  "en": "agree",
+  "tier": 4
+ },
+ {
+  "text": "διαφωνώ",
+  "category": "VERBS",
+  "en": "disagree",
+  "tier": 4
+ },
+ {
+  "text": "υπόσχομαι",
+  "category": "VERBS",
+  "en": "promise",
+  "tier": 4
+ },
+ {
+  "text": "φαντάζομαι",
+  "category": "VERBS",
+  "en": "imagine",
+  "tier": 4
+ },
+ {
+  "text": "ελπίζω",
+  "category": "VERBS",
+  "en": "hope",
+  "tier": 4
+ },
+ {
+  "text": "ανησυχώ",
+  "category": "VERBS",
+  "en": "worry",
+  "tier": 4
+ },
+ {
+  "text": "πιστεύω",
+  "category": "VERBS",
+  "en": "believe",
+  "tier": 4
+ },
+ {
+  "text": "νιώθω",
+  "category": "VERBS",
+  "en": "feel",
+  "tier": 4
+ },
+ {
+  "text": "προτιμώ",
+  "category": "VERBS",
+  "en": "prefer",
+  "tier": 4
+ },
+ {
+  "text": "αλλάζω",
+  "category": "VERBS",
+  "en": "change",
+  "tier": 4
+ },
+ {
+  "text": "επιστρέφω",
+  "category": "VERBS",
+  "en": "return",
+  "tier": 4
+ },
+ {
+  "text": "ετοιμάζω",
+  "category": "VERBS",
+  "en": "prepare",
+  "tier": 4
+ },
+ {
+  "text": "κανονίζω",
+  "category": "VERBS",
+  "en": "arrange",
+  "tier": 4
+ },
+ {
+  "text": "φροντίζω",
+  "category": "VERBS",
+  "en": "take care",
+  "tier": 4
+ },
+ {
+  "text": "προσέχω",
+  "category": "VERBS",
+  "en": "be careful",
+  "tier": 4
+ },
+ {
+  "text": "συζητάω",
+  "category": "VERBS",
+  "en": "discuss",
+  "tier": 4
+ },
+ {
+  "text": "χρειάζομαι",
+  "category": "VERBS",
+  "en": "need",
+  "tier": 4
+ },
+ {
+  "text": "καταφέρνω",
+  "category": "VERBS",
+  "en": "manage",
+  "tier": 4
+ },
+ {
+  "text": "δύσκολος",
+  "category": "FEELINGS",
+  "en": "difficult",
+  "tier": 4
+ },
+ {
+  "text": "εύκολος",
+  "category": "FEELINGS",
+  "en": "easy",
+  "tier": 4
+ },
+ {
+  "text": "σημαντικός",
+  "category": "FEELINGS",
+  "en": "important",
+  "tier": 4
+ },
+ {
+  "text": "σίγουρος",
+  "category": "FEELINGS",
+  "en": "sure",
+  "tier": 4
+ },
+ {
+  "text": "έτοιμος",
+  "category": "FEELINGS",
+  "en": "ready",
+  "tier": 4
+ },
+ {
+  "text": "περήφανος",
+  "category": "FEELINGS",
+  "en": "proud",
+  "tier": 4
+ },
+ {
+  "text": "ελεύθερος",
+  "category": "FEELINGS",
+  "en": "free",
+  "tier": 4
+ },
+ {
+  "text": "απαραίτητος",
+  "category": "FEELINGS",
+  "en": "necessary",
+  "tier": 4
+ },
+ {
+  "text": "επικίνδυνος",
+  "category": "FEELINGS",
+  "en": "dangerous",
+  "tier": 4
+ },
+ {
+  "text": "υπεύθυνος",
+  "category": "FEELINGS",
+  "en": "responsible",
+  "tier": 4
+ },
+ {
+  "text": "ανυπόμονος",
+  "category": "FEELINGS",
+  "en": "impatient",
+  "tier": 4
+ },
+ {
+  "text": "μπερδεμένος",
+  "category": "FEELINGS",
+  "en": "confused",
+  "tier": 4
+ },
+ {
+  "text": "απογοητευμένος",
+  "category": "FEELINGS",
+  "en": "disappointed",
+  "tier": 4
+ },
+ {
+  "text": "ενθουσιασμένος",
+  "category": "FEELINGS",
+  "en": "excited",
+  "tier": 4
+ },
+ {
+  "text": "τυχερός",
+  "category": "FEELINGS",
+  "en": "lucky",
+  "tier": 4
+ },
+ {
+  "text": "δυνατός",
+  "category": "FEELINGS",
+  "en": "strong",
+  "tier": 4
+ },
+ {
+  "text": "αδύναμος",
+  "category": "FEELINGS",
+  "en": "weak",
+  "tier": 4
+ },
+ {
+  "text": "ήσυχος",
+  "category": "FEELINGS",
+  "en": "quiet",
+  "tier": 4
+ },
+ {
+  "text": "ικανός",
+  "category": "FEELINGS",
+  "en": "capable",
+  "tier": 4
+ },
+ {
+  "text": "ελπίδα",
+  "category": "FEELINGS",
+  "en": "hope",
+  "tier": 5,
+  "gender": "F"
+ },
+ {
+  "text": "ιδέα",
+  "category": "FEELINGS",
+  "en": "idea",
+  "tier": 5,
+  "gender": "F"
+ },
+ {
+  "text": "πρόβλημα",
+  "category": "FEELINGS",
+  "en": "problem",
+  "tier": 5,
+  "gender": "N"
+ },
+ {
+  "text": "υπομονή",
+  "category": "FEELINGS",
+  "en": "patience",
+  "tier": 5,
+  "gender": "F"
+ },
+ {
+  "text": "ελευθερία",
+  "category": "FEELINGS",
+  "en": "freedom",
+  "tier": 5,
+  "gender": "F"
+ },
+ {
+  "text": "ευθύνη",
+  "category": "FEELINGS",
+  "en": "responsibility",
+  "tier": 5,
+  "gender": "F"
+ },
+ {
+  "text": "αλήθεια",
+  "category": "FEELINGS",
+  "en": "truth",
+  "tier": 5,
+  "gender": "F"
+ },
+ {
+  "text": "λύση",
+  "category": "FEELINGS",
+  "en": "solution",
+  "tier": 5,
+  "gender": "F"
+ },
+ {
+  "text": "απόφαση",
+  "category": "FEELINGS",
+  "en": "decision",
+  "tier": 5,
+  "gender": "F"
+ },
+ {
+  "text": "γνώμη",
+  "category": "FEELINGS",
+  "en": "opinion",
+  "tier": 5,
+  "gender": "F"
+ },
+ {
+  "text": "ανάγκη",
+  "category": "FEELINGS",
+  "en": "need",
+  "tier": 5,
+  "gender": "F"
+ },
+ {
+  "text": "ευκαιρία",
+  "category": "FEELINGS",
+  "en": "opportunity",
+  "tier": 5,
+  "gender": "F"
+ },
+ {
+  "text": "εμπειρία",
+  "category": "FEELINGS",
+  "en": "experience",
+  "tier": 5,
+  "gender": "F"
+ },
+ {
+  "text": "κίνδυνος",
+  "category": "FEELINGS",
+  "en": "danger",
+  "tier": 5,
+  "gender": "M"
+ },
+ {
+  "text": "ασφάλεια",
+  "category": "FEELINGS",
+  "en": "safety",
+  "tier": 5,
+  "gender": "F"
+ },
+ {
+  "text": "ησυχία",
+  "category": "FEELINGS",
+  "en": "silence",
+  "tier": 5,
+  "gender": "F"
+ },
+ {
+  "text": "δύναμη",
+  "category": "FEELINGS",
+  "en": "strength",
+  "tier": 5,
+  "gender": "F"
+ },
+ {
+  "text": "θάρρος",
+  "category": "FEELINGS",
+  "en": "courage",
+  "tier": 5,
+  "gender": "N"
+ },
+ {
+  "text": "φόβος",
+  "category": "FEELINGS",
+  "en": "fear",
+  "tier": 5,
+  "gender": "M"
+ },
+ {
+  "text": "θυμός",
+  "category": "FEELINGS",
+  "en": "anger",
+  "tier": 5,
+  "gender": "M"
+ },
+ {
+  "text": "χαρά",
+  "category": "FEELINGS",
+  "en": "joy",
+  "tier": 5,
+  "gender": "F"
+ },
+ {
+  "text": "λύπη",
+  "category": "FEELINGS",
+  "en": "sadness",
+  "tier": 5,
+  "gender": "F"
+ },
+ {
+  "text": "αγάπη",
+  "category": "FEELINGS",
+  "en": "love",
+  "tier": 5,
+  "gender": "F"
+ },
+ {
+  "text": "φιλία",
+  "category": "FEELINGS",
+  "en": "friendship",
+  "tier": 5,
+  "gender": "F"
+ },
+ {
+  "text": "εμπιστοσύνη",
+  "category": "FEELINGS",
+  "en": "trust",
+  "tier": 5,
+  "gender": "F"
+ },
+ {
+  "text": "σεβασμός",
+  "category": "FEELINGS",
+  "en": "respect",
+  "tier": 5,
+  "gender": "M"
+ },
+ {
+  "text": "υγεία",
+  "category": "BODY",
+  "en": "health",
+  "tier": 5,
+  "gender": "F"
+ },
+ {
+  "text": "ζωή",
+  "category": "FEELINGS",
+  "en": "life",
+  "tier": 5,
+  "gender": "F"
+ },
+ {
+  "text": "μνήμη",
+  "category": "FEELINGS",
+  "en": "memory",
+  "tier": 5,
+  "gender": "F"
+ },
+ {
+  "text": "σκέψη",
+  "category": "FEELINGS",
+  "en": "thought",
+  "tier": 5,
+  "gender": "F"
+ },
+ {
+  "text": "πρόοδος",
+  "category": "FEELINGS",
+  "en": "progress",
+  "tier": 5,
+  "gender": "F"
+ },
+ {
+  "text": "συνήθεια",
+  "category": "FEELINGS",
+  "en": "habit",
+  "tier": 5,
+  "gender": "F"
+ },
+ {
+  "text": "τύχη",
+  "category": "FEELINGS",
+  "en": "luck",
+  "tier": 5,
+  "gender": "F"
+ },
+ {
+  "text": "σκοπός",
+  "category": "FEELINGS",
+  "en": "purpose",
+  "tier": 5,
+  "gender": "M"
+ },
+ {
+  "text": "όνειρο",
+  "category": "FEELINGS",
+  "en": "dream",
+  "tier": 5,
+  "gender": "N"
+ },
+ {
+  "text": "μέλλον",
+  "category": "TIME",
+  "en": "future",
+  "tier": 5,
+  "gender": "N"
+ },
+ {
+  "text": "παρελθόν",
+  "category": "TIME",
+  "en": "past",
+  "tier": 5,
+  "gender": "N"
+ },
+ {
+  "text": "κατάσταση",
+  "category": "FEELINGS",
+  "en": "situation",
+  "tier": 5,
+  "gender": "F"
+ },
+ {
+  "text": "σχέση",
+  "category": "FEELINGS",
+  "en": "relationship",
+  "tier": 5,
+  "gender": "F"
+ },
+ {
+  "text": "ιστορία",
+  "category": "FEELINGS",
+  "en": "story",
+  "tier": 5,
+  "gender": "F"
+ },
+ {
+  "text": "φύση",
+  "category": "FEELINGS",
+  "en": "nature",
+  "tier": 5,
+  "gender": "F"
  }
 ]
