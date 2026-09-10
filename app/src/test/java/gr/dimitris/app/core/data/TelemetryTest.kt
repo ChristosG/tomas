@@ -253,6 +253,26 @@ class TelemetryTest {
         assertTrue("the exercise itself is still whole: $o", o["exercise"].isJsonObject)
     }
 
+    /**
+     * A level-15 row keeps the story, once. The exercise carries the same sentence twice — digits for
+     * the screen, words for the voice — and a year of rows does not need the second copy of a hundred
+     * characters it can derive from the first.
+     */
+    @Test fun `a word problem writes the story it showed him and not the one it said`() {
+        val shown = "Έχεις 3 κουτιά με 6 αυγά το καθένα. Σπάνε 4. Πόσα μένουν;"
+        val said = "Έχεις τρία κουτιά με έξι αυγά το καθένα. Σπάνε τέσσερα. Πόσα μένουν;"
+        val json = numbersDetail(
+            NumberExercise.WordProblem(15, shown, said, listOf(14, 18, 22, 2), 14),
+            given = 18, retries = 0, ms = 4_000,
+        )
+        assertTrue("the question he was asked has to survive: $json", json.contains(shown))
+        assertFalse("the spoken copy is derivable and does not belong in the row: $json", json.contains(said))
+        val o = parse(json)
+        assertEquals("problem", o["type"].asString)
+        assertEquals(14, o["answer"].asInt)
+        assertEquals(15, o["level"].asInt)
+    }
+
     @Test fun `an exercise he passed on carries no answer of his`() {
         val o = parse(numbersDetail(NumberExercise.Compare(1, 3, 9, false), given = null, retries = 0, ms = 900))
         assertFalse("a skip must not invent a tap: $o", o.has("given"))

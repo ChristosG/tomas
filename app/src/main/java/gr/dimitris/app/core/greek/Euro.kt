@@ -54,10 +54,20 @@ object Euro {
         if (euros !in 0..GreekNumbers.MAX) return format(cents)
         return when {
             rest == 0 -> "${GreekNumbers.words(euros)} ευρώ"
-            euros == 0 -> "${GreekNumbers.words(rest)} λεπτά"
-            else -> "${GreekNumbers.words(euros)} ευρώ και ${GreekNumbers.words(rest)} λεπτά"
+            euros == 0 -> cents(rest)
+            else -> "${GreekNumbers.words(euros)} ευρώ και ${cents(rest)}"
         }
     }
+
+    /**
+     * The λεπτά part, counted the way Greek counts: «ένα λεπτό» for one and «δύο λεπτά» for the rest.
+     *
+     * A caregiver types 3,01 € for something and the phone says it back to a man relearning his
+     * numbers; «ένα λεπτά» is the kind of small wrongness he would hear and not be able to say why.
+     * ευρώ needs no such branch — it is invariable, and «ένα ευρώ» is already right.
+     */
+    private fun cents(rest: Int): String =
+        if (rest == 1) "ένα λεπτό" else "${GreekNumbers.words(rest)} λεπτά"
 
     /**
      * What he is owed back, as coins and notes, largest first: `change(2000, 1340)` is

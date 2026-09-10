@@ -304,15 +304,18 @@ class ExerciseGenerator(private val random: Random = Random.Default) {
             0 -> {
                 val k = random.nextInt(2, 6)
                 val n = random.nextInt(3, 10)
+                // Fewer break than there are: k × n − m is never zero and never negative.
                 val m = random.nextInt(1, k * n)
                 told(k * n - m, listOf(k * n, k * n + m, n - m, k * n - m + 10)) { num ->
-                    "Έχεις ${num(k)} κουτιά με ${num(n)} αυγά. Σπάνε ${num(m)}. Πόσα μένουν;"
+                    "Έχεις ${num(k)} κουτιά με ${num(n)} αυγά το καθένα. Σπάνε ${num(m)}. Πόσα μένουν;"
                 }
             }
             1 -> {
                 val a = random.nextInt(5, 31)
                 val b = random.nextInt(2, 10)
-                val c = random.nextInt(1, 10)
+                // Never more people off the bus than are on it. Without this bound the story is
+                // impossible and the answer is negative, which no button and no Greek word can hold.
+                val c = random.nextInt(1, minOf(10, a + b))
                 told(a + b - c, listOf(a + b, a + b + c, a - b + c, a - c)) { num ->
                     "Στο λεωφορείο είναι ${num(a)} άτομα. Ανεβαίνουν ${num(b)} και κατεβαίνουν ${num(c)}. Πόσα άτομα είναι τώρα;"
                 }
@@ -337,13 +340,17 @@ class ExerciseGenerator(private val random: Random = Random.Default) {
                 val k = random.nextInt(2, 6)
                 val n = random.nextInt(2, 7)
                 val cost = k * n
-                val paid = NOTE_EUROS.first { it > cost }
+                // The note he hands over, never one that is exactly twice the bill: at 10 € paid with
+                // a 20 the change *is* the cost, and this level's whole point — that the one-step
+                // answer is sitting there as a button — is filtered out as a duplicate. Where no
+                // other note covers it (a 25 € bill has only the fifty), the collision stands.
+                val paid = NOTE_EUROS.firstOrNull { it > cost && it != 2 * cost } ?: NOTE_EUROS.first { it > cost }
                 told(paid - cost, listOf(cost, paid - n, paid - cost + n, paid + cost)) { num ->
                     "Αγοράζεις ${num(k)} μπουκάλια προς ${num(n)} ευρώ. Δίνεις ${num(paid)} ευρώ. Πόσα ρέστα παίρνεις;"
                 }
             }
         }
-        return NumberExercise.WordProblem(level, shown, said, options(answer, wrong, 0..150), answer)
+        return NumberExercise.WordProblem(level, shown, said, options(answer, wrong, PROBLEM_RANGE), answer)
     }
 
     /**
@@ -474,5 +481,16 @@ class ExerciseGenerator(private val random: Random = Random.Default) {
         val FACE_TIMES: List<Int> = (0 until GreekTime.MINUTES step 5).toList()
 
         val DAY_INDICES: List<Int> = GreekTime.days.indices.toList()
+
+        /**
+         * What a level-15 answer may be. The floor is what every shape is *built* to guarantee — a
+         * story whose answer is negative is a story that cannot happen, and `GreekNumbers` has no
+         * word for it — and the ceiling is the widest any of the five shapes reaches (50 − 4).
+         * `ExerciseGeneratorTest` sweeps five thousand seeds a shape against it.
+         */
+        val PROBLEM_ANSWERS: IntRange = 1..150
+
+        /** The same, opened at the bottom: zero is a wrong answer he may be offered, never the right one. */
+        val PROBLEM_RANGE: IntRange = 0..PROBLEM_ANSWERS.last
     }
 }

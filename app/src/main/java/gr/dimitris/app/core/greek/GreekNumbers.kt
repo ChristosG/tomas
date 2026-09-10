@@ -46,10 +46,12 @@ object GreekNumbers {
         val thousands = n / 1000
         val rest = n % 1000
         // χίλια for one thousand and nothing else: the multiplier is a feminine count of χιλιάδες,
-        // which is why 2000 is «δύο χιλιάδες» and not «δύο χίλια».
+        // which is why 2000 is «δύο χιλιάδες» and not «δύο χίλια». χίλια itself is an adjective and
+        // takes the gender of what it counts — «χίλιες μέρες» — while χιλιάδες is a noun and does
+        // not, which is why only the one-thousand branch asks.
         val head = when (thousands) {
             0 -> ""
-            1 -> "χίλια"
+            1 -> if (feminine) "χίλιες" else "χίλια"
             else -> "${onesFeminine[thousands]} χιλιάδες"
         }
         val tail = under1000(rest, feminine)

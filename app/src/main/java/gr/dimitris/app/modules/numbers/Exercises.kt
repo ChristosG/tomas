@@ -249,7 +249,11 @@ sealed class NumberExercise {
     data class WordProblem(
         override val level: Int,
         override val prompt: String,
-        val spoken: String,
+        // Kept out of the attempt row: the whole exercise object is written into `detail`
+        // ([gr.dimitris.app.core.data.Adapt.Detail.kept]), and this is the same sentence as [prompt]
+        // with its numbers spelled out — a second hundred characters a year of rows does not need,
+        // and derivable from the first if anyone ever wants it back.
+        @Transient val spoken: String,
         override val options: List<Int>,
         override val answer: Int,
     ) : NumberExercise() {

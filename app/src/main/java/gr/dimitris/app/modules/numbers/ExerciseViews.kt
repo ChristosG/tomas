@@ -25,6 +25,7 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -33,6 +34,8 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.drawText
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -160,28 +163,64 @@ fun CompareView(e: NumberExercise.Compare, s: NumbersState, onChoose: (Int) -> U
  */
 @Composable
 fun NumberLineView(e: NumberExercise.NumberLine, s: NumbersState, onChoose: (Int) -> Unit) {
-    val lo = e.ticks.first()
-    val hi = e.ticks.last()
-    val span = (hi - lo).coerceAtLeast(1).toFloat()
-    val labelled = listOf(lo, e.ticks[e.ticks.size / 2], hi).distinct()
-    val rule = MaterialTheme.colorScheme.onBackground
-
     Text(e.target.toString(), style = MaterialTheme.typography.displayLarge, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
     Spacer(Modifier.height(Sizes.gap))
+    TickRule(e.ticks) { xOf, inset ->
+        Spacer(Modifier.height(Sizes.gapSmall))
+        Box(Modifier.fillMaxWidth().height(Sizes.touchMin)) {
+            e.candidates.forEach { v ->
+                val (container, content) = optionColours(v, s, e.answer)
+                Button(
+                    onClick = { onChoose(v) },
+                    shape = CircleShape,
+                    colors = ButtonDefaults.buttonColors(containerColor = container, contentColor = content),
+                    contentPadding = PaddingValues(0.dp),
+                    // Full 72dp, centred on the value's own place on the line.
+                    modifier = Modifier.size(Sizes.touchMin).offset(x = xOf(v) - inset)
+                        .semantics { contentDescription = "Θέση ${GreekNumbers.words(v)}" },
+                ) {}
+            }
+        }
+    }
+}
+
+/**
+ * The line itself: one horizontal rule, a tick at every number in [ticks], the ends and the middle
+ * labelled. Nothing is written on the ticks — a tick labelled with its own digit would turn "where
+ * does seven go" into "find the glyph 7".
+ *
+ * [mark] is a filled dot drawn on the line and nothing else: level 9 shows where the first number of
+ * its sum already stands. [content] is handed the geometry — where a value sits, and the margin the
+ * line was drawn inside — so that whatever stands *on* the line (level 2 and 6's tap targets) lines
+ * up with it by construction instead of by a second copy of the same arithmetic.
+ */
+@Composable
+private fun TickRule(
+    ticks: List<Int>,
+    mark: Int? = null,
+    content: @Composable (xOf: (Int) -> Dp, inset: Dp) -> Unit = { _, _ -> },
+) {
+    val lo = ticks.first()
+    val hi = ticks.last()
+    val span = (hi - lo).coerceAtLeast(1).toFloat()
+    val labelled = listOf(lo, ticks[ticks.size / 2], hi).distinct()
+    val rule = MaterialTheme.colorScheme.onBackground
+    val dot = MaterialTheme.colorScheme.secondary
     BoxWithConstraints(Modifier.fillMaxWidth()) {
         // Half a button of margin at each end, so the circle standing on the first tick is fully on
         // the screen and every centre is a real position on the line.
         val inset = Sizes.touchMin / 2
         val usable = maxWidth - Sizes.touchMin
-        fun xOf(v: Int): Dp = inset + usable * ((v - lo) / span)
+        fun xOf(v: Int): Dp = inset + usable * ((v.coerceIn(lo, hi) - lo) / span)
         Column(Modifier.fillMaxWidth()) {
             Canvas(Modifier.fillMaxWidth().height(LINE_HEIGHT)) {
                 val y = size.height / 2f
                 drawLine(rule, Offset(inset.toPx(), y), Offset(size.width - inset.toPx(), y), strokeWidth = 4.dp.toPx(), cap = StrokeCap.Round)
-                e.ticks.forEach { t ->
+                ticks.forEach { t ->
                     val half = (if (t in labelled) 14.dp else 8.dp).toPx()
                     drawLine(rule, Offset(xOf(t).toPx(), y - half), Offset(xOf(t).toPx(), y + half), strokeWidth = 3.dp.toPx())
                 }
+                if (mark != null) drawCircle(dot, radius = 9.dp.toPx(), center = Offset(xOf(mark).toPx(), y))
             }
             Box(Modifier.fillMaxWidth().height(LABEL_HEIGHT)) {
                 labelled.forEach { t ->
@@ -192,21 +231,7 @@ fun NumberLineView(e: NumberExercise.NumberLine, s: NumbersState, onChoose: (Int
                     )
                 }
             }
-            Spacer(Modifier.height(Sizes.gapSmall))
-            Box(Modifier.fillMaxWidth().height(Sizes.touchMin)) {
-                e.candidates.forEach { v ->
-                    val (container, content) = optionColours(v, s, e.answer)
-                    Button(
-                        onClick = { onChoose(v) },
-                        shape = CircleShape,
-                        colors = ButtonDefaults.buttonColors(containerColor = container, contentColor = content),
-                        contentPadding = PaddingValues(0.dp),
-                        // Full 72dp, centred on the value's own place on the line.
-                        modifier = Modifier.size(Sizes.touchMin).offset(x = xOf(v) - inset)
-                            .semantics { contentDescription = "Θέση ${GreekNumbers.words(v)}" },
-                    ) {}
-                }
-            }
+            content(::xOf, inset)
         }
     }
 }
@@ -369,8 +394,19 @@ fun ClockFace(minutes: Int, modifier: Modifier = Modifier) {
     val ink = MaterialTheme.colorScheme.onBackground
     val face = MaterialTheme.colorScheme.surfaceVariant
     val hands = MaterialTheme.colorScheme.primary
-    Canvas(modifier.size(CLOCK_SIZE).semantics { contentDescription = "Ρολόι" }) {
-        val radius = size.minDimension / 2f
+    // The four numerals a wall clock has room for. Measured once, outside the draw, because a
+    // Canvas cannot lay out text by itself and a man relearning a face should not have to count
+    // ticks to find the three.
+    val measurer = rememberTextMeasurer()
+    val numeralStyle = MaterialTheme.typography.titleLarge.copy(color = ink)
+    val numerals = remember(measurer, numeralStyle) {
+        CLOCK_NUMERALS.map { (hour, at) -> at to measurer.measure(hour.toString(), numeralStyle) }
+    }
+    Canvas(modifier.size(CLOCK_SIZE).semantics { contentDescription = CLOCK_LABEL }) {
+        // Inside the stroke, not on it: a circle drawn at exactly half the box loses the outer half
+        // of its own outline at the top, bottom and sides.
+        val edge = 3.dp.toPx()
+        val radius = size.minDimension / 2f - edge / 2f
         val middle = Offset(size.width / 2f, size.height / 2f)
 
         /** [turn] is how far round from twelve, as a fraction of the whole circle. */
@@ -383,19 +419,24 @@ fun ClockFace(minutes: Int, modifier: Modifier = Modifier) {
         }
 
         drawCircle(face, radius = radius, center = middle)
-        drawCircle(ink, radius = radius, center = middle, style = Stroke(width = 3.dp.toPx()))
+        drawCircle(ink, radius = radius, center = middle, style = Stroke(width = edge))
         repeat(12) { i ->
             val angle = i / 12f * 2f * PI.toFloat() - PI.toFloat() / 2f
-            val outer = middle + Offset(cos(angle) * radius * 0.92f, sin(angle) * radius * 0.92f)
-            val inner = middle + Offset(cos(angle) * radius * 0.78f, sin(angle) * radius * 0.78f)
+            val outer = middle + Offset(cos(angle) * radius * 0.94f, sin(angle) * radius * 0.94f)
+            val inner = middle + Offset(cos(angle) * radius * 0.82f, sin(angle) * radius * 0.82f)
             // The quarters get the long ticks: they are the marks a face is actually read against.
             drawLine(ink, inner, outer, strokeWidth = (if (i % 3 == 0) 5.dp else 3.dp).toPx(), cap = StrokeCap.Round)
+        }
+        numerals.forEach { (turn, laid) ->
+            val angle = turn * 2f * PI.toFloat() - PI.toFloat() / 2f
+            val centre = middle + Offset(cos(angle) * radius * 0.66f, sin(angle) * radius * 0.66f)
+            drawText(laid, topLeft = centre - Offset(laid.size.width / 2f, laid.size.height / 2f))
         }
         val minute = GreekTime.minuteOf(minutes)
         // The hour hand creeps: at half past three it is between the three and the four, which is
         // exactly the thing that makes a real face hard and a toy one useless.
-        hand((GreekTime.hourOf(minutes) + minute / 60f) / 12f, radius * 0.52f, 9.dp)
-        hand(minute / 60f, radius * 0.80f, 5.dp)
+        hand((GreekTime.hourOf(minutes) + minute / 60f) / 12f, radius * 0.44f, 9.dp)
+        hand(minute / 60f, radius * 0.78f, 5.dp)
         drawCircle(hands, radius = 6.dp.toPx(), center = middle)
     }
 }
@@ -414,37 +455,13 @@ fun WordProblemView(e: NumberExercise.WordProblem, s: NumbersState, onChoose: (I
 
 /**
  * A line from zero to a thousand with [at] marked on it. Level 9's aid, and nothing he can tap.
+ *
+ * The very line levels 2 and 6 stand their buttons on ([TickRule]) — the same ticks, the same
+ * margins, the same labels — because the whole point of showing it here is that he has already
+ * learned to read *that* line.
  */
 @Composable
-private fun HundredsLine(at: Int) {
-    val rule = MaterialTheme.colorScheme.onBackground
-    val mark = MaterialTheme.colorScheme.secondary
-    val span = HUNDREDS_SPAN.toFloat()
-    BoxWithConstraints(Modifier.fillMaxWidth()) {
-        val inset = LABEL_WIDTH / 2
-        val usable = maxWidth - LABEL_WIDTH
-        fun xOf(v: Int): Dp = inset + usable * (v.coerceIn(0, HUNDREDS_SPAN) / span)
-        Column(Modifier.fillMaxWidth()) {
-            Canvas(Modifier.fillMaxWidth().height(LINE_HEIGHT)) {
-                val y = size.height / 2f
-                drawLine(rule, Offset(inset.toPx(), y), Offset(size.width - inset.toPx(), y), strokeWidth = 3.dp.toPx(), cap = StrokeCap.Round)
-                (0..HUNDREDS_SPAN step 100).forEach { t ->
-                    drawLine(rule, Offset(xOf(t).toPx(), y - 8.dp.toPx()), Offset(xOf(t).toPx(), y + 8.dp.toPx()), strokeWidth = 2.dp.toPx())
-                }
-                drawCircle(mark, radius = 9.dp.toPx(), center = Offset(xOf(at).toPx(), y))
-            }
-            Box(Modifier.fillMaxWidth().height(LABEL_HEIGHT)) {
-                listOf(0, HUNDREDS_SPAN / 2, HUNDREDS_SPAN).forEach { t ->
-                    Text(
-                        t.toString(), style = MaterialTheme.typography.bodyLarge, textAlign = TextAlign.Center,
-                        maxLines = 1, softWrap = false,
-                        modifier = Modifier.width(LABEL_WIDTH).offset(x = xOf(t) - LABEL_WIDTH / 2),
-                    )
-                }
-            }
-        }
-    }
-}
+private fun HundredsLine(at: Int) = TickRule(HUNDREDS_TICKS, mark = at)
 
 /** Tall enough for the ticks either side of the rule. */
 private val LINE_HEIGHT = 40.dp
@@ -453,14 +470,28 @@ private val LABEL_HEIGHT = 28.dp
 /** Wide enough for "1000" and centred on its tick, so the end labels do not lean on their neighbour. */
 private val LABEL_WIDTH = 64.dp
 
-/** Big enough that the hands are two different lengths at arm's length, small enough to leave the buttons room. */
-private val CLOCK_SIZE = 220.dp
+/**
+ * Big enough that the hands are two different lengths at arm's length, small enough to leave the
+ * buttons room.
+ *
+ * 180 and not 220: with the row of dots on the first screen of the module, four option buttons three
+ * and four lines deep, and a face that size, the last row of answers sat under the bottom of the
+ * screen. The content scrolls, so nothing was lost — but an answer he has to go looking for is an
+ * answer he may not know is there, and forty dp off a clock face costs nothing he can see.
+ */
+private val CLOCK_SIZE = 180.dp
+
+/** What a screen reader calls the face, and what the shot harness finds it by. */
+const val CLOCK_LABEL = "Ρολόι"
+
+/** The numerals on the face, each with how far round from twelve it sits. Four, as a wall clock has. */
+private val CLOCK_NUMERALS = listOf(12 to 0f, 3 to 0.25f, 6 to 0.5f, 9 to 0.75f)
 
 /** The level whose sums carry, and the only one that gets the line of hundreds. */
 private const val CARRY_LEVEL = 9
 
-/** How far the level-9 line runs. The same thousand level 6 walks along. */
-private const val HUNDREDS_SPAN = 1000
+/** The level-9 line: the same eleven ticks over the same thousand that level 6 walks along. */
+private val HUNDREDS_TICKS = (0..1000 step 100).toList()
 
 /** Past this many characters a stimulus is a sentence, not a number, and stops being display-sized. */
 private const val LONG_STIMULUS = 20

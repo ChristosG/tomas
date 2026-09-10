@@ -8,10 +8,21 @@ import org.junit.Test
 import kotlin.random.Random
 
 class ExerciseGeneratorTest {
-    private val gen = ExerciseGenerator(Random(42))
     private val prices = listOf(Price("καφές", 250), Price("σουβλάκι", 380), Price("νερό", 50))
 
-    private fun many(level: Int, n: Int = 200) = List(n) { gen.generate(level, prices) }
+    /**
+     * A generator of this test's own, from a seed of its own.
+     *
+     * Never a field shared between tests: with one stream for the whole class, what each test sees
+     * depends on JUnit's method ordering *and* on how many draws every test before it happened to
+     * take, so adding or renaming any test silently reshuffles all the others — and an assertion
+     * that would have caught a real defect can go green for a whole release on the draws it was
+     * handed. One did.
+     */
+    private fun gen(seed: Int = 42) = ExerciseGenerator(Random(seed))
+
+    /** [n] draws at [level], from a stream that depends on the level and on nothing else. */
+    private fun many(level: Int, n: Int = 200) = gen(level * 31).let { g -> List(n) { g.generate(level, prices) } }
 
     @Test fun `level 1 compares numbers 0 to 10 with dots, never two neighbours`() {
         many(1).forEach { e ->
@@ -137,7 +148,7 @@ class ExerciseGeneratorTest {
 
     @Test fun `a four-item plan yields four exercises`() {
         assertEquals(4, exercisesFor(4))
-        assertEquals(4, gen.session(1, prices, exercisesFor(4)).size)
+        assertEquals(4, gen().session(1, prices, exercisesFor(4)).size)
         // Free practice hands over the full ten, and a session may never ask for none.
         assertEquals(10, exercisesFor(10))
         assertEquals(1, exercisesFor(0))
@@ -145,7 +156,7 @@ class ExerciseGeneratorTest {
     }
 
     @Test fun `session has the requested size and only that level`() {
-        val s = gen.session(3, prices, 10)
+        val s = gen().session(3, prices, 10)
         assertEquals(10, s.size); assertTrue(s.all { it.level == 3 })
     }
 
@@ -161,10 +172,10 @@ class ExerciseGeneratorTest {
 
     /** Whatever the caller passes, the exercise is one of the fifteen levels. */
     @Test fun `a level outside one to fifteen is clamped`() {
-        assertEquals(1, gen.generate(0, prices).level)
-        assertEquals(1, gen.generate(-5, prices).level)
-        assertEquals(15, gen.generate(16, prices).level)
-        assertEquals(15, gen.generate(Int.MAX_VALUE, prices).level)
+        assertEquals(1, gen().generate(0, prices).level)
+        assertEquals(1, gen().generate(-5, prices).level)
+        assertEquals(15, gen().generate(16, prices).level)
+        assertEquals(15, gen().generate(Int.MAX_VALUE, prices).level)
     }
 
     /** A caregiver who priced everything the same still gets euro questions, just not comparisons. */
@@ -198,7 +209,7 @@ class ExerciseGeneratorTest {
 
     @Test fun `every exercise has a Greek prompt`() {
         (NumberProgression.MIN_LEVEL..NumberProgression.MAX_LEVEL).forEach { level ->
-            assertTrue(gen.generate(level, prices).prompt.isNotBlank())
+            assertTrue(gen().generate(level, prices).prompt.isNotBlank())
         }
     }
 
@@ -410,15 +421,87 @@ class ExerciseGeneratorTest {
         assertTrue("one story over and over", all.map { it.prompt.substringBefore(' ') }.distinct().size >= 4)
     }
 
+    /**
+     * **Every story, over five thousand seeds each, has an answer that can happen and can be said.**
+     *
+     * The bus shape used to draw «κατεβαίνουν» free of «είναι» and «ανεβαίνουν», so about one draw in
+     * 2,400 asked how many people are left on a bus after eight get off a bus that holds seven. The
+     * answer was negative: an impossible question, a button reading `-1`, and — because a negative
+     * number has no Greek word — `GreekNumbers.words` throwing out of the coroutine that speaks the
+     * answer, killing the sitting and the rows it had not written.
+     *
+     * A rate like that is invisible to a test that takes one stream of 400 draws, which is exactly
+     * how it survived: the assertion below existed and passed on the seed it happened to get. So this
+     * one sweeps seeds rather than draws, checks every shape separately, and asserts the *range* both
+     * ends — because too big is the same class of defect as below zero, and the option range is what
+     * the buttons can actually hold.
+     */
+    @Test fun `every level 15 story stays inside the answers a story can have`() {
+        val byShape = mutableMapOf<String, Int>()
+        (0 until PROBLEM_SEEDS).forEach { seed ->
+            val g = gen(seed)
+            repeat(PROBLEM_DRAWS) {
+                val e = g.generate(15, prices) as NumberExercise.WordProblem
+                val shape = SHAPES.first { it in e.prompt }
+                byShape[shape] = (byShape[shape] ?: 0) + 1
+                assertTrue(
+                    "seed $seed: an answer no story can have and no word can say: ${e.answer} — ${e.prompt}",
+                    e.answer in ExerciseGenerator.PROBLEM_ANSWERS,
+                )
+                assertTrue("seed $seed: an option off the buttons: ${e.options} — ${e.prompt}",
+                    e.options.all { it in ExerciseGenerator.PROBLEM_RANGE })
+                assertEquals("seed $seed: not one right answer: ${e.options}", 1, e.options.count { it == e.answer })
+                // Every one of them is sayable, which is the other half of what went wrong.
+                assertTrue(GreekNumbers.words(e.answer).isNotBlank())
+            }
+        }
+        assertEquals("a shape that never came up: $byShape", SHAPES.size, byShape.size)
+        // Five shapes out of 25 000 draws is ~5 000 each; half of that is still five thousand seeds
+        // deep and is a floor a fair draw cannot fall through.
+        val floor = PROBLEM_SEEDS * PROBLEM_DRAWS / SHAPES.size / 2
+        byShape.forEach { (shape, n) ->
+            assertTrue("$shape was drawn only $n times, too few to have proved anything", n >= floor)
+        }
+    }
+
+    /**
+     * Level 15's one-step answer is the whole point of the level, so it may not be quietly filtered
+     * out for colliding with the right one: at a 10 € bill paid with a twenty the change *is* the
+     * cost, and the button that catches a man who stopped halfway disappears.
+     */
+    @Test fun `the buy-and-change story never pays with exactly twice the bill`() {
+        val bought = (0 until 400).flatMap { seed -> gen(seed).let { g -> List(5) { g.generate(15, prices) } } }
+            .filterIsInstance<NumberExercise.WordProblem>()
+            .filter { BUY in it.prompt }
+        assertTrue(bought.isNotEmpty())
+        // 25 € is the one bill no other note covers (only the fifty is bigger), so there — and only
+        // there, about one buy-story in twenty — the collision is allowed to stand.
+        val collided = bought.filter { it.answer * 2 == paidOf(it) }
+        assertTrue("the change equals the bill in ${collided.size} of ${bought.size}", collided.size < bought.size / 10)
+        collided.forEach { assertEquals("only the 25 € bill may collide: ${it.prompt}", 50, paidOf(it)) }
+    }
+
+    /** The note in «Δίνεις 20 ευρώ», read back off the sentence. */
+    private fun paidOf(e: NumberExercise.WordProblem): Int =
+        e.prompt.substringAfter("Δίνεις ").substringBefore(" ευρώ").toInt()
+
     /** A run at the hardest level is still ten questions, and a mixed session still gets its four. */
     @Test fun `a session at the top of the ladder is a full session`() {
-        assertEquals(10, gen.session(15, prices, 10).size)
-        assertEquals(4, gen.session(13, prices, exercisesFor(4)).size)
-        assertTrue(gen.session(12, emptyList(), 10).all { it.level == 12 })
+        assertEquals(10, gen().session(15, prices, 10).size)
+        assertEquals(4, gen().session(13, prices, exercisesFor(4)).size)
+        assertTrue(gen().session(12, emptyList(), 10).all { it.level == 12 })
     }
 
     private companion object {
         /** Draws per level in the sweep above. Enough for a one-in-three-hundred combination. */
         const val DRAWS = 500
+
+        /** Seeds per level-15 shape, and draws per seed: 25 000 stories, ~5 000 of each shape. */
+        const val PROBLEM_SEEDS = 5_000
+        const val PROBLEM_DRAWS = 5
+
+        /** One word out of each of the five stories, enough to tell them apart. */
+        val SHAPES = listOf("κουτιά", "λεωφορείο", "Ξοδεύεις", "Μοιράζεις", "Αγοράζεις")
+        const val BUY = "Αγοράζεις"
     }
 }

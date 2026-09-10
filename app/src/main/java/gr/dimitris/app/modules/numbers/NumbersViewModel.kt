@@ -43,6 +43,40 @@ internal fun numbersDetail(e: NumberExercise, given: Int?, retries: Int, ms: Lon
     put("ms", ms)
 }
 
+/**
+ * The answer as it is said out loud — «δεκαέξι», «οκτώ ευρώ και τριάντα λεπτά», «τρεις και μισή»,
+ * «Δευτέρα» — and the plain digits of it if it cannot be said.
+ *
+ * **It never throws, and that is its whole job.** The words come from three pure functions with
+ * domains of their own ([GreekNumbers.words] is 0..9999 and *requires* it), and this is called from
+ * inside a launched coroutine on the one path the module promises can never end badly: the moment
+ * after he taps. A generator that ever produced an answer outside those domains — a story with a
+ * negative answer, a number past nine thousand — would take the whole sitting down with it, along
+ * with the rows it had not written yet, and the man holding the phone would have no idea why. So the
+ * exercise is asked politely, and an answer with no Greek name is read out as its digits instead:
+ * wrong-sounding, but he can still see it lit up green on the button, and the run goes on.
+ *
+ * [onFailure] is how that gets written down instead of swallowed — the caregiver's «Σφάλματα» row —
+ * because a level generating unsayable answers is a bug someone has to be told about.
+ *
+ * Free of the ViewModel so the guarantee can be argued with in a unit test rather than on a phone.
+ */
+internal fun spokenAnswer(e: NumberExercise, onFailure: (Throwable) -> Unit = {}): String =
+    runCatching { answerWords(e) }.getOrElse { onFailure(it); e.answer.toString() }
+
+/** What [spokenAnswer] says when everything is in range. Throws out of range; nothing calls it directly. */
+private fun answerWords(e: NumberExercise): String = when (e) {
+    is NumberExercise.Compare, is NumberExercise.NumberLine, is NumberExercise.Count, is NumberExercise.WordMatch,
+    is NumberExercise.Arithmetic, is NumberExercise.Missing, is NumberExercise.WordProblem,
+    -> GreekNumbers.words(e.answer)
+    // Spoken, not written: Greek TTS reads "10,00 €" as punctuation.
+    is NumberExercise.CoinPick, is NumberExercise.Pay, is NumberExercise.Change -> Euro.spoken(e.answer)
+    is NumberExercise.PriceCompare -> if (e.a.cents >= e.b.cents) e.a.name else e.b.name
+    // The words and not the digits: «τρεις και μισή» is what the answer to a clock face sounds like.
+    is NumberExercise.Clock -> GreekTime.words(e.answer)
+    is NumberExercise.DayAfter -> GreekTime.day(e.answer)
+}
+
 data class NumbersState(
     val level: Int = 1,
     /** The 1..5 he set on the first screen. It bounds which levels the progression may reach. */
@@ -143,7 +177,12 @@ class NumbersViewModel(
 
     fun speakPrompt() {
         val e = _state.value.exercise ?: return
-        viewModelScope.launch { report(graph.speaker.speakText(e.spokenPrompt)) }
+        // The spoken prompt is built on demand out of the same word tables [spokenAnswer] guards, so
+        // it is asked for with the same care: a question that cannot be said falls back to the one
+        // written on the screen rather than killing the sitting.
+        val said = runCatching { e.spokenPrompt }
+            .getOrElse { graph.errors.record("numbers prompt words", it); e.prompt }
+        viewModelScope.launch { report(graph.speaker.speakText(said)) }
     }
 
     /**
@@ -281,17 +320,9 @@ class NumbersViewModel(
         }
     }
 
-    private fun sayAnswer(e: NumberExercise): String = when (e) {
-        is NumberExercise.Compare, is NumberExercise.NumberLine, is NumberExercise.Count, is NumberExercise.WordMatch,
-        is NumberExercise.Arithmetic, is NumberExercise.Missing, is NumberExercise.WordProblem,
-        -> GreekNumbers.words(e.answer)
-        // Spoken, not written: Greek TTS reads "10,00 €" as punctuation.
-        is NumberExercise.CoinPick, is NumberExercise.Pay, is NumberExercise.Change -> Euro.spoken(e.answer)
-        is NumberExercise.PriceCompare -> if (e.a.cents >= e.b.cents) e.a.name else e.b.name
-        // The words and not the digits: «τρεις και μισή» is what the answer to a clock face sounds like.
-        is NumberExercise.Clock -> GreekTime.words(e.answer)
-        is NumberExercise.DayAfter -> GreekTime.day(e.answer)
-    }
+    /** The answer out loud, with the failure written down where a caregiver can see it. See [spokenAnswer]. */
+    private fun sayAnswer(e: NumberExercise): String =
+        spokenAnswer(e) { graph.errors.record("numbers answer words", it) }
 
     companion object {
         /** Said on the screen when a tap made no sound at all. */

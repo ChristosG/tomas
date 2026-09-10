@@ -45,7 +45,7 @@ class GreekNumbersTest {
     }
 
     /** ένα, τρία and τέσσερα are the three that move; the clock, the week and the χιλιάδες need them. */
-    @Test fun `the feminine form changes exactly the three words that have one`() {
+    @Test fun `the feminine form changes exactly the words that have one`() {
         assertEquals("μία", GreekNumbers.feminine(1))
         assertEquals("δύο", GreekNumbers.feminine(2))
         assertEquals("τρεις", GreekNumbers.feminine(3))
@@ -54,8 +54,39 @@ class GreekNumbersTest {
         assertEquals("δεκατρείς", GreekNumbers.feminine(13))
         assertEquals("είκοσι μία", GreekNumbers.feminine(21))
         assertEquals("τριακόσιες σαράντα τρεις", GreekNumbers.feminine(343))
-        // The rest are the same word in both genders, and must not be invented twice.
-        (0..99).filter { it % 10 !in listOf(1, 3, 4) }.forEach { assertEquals(w(it), GreekNumbers.feminine(it)) }
+        // χίλια is an adjective and takes the gender of what it counts — «χίλιες μέρες»; χιλιάδες is
+        // a noun and does not, so only the *first* thousand moves.
+        assertEquals("χίλιες", GreekNumbers.feminine(1000))
+        assertEquals("χίλιες διακόσιες", GreekNumbers.feminine(1200))
+        assertEquals("δύο χιλιάδες διακόσιες", GreekNumbers.feminine(2200))
+        assertEquals("εννέα χιλιάδες εννιακόσιες ενενήντα εννέα", GreekNumbers.feminine(9999))
+    }
+
+    /**
+     * The drift guard, over the whole range and not just the easy end: the feminine of any number is
+     * its neuter with each gendered word swapped, word for word, and nothing else touched.
+     *
+     * Derived rather than listed, so a table that grows a new entry in one gender and not the other
+     * cannot pass — which is exactly how the thousands were missed the first time, when this walk
+     * stopped at 99 and the bug lived at 1000.
+     */
+    @Test fun `the two genders differ only in the words Greek actually declines`() {
+        (0..GreekNumbers.MAX).forEach { n ->
+            val derived = w(n).split(" ").joinToString(" ") { GENDERED[it] ?: it }
+            assertEquals("$n", derived, GreekNumbers.feminine(n))
+        }
+    }
+
+    private companion object {
+        /** Every word that has a feminine of its own: the neuter as written, the feminine to swap in. */
+        val GENDERED = mapOf(
+            "ένα" to "μία", "τρία" to "τρεις", "τέσσερα" to "τέσσερις",
+            "δεκατρία" to "δεκατρείς", "δεκατέσσερα" to "δεκατέσσερις",
+            "χίλια" to "χίλιες",
+            "διακόσια" to "διακόσιες", "τριακόσια" to "τριακόσιες", "τετρακόσια" to "τετρακόσιες",
+            "πεντακόσια" to "πεντακόσιες", "εξακόσια" to "εξακόσιες", "επτακόσια" to "επτακόσιες",
+            "οκτακόσια" to "οκτακόσιες", "εννιακόσια" to "εννιακόσιες",
+        )
     }
 
     @Test fun `out of range throws`() { assertThrows(IllegalArgumentException::class.java) { w(-1) }; assertThrows(IllegalArgumentException::class.java) { w(10_000) } }

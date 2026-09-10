@@ -34,6 +34,12 @@ class EuroTest {
         assertEquals("μηδέν ευρώ", Euro.spoken(0))
         // Four-digit prices are sayable since phase 12, which is what the words go up to.
         assertEquals("δύο χιλιάδες ευρώ", Euro.spoken(200_000))
+        // One λεπτό, not «ένα λεπτά»: a caregiver types 3,01 € and the phone says it back to a man
+        // who is relearning these words and would hear that it was wrong without knowing why.
+        assertEquals("ένα λεπτό", Euro.spoken(1))
+        assertEquals("τρία ευρώ και ένα λεπτό", Euro.spoken(301))
+        assertEquals("δύο λεπτά", Euro.spoken(2))
+        assertEquals("ένα ευρώ", Euro.spoken(100))
         // Above what GreekNumbers can say, it falls back to the written form instead of throwing.
         assertEquals("100000,00 €", Euro.spoken(10_000_000))
     }
