@@ -42,9 +42,15 @@ enum class Source { JUDGE, LOCAL }
  * it is sent so the model knows how much grammar to insist on, and for nothing else.
  *
  * [intent] is what a good answer has to *convey*, in Greek, as the caregiver or the seed wrote it:
- * «λέει τι θέλει και πόσο». Only a [Kind.DIALOGUE] has one, and it is the difference between an open
- * question and a guessing game — the [target] is one right answer out of many, and this says what
- * they all have in common. It is written by a person about the exercise, never about him.
+ * «λέει τι θέλει και πόσο». It is the difference between an open question and a guessing game — the
+ * [target] is one right answer out of many, and this says what they all have in common. It is written
+ * by a person about the exercise, never about him.
+ *
+ * A [Kind.DIALOGUE] carries one wherever the line was written with one. So does the one [Kind.SENTENCE]
+ * board that asks for a sentence rather than for *the* sentence — «Γράψε»'s typed level, where the
+ * picture admits any correct sentence about the word and the target is only the example the app
+ * happened to build ([gr.dimitris.app.modules.trace.TraceViewModel.WRITE_A_SENTENCE]). A WORD or an
+ * EXPAND never has one: there is nothing an intent could say that the target does not.
  */
 data class Ask(
     val kind: Kind,
@@ -159,9 +165,10 @@ object JudgeContract {
         WORD: δέξου το target, ή μια κοντινή προφορά ή κλίση του. Μικρές διαφορές ήχων, ένα χαμένο
         τελικό «ς», έναν τόνο αλλού: δεν είναι λάθος. Το expanded είναι null.
 
-        SENTENCE: βάλε accept true όταν το νόημα συμφωνεί με το target ΚΑΙ η γραμματική στέκει.
-        Αλλιώς accept false, και στο expanded ολόκληρη τη σωστή πρόταση — ποτέ accept false χωρίς
-        expanded.
+        SENTENCE: βάλε accept true όταν το νόημα συμφωνεί με το target ΚΑΙ η γραμματική στέκει. Αν
+        υπάρχει intent, τότε το target είναι απλώς ένα παράδειγμα: δέξου ΚΑΘΕ σωστή ελληνική πρόταση
+        που πετυχαίνει αυτόν τον στόχο, κι αν δεν είναι η ίδια πρόταση με το target. Αλλιώς accept
+        false, και στο expanded ολόκληρη τη σωστή πρόταση — ποτέ accept false χωρίς expanded.
 
         EXPAND: δεν κρίνεις τίποτα. Το heard είναι λέξεις περιεχομένου· γύρνα στο expanded ολόκληρη
         τη σωστή ελληνική πρόταση που φτιάχνουν, με accept true. Πρώτο πρόσωπο ενεστώτα, εκτός αν οι

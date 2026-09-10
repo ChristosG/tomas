@@ -5,6 +5,7 @@ import gr.dimitris.app.core.data.ItemKind
 import gr.dimitris.app.modules.arcade.Adaptive
 import gr.dimitris.app.modules.numbers.NumberProgression
 import gr.dimitris.app.modules.sentences.SentenceTemplates
+import gr.dimitris.app.modules.trace.TraceViewModel
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -109,14 +110,38 @@ class DifficultyTest {
     // ------------------------------------------------------------------ «Γράψε»
 
     /**
-     * «Γράψε» had five levels before it had five dots, and they are the same five: capitals, small
-     * letters, his name, words, words from memory. A band of one level is the point — the automatic
-     * progression has nowhere to move him, so what he is writing stays what he chose.
+     * «Γράψε» had five levels before it had five dots, and it still has five: capitals, small letters,
+     * words with his finger, the word said and not shown, a whole sentence on the keyboard. A band of
+     * one level is the point — the automatic progression has nowhere to move him, so what he is
+     * writing stays what he chose.
      */
     @Test fun `the writing dots are the writing levels, one each`() {
         for (n in 1..5) assertEquals(n..n, Difficulty.trace(n))
         assertEquals(1..1, Difficulty.trace(0))
         assertEquals(5..5, Difficulty.trace(9))
+    }
+
+    /**
+     * And which exercise each of those dots is, which is the half of the mapping that moved in phase
+     * 13: his own name came off level 3 (he knows all his letters — tracing «Δημήτρης» was copying),
+     * the words came down to it, and the two hardest things a hand can be asked to do went on top.
+     *
+     * Pinned by the module's own constants rather than by repeating the numbers, so a level that is
+     * ever renumbered is renumbered in one place and this test still says what it means. Writing from
+     * memory is deliberately **not** a level any more — it is reachable inside dot 3 as the word
+     * level's own progression, which is a thing a band of one level cannot express.
+     */
+    @Test fun `each writing dot names the exercise it asks for`() {
+        assertEquals("words with his finger", TraceViewModel.WORD_LEVEL..TraceViewModel.WORD_LEVEL, Difficulty.trace(3))
+        assertEquals("the word said, not shown", TraceViewModel.DICTATION_LEVEL..TraceViewModel.DICTATION_LEVEL, Difficulty.trace(4))
+        assertEquals("a sentence on the keyboard", TraceViewModel.TYPED_LEVEL..TraceViewModel.TYPED_LEVEL, Difficulty.trace(5))
+        // The three hardest are three different exercises, and the two new ones are the top two.
+        assertEquals(Difficulty.MAX, TraceViewModel.TYPED_LEVEL)
+        assertTrue(TraceViewModel.WORD_LEVEL < TraceViewModel.DICTATION_LEVEL)
+        assertTrue(TraceViewModel.DICTATION_LEVEL < TraceViewModel.TYPED_LEVEL)
+        // And a dot still names the level it is: a caregiver's stepper and his own dots cannot disagree.
+        assertEquals(5, Difficulty.traceDot(TraceViewModel.TYPED_LEVEL))
+        assertEquals(4, Difficulty.traceDot(TraceViewModel.DICTATION_LEVEL))
     }
 
     // ------------------------------------------------------------------ «Λέξεις»

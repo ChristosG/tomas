@@ -154,12 +154,17 @@ the three to read it as.
 | `tries` | how many goes at this letter or word |
 | `coverage`, `precision` | the two numbers the marking is made of, 0..1; absent on a skip |
 | `meanDistance` | how far his ink ran from the letter, in canvas pixels |
-| `letters` | the same marks letter by letter: `[{c, coverage, precision, ink}, …]`, where `ink` is that letter's own share of the line against how long the letter is |
+| `letters` | the same marks letter by letter: `[{c, coverage, precision, ink}, …]`, where `ink` is that letter's own share of the line against how long the letter is. On a dictated word each letter also carries `missed` — whether it had to be shown to him before he could write it |
 | `inkRatio` | how much line he drew against how long the whole word is |
 | `strictness` | `LOOSE` / `NORMAL` / `STRICT`, as a caregiver had it set |
 | `strokes` | how many separate strokes the *marked* try took |
-| `templateHeightPx` | how tall the letter came out, in the same pixels as `meanDistance` |
+| `templateHeightPx` | how tall the letter came out, in the same pixels as `meanDistance`; absent where there was no paper at all |
 | `ms` | milliseconds from the letter appearing to «Έτοιμο» |
+| `variant` | since phase 13: `dictation` (level 4 — he heard the word and wrote it letter by letter) or `typed` (level 5 — he wrote a whole sentence about a picture). Absent on the levels that trace a shape, which is every row written before phase 13 |
+| `fromMemory` | the word was written with nothing on the paper: the word level's own progression, earned by writing the word before it without help |
+| `listened` | how many times he pressed «Άκου» for the word. It costs him nothing and is not help — at level 4 the word is *only* ever a sound — but a word he asks for four times is a word he could not hold |
+| `noJudge` | a level-5 row that was **not** typed: he asked for the sentence level and «Έλεγχος με Claude» could not answer, so the sitting was the word level's work |
+| `judge` | what Claude decided about the sentence he typed: `{source, accept, ms, expanded?}`, the same shape every other module writes |
 
 **Knobs, and the first rules to try:**
 
@@ -178,6 +183,13 @@ the three to read it as.
   hand writing them; if the largest of a month sits near 1, it could come down.
 - **`templateHeightPx` adapts nothing by itself** and is here because without it none of the
   distances above can be compared between his phone and a tablet.
+- **Which letters he cannot spell, as opposed to cannot draw.** A dictated letter with
+  `missed: true` and a high `coverage` once it was shown is a letter he can *form* and could not
+  *retrieve* — the opposite knob from the one above. Those go on a spelling list, not a tracing one,
+  and the word level is where a tracing list belongs.
+- **Whether level 4 is too long a word.** `listened` rising with the word's length across a
+  fortnight is a working-memory ceiling rather than a hand problem: keep the dictation to the
+  shorter half of the pool (`TraceViewModel.SHORT_POOL`) before stepping the dot down.
 
 ### Δεξί χέρι — arcade (`module = 'ARCADE'`, `itemId = 'arcade:<game>'`)
 

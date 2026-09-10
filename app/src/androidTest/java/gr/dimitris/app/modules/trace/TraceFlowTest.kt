@@ -3,6 +3,7 @@ package gr.dimitris.app.modules.trace
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
@@ -13,6 +14,7 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollToNode
+import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTouchInput
 import androidx.test.core.app.ApplicationProvider
 import gr.dimitris.app.DimitrisApp
@@ -21,11 +23,15 @@ import gr.dimitris.app.core.data.Attempt
 import gr.dimitris.app.core.data.ItemKind
 import gr.dimitris.app.core.data.ModuleId
 import gr.dimitris.app.core.data.Outcome
+import gr.dimitris.app.core.judge.JudgeClient
+import gr.dimitris.app.core.judge.TurnJudge
 import gr.dimitris.app.today.MODULE_GRID_TAG
+import gr.dimitris.app.ui.components.LISTEN_TAG
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
@@ -48,13 +54,22 @@ class TraceFlowTest {
     private var levelBefore = 1
     private var since = 0L
 
+    /** The judge the typed cases run against: the emulator can reach the Anthropic API no more than a mic. */
+    private var realJudge: TurnJudge? = null
+
+    /** What the fake client answers, reply by reply. */
+    private val replies = ArrayDeque<String>()
+
     @Before fun rememberLevel() = runBlocking<Unit> {
         levelBefore = graph.settings.traceLevel.first()
         since = System.currentTimeMillis()
     }
 
-    /** His level is his; a test that borrows it puts it back. */
-    @After fun restoreLevel() = runBlocking<Unit> { graph.settings.setTraceLevel(levelBefore) }
+    /** His level is his; a test that borrows it puts it back, and so is the judge. */
+    @After fun restoreLevel() = runBlocking<Unit> {
+        graph.settings.setTraceLevel(levelBefore)
+        realJudge?.let { graph.judge = it }
+    }
 
     @Test fun aHandLikeTraceOfACapitalIsWritingIt() {
         val letter = openPractice(level = 1)
@@ -70,52 +85,59 @@ class TraceFlowTest {
         compose.onNodeWithText("Επόμενο").assertIsDisplayed()
     }
 
-    /** Level 3 is his own name: eight letters in one box, and the tolerance that comes with them. */
-    @Test fun aHandLikeTraceOfHisOwnNameIsWritingIt() {
-        val name = openPractice(level = 3)
-        assertEquals("Δημήτρης", name)
-        write(name)
-        finish()
-
-        compose.waitUntil(TIMEOUT_MS) { attempts().isNotEmpty() }
-        assertEquals(Outcome.CORRECT, attempts().single().outcome)
-    }
-
-    /** Level 4 is a word off his own talk board, and it has to be as writeable as his name. */
+    /**
+     * Level 3 is a word off his own talk board, written with his finger. It was his own name until
+     * phase 13, and the name is now only what a device with no vocabulary falls back on: he knows all
+     * his letters, and tracing «Δημήτρης» six times is copying rather than writing.
+     */
     @Test fun aHandLikeTraceOfOneOfHisWordsIsWritingIt() {
         waitForVocabulary()
-        val word = openPractice(level = 4)
+        val word = openPractice(level = 3)
+        assertTrue("level 3 owes him a word, not a letter: «$word»", word.length > 1)
         write(word)
         finish()
 
         compose.waitUntil(TIMEOUT_MS) { attempts().isNotEmpty() }
         val attempt = attempts().single()
         assertEquals(Outcome.CORRECT, attempt.outcome)
-        // Level 4 is the one level whose row belongs to the word itself.
+        // The word levels are the ones whose row belongs to the word itself.
         assertTrue("a word he practised was recorded against the level", attempt.itemId.startsWith(ITEM_ID_PREFIX).not())
     }
 
     /**
-     * Level 5 is the recall exercise, and it is not begun until he has taken the letter away: until
-     * then there is no «Έτοιμο» at all, so the cheap route — trace what is on the screen and be
-     * marked as though it had not been — does not exist. Once he passes, the word comes back to
-     * compare.
+     * Writing from memory, which phase 13 moved *inside* the word level as that level's own
+     * progression: a word written with no help at all earns him the next one with nothing to follow.
      *
-     * «Το είδα» takes the paper with the letter, so tracing it first and hiding it afterwards is not
-     * a way through either: what is marked is only what he wrote once the word was gone.
+     * The recall word is not begun until he has taken the word away: until then there is no «Έτοιμο»
+     * at all, so the cheap route — trace what is on the screen and be marked as though it had not been
+     * — does not exist. «Το είδα» takes the paper with the word, so tracing it first and hiding it
+     * afterwards is not a way through either. Once he passes, the word comes back to compare.
      *
-     * Since phase 12's UX audit the two share one slot rather than standing one above the other: the
-     * bottom area holds three actions on every level, and the primary is whichever of «Το είδα» and
-     * «Έτοιμο» is the actual next step. So "«Έτοιμο» is dead" is now "«Έτοιμο» is not there yet",
-     * which is the stronger statement of the same rule.
+     * The two share one slot rather than standing one above the other (phase 12's UX audit): the
+     * bottom area holds three actions at every level, and the primary is whichever of «Το είδα» and
+     * «Έτοιμο» is the real next step.
      */
-    @Test fun levelFiveIsNotBegunUntilHeHasTakenTheLetterAway() {
-        val word = openPractice(level = 5)
-        // The letter is still on the paper, so the slot holds «Το είδα» and there is no «Έτοιμο» to
+    @Test fun aWordWrittenWithNoHelpEarnsTheNextOneFromMemory() {
+        waitForVocabulary()
+        val first = openPractice(level = 3)
+        // The first word of a sitting is never from memory: he has not earned it yet, and there is
+        // nothing on the screen to have remembered.
+        compose.onNodeWithText("Το είδα").assertDoesNotExist()
+        write(first)
+        finish()
+        compose.waitUntil(TIMEOUT_MS) { attempts().isNotEmpty() }
+        assertEquals("a word written by hand was not his own answer", Outcome.CORRECT, attempts().single().outcome)
+
+        // On to the next word, which he has now earned the right to write from memory.
+        compose.onNodeWithText("Επόμενο").performClick()
+        compose.waitUntil(TIMEOUT_MS) { compose.onAllNodes(hasText("Το είδα")).fetchSemanticsNodes().isNotEmpty() }
+        val word = compose.onNodeWithTag(TRACE_TEXT_TAG).fetchSemanticsNode()
+            .config.getOrNull(SemanticsProperties.Text)?.joinToString("") { it.text }
+        assertTrue("nothing to remember", !word.isNullOrBlank())
+        // The word is still on the paper, so the slot holds «Το είδα» and there is no «Έτοιμο» to
         // press — not even a dead one, and never a fourth button in the row.
         compose.onNodeWithText("Έτοιμο").assertDoesNotExist()
-        compose.onNodeWithText("Το είδα").assertIsEnabled()
-        write(word)
+        write(word!!)
         compose.onNodeWithText("Έτοιμο").assertDoesNotExist()
 
         compose.onNodeWithText("Το είδα").performClick()
@@ -130,10 +152,11 @@ class TraceFlowTest {
         compose.onNodeWithText("Έτοιμο").assertIsEnabled()
         finish()
 
-        compose.waitUntil(TIMEOUT_MS) { attempts().isNotEmpty() }
-        assertEquals(Outcome.CORRECT, attempts().single().outcome)
-        assertEquals("a recall row belongs to the level, not the word", "trace:level:5", attempts().single().itemId)
-        // He has earned the look: the word and the letter come back over what he wrote.
+        compose.waitUntil(TIMEOUT_MS) { attempts().size > 1 }
+        val recalled = attempts().last()
+        assertEquals(Outcome.CORRECT, recalled.outcome)
+        assertTrue("a word written from memory has to say so: ${recalled.detail}", recalled.detail.contains("\"fromMemory\":true"))
+        // He has earned the look: the word and the letters come back over what he wrote.
         compose.onNodeWithTag(TRACE_TEXT_TAG).assertIsDisplayed()
     }
 
@@ -217,32 +240,36 @@ class TraceFlowTest {
     }
 
     /**
-     * His own name, which is level 3 and the same eight letters every time — so unlike the shuffled
-     * capitals above, what this asks is the same on every run: a whole word written by hand is the
-     * word, and another word written just as well over it is not.
+     * A whole word written by hand is the word, and another word written just as well over it is not.
+     *
+     * The word is whichever of his own the word level offered; «Δημήτρης» — his name, and level 3
+     * itself until phase 13 — is a word of a different length and a different shape, which is the
+     * point: what refuses it is the shape and not the box it was drawn in.
      */
-    @Test fun aDifferentWordOverHisNameIsNotHisName() {
-        val name = openPractice(level = 3)
-        assertEquals("Δημήτρης", name)
+    @Test fun aDifferentWordOverHisOwnWordIsNotThatWord() {
+        waitForVocabulary()
+        val word = openPractice(level = 3)
         write(OTHER_WORD)
         finish()
 
         waitForNudge()
-        assertTrue("«$OTHER_WORD» passed as «$name»", attempts().isEmpty())
+        assertTrue("«$OTHER_WORD» passed as «$word»", attempts().isEmpty())
     }
 
     /**
-     * The field test of this round, on the glass: his name written properly except that one «η» of
-     * it is a «Κ». Seven letters right out of eight is seven letters right — and the nudge has to
-     * say *which* letter, because «Ξανά» over a word of eight is not something a man with aphasia
-     * can act on.
+     * The field test of this round, on the glass: a word of his written properly except that one letter
+     * of it is a «Κ». Three letters right out of four is three letters right — and the nudge has to
+     * say *which* letter, because «Ξανά» over a word is not something a man with aphasia can act on.
      */
-    @Test fun aKOverOneLetterOfHisNameNamesThatLetter() {
+    @Test fun aKOverOneLetterOfAWordNamesThatLetter() {
+        waitForVocabulary()
         val name = openPractice(level = 3)
         val (width, height) = canvasSize()
         val glyph = Glyphs.template(name, width, height)
-        val eta = glyph.letters.indexOfLast { it.text == WRONG_IN_NAME }
-        assertTrue("no «$WRONG_IN_NAME» in «$name»", eta > 0)
+        // Any letter but a «κ» itself: a «Κ» drawn over a «κ» is the letter, written.
+        val eta = glyph.letters.indexOfLast { !it.text.equals(WRONG_LETTER, ignoreCase = true) }
+        assertTrue("no letter of «$name» to spoil", eta > 0)
+        val wrongAt = glyph.letters[eta].text
         val its = glyph.points.filter { it.letter == eta }
         val left = its.minOf { it.pt.x }
         val right = its.maxOf { it.pt.x }
@@ -263,8 +290,10 @@ class TraceFlowTest {
         finish()
 
         waitForNudge()
-        compose.onNodeWithText("${TraceViewModel.TRY_AGAIN} — δες το «$WRONG_IN_NAME».").assertIsDisplayed()
-        assertTrue("a «Κ» over one «$WRONG_IN_NAME» passed as «$name»", attempts().isEmpty())
+        // The letter is named. Which *other* letters the «Κ» leaned into is the scorer's business and
+        // not this test's — what has to hold is that the nudge points at the letter he got wrong.
+        compose.onNode(hasText("«$wrongAt»", substring = true)).assertIsDisplayed()
+        assertTrue("a «Κ» over one «$wrongAt» passed as «$name»", attempts().isEmpty())
     }
 
     /**
@@ -298,8 +327,189 @@ class TraceFlowTest {
         compose.onNodeWithText("Επόμενο").assertIsDisplayed()
     }
 
-    /** Sets the level, opens free practice and returns what it is asking him to write. */
-    private fun openPractice(level: Int): String {
+    // ------------------------------------------------------------ level 4: «Υπαγόρευση»
+
+    /**
+     * The dictation level, as he meets it: the word is **not** on the screen anywhere, the paper is
+     * empty, and the one thing on offer with a clean sheet is hearing the word again.
+     *
+     * The word being absent is the whole exercise, so it is the assertion that matters most: a level
+     * that showed it would be the word level with extra steps.
+     */
+    @Test fun theDictationShowsNoWordAndOffersTheSoundInstead() {
+        waitForVocabulary()
+        open(level = 4)
+
+        // Nothing to copy: no word, no letter on the paper, and a row of slots instead.
+        compose.onAllNodesWithTag(TRACE_TEXT_TAG).assertCountEquals(0)
+        compose.onNodeWithTag(TRACE_SLOTS_TAG).assertIsDisplayed()
+        assertEquals(
+            "the first slot is empty, and nothing has been written yet",
+            TraceViewModel.SLOT,
+            text(TRACE_SLOTS_TAG),
+        )
+        // «Άκου» is the live one until there is ink: there is nothing to wipe and nothing to hand in.
+        compose.onNodeWithTag(LISTEN_TAG).assertIsEnabled()
+        compose.onNodeWithText("Καθάρισε").assertDoesNotExist()
+        compose.onNodeWithText("Έτοιμο").assertIsNotEnabled()
+        compose.onNodeWithText("Παράλειψη").assertIsDisplayed()
+
+        // One stroke, and the slot swaps «Άκου» for the way back: three actions either way.
+        val (width, height) = canvasSize()
+        compose.onNodeWithTag(TRACE_CANVAS_TAG).performTouchInput {
+            down(Offset(width * 0.4f, height * 0.4f))
+            moveTo(Offset(width * 0.6f, height * 0.6f))
+            up()
+        }
+        compose.waitUntil(TIMEOUT_MS) { compose.onAllNodes(hasText("Καθάρισε")).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithText("Έτοιμο").assertIsEnabled()
+        compose.onNodeWithText("Καθάρισε").performClick()
+        compose.waitUntil(TIMEOUT_MS) { compose.onAllNodesWithTag(LISTEN_TAG).fetchSemanticsNodes().isNotEmpty() }
+    }
+
+    /**
+     * A dictated word written the way he will write it: letter by letter, each one a hand-like trace of
+     * the letter the word spells, with nothing on the paper to follow.
+     *
+     * Driven through the ViewModel rather than through the glass, for a reason that is the exercise
+     * itself: the word is never shown, so a test tapping at the screen has no way of knowing which
+     * letter the slot wants. What is real here is everything that decides the answer — the device's own
+     * font, its density, the phase-11 scorer, the strictness a caregiver set — and the strokes are
+     * [HandTrace]'s, a line down the middle of each stroke of the letter, which is what a hand does.
+     *
+     * The miss in the middle is the other half of the level: a letter that is not the letter is put on
+     * the paper to be traced, the word goes on, and what it costs is the word's mark.
+     */
+    @Test fun aDictatedWordIsWrittenLetterByLetterAndAMissRevealsTheLetter() {
+        waitForVocabulary()
+        runBlocking { graph.settings.setTraceLevel(4) }
+        lateinit var vm: TraceViewModel
+        compose.runOnUiThread { vm = TraceViewModel(graph, sessionId = null) }
+        try {
+            compose.runOnUiThread { vm.setCanvasSize(PAPER, PAPER) }
+            compose.waitUntil(TIMEOUT_MS) { vm.state.value.dictation?.expected != null && vm.state.value.target.points.isNotEmpty() }
+            val word = vm.state.value.dictation!!.word
+            assertTrue("nothing to dictate", word.isNotEmpty())
+            assertFalse("the word he is meant to hear was on the paper", vm.state.value.templateVisible)
+
+            // The first letter, missed: a scribble across the middle of the paper is not a letter.
+            compose.runOnUiThread {
+                vm.addStroke(listOf(Pt(PAPER * 0.45f, PAPER * 0.48f), Pt(PAPER * 0.55f, PAPER * 0.52f)))
+                vm.check()
+            }
+            compose.waitUntil(TIMEOUT_MS) { vm.state.value.score?.passed == false }
+            assertTrue("a letter that missed was not put on the paper to trace", vm.state.value.templateVisible)
+            assertEquals("a miss took the slot", 0, vm.state.value.dictation!!.at)
+            assertTrue("a miss wrote a row", attempts().isEmpty())
+
+            // Traced over the revealed letter, it passes — and the word carries that help to the end.
+            compose.runOnUiThread { vm.clear() }
+            writeLetter(vm)
+            compose.waitUntil(TIMEOUT_MS) { vm.state.value.dictation!!.at == 1 }
+            assertTrue("the letter he was shown does not say so", vm.state.value.dictation!!.written.single().missed)
+            assertFalse("the next slot opened with the letter still on it", vm.state.value.templateVisible)
+
+            // The rest of the word, from hearing alone.
+            while (vm.state.value.dictation?.done == false) {
+                val at = vm.state.value.dictation!!.at
+                writeLetter(vm)
+                compose.waitUntil(TIMEOUT_MS) { vm.state.value.dictation!!.at > at }
+            }
+
+            compose.waitUntil(TIMEOUT_MS) { attempts().isNotEmpty() }
+            val row = attempts().single()
+            assertEquals("a word with one letter shown to him is assisted work", Outcome.ASSISTED, row.outcome)
+            assertTrue("the row does not say how it was asked: ${row.detail}", row.detail.contains("\"variant\":\"dictation\""))
+            assertTrue("nor which letters he wrote: ${row.detail}", row.detail.contains("\"missed\":true"))
+            assertTrue("nor that the rest were his own: ${row.detail}", row.detail.contains("\"missed\":false"))
+        } finally {
+            compose.runOnUiThread { vm.leave {} }
+        }
+    }
+
+    // ------------------------------------------------- level 5: «Γράψε την πρόταση»
+
+    /**
+     * The typed level: a picture, the keyboard, and a whole sentence of his own about the word.
+     *
+     * Two goes, because the refusal is the part that must never be a wall: the first is answered with
+     * the whole form on the screen to copy, the second is accepted, and the row says assisted because
+     * the sentence had been in front of him.
+     */
+    @Test fun aTypedSentenceIsJudgedAndARefusalComesBackWhole() {
+        waitForVocabulary()
+        withJudge(
+            """{"accept":false,"expanded":"Ο μπαμπάς πίνει τον καφέ.","feedback":"Κοντά είσαι.","score":0.4}""",
+            """{"accept":true,"expanded":null,"feedback":"Ωραία πρόταση.","score":1}""",
+        )
+        openTyped()
+        compose.onNodeWithText(TraceViewModel.WRITE_IT, substring = true).assertIsDisplayed()
+        // No paper at this level: a sentence is not a shape.
+        compose.onAllNodesWithTag(TRACE_CANVAS_TAG).assertCountEquals(0)
+        // And the three actions are the three: «Άκου», «Έτοιμο», «Παράλειψη».
+        compose.onNodeWithTag(LISTEN_TAG).assertIsEnabled()
+        compose.onNodeWithText("Έτοιμο").assertIsNotEnabled()
+        compose.onNodeWithText("Παράλειψη").assertIsDisplayed()
+
+        compose.onNodeWithTag(TRACE_TYPED_TAG).performTextInput("καφέ μπαμπάς")
+        compose.onNodeWithText("Έτοιμο").performClick()
+
+        // Refused: the whole sentence, on the screen, with the keyboard still there and no «λάθος».
+        compose.waitUntil(TIMEOUT_MS) {
+            compose.onAllNodes(hasText("Ο μπαμπάς πίνει τον καφέ.", substring = true)).fetchSemanticsNodes().isNotEmpty()
+        }
+        assertTrue("a refused sentence was written down as an attempt", attempts().isEmpty())
+        compose.onNodeWithText(TraceViewModel.I_WROTE_IT).assertIsDisplayed()
+        // The field survived the judge: it is read-only while the judge reads, never disabled, so it
+        // still holds what he wrote and still takes more. (Disabling it would fold into the field's own
+        // `focusable` and take the keyboard away with the focus — the bug «Προτάσεις» carries a comment
+        // about.) The column has scrolled down to the sentence to copy, so the field may be off the
+        // viewport; that it is still *there* and still writable is the property that matters.
+        compose.onNodeWithTag(TRACE_TYPED_TAG).assertExists()
+
+        compose.onNodeWithTag(TRACE_TYPED_TAG).performTextInput(" πίνει τον καφέ")
+        compose.onNodeWithText("Έτοιμο").performClick()
+
+        compose.waitUntil(TIMEOUT_MS) { attempts().isNotEmpty() }
+        val row = attempts().single()
+        assertEquals("a sentence written with the answer on the screen is assisted work", Outcome.ASSISTED, row.outcome)
+        assertEquals("a typed row belongs to the level, not to the picture", "${ITEM_ID_PREFIX}5", row.itemId)
+        assertTrue("the row does not say how it was asked: ${row.detail}", row.detail.contains("\"variant\":\"typed\""))
+        assertTrue("nor who judged it: ${row.detail}", row.detail.contains("\"source\":\"JUDGE\""))
+        // The judge's one warm line about a sentence he got right is on the screen, not thrown away.
+        compose.onNodeWithText("Ωραία πρόταση.").assertIsDisplayed()
+        compose.onNodeWithText("Επόμενο").assertIsDisplayed()
+    }
+
+    /**
+     * The same level on a phone whose «Έλεγχος με Claude» is off, which is every phone by default.
+     *
+     * Nothing on the device can read a sentence, so the level is not offered at all: he gets the word
+     * level's work — six words to write with a finger, which is always a writing exercise — and one
+     * line on the first screen saying what is missing. A man who set the hardest dot and was quietly
+     * handed easier work would have no way of knowing why.
+     */
+    @Test fun withoutTheJudgeTheSentenceLevelFallsBackToWriting() {
+        waitForVocabulary()
+        withNoJudge()
+        val word = openPractice(level = 5)
+
+        compose.onNodeWithText(TraceViewModel.NEEDS_JUDGE).assertIsDisplayed()
+        compose.onAllNodesWithTag(TRACE_TYPED_TAG).assertCountEquals(0)
+        assertTrue("a word to write, not an empty screen: «$word»", word.isNotBlank())
+        write(word)
+        finish()
+
+        compose.waitUntil(TIMEOUT_MS) { attempts().isNotEmpty() }
+        val row = attempts().single()
+        assertEquals(Outcome.CORRECT, row.outcome)
+        // The row has to be readable as what it was: level 5, and not typed.
+        assertTrue("a fallback row does not say so: ${row.detail}", row.detail.contains("\"noJudge\":true"))
+        assertFalse("a fallback row claims to be typed: ${row.detail}", row.detail.contains("\"variant\""))
+    }
+
+    /** Sets the level and opens free practice, with the paper laid out and something on it to write. */
+    private fun open(level: Int) {
         runBlocking { graph.settings.setTraceLevel(level) }
         compose.onNodeWithTag(MODULE_GRID_TAG).performScrollToNode(hasText(TITLE))
         compose.onNodeWithText(TITLE).performClick()
@@ -307,15 +517,68 @@ class TraceFlowTest {
         compose.waitUntil(TIMEOUT_MS) {
             compose.onAllNodesWithTag(TRACE_CANVAS_TAG).fetchSemanticsNodes().any { it.size.width > 0 && it.size.height > 0 }
         }
-        val text = compose.onNodeWithTag(TRACE_TEXT_TAG).fetchSemanticsNode()
-            .config.getOrNull(SemanticsProperties.Text)?.joinToString("") { it.text }
+    }
+
+    /** The same, for the one level that has a keyboard instead of paper. */
+    private fun openTyped() {
+        runBlocking { graph.settings.setTraceLevel(5) }
+        compose.onNodeWithTag(MODULE_GRID_TAG).performScrollToNode(hasText(TITLE))
+        compose.onNodeWithText(TITLE).performClick()
+        compose.waitUntil(TIMEOUT_MS) { compose.onAllNodesWithTag(TRACE_TYPED_TAG).fetchSemanticsNodes().isNotEmpty() }
+    }
+
+    /** Sets the level, opens free practice and returns what it is asking him to write. */
+    private fun openPractice(level: Int): String {
+        open(level)
+        val text = text(TRACE_TEXT_TAG)
         assertTrue("nothing to write", !text.isNullOrBlank())
         return text!!
     }
 
-    /** The seed vocabulary arrives on first launch; levels 4 and 5 have nothing to offer before it. */
+    /** Whatever a tagged line of the screen says, joined as he reads it. */
+    private fun text(tag: String): String? = compose.onNodeWithTag(tag).fetchSemanticsNode()
+        .config.getOrNull(SemanticsProperties.Text)?.joinToString("") { it.text }
+
+    /**
+     * The letter the dictation's slot is waiting for, written the way a hand writes it — and handed to
+     * the ViewModel as strokes, because at that level the screen cannot tell a test which letter it is.
+     */
+    private fun writeLetter(vm: TraceViewModel) {
+        val letter = vm.state.value.dictation?.expected
+        assertTrue("no letter at this slot", !letter.isNullOrEmpty())
+        val strokes = HandTrace.centreLine(Glyphs.template(letter!!, PAPER, PAPER))
+        assertTrue("«$letter» has no strokes to write", strokes.isNotEmpty())
+        compose.runOnUiThread {
+            strokes.forEach { vm.addStroke(it) }
+            vm.check()
+        }
+    }
+
+    /** The seed vocabulary arrives on first launch; the word levels have nothing to offer before it. */
     private fun waitForVocabulary() = compose.waitUntil(TIMEOUT_MS) {
         runBlocking { graph.db.items().activeOfKinds(listOf(ItemKind.WORD)) }.isNotEmpty()
+    }
+
+    /**
+     * A judge that answers with canned verdicts, with a key behind it so that [TurnJudge.available]
+     * says yes and the sitting is planned with typed boards in it. The secret store is untouched: the
+     * key is the judge's own, which is what the seam is for.
+     */
+    private fun withJudge(vararg json: String) {
+        realJudge = graph.judge
+        replies.clear()
+        replies += json
+        graph.judge = TurnJudge(
+            secrets = { KEY },
+            enabled = { true },
+            client = JudgeClient { _, _, _ -> replies.removeFirstOrNull() },
+        )
+    }
+
+    /** The default phone: «Έλεγχος με Claude» off, so nothing can read a sentence he types. */
+    private fun withNoJudge() {
+        realJudge = graph.judge
+        graph.judge = TurnJudge(secrets = { null }, enabled = { false }, client = JudgeClient { _, _, _ -> null })
     }
 
     /** The canvas as the app measured it, which is the box the letter was laid out in. */
@@ -363,11 +626,18 @@ class TraceFlowTest {
         /** The letter that comes nearest to being another one, which is why it is the test. */
         const val WRONG_LETTER = "Κ"
 
-        /** Not his name, and near enough to it that the shape is what refuses it. */
+        /** A word of his own, and not one the word level can have offered: the shape is what refuses it. */
         const val OTHER_WORD = "Δημητρα"
 
-        /** The letter of his name that gets written as a «Κ» instead. */
-        const val WRONG_IN_NAME = "η"
+        /**
+         * The paper the dictation cases write on, in pixels: a square, as the screen gives a single
+         * letter, and about the size a phone's own canvas comes out. The marking is in fingertips
+         * against the device's real density, so the number only has to be a believable piece of paper.
+         */
+        const val PAPER = 900f
+
+        /** Never a real key: the judge's [TurnJudge.available] only asks whether there is one. */
+        const val KEY = "sk-ant-test"
         const val TIMEOUT_MS = 20_000L
     }
 }

@@ -69,7 +69,10 @@ primary. `QuietButton` is the app's genuinely secondary control — outlined, an
 | | telling them | «Μίλα» / «Το είπα!», «Άκου», «Παράλειψη» | «Μίλα» / «Το είπα!» |
 | | finished | «Εντάξει» | «Εντάξει» |
 | Γράψε (`TraceScreen`) | passed | «Επόμενο» | «Επόμενο» |
-| | level 5, letter still shown | «Καθάρισε», «Το είδα», «Παράλειψη» | «Το είδα» |
+| | recall word, still shown | «Καθάρισε», «Το είδα», «Παράλειψη» | «Το είδα» |
+| | level 4, clean paper | «Άκου», «Έτοιμο» (dead), «Παράλειψη» | «Άκου» |
+| | level 4, ink on the paper | «Καθάρισε», «Έτοιμο», «Παράλειψη» | «Έτοιμο» |
+| | level 5 (typed) | «Άκου», «Έτοιμο», «Παράλειψη» | «Έτοιμο» |
 | | otherwise | «Καθάρισε», «Έτοιμο», «Παράλειψη» | «Έτοιμο» |
 | | finished | «Εντάξει» | «Εντάξει» |
 | Δεξί χέρι (`ArcadeScreen`) | playing | «Παράλειψη» | — |

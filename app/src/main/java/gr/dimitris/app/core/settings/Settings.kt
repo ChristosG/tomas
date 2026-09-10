@@ -111,7 +111,7 @@ class Settings(private val store: DataStore<Preferences>) {
         }
     }
 
-    /** What he is writing, 1..5: capitals, small letters, his name, words, words from memory. */
+    /** What he is writing, 1..5: capitals, small letters, words, a word he only *hears*, a sentence. */
     val traceLevel: Flow<Int> = store.data.map { it[TRACE_LEVEL] ?: 1 }
     suspend fun setTraceLevel(level: Int) {
         store.edit { p ->

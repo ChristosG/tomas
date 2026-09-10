@@ -71,8 +71,16 @@ internal class TypedCheck(
      * hint the judge gets about what he was looking at and what was wanted of him. It says the
      * *kind* of thing too, which a bare word cannot: a question asked for and a sentence given back
      * is not the same answer. [target] is the sentence the board was built from.
+     *
+     * [intent] is what a good answer has to **convey**, where the board can say it — see
+     * [Ask.intent]. This module's own boards pass none: a gap in the sentence and a sentence to build
+     * both have one answer, and the [target] *is* the intent. «Γράψε»'s typed level passes one
+     * ([gr.dimitris.app.modules.trace.TraceViewModel.WRITE_A_SENTENCE]), because there the picture
+     * admits any correct sentence about the word and the target is only the example the app happened
+     * to build. It is the one parameter phase 13 added to this class, and the boards that do not need
+     * it are unchanged by it.
      */
-    suspend fun weigh(typed: String, prompt: String, target: String): Written {
+    suspend fun weigh(typed: String, prompt: String, target: String, intent: String? = null): Written {
         val first = !nudged
         val said = typed.trim()
         // Nothing typed is nothing to judge, and the screen does not offer «Έτοιμο» on an empty
@@ -88,7 +96,10 @@ internal class TypedCheck(
             return if (matched) Written(true, null, null, first, emptyMap())
             else refused(target, feedback = null, first = first, judge = emptyMap())
         }
-        val ask = Ask(kind = Kind.SENTENCE, prompt = prompt, target = target, heard = said, difficulty = difficulty())
+        val ask = Ask(
+            kind = Kind.SENTENCE, prompt = prompt, target = target, heard = said,
+            difficulty = difficulty(), intent = intent,
+        )
         val began = now()
         val verdict = try {
             askJudge(ask)

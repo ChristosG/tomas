@@ -93,13 +93,28 @@ object Difficulty {
 
     /**
      * What he writes, one dot per level, because «Γράψε» already had exactly five and they are
-     * already a difficulty: 1 capitals, 2 small letters, 3 his own name, 4 words, 5 words from
-     * memory.
+     * already a difficulty: **1 capitals, 2 small letters, 3 words with his finger, 4 the word said
+     * and not shown, 5 a whole sentence on the keyboard.**
      *
-     * A band of one level means the automatic progression has nowhere to move inside it: from here
+     * The top three moved in phase 13, and they moved because of what Dimitris said in September: he
+     * knows all his letters, and tracing his own name — the old level 3 — was not an exercise for a
+     * man who types words to a chat assistant with his left hand. So the name became the fallback for
+     * a device with no vocabulary, the words came down a level, and the two hardest things a hand can
+     * be asked to do went on top: writing from hearing
+     * ([gr.dimitris.app.modules.trace.TraceViewModel.DICTATION_LEVEL]) and writing a sentence of his
+     * own ([gr.dimitris.app.modules.trace.TraceViewModel.TYPED_LEVEL]).
+     *
+     * Writing a word **from memory** is the one thing that did not survive as a level, and it did not
+     * need to: it is reachable inside dot 3 as the word level's own progression — a word written with
+     * no help earns him the next one with nothing to follow. See
+     * [gr.dimitris.app.modules.trace.TraceState.recall]. As a *level* it had become unreachable in
+     * practice anyway: a dot is one level here, and nobody sets the hardest dot to write «ψωμί» from
+     * memory when the same dot writes a sentence.
+     *
+     * A band of one level means the automatic progression has nowhere to move inside it: from phase 12
      * on, the writing level is his to set and the sitting no longer steps it up or down behind him.
      * That is the intended trade — the five levels are five *different exercises*, not five sizes of
-     * the same one, and being moved off "my own name" by a good morning was never something he
+     * the same one, and being moved off the exercise he chose by a good morning was never something he
      * asked for.
      */
     fun trace(d: Int): IntRange = clamp(d).let { it..it }
