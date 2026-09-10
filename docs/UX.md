@@ -72,7 +72,9 @@ primary. `QuietButton` is the app's genuinely secondary control — outlined, an
 | | finished | «Εντάξει» | «Εντάξει» |
 | Μίλα (`TalkBoardScreen`) | always | «Πες το», σβήσε, καθάρισε | «Πες το» |
 
-Four of his screens carry a control in the *content* rather than in the bottom area:
+Six of his screens carry a control in the *content* rather than in the bottom area. Every one of them
+is listed here, deliberately: the rule below is that a content control is an escape hatch and not a
+loophole, and a list that is only *mostly* complete is how the loophole gets in.
 
 - **Λέξεις**: «Βοήθεια», beside the picture it is a hint about; and the second «Μίλα» offered after
   the phone has asked him twice.
@@ -80,6 +82,12 @@ Four of his screens carry a control in the *content* rather than in the bottom a
 - **Τραγούδα και πες το**: «Το έκανα», under the syllables; «Ηχογράφηση» (only on the fallback
   recogniser path, where the window does not keep his own take); and the second «Μίλα».
 - **Προτάσεις**: «Το έγραψα», under the sentence he typed.
+- **Αριθμοί**: «Άκου», between the question and the options — the question said again, next to the
+  question, where the bottom area holds only «Παράλειψη».
+- **Μίλα**: the whole of «Ολόκληρη», inside the sentence strip. «Ολόκληρη» while the strip is only
+  words; then, over the chips, the sentence with «Μίλα» / «Το είπα!» and «Κλείσε» under it, and
+  «Στοπ» alone while the microphone is open. The board's own three at the bottom («Πες το», σβήσε,
+  καθάρισε) never move and never grow — which is why this lives in the strip and not beside them.
 
 The row of five difficulty dots is content too, on the first screen of each module and nowhere else.
 

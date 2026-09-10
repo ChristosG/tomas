@@ -186,6 +186,15 @@ fun SingSayScreen(items: List<Item>, sessionId: String?, onDone: () -> Unit, onL
             //
             // Not while the microphone is open either: a phrase finished mid-take ends with a
             // recording that spans stages, and the «Στοπ» that would have closed it is a screen away.
+            //
+            // Accepted, deliberately: at a large font scale, with a dot-5 phrase whose syllables wrap
+            // to three or four rows and the dots row above them, this can sit below the fold and be
+            // reached by scrolling. Pinning it above the scroll was considered and rejected — it
+            // would be the first control on the screen, above the syllables it is about and above
+            // the step count, and a control that is *his to take and never asked of him* must not
+            // read as the thing to do next. Below the fold is the cost of that, and the cheaper one:
+            // he loses nothing by not seeing it (the tap pad below is the exercise and it is always
+            // under his thumb), whereas a man who reads it as an instruction loses the exercise.
             if (s.stage != SingStage.SPEAK) {
                 QuietButton(
                     "Το έκανα", onClick = vm::didIt, icon = Icons.Rounded.CheckCircle,

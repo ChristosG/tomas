@@ -116,7 +116,14 @@ fun TraceScreen(count: Int, sessionId: String?, onDone: () -> Unit, onLeave: () 
                 // «Το είδα» used to stand *above* this row, which made four buttons and two loud
                 // ones — and the «Έτοιμο» beside it was dead anyway, because there is nothing to
                 // hand in until he has taken the letter away. So the two share one slot: the primary
-                // is whichever of them is the actual next step, and it changes only on his own tap.
+                // is whichever of them is the actual next step.
+                //
+                // His tap is not the only thing that moves it. A missed try brings the letter back
+                // over his strokes (`TraceViewModel.check`), so after a miss the slot reads «Το είδα»
+                // again — which is the honest next step, because the letter is on the screen and it
+                // has to come off before anything can be handed in. The cost is that `hide()` clears
+                // the strokes with it, so the faded ink the nudge put there goes when he presses it:
+                // the letter was what he needed to see, and by then he has seen it.
                 val hiding = recall && s.templateVisible
                 Row {
                     // Dead until there is ink to wipe, so it cannot be the button he learns to press.
