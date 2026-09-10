@@ -57,6 +57,7 @@ object AdviceSummary {
         ModuleId.TRACE to "Γράψε",
         ModuleId.ARCADE to "Δεξί χέρι",
         ModuleId.SQL to "SQL",
+        ModuleId.STEPS to "Βήματα",
         ModuleId.TALKBOARD to "Μίλα",
     )
 

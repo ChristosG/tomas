@@ -1,0 +1,245 @@
+{
+ "version": 1,
+ "tasks": [
+  {
+   "id": "coffee",
+   "title": "Φτιάχνω καφέ",
+   "difficulty": 1,
+   "steps": [
+    { "text": "Βάζω νερό στο μπρίκι", "en": "water", "image": "steps/2248.png" },
+    { "text": "Ρίχνω καφέ και ζάχαρη", "en": "coffee", "image": "steps/2296.png" },
+    { "text": "Το βάζω στη φωτιά", "en": "stove", "image": "steps/2341.png" }
+   ]
+  },
+  {
+   "id": "message",
+   "title": "Στέλνω μήνυμα",
+   "difficulty": 1,
+   "steps": [
+    { "text": "Ανοίγω το κινητό", "en": "mobile phone", "image": "steps/2586.png" },
+    { "text": "Γράφω το μήνυμα", "en": "write", "image": "steps/2380.png" },
+    { "text": "Πατάω αποστολή", "en": "send", "image": "steps/21828.png" }
+   ]
+  },
+  {
+   "id": "teeth",
+   "title": "Πλένω τα δόντια μου",
+   "difficulty": 1,
+   "steps": [
+    { "text": "Βάζω οδοντόκρεμα στη βούρτσα", "en": "toothpaste", "image": "steps/2858.png" },
+    { "text": "Βουρτσίζω τα δόντια μου", "en": "brush teeth", "image": "steps/2326.png" },
+    { "text": "Ξεπλένω το στόμα μου", "en": "rinse", "image": "steps/8560.png" }
+   ]
+  },
+  {
+   "id": "tv",
+   "title": "Ανοίγω την τηλεόραση",
+   "difficulty": 1,
+   "steps": [
+    { "text": "Παίρνω το τηλεκοντρόλ", "en": "remote control", "image": "steps/11299.png" },
+    { "text": "Πατάω το κουμπί", "en": "button", "image": "steps/2668.png" },
+    { "text": "Διαλέγω το κανάλι", "en": "television", "image": "steps/25498.png" }
+   ]
+  },
+  {
+   "id": "pharmacy",
+   "title": "Πάω στο φαρμακείο",
+   "difficulty": 2,
+   "steps": [
+    { "text": "Παίρνω τη συνταγή", "en": "prescription", "image": "steps/38606.png" },
+    { "text": "Βγαίνω από το σπίτι", "en": "go out", "image": "steps/2806.png" },
+    { "text": "Ζητάω το φάρμακο", "en": "pharmacy", "image": "steps/3313.png" },
+    { "text": "Πληρώνω και φεύγω", "en": "pay", "image": "steps/6457.png" }
+   ]
+  },
+  {
+   "id": "food",
+   "title": "Παραγγέλνω φαγητό",
+   "difficulty": 2,
+   "steps": [
+    { "text": "Ανοίγω την εφαρμογή", "en": "application", "image": "steps/19555.png" },
+    { "text": "Διαλέγω τι θα φάω", "en": "menu", "image": "steps/5513.png" },
+    { "text": "Δίνω τη διεύθυνσή μου", "en": "address", "image": "steps/30231.png" },
+    { "text": "Πληρώνω την παραγγελία", "en": "credit card", "image": "steps/4751.png" }
+   ]
+  },
+  {
+   "id": "laundry",
+   "title": "Βάζω πλυντήριο",
+   "difficulty": 2,
+   "steps": [
+    { "text": "Βάζω τα ρούχα μέσα", "en": "washing machine", "image": "steps/2442.png" },
+    { "text": "Ρίχνω απορρυπαντικό", "en": "detergent", "image": "steps/7021.png" },
+    { "text": "Κλείνω την πόρτα του πλυντηρίου", "en": "close", "image": "steps/2697.png" },
+    { "text": "Ξεκινάω το πλυντήριο", "en": "start", "image": "steps/5431.png" }
+   ]
+  },
+  {
+   "id": "toast",
+   "title": "Φτιάχνω ένα τοστ",
+   "difficulty": 2,
+   "steps": [
+    { "text": "Κόβω δύο ψωμιά", "en": "bread", "image": "steps/2494.png" },
+    { "text": "Βάζω τυρί και ζαμπόν", "en": "cheese", "image": "steps/2541.png" },
+    { "text": "Το ψήνω στην τοστιέρα", "en": "toaster", "image": "steps/2598.png" },
+    { "text": "Το τρώω ζεστό", "en": "eat", "image": "steps/2349.png" }
+   ]
+  },
+  {
+   "id": "doctor",
+   "title": "Κλείνω ραντεβού στον γιατρό",
+   "difficulty": 3,
+   "steps": [
+    { "text": "Βρίσκω το τηλέφωνο του γιατρού", "en": "telephone", "image": "steps/2791.png" },
+    { "text": "Παίρνω τηλέφωνο στο ιατρείο", "en": "call", "image": "steps/4686.png" },
+    { "text": "Λέω το όνομά μου", "en": "name", "image": "steps/27357.png" },
+    { "text": "Ζητάω ραντεβού", "en": "appointment", "image": "steps/16165.png" },
+    { "text": "Γράφω τη μέρα στο ημερολόγιο", "en": "calendar", "image": "steps/3071.png" }
+   ]
+  },
+  {
+   "id": "gym",
+   "title": "Ετοιμάζομαι για το γυμναστήριο",
+   "difficulty": 3,
+   "steps": [
+    { "text": "Βάζω τη φόρμα μου", "en": "tracksuit", "image": "steps/2332.png" },
+    { "text": "Βάζω αθλητικά παπούτσια", "en": "trainers", "image": "steps/2621.png" },
+    { "text": "Παίρνω πετσέτα", "en": "towel", "image": "steps/2593.png" },
+    { "text": "Γεμίζω το παγούρι", "en": "water bottle", "image": "steps/4587.png" },
+    { "text": "Φεύγω για το γυμναστήριο", "en": "gym", "image": "steps/24785.png" }
+   ]
+  },
+  {
+   "id": "bus",
+   "title": "Πάω με το λεωφορείο",
+   "difficulty": 3,
+   "steps": [
+    { "text": "Βγάζω εισιτήριο", "en": "ticket", "image": "steps/9184.png" },
+    { "text": "Πάω στη στάση", "en": "bus stop", "image": "steps/2499.png" },
+    { "text": "Περιμένω το λεωφορείο", "en": "wait", "image": "steps/8109.png" },
+    { "text": "Μπαίνω μέσα και κάθομαι", "en": "bus", "image": "steps/2262.png" },
+    { "text": "Κατεβαίνω στη στάση μου", "en": "get off", "image": "steps/33014.png" }
+   ]
+  },
+  {
+   "id": "bill",
+   "title": "Πληρώνω τον λογαριασμό",
+   "difficulty": 3,
+   "steps": [
+    { "text": "Ανοίγω τον λογαριασμό", "en": "bill", "image": "steps/5995.png" },
+    { "text": "Βλέπω πόσα χρωστάω", "en": "money", "image": "steps/4630.png" },
+    { "text": "Ανοίγω την εφαρμογή της τράπεζας", "en": "bank", "image": "steps/3062.png" },
+    { "text": "Γράφω τον κωδικό πληρωμής", "en": "code", "image": "steps/27691.png" },
+    { "text": "Στέλνω την πληρωμή", "en": "payment", "image": "steps/16017.png" }
+   ]
+  },
+  {
+   "id": "suitcase",
+   "title": "Φτιάχνω τη βαλίτσα",
+   "difficulty": 4,
+   "steps": [
+    { "text": "Ανοίγω τη βαλίτσα", "en": "suitcase", "image": "steps/2931.png" },
+    { "text": "Βάζω τα ρούχα στη βαλίτσα", "en": "clothes", "image": "steps/7233.png" },
+    { "text": "Βάζω τα παπούτσια μου", "en": "shoes", "image": "steps/2622.png" },
+    { "text": "Βάζω την οδοντόβουρτσα", "en": "toothbrush", "image": "steps/2694.png" },
+    { "text": "Βάζω τον φορτιστή", "en": "charger", "image": "steps/16597.png" },
+    { "text": "Κλείνω τη βαλίτσα", "en": "luggage", "image": "steps/8562.png" }
+   ]
+  },
+  {
+   "id": "pasta",
+   "title": "Μαγειρεύω μακαρόνια",
+   "difficulty": 4,
+   "steps": [
+    { "text": "Βάζω νερό στην κατσαρόλα", "en": "pot", "image": "steps/3126.png" },
+    { "text": "Ρίχνω λίγο αλάτι", "en": "salt", "image": "steps/5579.png" },
+    { "text": "Περιμένω να βράσει", "en": "boil", "image": "steps/5485.png" },
+    { "text": "Ρίχνω τα μακαρόνια", "en": "pasta", "image": "steps/8652.png" },
+    { "text": "Τα σουρώνω στον νεροχύτη", "en": "colander", "image": "steps/2382.png" },
+    { "text": "Βάζω σάλτσα από πάνω", "en": "tomato sauce", "image": "steps/17008.png" }
+   ]
+  },
+  {
+   "id": "shopping",
+   "title": "Πάω για ψώνια",
+   "difficulty": 4,
+   "steps": [
+    { "text": "Γράφω τη λίστα", "en": "shopping list", "image": "steps/7144.png" },
+    { "text": "Παίρνω το πορτοφόλι", "en": "wallet", "image": "steps/2689.png" },
+    { "text": "Πάω στο σούπερ μάρκετ", "en": "supermarket", "image": "steps/3389.png" },
+    { "text": "Βάζω τα ψώνια στο καρότσι", "en": "shopping cart", "image": "steps/5948.png" },
+    { "text": "Πληρώνω στο ταμείο", "en": "cashier", "image": "steps/3001.png" },
+    { "text": "Γυρίζω σπίτι με τις σακούλες", "en": "shopping bag", "image": "steps/27616.png" }
+   ]
+  },
+  {
+   "id": "bath",
+   "title": "Κάνω μπάνιο",
+   "difficulty": 4,
+   "steps": [
+    { "text": "Βγάζω τα ρούχα μου", "en": "undress", "image": "steps/11232.png" },
+    { "text": "Ανοίγω το ζεστό νερό", "en": "shower", "image": "steps/2370.png" },
+    { "text": "Πλένομαι με σαπούνι", "en": "soap", "image": "steps/2964.png" },
+    { "text": "Κλείνω τη βρύση", "en": "tap", "image": "steps/2414.png" },
+    { "text": "Σκουπίζομαι με την πετσέτα", "en": "dry", "image": "steps/2566.png" },
+    { "text": "Ντύνομαι", "en": "get dressed", "image": "steps/2781.png" }
+   ]
+  },
+  {
+   "id": "atm",
+   "title": "Βγάζω χρήματα από το ΑΤΜ",
+   "difficulty": 5,
+   "steps": [
+    { "text": "Πάω στο ΑΤΜ", "en": "cash machine", "image": "steps/2390.png" },
+    { "text": "Βάζω την κάρτα μου", "en": "bank card", "image": "steps/39495.png" },
+    { "text": "Γράφω τον κωδικό μου", "en": "password", "image": "steps/27691.png" },
+    { "text": "Διαλέγω πόσα θέλω", "en": "euro", "image": "steps/5092.png" },
+    { "text": "Παίρνω τα χαρτονομίσματα", "en": "money", "image": "steps/4630.png" },
+    { "text": "Παίρνω πίσω την κάρτα", "en": "take", "image": "steps/2349.png" }
+   ],
+   "distractor": { "text": "Παίρνω το πορτοφόλι", "en": "wallet", "image": "steps/2689.png" }
+  },
+  {
+   "id": "dishes",
+   "title": "Πλένω τα πιάτα",
+   "difficulty": 5,
+   "steps": [
+    { "text": "Μαζεύω τα πιάτα από το τραπέζι", "en": "plate", "image": "steps/2532.png" },
+    { "text": "Πετάω τα αποφάγια στα σκουπίδια", "en": "rubbish", "image": "steps/8499.png" },
+    { "text": "Ανοίγω τη ζεστή βρύση", "en": "hot water", "image": "steps/3172.png" },
+    { "text": "Πλένω με σφουγγάρι και υγρό", "en": "sponge", "image": "steps/2749.png" },
+    { "text": "Ξεπλένω τα πιάτα", "en": "wash the dishes", "image": "steps/30967.png" },
+    { "text": "Τα αφήνω να στεγνώσουν", "en": "dish rack", "image": "steps/30934.png" }
+   ],
+   "distractor": { "text": "Ρίχνω απορρυπαντικό", "en": "detergent", "image": "steps/7021.png" }
+  },
+  {
+   "id": "bed",
+   "title": "Ετοιμάζομαι να κοιμηθώ",
+   "difficulty": 5,
+   "steps": [
+    { "text": "Κλείνω την τηλεόραση", "en": "turn off", "image": "steps/11739.png" },
+    { "text": "Πίνω ένα ποτήρι νερό", "en": "glass of water", "image": "steps/4768.png" },
+    { "text": "Πλένω το πρόσωπό μου", "en": "wash face", "image": "steps/38230.png" },
+    { "text": "Βάζω τις πιτζάμες μου", "en": "pyjamas", "image": "steps/2522.png" },
+    { "text": "Βάζω ξυπνητήρι στο κινητό", "en": "alarm clock", "image": "steps/5560.png" },
+    { "text": "Σβήνω το φως", "en": "light", "image": "steps/4604.png" }
+   ],
+   "distractor": { "text": "Σκουπίζομαι με την πετσέτα", "en": "dry", "image": "steps/2566.png" }
+  },
+  {
+   "id": "cafe",
+   "title": "Πάω για καφέ με έναν φίλο",
+   "difficulty": 5,
+   "steps": [
+    { "text": "Στέλνω μήνυμα στον φίλο μου", "en": "friend", "image": "steps/8486.png" },
+    { "text": "Λέμε πού θα βρεθούμε", "en": "meeting", "image": "steps/8207.png" },
+    { "text": "Ετοιμάζομαι και βγαίνω", "en": "get ready", "image": "steps/17000.png" },
+    { "text": "Πάω στην καφετέρια", "en": "cafe", "image": "steps/28889.png" },
+    { "text": "Παραγγέλνω έναν καφέ", "en": "cup of coffee", "image": "steps/32049.png" },
+    { "text": "Πληρώνω και λέμε γεια", "en": "goodbye", "image": "steps/5896.png" }
+   ],
+   "distractor": { "text": "Βγάζω εισιτήριο", "en": "ticket", "image": "steps/9184.png" }
+  }
+ ]
+}

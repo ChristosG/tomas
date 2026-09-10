@@ -286,6 +286,35 @@ class DifficultyTest {
         assertEquals(Difficulty.MAX, Difficulty.scriptTier(9))
     }
 
+    // ----------------------------------------------------------------- «Βήματα»
+
+    /**
+     * One dot, one task length: 1 is three steps, 2 four, 3 five, 4 six, 5 six and a step that belongs
+     * to another task. Cumulative, like the dialogues and the word coach's tiers — «Φτιάχνω καφέ» is
+     * still worth sequencing on the day he asks for the cash machine, and a band of 5..5 would have
+     * retired three quarters of the tasks the moment he asked for hard work.
+     */
+    @Test fun `each steps dot admits its own task length and every shorter one`() {
+        (Difficulty.MIN..Difficulty.MAX).forEach { d -> assertEquals("dot $d", d, Difficulty.stepsTier(d)) }
+        val ceilings = (1..5).map { Difficulty.stepsTier(it) }
+        ceilings.zipWithNext { a, b -> assertTrue(a < b) }
+        for (d in 1..5) for (t in 1..5) {
+            assertEquals("a task of difficulty $t at dot $d", t <= d, Difficulty.admitsSteps(t, d))
+        }
+    }
+
+    /** An ungraded task — a zero from a hand-edited seed — is the easiest, and in reach from every dot. */
+    @Test fun `an ungraded task is in reach from every dot`() {
+        for (d in 1..5) {
+            assertTrue("dot $d", Difficulty.admitsSteps(0, d))
+            assertTrue("dot $d", Difficulty.admitsSteps(-3, d))
+        }
+        // And out of range the other way is held rather than made unreachable for ever.
+        assertEquals(Difficulty.MIN, Difficulty.stepsTier(0))
+        assertEquals(Difficulty.MAX, Difficulty.stepsTier(9))
+        assertTrue(Difficulty.admitsSteps(9, 5))
+    }
+
     // -------------------------------------------------------------- «Δεξί χέρι»
 
     @Test fun `the arcade bands cover what the games can draw, hardest last`() {

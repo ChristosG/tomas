@@ -77,6 +77,7 @@ object InsightRules {
         // ερωτήσεις SQL» is what he is actually doing — writing queries — said as a plural, like
         // every other subject here, so «... πάνε πολύ καλά» still agrees with it.
         ModuleId.SQL -> "Οι ερωτήσεις SQL"
+        ModuleId.STEPS -> "Τα βήματα"
     }
 
     fun percent(accuracy: Float): Int = (accuracy * 100).roundToInt()

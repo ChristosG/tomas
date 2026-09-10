@@ -64,6 +64,10 @@ primary. `QuietButton` is the app's genuinely secondary control — outlined, an
 | | gap board | «Άκου», «Παράλειψη» | — |
 | | card board | «Άκου», σβήσε, «Παράλειψη» | — |
 | | finished | «Εντάξει» | «Εντάξει» |
+| Βήματα (`StepsScreen`) | listening | «Στοπ» | «Στοπ» |
+| | ordering the steps | «Έτοιμο», «Άκου», «Παράλειψη» | «Έτοιμο» |
+| | telling them | «Μίλα» / «Το είπα!», «Άκου», «Παράλειψη» | «Μίλα» / «Το είπα!» |
+| | finished | «Εντάξει» | «Εντάξει» |
 | Γράψε (`TraceScreen`) | passed | «Επόμενο» | «Επόμενο» |
 | | level 5, letter still shown | «Καθάρισε», «Το είδα», «Παράλειψη» | «Το είδα» |
 | | otherwise | «Καθάρισε», «Έτοιμο», «Παράλειψη» | «Έτοιμο» |
@@ -77,7 +81,7 @@ primary. `QuietButton` is the app's genuinely secondary control — outlined, an
 | | finished | «Εντάξει» | «Εντάξει» |
 | Μίλα (`TalkBoardScreen`) | always | «Πες το», σβήσε, καθάρισε | «Πες το» |
 
-Seven of his screens carry a control in the *content* rather than in the bottom area. Every one of
+Eight of his screens carry a control in the *content* rather than in the bottom area. Every one of
 them is listed here, deliberately: the rule below is that a content control is an escape hatch and
 not a loophole, and a list that is only *mostly* complete is how the loophole gets in.
 
@@ -94,6 +98,11 @@ not a loophole, and a list that is only *mostly* complete is how the loophole ge
   «Άκου» / «Έτοιμο» / «Παράλειψη», and because the thing being undone is *that word in that place*.
   The three options of a «διάλεξε» board are content too, like the numbers module's answers: they are
   the question, not an action.
+- **Βήματα**: the steps he has already put in the strip — tapping one takes it back. The undo lives
+  next to the sequence he is building, because the bottom block is already «Έτοιμο» / «Άκου» /
+  «Παράλειψη» and because the thing being undone is *that step in that place*. The whole telling, left
+  on the screen after one that did not land, is content too: it is there to be read and repeated, not
+  pressed.
 - **Μίλα**: the whole of «Ολόκληρη», inside the sentence strip. «Ολόκληρη» while the strip is only
   words; then, over the chips, the sentence with «Μίλα» / «Το είπα!» and «Κλείσε» under it, and
   «Στοπ» alone while the microphone is open. The board's own three at the bottom («Πες το», σβήσε,
@@ -184,3 +193,42 @@ very basic SQL exercises; the switch in Ρυθμίσεις is there for anyone w
 
 [`Settings.DEFAULT_OFF`]: ../app/src/main/java/gr/dimitris/app/core/settings/Settings.kt
 [`Icons.Rounded.TableChart`]: ../app/src/main/java/gr/dimitris/app/modules/sql/SqlModule.kt
+
+## What phase 13 added: the «Βήματα» tile
+
+The second of the two new tiles, and the one that is not about words at all: a task in three to six
+steps, put in order and then told. «Βήματα» is on the grid ([`Icons.Rounded.FormatListNumbered`]), it
+has the same row of five dots on its first screen, and it ends on «Εντάξει». Four things about it were
+decisions rather than defaults.
+
+**Two stages, one screen, and the buttons do not move between them.** The strip he builds while
+ordering is the strip he reads from while telling, in the same place — a second screen would have taken
+it away at the moment it became useful. The bottom block is therefore the same three places in both
+stages: the green primary on top («Έτοιμο», then «Μίλα» / «Το είπα!»), «Άκου» under it, «Παράλειψη» at
+the foot. The app has two conventions for that order — the four speech modules put the primary first,
+«SQL» and «Προτάσεις» put «Άκου» first — and a screen that switched from one to the other halfway
+through a task would move a button under his thumb between one tap and the next. It picks the speech
+one, because the second stage *is* speech.
+
+**«Άκου» says two different things, and only one of them costs him anything.** While he is ordering it
+reads the task and the strip **as it stands** — his own order, said back to him, which is how a man who
+reads slowly checks his own work without being handed the answer — so it is free, exactly as it is in
+«SQL». While he is telling it reads the whole telling, which *is* the answer, so the row carries
+[`CueLadder.LISTENED`] and the exercise comes out as assisted work. Same button, same place, never
+withheld (spec §12); what changes is what the row says.
+
+**One step is marked, never four.** A wrong order marks the **first** step that is out of place and
+nothing else, and the strip is left exactly as he built it. Marking every step after the first one as
+well would be true and useless: a man who put step 3 where step 2 goes has one tile to move, and a
+strip of four marks reads as "you got it all wrong", which is both untrue and the one thing this app may
+never say. The tiles are not handed back either — «Προτάσεις» hands its cards back because a sentence
+of three words is quick to rebuild, and six steps is not.
+
+**Two attempt rows per task.** `steps:order:<task>` for the sequencing and `steps:tell:<task>` for the
+telling, because they are two exercises and a reader who cannot tell them apart cannot see the thing
+worth seeing — he orders well and tells badly, or the other way about. It means a sitting of four tasks
+leaves eight rows where the session's `plannedItemCount` says four; the number he is shown at the end
+counts the rows, which is the honest one.
+
+[`Icons.Rounded.FormatListNumbered`]: ../app/src/main/java/gr/dimitris/app/modules/steps/StepsModule.kt
+[`CueLadder.LISTENED`]: ../app/src/main/java/gr/dimitris/app/modules/wordcoach/CueLadder.kt

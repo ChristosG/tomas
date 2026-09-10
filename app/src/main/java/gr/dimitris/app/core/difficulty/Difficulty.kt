@@ -165,6 +165,31 @@ object Difficulty {
      */
     fun sqlDot(level: Int): Int = clamp(level)
 
+    // ----------------------------------------------------------------- «Βήματα»
+
+    /**
+     * The hardest task «Βήματα» asks for at this dot, as a [gr.dimitris.app.modules.steps.StepTask]'s
+     * own `difficulty`: one dot, one step count, and dot n admits every task at or below it.
+     *
+     * The five difficulties are five lengths of the same exercise — 1 is three steps, 2 four, 3 five,
+     * 4 six, and 5 six with a seventh tile on the board that belongs to another task entirely — so the
+     * number of things to hold in order *is* the difficulty here, and nothing else in the module
+     * changes with the dot.
+     *
+     * Cumulative, like [wordCoachTier] and [scriptTier] and for the same reason: «Φτιάχνω καφέ» is
+     * still worth sequencing on the day he asks for «Βγάζω χρήματα από το ΑΤΜ», and a *band* of 5..5
+     * would have retired three quarters of the tasks the moment he asked for hard work — the mistake
+     * [syllableCeiling] documents. The easy tasks are the easy ends of a sitting.
+     *
+     * There is no stored level for this module and nothing for a sitting to promote: the dot is the
+     * whole of its difficulty, the way it is for «Λέξεις» and «Διάλογοι». Which tasks a dot leaves in
+     * the pool is [gr.dimitris.app.modules.steps.StepTasks.forDifficulty].
+     */
+    fun stepsTier(d: Int): Int = clamp(d)
+
+    /** Whether a task of [difficulty] is one this dot asks for. Anything unreadable is the easiest. */
+    fun admitsSteps(difficulty: Int, d: Int): Boolean = clamp(difficulty) <= stepsTier(d)
+
     // ------------------------------------------------- «Τραγούδα και πες το»
 
     /**

@@ -38,6 +38,7 @@ import gr.dimitris.app.modules.scripts.ScriptsModule
 import gr.dimitris.app.modules.sentences.SentencesModule
 import gr.dimitris.app.modules.singsay.SingSayModule
 import gr.dimitris.app.modules.sql.SqlModule
+import gr.dimitris.app.modules.steps.StepsModule
 import gr.dimitris.app.modules.trace.TraceModule
 import gr.dimitris.app.modules.wordcoach.WordCoachModule
 import gr.dimitris.app.ui.theme.Feedback
@@ -212,12 +213,15 @@ class AppGraph(context: Context) {
      * on, so the grid is normally six tiles: see
      * [gr.dimitris.app.core.settings.Settings.DEFAULT_OFF].
      *
+     * «Βήματα» sits with the language tiles, after «Προτάσεις»: a sentence and a sequence of steps are
+     * the same kind of work to him, and «πρώτα… μετά… τέλος» are sentence connectors.
+     *
      * «SQL» is last because it is the one tile that is not speech therapy — he was a programmer and
      * asked for it — and the day should still open with the words.
      */
     val modules: List<Module> = listOf(
-        WordCoachModule, NumbersModule, SingSayModule, ScriptsModule, SentencesModule, TraceModule,
-        ArcadeModule, SqlModule,
+        WordCoachModule, NumbersModule, SingSayModule, ScriptsModule, SentencesModule, StepsModule,
+        TraceModule, ArcadeModule, SqlModule,
     )
 
     /**
