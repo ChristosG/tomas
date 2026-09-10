@@ -12,6 +12,9 @@ import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException
 import java.io.RandomAccessFile
+import java.util.concurrent.ArrayBlockingQueue
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 
 /**
  * One microphone, one stream of samples, two destinations: the recogniser and a file of his own
@@ -25,23 +28,36 @@ import java.io.RandomAccessFile
  * through `EXTRA_AUDIO_SOURCE`. So the transcript and the take are the same breath, by construction,
  * and «Άκου» after a window plays him exactly what the phone judged.
  *
- * Three things are deliberate:
+ * Four things are deliberate:
  *
- * * **the file wins.** The pipe is written after the file and outside its lock, so a recogniser that
- *   reads two seconds and walks away — which is what `EPIPE` means, and it is allowed to — cannot
- *   stall or truncate his take. The pipe breaking is an ordinary outcome, not an error;
+ * * **the file wins, and it wins on a separate thread.** The microphone thread writes the WAV and
+ *   nothing else. Blocks for the recogniser are handed to a bounded queue that a second thread
+ *   drains into the pipe, and when that queue is full the *oldest* block is dropped. A write into a
+ *   pipe blocks until the reader takes the bytes, and a recogniser is free to hold the read end and
+ *   not drain it — the first draft of this class did the pipe write on the microphone thread, so
+ *   after about two seconds (a 64 KiB pipe at 32 kB/s) the `AudioRecord` ring would overrun, the bar
+ *   would freeze, and his take would stop mid-word. Losing audio the recogniser was too slow to take
+ *   is acceptable; losing the recording of him speaking is not;
  * * **one take, many sessions.** Google's service gives up a second or two into a silence (Chris
  *   measured it) and [Recognition.restartsAfterSilence] answers that by opening another session.
  *   Each session needs its own pipe, because a pipe can only be read once; the microphone, the
- *   thread and the WAV carry straight on across all of them. His «Μίλα» is one take whatever the
+ *   threads and the WAV carry straight on across all of them. His «Μίλα» is one take whatever the
  *   service does with it;
+ * * **the pipe is closed, not abandoned.** An engine fed from a descriptor may wait for
+ *   end-of-stream before it decides what it heard, so «Στοπ» calls [closePipe] and the ordinary end
+ *   of a take drains what is queued and then closes. `EPIPE` on the way — the engine has what it
+ *   wanted and let go of its end — is how this is *supposed* to end, and it ends the pipe writer
+ *   quietly;
  * * **the header is written twice.** Once empty at the start and once over the top at the end with
  *   the real length, because the length is not known until he stops. A take interrupted by anything
  *   at all — the app killed, the phone out of space — is still a valid, if empty, file.
  *
- * The caller must hold `RECORD_AUDIO`. Nothing here can be exercised on the emulator beyond the
- * shape of it: there is no speech engine to read the pipe, which is exactly why the file being
- * independent of the pipe is the property worth testing (`PcmTakeTest`).
+ * The caller must hold `RECORD_AUDIO`, and must call [start], [stop] and [cancel] off the main
+ * thread: opening a microphone and joining a reader are not things the screen may wait on.
+ *
+ * Nothing here can be exercised on the emulator beyond the shape of it: there is no speech engine to
+ * read the pipe, which is exactly why the file being independent of the pipe is the property worth
+ * testing (`PcmTakeTest` holds a read end open and never drains it).
  */
 class PcmTake private constructor(
     /** His take, in [gr.dimitris.app.core.audio.MediaFiles.recordingsDir], named as any other is. */
@@ -50,12 +66,12 @@ class PcmTake private constructor(
     private val blockBytes: Int,
     private val onLevel: (Float) -> Unit,
 ) {
-    /** False from [stop] or [cancel] on. The pump thread reads it and nothing else writes it. */
+    /** False from [stop] or [cancel] on. Both threads read it and only those two write it. */
     @Volatile private var running = true
 
     /**
      * Everything about the file: the handle, how much audio is in it, and the loudest sample seen.
-     * Held only around a write of a tenth of a second, and never while the pipe is being written.
+     * Held only around a write of a tenth of a second, on the microphone thread and in [stop].
      */
     private val fileLock = Any()
     private var out: RandomAccessFile? = null
@@ -64,15 +80,29 @@ class PcmTake private constructor(
 
     /**
      * The write end of the pipe the recogniser is reading, and the stream over it. Its own lock,
-     * because a write to a pipe blocks until the engine reads — and a blocked pipe must never be
-     * able to hold up his take or his «Στοπ».
+     * touched only by the pipe thread and by whoever opens or closes a pipe — never by the
+     * microphone thread, which is the whole point.
      */
     private val pipeLock = Any()
     private var pipe: ParcelFileDescriptor? = null
     private var sink: FileOutputStream? = null
 
+    /**
+     * Blocks waiting to reach the recogniser, oldest first. Bounded, and full means the oldest goes:
+     * the recogniser then misses a tenth of a second somewhere behind the live edge, which costs it a
+     * syllable at worst, and the microphone thread never waits.
+     */
+    private val queue = ArrayBlockingQueue<ByteArray>(QUEUE_BLOCKS)
+
+    /** Handed to the pipe thread to say "no more blocks are coming; drain and close". */
+    private val endOfStream = ByteArray(0)
+
+    /** Counted down by the pipe thread once it has closed the pipe. [stop] waits on it, briefly. */
+    private val pipeClosed = CountDownLatch(1)
+
     private val startedAt = SystemClock.elapsedRealtime()
-    private var pump: Thread? = null
+    private var microphone: Thread? = null
+    private var toPipe: Thread? = null
 
     val isRecording: Boolean get() = running
 
@@ -81,12 +111,14 @@ class PcmTake private constructor(
      * session's pipe is closed first: one pipe per session, because a session is the only thing that
      * can read one.
      *
-     * Null when the microphone has already stopped or the pipe could not be made. The caller then
-     * opens a plain session and lets the engine use its own microphone — which costs the one-control
-     * behaviour for that window and nothing else.
+     * Null when the microphone has already stopped or the pipe could not be made. There is no honest
+     * fallback for that window — the app is holding the microphone, so letting the engine open it
+     * too would be two captures on one device and usually silences one of them — so the caller
+     * cancels the take and runs a plain recognition session instead. See
+     * [AndroidSpeechToText.listen].
      */
     fun newPipe(): ParcelFileDescriptor? = synchronized(pipeLock) {
-        closePipe()
+        closePipeLocked()
         if (!running) return null
         val ends = runCatching { ParcelFileDescriptor.createPipe() }.getOrNull() ?: return null
         pipe = ends[WRITE_END]
@@ -95,21 +127,56 @@ class PcmTake private constructor(
     }
 
     /**
-     * «Στοπ», or the end of the wait: the microphone closes, the pipe closes, and the header is
-     * written with the real length.
+     * «Στοπ»: the recogniser is told there is no more audio coming, now.
      *
-     * The pipe is closed *first* so that a pump thread blocked writing into a recogniser that has
-     * stopped reading is freed before it is waited for; the wait itself is bounded, and the header is
-     * patched whatever the thread does, because a take that cannot be closed is a take he loses.
+     * An engine fed from a descriptor may be waiting for end-of-stream before it says what it heard,
+     * and the session's own bound is twenty seconds — so without this his «Στοπ» could stand there
+     * doing nothing while the words he got out were thrown away. The microphone and the file are
+     * untouched: this closes the pipe and nothing else.
+     *
+     * If the pipe thread happens to be blocked inside a write (a recogniser holding the read end and
+     * not reading it), the close lands when that write returns or throws. Nothing waits for it.
+     */
+    fun closePipe() {
+        // Behind whatever is still queued, not in front of it: the last thing he said is in those
+        // blocks, and an engine given end-of-stream before them would decide on a truncated word.
+        // With a recogniser reading normally the queue is empty and this is immediate; with one that
+        // has stopped reading nothing could be immediate anyway. A full queue drops its oldest block
+        // to make room, which is the same trade the microphone thread makes.
+        while (!queue.offer(endOfStream)) {
+            if (queue.poll() == null) break
+        }
+    }
+
+    /**
+     * The end of the wait: the microphone closes, whatever is queued is given a moment to reach the
+     * recogniser, the pipe closes and the header is written with the real length.
+     *
+     * Every wait here is bounded, and the header is patched whatever the two threads are doing,
+     * because a take that cannot be closed is a take he loses. In particular nothing joins the pipe
+     * thread: it is a daemon holding two descriptors, and a recogniser that stopped reading must
+     * never be able to make «Στοπ» a button that does nothing.
+     *
+     * Ordering, which matters: `AudioRecord.stop()` comes first so a pending `read` returns at once
+     * and the join below is instant; `release()` comes only after that thread is gone, because
+     * releasing a recorder another thread is inside is a native-level hazard. On the recogniser's
+     * side the ordering is [AndroidSpeechToText]'s: the session's `destroy()` closes the service's
+     * copy of the read end, and *that* — not anything here — is what frees a pipe write blocked
+     * against a service that walked away.
      */
     fun stop(): Recorded {
-        closePipeNow()
         running = false
         val duration = SystemClock.elapsedRealtime() - startedAt
-        runCatching { pump?.join(JOIN_MS) }
-        pump = null
         runCatching { recorder.stop() }
+        runCatching { microphone?.join(MICROPHONE_JOIN_MS) }
+        microphone = null
         runCatching { recorder.release() }
+        // What is queued is the tail of what he said: the recogniser gets a moment to take it, and
+        // then the pipe closes whether it did or not.
+        queue.offer(endOfStream)
+        runCatching { pipeClosed.await(PIPE_GRACE_MS, TimeUnit.MILLISECONDS) }
+        synchronized(pipeLock) { closePipeLocked() }
+        toPipe = null
         val loudest: Int
         val length: Int
         synchronized(fileLock) {
@@ -123,7 +190,7 @@ class PcmTake private constructor(
             }
             runCatching { handle?.close() }
         }
-        return Recorded(file, duration, loudest)
+        return Recorded(file, duration, loudest, silenceFloor = Recorded.SILENCE_PEAK_PCM)
     }
 
     /** The take belongs to a word he has left behind: closed and deleted, not kept. */
@@ -140,15 +207,17 @@ class PcmTake private constructor(
             }
         }
         recorder.startRecording()
-        pump = Thread({ drain() }, "pcm-take").apply { isDaemon = true; start() }
+        toPipe = Thread({ toPipe() }, "pcm-take-pipe").apply { isDaemon = true; start() }
+        microphone = Thread({ fromMicrophone() }, "pcm-take-mic").apply { isDaemon = true; start() }
     }
 
     /**
-     * The one reading thread. `AudioRecord.read` blocks for about a block at a time, so this is a
-     * thread and not a coroutine: it spends its life inside a blocking call that no dispatcher would
-     * be the better for.
+     * The microphone thread. It reads, writes the WAV, moves the bar and hands a copy to the queue —
+     * and it does nothing that can block on anything but the microphone itself. `AudioRecord.read`
+     * blocks for about a block at a time, so this is a thread and not a coroutine: it spends its life
+     * inside a blocking call that no dispatcher would be the better for.
      */
-    private fun drain() {
+    private fun fromMicrophone() {
         val buffer = ByteArray(blockBytes)
         while (running) {
             val read = runCatching { recorder.read(buffer, 0, buffer.size) }.getOrDefault(-1)
@@ -158,36 +227,68 @@ class PcmTake private constructor(
             keep(buffer, read)
         }
         // Whatever ended the loop, the engine is owed an end-of-stream rather than a hang.
-        closePipeNow()
+        queue.offer(endOfStream)
     }
 
     private fun keep(buffer: ByteArray, read: Int) {
         val loudest = Wav.peakOf(buffer, read)
-        // His take first, and under its own lock. Nothing the recogniser does can reach this.
+        // His take, and nothing the recogniser does can reach this.
         synchronized(fileLock) {
             val handle = out
             if (handle != null && runCatching { handle.write(buffer, 0, read) }.isSuccess) dataBytes += read
             if (loudest > peak) peak = loudest
         }
-        // Then the recogniser's pipe, outside that lock. `EPIPE` — the engine has what it wanted and
-        // closed its end — is how this is *supposed* to end, so it closes the pipe and says nothing.
-        val stream = synchronized(pipeLock) { sink }
-        if (stream != null) {
-            try {
-                stream.write(buffer, 0, read)
-            } catch (e: IOException) {
-                closePipeNow()
-            }
+        // A copy, because this buffer is about to be filled again. Never a blocking put: when the
+        // queue is full the oldest block goes, so a recogniser that has stopped reading costs the
+        // engine a syllable and costs his take nothing at all.
+        val block = buffer.copyOf(read)
+        while (!queue.offer(block)) {
+            if (queue.poll() == null) break
         }
         // The bar, drawn from the app's own samples: with the engine fed through a pipe it never
         // calls `onRmsChanged`, and a man who cannot ask "is it hearing me?" would have no answer.
         onLevel(Wav.levelOf(loudest))
     }
 
-    private fun closePipeNow() = synchronized(pipeLock) { closePipe() }
+    /**
+     * The pipe thread. Everything that can block on the recogniser happens here and nowhere else.
+     *
+     * `EPIPE` is the ordinary ending of one *session* — the engine took what it wanted and let go of
+     * its end — so it closes that pipe quietly and carries on. It carries on because the wait is not
+     * over: a session that heard nothing is started again, with a new pipe, and the same queue has to
+     * keep feeding it. Blocks arriving while no pipe is open are dropped, which is the honest thing
+     * to do with audio nobody is listening to.
+     *
+     * The thread ends on the end-of-stream marker, or when the microphone has stopped and the queue
+     * has run dry.
+     */
+    private fun toPipe() {
+        try {
+            while (true) {
+                val block = try {
+                    queue.poll(POLL_MS, TimeUnit.MILLISECONDS)
+                } catch (e: InterruptedException) {
+                    break
+                }
+                if (block === endOfStream) break
+                if (block == null) {
+                    if (running) continue else break
+                }
+                val stream = synchronized(pipeLock) { sink } ?: continue
+                try {
+                    stream.write(block)
+                } catch (e: IOException) {
+                    synchronized(pipeLock) { closePipeLocked() }
+                }
+            }
+        } finally {
+            synchronized(pipeLock) { closePipeLocked() }
+            pipeClosed.countDown()
+        }
+    }
 
     /** Caller holds [pipeLock]. Idempotent: every path through here may be taken twice. */
-    private fun closePipe() {
+    private fun closePipeLocked() {
         runCatching { sink?.close() }
         runCatching { pipe?.close() }
         sink = null
@@ -200,13 +301,15 @@ class PcmTake private constructor(
          * be had at all — the permission was refused, or something else holds it — which the caller
          * answers by falling back to a plain recognition session.
          *
-         * [onLevel] is called about ten times a second from the pump thread with 0..1.
+         * Off the main thread, please: constructing an `AudioRecord` and opening a file are not
+         * things the screen may wait on. [onLevel] is called about ten times a second from the
+         * microphone thread with 0..1.
          */
         @SuppressLint("MissingPermission")
         fun start(file: File, onLevel: (Float) -> Unit = {}): PcmTake {
             val minimum = AudioRecord.getMinBufferSize(Wav.SAMPLE_RATE, CHANNEL, ENCODING)
-            // Two of the driver's minimum, so one slow tick of the pump cannot overrun the buffer and
-            // lose a syllable; and a sane floor when the driver will not say.
+            // Two of the driver's minimum, so one slow tick of the reader cannot overrun the buffer
+            // and lose a syllable; and a sane floor when the driver will not say.
             val buffer = if (minimum > 0) minimum * 2 else Wav.SAMPLE_RATE * BYTES_PER_SAMPLE
             val recorder = AudioRecord(SOURCE, Wav.SAMPLE_RATE, CHANNEL, ENCODING, buffer)
             if (recorder.state != AudioRecord.STATE_INITIALIZED) {
@@ -246,10 +349,29 @@ class PcmTake private constructor(
         private const val WRITE_END = 1
 
         /**
-         * How long [stop] waits for the pump thread. Generous enough for a blocking read of one block
-         * to return, short enough that «Στοπ» is never a button that does nothing.
+         * How much audio may wait for a slow recogniser: 32 blocks of a tenth of a second, a little
+         * over three seconds, and about 100 kB of memory. Deep enough that an engine pausing to think
+         * loses nothing, shallow enough that what it eventually reads is still roughly what he is
+         * saying now rather than a recording of a minute ago.
          */
-        const val JOIN_MS = 500L
+        const val QUEUE_BLOCKS = 32
+
+        /** How long the pipe thread waits for a block before looking again at whether the take is over. */
+        private const val POLL_MS = 50L
+
+        /**
+         * How long [stop] waits for the microphone thread. It has just been told to stop, so a
+         * pending read is already on its way back; this is only so that a thread descheduled at the
+         * wrong moment cannot leave the header short.
+         */
+        const val MICROPHONE_JOIN_MS = 100L
+
+        /**
+         * How long [stop] gives the queued tail to reach the recogniser before the pipe is closed
+         * regardless. Short on purpose: this is «Στοπ» under his thumb, and the whole of [stop] has
+         * to come back inside a fifth of a second whatever the recogniser is doing.
+         */
+        const val PIPE_GRACE_MS = 50L
 
         /** Said when the microphone could not be opened at all. Not shown to him: the caller decides. */
         const val NO_MICROPHONE = "Δεν άνοιξε το μικρόφωνο"

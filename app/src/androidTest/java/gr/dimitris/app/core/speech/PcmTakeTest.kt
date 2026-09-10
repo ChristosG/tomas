@@ -1,6 +1,7 @@
 package gr.dimitris.app.core.speech
 
 import android.Manifest
+import android.os.SystemClock
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.rule.GrantPermissionRule
@@ -56,8 +57,19 @@ class PcmTakeTest {
 
         assertEquals(file, recorded.file)
         assertTrue("the take knows roughly how long it ran: ${recorded.durationMs}", recorded.durationMs >= TAKE_MS)
+        // The measured floor, named in the message so the number in `Recorded.SILENCE_PEAK_PCM` can
+        // be argued with rather than believed. On this emulator it is 8 — the same 8 `RecorderTest`
+        // reads through the AAC encoder, so the floor gives no reason to move the line; what does is
+        // the gain difference between `MIC` and `VOICE_RECOGNITION`, which only his phone can show.
         assertTrue("nobody spoke into it: peak ${recorded.peakAmplitude}", recorded.peakAmplitude < QUIET_PEAK)
+        assertEquals("and it is judged against the PCM line, not the encoder's", Recorded.SILENCE_PEAK_PCM, recorded.silenceFloor)
         assertTrue("so the silence check catches it", recorded.isSilent)
+        // The line has to sit far above the floor and far below a voice, or it is not a line at all.
+        assertTrue(
+            "the silence line is not clear of the noise floor: ${recorded.peakAmplitude} vs ${Recorded.SILENCE_PEAK_PCM}",
+            Recorded.SILENCE_PEAK_PCM > recorded.peakAmplitude * 10 + 100,
+        )
+        assertTrue("and it is below the quietest speech", Recorded.SILENCE_PEAK_PCM < QUIET_SPEECH_PEAK)
 
         val bytes = file.readBytes()
         assertTrue("the header is there: ${bytes.size} bytes", bytes.size > Wav.HEADER_BYTES)
@@ -81,25 +93,85 @@ class PcmTakeTest {
     }
 
     /**
-     * The pipe and the file are independent, which is the property the whole design rests on.
-     *
-     * On this emulator nothing will ever read the pipe — there is no engine — so it fills up and the
-     * writes into it start failing or blocking. His take must complete anyway: the file is written
-     * first and under its own lock, and a recogniser walking away from the pipe is an ordinary
-     * outcome rather than an error.
+     * An engine that closed its end. `EPIPE` is the ordinary way a session ends — it took what it
+     * wanted and let go — and the take must read it as an ending rather than as a fault.
      */
-    @Test fun aPipeNobodyReadsCannotStopTheTake() {
+    @Test fun anEngineThatLetsGoOfThePipeIsAnOrdinaryEnding() {
         val file = newFile()
         val take = PcmTake.start(file)
         val pipe = take.newPipe()
         assertNotNull("a pipe was made for the session", pipe)
         // The read end is what a recognition service would get. Closing it here is exactly what an
-        // engine that has heard enough does, and the writer must take it as an end rather than a fault.
+        // engine that has heard enough does.
         pipe?.close()
         Thread.sleep(TAKE_MS)
         val recorded = take.stop()
 
         assertTrue("the file completed regardless", recorded.file.length() > Wav.HEADER_BYTES)
+        assertEquals(file.length().toInt() - Wav.HEADER_BYTES, int32(file.readBytes(), 40))
+    }
+
+    /**
+     * **The property the whole design rests on**: a recogniser that holds the read end and never
+     * drains it cannot touch his take.
+     *
+     * This is the failure the first draft of `PcmTake` really had. The pipe write sat on the
+     * microphone thread, so once the kernel's 64 KiB pipe buffer filled — two seconds of 16 kHz mono
+     * PCM16, at 32 000 B/s — that thread blocked inside `write`, stopped calling `AudioRecord.read`,
+     * the recorder's ring overran, the bar froze and the WAV stopped mid-word. On Chris' phone it
+     * would have looked exactly like the engine ignoring `EXTRA_AUDIO_SOURCE`, which is the opposite
+     * of what it is.
+     *
+     * So: hold the read end open, read nothing from it, and record for well past the point where
+     * both the pipe buffer and the bounded queue behind it are full. The WAV has to hold the whole
+     * duration, its header has to be right, and `stop()` has to come back at once — «Στοπ» is under
+     * his thumb, and a button that waits on a wedged recogniser is a button that does nothing.
+     */
+    @Test fun aRecogniserThatNeverReadsCannotStallHisTake() {
+        val file = newFile()
+        val take = PcmTake.start(file)
+        // Held, never read: the far end of a recogniser that has stopped taking audio.
+        val pipe = take.newPipe()
+        assertNotNull("a pipe was made for the session", pipe)
+        try {
+            // Long past the ~2 s of pipe buffer plus the ~3 s of queue behind it.
+            Thread.sleep(STALLED_MS)
+            val before = SystemClock.elapsedRealtime()
+            val recorded = take.stop()
+            val closing = SystemClock.elapsedRealtime() - before
+
+            assertTrue("«Στοπ» waited on the recogniser: ${closing}ms", closing < STOP_BOUND_MS)
+            val bytes = file.readBytes()
+            val audio = bytes.size - Wav.HEADER_BYTES
+            // Six seconds at 16 kHz mono PCM16 is 192 000 bytes. The bound below is deliberately
+            // loose — this is a shared emulator — but it is far above the ~96 000 a take truncated
+            // at the pipe buffer would hold.
+            assertTrue("the take was truncated at the pipe: $audio bytes", audio > Wav.SAMPLE_RATE * 2 * STALLED_SECONDS_KEPT)
+            assertEquals("and its header still says how much is there", audio, int32(bytes, 40))
+            assertEquals(Wav.HEADER_BYTES - 8 + audio, int32(bytes, 4))
+            assertTrue("the take knows how long it ran: ${recorded.durationMs}", recorded.durationMs >= STALLED_MS)
+        } finally {
+            runCatching { pipe?.close() }
+        }
+    }
+
+    /**
+     * «Στοπ» tells the engine there is no more audio coming, without touching the microphone or the
+     * file. An engine fed from a descriptor may be waiting for exactly that before it says what it
+     * heard, and the session's own bound is twenty seconds.
+     */
+    @Test fun closingThePipeLeavesTheMicrophoneAndTheFileAlone() {
+        val file = newFile()
+        val take = PcmTake.start(file)
+        take.newPipe()?.close()
+        Thread.sleep(400)
+
+        take.closePipe()
+        assertTrue("the microphone is still his", take.isRecording)
+        Thread.sleep(400)
+        val recorded = take.stop()
+
+        assertTrue("the take carried on past the pipe: ${recorded.durationMs}", recorded.durationMs >= 800)
         assertEquals(file.length().toInt() - Wav.HEADER_BYTES, int32(file.readBytes(), 40))
     }
 
@@ -157,6 +229,24 @@ class PcmTakeTest {
     private companion object {
         /** Long enough for a second of audio and a dozen peak readings. */
         const val TAKE_MS = 1_200L
+
+        /**
+         * Long past the ~2 s of kernel pipe buffer plus the ~3 s of [PcmTake.QUEUE_BLOCKS] behind it,
+         * so a take that could be stalled by a silent recogniser certainly would be.
+         */
+        const val STALLED_MS = 6_000L
+
+        /** How much of those six seconds the file must hold, in whole seconds. Loose on purpose. */
+        const val STALLED_SECONDS_KEPT = 4
+
+        /** «Στοπ» is under his thumb: [PcmTake.stop] answers inside this whatever the engine is doing. */
+        const val STOP_BOUND_MS = 200L
+
+        /**
+         * The quietest a real voice at normal distance is expected to read on the 16-bit scale. The
+         * silence line has to sit under it, or a word he really said is deleted.
+         */
+        const val QUIET_SPEECH_PEAK = 1_500
 
         /**
          * The silent emulator's own noise floor, with room to spare. Raw PCM from a dead microphone
