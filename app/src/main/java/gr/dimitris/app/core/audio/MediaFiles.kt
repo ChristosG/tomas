@@ -16,6 +16,16 @@ class MediaFiles(context: Context) : MediaPaths {
     fun newRecordingFile(): File = File(recordingsDir, "${UUID.randomUUID()}.m4a")
 
     /**
+     * A take the recogniser's own microphone fills.
+     *
+     * It is a WAV and not an .m4a because it is raw PCM by the time it reaches disk: the on-device
+     * engine is fed the same samples down a pipe, and encoding them to AAC on the way to the file
+     * would mean two different versions of one breath. Beside the .m4a takes in the same folder,
+     * synced like them, and played by the same `MediaPlayer`, which reads the bytes and not the name.
+     */
+    fun newWavFile(): File = File(recordingsDir, "${UUID.randomUUID()}.wav")
+
+    /**
      * The path to store in the database: relative to the files dir ("photos/abc.jpg"), so a backup
      * restored on another phone — where the data dir has a different absolute path — still finds its
      * media. Anything outside the files dir keeps its absolute path.

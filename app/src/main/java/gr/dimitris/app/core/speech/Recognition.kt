@@ -1,6 +1,7 @@
 package gr.dimitris.app.core.speech
 
 import android.speech.SpeechRecognizer
+import gr.dimitris.app.core.audio.Recorded
 
 /**
  * The two decisions the recogniser has to make about its own failures, as pure functions.
@@ -52,6 +53,55 @@ object Recognition {
 
     fun heardNothing(errorCode: Int): Boolean =
         errorCode == SpeechRecognizer.ERROR_SPEECH_TIMEOUT || errorCode == SpeechRecognizer.ERROR_NO_MATCH
+
+    /**
+     * What kind of trouble the phone is in, and the one Greek line that says so.
+     *
+     * Chris' report is the whole reason this exists. His phone answered code 12 for a day and then
+     * code 2, and the app said «Η αναγνώριση δεν λειτούργησε. Δες τις ρυθμίσεις.» to both — which
+     * sent him to a settings screen that could do nothing about either, and told a man who cannot
+     * read a stack trace nothing at all. Three of the codes have an answer a person can act on, so
+     * three of them get their own sentence:
+     *
+     * * **no connection** (1, 2): the engine in use is a cloud one and the phone is offline. The fix
+     *   is a connection, or Greek downloaded — and both are named rather than implied;
+     * * **no Greek** (12, 13): the engine cannot speak his language. The fix is the one button in
+     *   the settings, so the line points straight at it;
+     * * **busy** (8, 10): something else has the recogniser, or it has been asked too often. Nothing
+     *   is wrong and nothing needs fixing: wait a moment.
+     *
+     * Everything else keeps the old line. A code this app has never seen is not guessed about.
+     *
+     * None of them is ever a sentence about his voice. That is the rule the classes exist to keep.
+     */
+    enum class ErrorClass(val line: String) {
+        /** Codes 1 and 2. The case that made Chris ask for transcription to stop needing the network. */
+        NO_CONNECTION("Χρειάζεται σύνδεση για την αναγνώριση."),
+
+        /** Codes 12 and 13. One tap in the settings away from being fixed for ever. */
+        NO_GREEK("Λείπουν τα ελληνικά. Κατέβασέ τα από τις ρυθμίσεις."),
+
+        /** Codes 8 and 10. Not a fault, and not his: a moment's patience is the whole answer. */
+        BUSY("Η αναγνώριση είναι απασχολημένη. Δοκίμασε σε λίγο."),
+
+        /** Anything else, including a code from an Android newer than this build knows about. */
+        UNKNOWN(NOT_WORKING),
+    }
+
+    /**
+     * Which class an `onError` code falls in. Pure, and here rather than in [AndroidSpeechToText],
+     * because the codes that matter most are the two that cannot be reproduced anywhere but on
+     * Chris' own phone.
+     */
+    fun classOf(errorCode: Int): ErrorClass = when (errorCode) {
+        SpeechRecognizer.ERROR_NETWORK, SpeechRecognizer.ERROR_NETWORK_TIMEOUT -> ErrorClass.NO_CONNECTION
+        SpeechRecognizer.ERROR_LANGUAGE_NOT_SUPPORTED, SpeechRecognizer.ERROR_LANGUAGE_UNAVAILABLE -> ErrorClass.NO_GREEK
+        SpeechRecognizer.ERROR_RECOGNIZER_BUSY, SpeechRecognizer.ERROR_TOO_MANY_REQUESTS -> ErrorClass.BUSY
+        else -> ErrorClass.UNKNOWN
+    }
+
+    /** The line a module puts on the screen for one code. Shorthand for `classOf(code).line`. */
+    fun lineFor(errorCode: Int): String = classOf(errorCode).line
 
     /**
      * Whether to open another session after one came back having heard nothing.
@@ -122,14 +172,30 @@ object Recognition {
     const val NOT_WORKING = "Η αναγνώριση δεν λειτούργησε. Δες τις ρυθμίσεις."
 }
 
-/** Why a recognition window came back with no words. The two are treated very differently. */
+/**
+ * Why a recognition window came back with no words. The two are treated very differently.
+ *
+ * Both carry [take], because on the on-device path the window *is* the take: one [PcmTake] feeds the
+ * recogniser through a pipe and a WAV at the same time, and the file is finished whatever the engine
+ * made of it. A man whose effortful Greek the recogniser answered `ERROR_NO_MATCH` to still said the
+ * word, and the recording of him saying it is the thing he presses «Άκου» to hear. Throwing it away
+ * because the phone was not sure would be the app disagreeing with him and then hiding the evidence.
+ */
 sealed class SpeechFailure(message: String) : Exception(message) {
+    /** His own voice from this window, when the engine recorded one. Null on every other path. */
+    abstract val take: Recorded?
+
     /**
      * Nothing was heard — silence, or a sound that matched no word. An ordinary outcome, answered
      * with the gentle line and another go.
      */
-    class HeardNothing : SpeechFailure("Δεν άκουσα τίποτα")
+    class HeardNothing(override val take: Recorded? = null) : SpeechFailure("Δεν άκουσα τίποτα")
 
-    /** The phone could not listen. A caregiver's problem, logged once, and it costs him no try. */
-    class NotWorking(val code: Int) : SpeechFailure("${Recognition.NOT_WORKING} ($code)")
+    /**
+     * The phone could not listen. A caregiver's problem, logged once per class per run, and it costs
+     * him no try. The message carries the honest line for the code, so the row in «Σφάλματα» says
+     * which of the three things went wrong rather than only that something did.
+     */
+    class NotWorking(val code: Int, override val take: Recorded? = null) :
+        SpeechFailure("${Recognition.lineFor(code)} ($code)")
 }

@@ -12,6 +12,11 @@ import java.util.TimerTask
  * One finished take. [peakAmplitude] is the loudest sample of it on [MediaRecorder.getMaxAmplitude]'s
  * 0..32767 scale, and is what tells a take he spoke into from a take he did not.
  *
+ * Two recorders fill this in now, on the same scale and against the same line: [Recorder], which
+ * polls the AAC encoder, and [gr.dimitris.app.core.speech.PcmTake], which knows the exact peak
+ * because it has the samples in its hand ([Wav.peakOf]). The second is the one «Μίλα» uses on the
+ * on-device path, where one microphone feeds the recogniser and his own file at once.
+ *
  * It defaults to 0 so that a [Recorded] built anywhere else — a test, a future recorder — reads as
  * silence rather than quietly passing a check it was never measured for.
  */

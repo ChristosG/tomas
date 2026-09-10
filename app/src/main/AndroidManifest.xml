@@ -5,6 +5,11 @@
          with the phone in flight mode. -->
     <uses-permission android:name="android.permission.INTERNET" />
 
+    <!-- Read-only, and for one sentence: telling "the recogniser needs a connection" apart from
+         "this phone has no recogniser at all", so the line he is shown names the real trouble.
+         A normal permission — nothing is ever asked of him or of his caregiver for it. -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-permission android:name="android.permission.VIBRATE" />

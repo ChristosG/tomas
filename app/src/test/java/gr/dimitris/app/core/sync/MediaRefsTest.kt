@@ -110,6 +110,32 @@ class MediaRefsTest {
         assertEquals("ψωμί", out["text"])
     }
 
+    // A take made by «Μίλα» on the on-device path is a `.wav`: the same PCM the recogniser was fed.
+    // It has to travel and land exactly like the .m4a takes beside it.
+
+    @Test fun `a wav take is content-addressed like any other voice`() {
+        val file = files.recording("take.wav", "abc".toByteArray())
+        val row = mapOf<String, Any?>("id" to "r1", "path" to "recordings/take.wav", "who" to "DIMITRIS")
+
+        val (out, uploads) = MediaRefs.outgoing(Tables.RECORDINGS, row, files)
+
+        assertEquals("media://$abcSha", out["path"])
+        assertEquals(listOf(file.canonicalFile), uploads.map { it.file.canonicalFile })
+    }
+
+    /** A phone that has never made one still has to put it with the rest of his voice. */
+    @Test fun `a wav lands in the recordings folder`() {
+        assertEquals(files.recordingsDir, MediaRefs.folderFor(Tables.WAV_EXT, files))
+        assertEquals(files.recordingsDir, MediaRefs.folderFor(Tables.RECORDING_EXT, files))
+        assertEquals(files.photosDir, MediaRefs.folderFor(Tables.PHOTO_EXT, files))
+    }
+
+    @Test fun `both voice extensions are voices`() {
+        assertEquals(setOf("m4a", "wav"), Tables.RECORDING_EXTS)
+        assertTrue(Tables.RECORDING_EXT in Tables.RECORDING_EXTS)
+        assertTrue(Tables.WAV_EXT in Tables.RECORDING_EXTS)
+    }
+
     @Test fun `a value that only looks like a media url is not one`() {
         assertNull(MediaRefs.shaOf("media://not-a-hash"))
         assertNull(MediaRefs.shaOf("photos/x.jpg"))

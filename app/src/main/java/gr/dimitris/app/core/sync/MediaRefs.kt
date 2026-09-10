@@ -119,9 +119,15 @@ object MediaRefs {
             shaOf(row[field])?.let { it to extension }
         }
 
-    /** Where a downloaded file belongs: pictures with the pictures, voices with the voices. */
+    /**
+     * Where a downloaded file belongs: pictures with the pictures, voices with the voices.
+     *
+     * Both voice extensions are accepted. A take made by «Μίλα» on the on-device path is a `.wav` —
+     * the same PCM the recogniser was fed — and a phone that has never seen one must still put it
+     * with the rest of his voice rather than among the photographs.
+     */
     fun folderFor(extension: String, files: MediaPaths): File =
-        if (extension == Tables.RECORDING_EXT) files.recordingsDir else files.photosDir
+        if (extension in Tables.RECORDING_EXTS) files.recordingsDir else files.photosDir
 
     private fun isSynced(file: File, files: MediaPaths): Boolean =
         under(file, files.photosDir) || under(file, files.recordingsDir)

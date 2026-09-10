@@ -1,5 +1,6 @@
 package gr.dimitris.app.core.speech
 
+import gr.dimitris.app.core.audio.Wav
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
@@ -50,4 +51,43 @@ class RecognizerIntentsTest {
             english.filterKeys { it != "android.speech.extra.LANGUAGE" },
         )
     }
+
+    // The audio-source extras: the mechanism behind the one speech control.
+
+    private val source = RecognizerIntents.audioSource()
+
+    /**
+     * These three are what let one microphone serve both purposes. The app opens it, writes a WAV he
+     * can play back, and hands the engine the same samples down a pipe — and the engine cannot guess
+     * the format of bytes arriving down a pipe, so it is told.
+     *
+     * Asserted as the real extra names rather than through the constants, so a rename or a wrong
+     * constant cannot make this test agree with itself.
+     */
+    @Test fun `the engine is told one channel`() =
+        assertEquals(1, source["android.speech.extra.AUDIO_SOURCE_CHANNEL_COUNT"])
+
+    @Test fun `sixteen-bit PCM`() =
+        // AudioFormat.ENCODING_PCM_16BIT, which is 2. The number matters: the engine reads it raw.
+        assertEquals(2, source["android.speech.extra.AUDIO_SOURCE_ENCODING"])
+
+    @Test fun `and sixteen kilohertz`() =
+        assertEquals(16_000, source["android.speech.extra.AUDIO_SOURCE_SAMPLING_RATE"])
+
+    @Test fun `nothing else rides along with them either`() = assertEquals(3, source.size)
+
+    /**
+     * The format the engine is told and the format the file is written in have to be the same numbers,
+     * or the recogniser hears a man speaking at the wrong speed while the take plays back correctly —
+     * a mismatch that would look like his Greek being unintelligible.
+     */
+    @Test fun `what the engine is told is what the file holds`() {
+        assertEquals(Wav.SAMPLE_RATE, source["android.speech.extra.AUDIO_SOURCE_SAMPLING_RATE"])
+        assertEquals(Wav.CHANNELS, source["android.speech.extra.AUDIO_SOURCE_CHANNEL_COUNT"])
+        assertEquals(16, Wav.BITS_PER_SAMPLE)
+    }
+
+    /** The pipe itself is not data and cannot be asserted here, but its extra's name can be. */
+    @Test fun `the pipe goes in under the audio-source name`() =
+        assertEquals("android.speech.extra.AUDIO_SOURCE", android.speech.RecognizerIntent.EXTRA_AUDIO_SOURCE)
 }

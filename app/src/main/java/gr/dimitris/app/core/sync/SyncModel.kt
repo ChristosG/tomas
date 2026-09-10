@@ -98,6 +98,15 @@ object Tables {
     /** Matches [gr.dimitris.app.core.audio.MediaFiles.newRecordingFile]. */
     const val RECORDING_EXT = "m4a"
 
+    /**
+     * And [gr.dimitris.app.core.audio.MediaFiles.newWavFile]: a take made by «Μίλα» on the on-device
+     * path is raw PCM in a WAV, because the same samples went to the recogniser down a pipe.
+     */
+    const val WAV_EXT = "wav"
+
+    /** Both names a voice can arrive under, so either lands in the recordings folder. */
+    val RECORDING_EXTS: Set<String> = setOf(RECORDING_EXT, WAV_EXT)
+
     val all: List<TableSpec> = listOf(
         TableSpec(ITEMS, Item::class.java, appendOnly = false, mediaFields = mapOf("imagePath" to PHOTO_EXT),
             idOf = ::plainId, sample = { Item(text = "") }),

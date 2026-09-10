@@ -67,7 +67,7 @@ class AppGraph(context: Context) {
      * drive the gentle check of spec §12 in a test is to put a fake in front of the three modules.
      * Nothing in the app ever assigns it.
      */
-    var stt: SpeechToText = AndroidSpeechToText(app)
+    var stt: SpeechToText = AndroidSpeechToText(app, newTakeFile = files::newWavFile)
     val recorder = Recorder(app, files)
     val player = Player()
     /** Owned by [voice], which is the only production caller; kept here so tests can drive it alone. */

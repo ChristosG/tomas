@@ -3,6 +3,7 @@ package gr.dimitris.app.core.speech
 import android.speech.SpeechRecognizer
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -153,7 +154,87 @@ class RecognitionTest {
     @Test fun `a failure carries its code so the modules can tell the two apart`() {
         val failed = SpeechFailure.NotWorking(SpeechRecognizer.ERROR_NETWORK)
         assertEquals(SpeechRecognizer.ERROR_NETWORK, failed.code)
-        assertTrue(failed.message!!.startsWith(Recognition.NOT_WORKING))
+        // The message is the honest line for the code, so the caregiver's «Σφάλματα» row says which
+        // of the three things went wrong rather than only that something did.
+        assertTrue(failed.message!!.startsWith(Recognition.ErrorClass.NO_CONNECTION.line))
         assertTrue(SpeechFailure.HeardNothing() is SpeechFailure)
+    }
+
+    /** Neither failure carries a take unless the window actually made one. */
+    @Test fun `a window with no take says so`() {
+        assertNull(SpeechFailure.HeardNothing().take)
+        assertNull(SpeechFailure.NotWorking(SpeechRecognizer.ERROR_NETWORK).take)
+    }
+
+    // The error classes. Chris' two codes first, because they are why these exist at all.
+
+    /**
+     * Code 12 on his phone: the recognition service it had fallen back to has no Greek in it. The
+     * line points at the settings row that can fix it in one tap, which is the difference between a
+     * dead end and a thing a caregiver can do.
+     */
+    @Test fun `a missing Greek model is said as a missing Greek model`() {
+        assertEquals(12, SpeechRecognizer.ERROR_LANGUAGE_NOT_SUPPORTED)
+        assertEquals(Recognition.ErrorClass.NO_GREEK, Recognition.classOf(SpeechRecognizer.ERROR_LANGUAGE_NOT_SUPPORTED))
+        assertEquals(
+            "Λείπουν τα ελληνικά. Κατέβασέ τα από τις ρυθμίσεις.",
+            Recognition.lineFor(SpeechRecognizer.ERROR_LANGUAGE_NOT_SUPPORTED),
+        )
+    }
+
+    @Test fun `and so is a Greek model the engine will not serve`() {
+        assertEquals(13, SpeechRecognizer.ERROR_LANGUAGE_UNAVAILABLE)
+        assertEquals(Recognition.ErrorClass.NO_GREEK, Recognition.classOf(SpeechRecognizer.ERROR_LANGUAGE_UNAVAILABLE))
+    }
+
+    /** Code 2 on his phone, the day after: a cloud engine and no connection. */
+    @Test fun `no network is said as needing a connection`() {
+        assertEquals(2, SpeechRecognizer.ERROR_NETWORK)
+        assertEquals(Recognition.ErrorClass.NO_CONNECTION, Recognition.classOf(SpeechRecognizer.ERROR_NETWORK))
+        assertEquals("Χρειάζεται σύνδεση για την αναγνώριση.", Recognition.lineFor(SpeechRecognizer.ERROR_NETWORK))
+    }
+
+    @Test fun `and so is a network that timed out`() {
+        assertEquals(1, SpeechRecognizer.ERROR_NETWORK_TIMEOUT)
+        assertEquals(Recognition.ErrorClass.NO_CONNECTION, Recognition.classOf(SpeechRecognizer.ERROR_NETWORK_TIMEOUT))
+    }
+
+    /** Nothing is wrong and nothing needs fixing: the one honest answer is "in a moment". */
+    @Test fun `a busy recogniser is said as busy`() {
+        assertEquals(8, SpeechRecognizer.ERROR_RECOGNIZER_BUSY)
+        assertEquals(10, SpeechRecognizer.ERROR_TOO_MANY_REQUESTS)
+        assertEquals(Recognition.ErrorClass.BUSY, Recognition.classOf(SpeechRecognizer.ERROR_RECOGNIZER_BUSY))
+        assertEquals(Recognition.ErrorClass.BUSY, Recognition.classOf(SpeechRecognizer.ERROR_TOO_MANY_REQUESTS))
+        assertEquals("Η αναγνώριση είναι απασχολημένη. Δοκίμασε σε λίγο.", Recognition.lineFor(SpeechRecognizer.ERROR_RECOGNIZER_BUSY))
+    }
+
+    /**
+     * Everything the app has no better sentence for keeps the old line. A code from an Android newer
+     * than this build is not guessed about — and a wrong guess about his phone is worse than a
+     * general one.
+     */
+    @Test fun `everything else keeps the old line`() {
+        for (code in listOf(
+            SpeechRecognizer.ERROR_AUDIO,
+            SpeechRecognizer.ERROR_SERVER,
+            SpeechRecognizer.ERROR_CLIENT,
+            SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS,
+            SpeechRecognizer.ERROR_SERVER_DISCONNECTED,
+            AndroidSpeechToText.NO_RECOGNIZER,
+            9_999,
+        )) {
+            assertEquals("code $code has no sentence of its own", Recognition.ErrorClass.UNKNOWN, Recognition.classOf(code))
+            assertEquals(Recognition.NOT_WORKING, Recognition.lineFor(code))
+        }
+    }
+
+    /** Not one of the four is about his voice. That is the rule the classes exist to keep. */
+    @Test fun `no line blames him`() {
+        for (klass in Recognition.ErrorClass.entries) {
+            assertTrue("«${klass.line}» must say something", klass.line.isNotBlank())
+            for (blame in listOf("λάθος", "δεν σε άκουσα", "δεν μίλησες")) {
+                assertFalse("«${klass.line}» blames him", klass.line.contains(blame, ignoreCase = true))
+            }
+        }
     }
 }

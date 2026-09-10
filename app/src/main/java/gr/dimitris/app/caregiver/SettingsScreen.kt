@@ -32,6 +32,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
@@ -41,13 +42,16 @@ import gr.dimitris.app.core.data.ModuleId
 import gr.dimitris.app.core.secrets.SecretStore
 import gr.dimitris.app.core.settings.DeviceRole
 import gr.dimitris.app.core.settings.Settings
+import gr.dimitris.app.core.speech.OnDeviceSupport
 import gr.dimitris.app.modules.singsay.Key
 import gr.dimitris.app.modules.singsay.Tempo
 import gr.dimitris.app.modules.trace.TraceStrictness
+import gr.dimitris.app.ui.components.BigButton
 import gr.dimitris.app.ui.components.DimitrisScreen
 import gr.dimitris.app.ui.components.QuietButton
 import gr.dimitris.app.ui.theme.Sizes
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -120,6 +124,84 @@ private fun KeyChip(label: String, value: Key, chosen: Key, modifier: Modifier =
         shape = RoundedCornerShape(Sizes.corner),
         modifier = modifier.heightIn(min = Sizes.touchMin),
     )
+}
+
+/**
+ * What this phone can do about Greek without a connection, and the one tap that fixes it.
+ *
+ * The whole row exists because of Chris' field report. His phone answered `ERROR_LANGUAGE_NOT_SUPPORTED`
+ * for a day and then `ERROR_NETWORK`, and the only thing the app ever said was «Η αναγνώριση δεν
+ * λειτούργησε. Δες τις ρυθμίσεις.» — which sent him to a settings screen that said nothing about
+ * either and offered nothing to do. Now the screen he is sent to answers the question: the Greek model
+ * is installed, or missing and one button away, or being fetched, or not something this phone can do.
+ *
+ * [LISTEN_STATE_TAG] is how the instrumented test finds the line. The emulator has no speech engine
+ * at all, so what it proves is the honest bottom of the ladder: «δεν υποστηρίζεται», and no button.
+ */
+@Composable
+private fun GreekModelRow() {
+    val graph = LocalAppGraph.current
+    val scope = rememberCoroutineScope()
+
+    // Null until the engine has been asked. The line is not drawn at all until then: a row that said
+    // «δεν υποστηρίζεται» for a beat on a phone that does support it would be a lie with a timer on it.
+    var engine by remember { mutableStateOf<OnDeviceSupport.Engine?>(null) }
+
+    /** A download this screen started, or one the engine was already running when we looked. */
+    var downloading by remember { mutableStateOf(false) }
+
+    suspend fun reread() {
+        engine = graph.stt.engine(fresh = true)
+        downloading = graph.stt.greekPending()
+    }
+
+    LaunchedEffect(Unit) { reread() }
+
+    // While it says «λήψη…», ask again every few seconds. The listener on Android 14 reports the
+    // finish and this poll is the belt to its braces; on Android 13 there is no listener at all and
+    // the poll is the only way the row ever stops saying «λήψη…».
+    LaunchedEffect(downloading) {
+        var rounds = 0
+        while (downloading && rounds < DOWNLOAD_POLLS) {
+            delay(DOWNLOAD_POLL_MS)
+            rounds++
+            engine = graph.stt.engine(fresh = true)
+            if (engine == OnDeviceSupport.Engine.ON_DEVICE) break
+            downloading = graph.stt.greekPending()
+        }
+        // A download nobody can see the end of must not leave the row claiming for ever that one is
+        // running: it goes back to what the engine says, which is «δεν υπάρχουν» and the button again.
+        if (rounds >= DOWNLOAD_POLLS) downloading = false
+    }
+
+    val resolved = engine ?: return
+    val greek = OnDeviceSupport.greekFor(resolved, downloading)
+    Text(
+        OnDeviceSupport.lineFor(greek),
+        style = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.testTag(LISTEN_STATE_TAG),
+    )
+    // Offered only when there is something to fetch and nothing already fetching it. On-device Greek
+    // is what makes transcription free and offline, which is the whole of spec §13.
+    if (greek == OnDeviceSupport.Greek.MISSING) {
+        Spacer(Modifier.height(Sizes.gapSmall))
+        BigButton(
+            OnDeviceSupport.DOWNLOAD,
+            onClick = {
+                downloading = true
+                scope.launch {
+                    try {
+                        graph.stt.downloadGreek()
+                    } finally {
+                        // Whatever it answered, the engine is the authority on what happened.
+                        engine = graph.stt.engine(fresh = true)
+                        downloading = graph.stt.greekPending()
+                    }
+                }
+            },
+        )
+    }
 }
 
 @Composable
@@ -284,6 +366,7 @@ fun SettingsScreen(onBack: () -> Unit) {
                 )
                 Switch(checked = stt && sttAvailable, enabled = sttAvailable, onCheckedChange = { on -> scope.launch { graph.settings.setSttEnabled(on) } })
             }
+            GreekModelRow()
             Spacer(Modifier.height(Sizes.gap))
 
             // Asked once on the very first launch, and changed here when the answer was wrong or
@@ -436,3 +519,14 @@ private fun ClaudeSection() {
         color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
 }
+
+/** How a test finds the one line that says what this phone can do about Greek offline. */
+const val LISTEN_STATE_TAG = "greek-model-state"
+
+/**
+ * How often the row re-asks the engine while it says «λήψη…», and for how long it keeps asking.
+ * Three seconds for twenty rounds is a minute of patience — long enough for a language model over a
+ * phone connection, short enough that a download nobody will ever see the end of stops being claimed.
+ */
+private const val DOWNLOAD_POLL_MS = 3_000L
+private const val DOWNLOAD_POLLS = 20
