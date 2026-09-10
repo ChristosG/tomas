@@ -79,7 +79,11 @@ class Settings(private val store: DataStore<Preferences>) {
         }
     }
 
-    /** How long a sentence he is building, 1..4. See [numbersLevel] for why the dot follows it. */
+    /**
+     * How long a sentence he is building, 1..8 since phase 12: four levels of word order, and then
+     * the articles, the prepositions, a clause and a question. See [numbersLevel] for why the dot
+     * follows it.
+     */
     val sentencesLevel: Flow<Int> = store.data.map { it[SENTENCES_LEVEL] ?: 1 }
     suspend fun setSentencesLevel(level: Int) {
         store.edit { p ->

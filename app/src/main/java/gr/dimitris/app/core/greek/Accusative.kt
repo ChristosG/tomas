@@ -38,17 +38,12 @@ private fun dropFinalSigma(word: String): String {
     if (!ends || word.length < 2) return word
     // Typed in a hurry: «ΚΑΦΕΣ» and «κρεας» have to be recognised as the words they are.
     val bare = Greek.stripAccents(Greek.normalize(word))
-    if (bare in NEUTER_IN_SIGMA || isPlural(word, bare)) return word
+    // A plural that is already the accusative: «πατάτες», «γυναίκες», «πόλεις». Told apart from the
+    // masculine singulars that end the same way — «καφές», «χυμός» — by where the accent sits, which
+    // is [pluralEnding]'s rule: the article levels need exactly the same call, and one copy of it.
+    if (bare in NEUTER_IN_SIGMA || pluralEnding(word)) return word
     return word.dropLast(1)
 }
-
-/**
- * A plural that is already the accusative: «πατάτες», «γυναίκες», «πόλεις». Told apart from the
- * masculine singulars that end the same way — «καφές», «χυμός» — by where the accent sits: the
- * singulars carry it on the ending they are about to lose, the plurals never on that -ες.
- */
-private fun isPlural(word: String, bare: String): Boolean =
-    bare.endsWith("εις") || (bare.endsWith("ες") && word.dropLast(1).last().lowercaseChar() == 'ε')
 
 /** Both sigmas: a word typed in capitals ends in Σ, and one typed properly in ς. */
 private val SIGMA = setOf('ς', 'σ')
@@ -58,8 +53,11 @@ private val SIGMA = setOf('ς', 'σ')
  * accents, the way a caregiver's typing is compared. A neuter missing from this list loses its
  * ending on a sentence card, so it is worth adding to rather than clever about — the -ος and -ας
  * neuters are a closed class, and these are the ones a kitchen, a house and a body are made of.
+ *
+ * Shared with [nounForm], which has to make the same call for the same reason: a neuter that ends in
+ * sigma keeps its sigma *and* takes «το».
  */
-private val NEUTER_IN_SIGMA = setOf(
+internal val NEUTER_IN_SIGMA = setOf(
     "κρεας", "τερας", "περας", "γηρας",
     "φως", "λαθος", "μερος", "τελος", "ειδος", "μεγεθος", "βαρος", "υψος", "μηκος", "πλατος", "βαθος",
     "δασος", "κρατος", "ετος", "πληθος", "χρεος", "στηθος", "ηθος", "εδαφος", "γεγονος",

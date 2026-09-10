@@ -102,12 +102,14 @@ class SettingsTest {
     }
 
     /** Its own counter with its own ceiling: four sentence levels, not the numbers module's fifteen. */
-    @Test fun `sentences level starts at 1 and is clamped to 1__4`() = runBlocking {
+    /** Eight since phase 12: four levels of word order, and then the small words between them. */
+    @Test fun `sentences level starts at 1 and is clamped to 1__8`() = runBlocking {
         val s = newSettings()
         assertEquals(1, s.sentencesLevel.first())
-        s.setSentencesLevel(9); assertEquals(4, s.sentencesLevel.first())
+        s.setSentencesLevel(9); assertEquals(8, s.sentencesLevel.first())
         s.setSentencesLevel(0); assertEquals(1, s.sentencesLevel.first())
         s.setSentencesLevel(3); assertEquals(3, s.sentencesLevel.first())
+        s.setSentencesLevel(7); assertEquals(7, s.sentencesLevel.first())
         assertEquals(1, s.numbersLevel.first())
     }
 

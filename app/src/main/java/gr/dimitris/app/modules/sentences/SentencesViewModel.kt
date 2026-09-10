@@ -13,6 +13,7 @@ import gr.dimitris.app.core.data.now
 import gr.dimitris.app.core.difficulty.Difficulty
 import gr.dimitris.app.core.scheduler.LevelProgression
 import gr.dimitris.app.modules.wordcoach.CueLadder
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -38,10 +39,17 @@ internal fun sentencesDetail(
     retries: Int,
     undo: Int,
     ms: Long,
+    /** Which of the three ways this board asked its question. Since phase 12; `BUILD` before it. */
+    variant: Variant = Variant.BUILD,
+    /** What the judge decided, on the one board that asks it. Absent everywhere else. */
+    judge: Map<String, Any?> = emptyMap(),
 ): String = Adapt.detail {
     // Kept, not put: an empty list was written as `[]` before this helper existed and still is,
     // and the labels are his own vocabulary, which these rows already carried.
     kept("tiles", tiles)
+    // On a built board, the cards in the order he tapped them. On a gap board, the small word he
+    // chose. On a typed board, the one sentence he wrote — the same column, the same question
+    // ("what did he put down?"), and `variant` is what says which of the three to read it as.
     kept("chosen", chosen)
     put("firstTry", firstTry)
     put("listened", listened)
@@ -49,6 +57,8 @@ internal fun sentencesDetail(
     put("retries", retries)
     put("undo", undo)
     put("ms", ms)
+    put("variant", variant)
+    put("judge", judge)
 }
 
 data class SentencesState(
@@ -72,6 +82,18 @@ data class SentencesState(
     val levelChanged: Int? = null,
     /** Said on the screen when a tap made no sound at all. */
     val error: String? = null,
+    /** What he has written on a [Variant.TYPED] board, as it stands. */
+    val typed: String = "",
+    /** The judge is reading his sentence right now: «Έτοιμο» is off for exactly as long as that lasts. */
+    val checking: Boolean = false,
+    /**
+     * The whole sentence, left on the screen after a typed answer that did not land — the model's
+     * expansion where there was one, and the board's own sentence where there was not. Null while
+     * there is nothing to copy.
+     */
+    val whole: String? = null,
+    /** The judge's one warm Greek line about what he wrote, when it had one. */
+    val feedback: String? = null,
 )
 
 /**
@@ -135,12 +157,32 @@ class SentencesViewModel(
     private var ending = false
 
     /**
+     * Whether «Έλεγχος με Claude» will really answer. Read once, when the sitting is planned,
+     * because it decides which boards are built: only the judge can read a sentence he typed.
+     */
+    private var judged = false
+
+    /** His own 1–5 dot row for this module, as the judge is told it. */
+    private var dots = Difficulty.DEFAULT
+
+    /** The typed board he is on, or null on a board that is not one. One per board, like the sentence. */
+    private var typing: TypedCheck? = null
+
+    /** What the judge said about the board just finished, for the attempt row. */
+    private var lastVerdict: Map<String, Any?> = emptyMap()
+
+    /**
      * True from the moment a sentence is finished or skipped until the next one starts. It carries
      * both guards: one attempt per sentence, and one advance per finished sentence.
      */
     private var finishing = false
 
-    init { load() }
+    init {
+        load()
+        // A new screen is a new run: the judge writes one row per failure class per run, and a
+        // sitting on an offline phone must not fill «Σφάλματα» with one row per sentence.
+        graph.judge.newRun()
+    }
 
     /** He moved the dots. The sitting is rebuilt at the level the new band starts from. */
     fun reload() {
@@ -167,11 +209,20 @@ class SentencesViewModel(
             }
             val pool = runCatching { graph.db.items().activeOfKinds(listOf(ItemKind.WORD)) }
                 .getOrElse { graph.errors.record("sentences pool", it); emptyList() }
+            // Before the boards are built, because it decides which ones exist: a typed board with
+            // nothing behind it would either accept anything he wrote or refuse all of it, and both
+            // are worse than not asking. `available()` opens the encrypted key file, so it is taken
+            // here, in the same breath as the settings, and not once per sentence.
+            dots = difficulty
+            judged = runCatching { graph.judge.available() }
+                .onFailure { graph.errors.record(TypedCheck.WHERE, it) }
+                .getOrDefault(false)
             results.clear()
             sentences = plan(level, pool)
             // Not before the settings read and the vocabulary query: their wait is not his thinking time.
             startedAt = now()
             val first = sentences.firstOrNull()
+            typing = first?.let(::typedCheck)
             _state.value = SentencesState(
                 level = level,
                 difficulty = difficulty,
@@ -198,11 +249,11 @@ class SentencesViewModel(
     private fun plan(level: Int, pool: List<Item>): List<Sentence> {
         var at = level.coerceAtMost(SentenceTemplates.MAX_LEVEL)
         while (at >= SentenceTemplates.MIN_LEVEL) {
-            val made = templates.session(at, pool, wanted).toMutableList()
+            val made = templates.session(at, pool, wanted, judged).toMutableList()
             if (made.isNotEmpty()) {
                 // Short only because a shape came up empty by chance — ask again at the same level.
                 while (made.size < wanted) {
-                    val more = templates.session(at, pool, wanted - made.size)
+                    val more = templates.session(at, pool, wanted - made.size, judged)
                     if (more.isEmpty()) break
                     made += more
                 }
@@ -212,6 +263,20 @@ class SentencesViewModel(
         }
         return emptyList()
     }
+
+    /**
+     * The check for one typed board. Built per board, because [TypedCheck.nudged] is what separates
+     * a sentence he wrote himself from one he copied off the screen, and that is a fact about this
+     * board and no other.
+     */
+    private fun typedCheck(sentence: Sentence) =
+        if (sentence.variant != Variant.TYPED) null
+        else TypedCheck(
+            judged = { judged },
+            difficulty = { dots },
+            askJudge = { ask -> graph.judge.judge(ask) },
+            record = { where, e -> graph.errors.record(where, e) },
+        )
 
     /**
      * The cards as they are laid out. Plain shuffled, so at level 1 the board is in the answer's
@@ -230,6 +295,7 @@ class SentencesViewModel(
         val sentence = s.sentence ?: return
         // Finished (right, or waiting for «Επόμενο»), or the sitting is over: the board is closed.
         if (finishing || ending) return
+        if (sentence.variant != Variant.BUILD) return
         if (s.chosen.any { it.item.id == tile.item.id }) return
         if (s.chosen.size >= sentence.tiles.size) return
         val chosen = s.chosen + tile
@@ -243,7 +309,7 @@ class SentencesViewModel(
             finishing = true
             _state.update { it.copy(correct = true) }
             speaking { report(graph.speaker.speakText(sentence.text)) }
-            record(sentence, chosen, firstTry = s.wrongTries == 0, retries = s.wrongTries)
+            record(sentence, chosen.map { it.label }, firstTry = s.wrongTries == 0, retries = s.wrongTries)
         } else {
             // Never a fail state: the sentence is said and left on the screen, the cards come back,
             // and he tries again as often as he likes. Only the first-try mark is spent.
@@ -259,6 +325,105 @@ class SentencesViewModel(
         if (_state.value.chosen.isEmpty()) return
         undos++
         _state.update { it.copy(chosen = it.chosen.dropLast(1)) }
+    }
+
+    /**
+     * One of the three small words on a gap board.
+     *
+     * The same rules as the builder, asked of the one word the sentence is missing: right is his own
+     * answer the first time and assisted after that, wrong is «Σχεδόν.» with the whole sentence left
+     * on the screen and the three cards handed back. There is no limit and no way to fail here
+     * either — the two options that are not the answer agree with no noun on the board, so the only
+     * thing a wrong tap can mean is that the agreement is what he is still learning.
+     */
+    fun chooseGap(option: String) {
+        val s = _state.value
+        val sentence = s.sentence ?: return
+        if (finishing || ending) return
+        if (sentence.variant != Variant.GAP) return
+        if (option == sentence.answer) {
+            graph.feedback.success()
+            finishing = true
+            _state.update { it.copy(correct = true) }
+            speaking { report(graph.speaker.speakText(sentence.text)) }
+            record(sentence, listOf(option), firstTry = s.wrongTries == 0, retries = s.wrongTries)
+        } else {
+            graph.feedback.nudge()
+            _state.update { it.copy(correct = false, wrongTries = it.wrongTries + 1) }
+            speaking { report(graph.speaker.speakText("$WRONG_ORDER ${sentence.text}")) }
+        }
+    }
+
+    /** One keystroke on a typed board. Nothing is judged until he says he is done. */
+    fun onTypedChange(text: String) {
+        if (finishing || ending) return
+        if (_state.value.sentence?.variant != Variant.TYPED) return
+        _state.update { it.copy(typed = text) }
+    }
+
+    /**
+     * «Έτοιμο»: the sentence he wrote, read by the judge (spec §13).
+     *
+     * Accepted is his own sentence — CORRECT the first time, ASSISTED once the whole form has been
+     * on the screen. Refused is never a wall: the whole form is shown and said, the keyboard stays,
+     * and he may write it again as often as he likes or press «Το έγραψα» when he has copied it.
+     */
+    fun submitTyped() {
+        val s = _state.value
+        val sentence = s.sentence ?: return
+        val check = typing ?: return
+        if (finishing || ending || s.checking) return
+        if (sentence.variant != Variant.TYPED) return
+        val said = s.typed.trim()
+        if (said.isEmpty()) return
+        _state.update { it.copy(checking = true) }
+        viewModelScope.launch {
+            val written = try {
+                check.weigh(said, prompt = sentence.picture?.item?.text.orEmpty(), target = sentence.text)
+            } catch (ce: CancellationException) {
+                throw ce
+            } catch (e: Throwable) {
+                // Nothing in [TypedCheck] throws; if anything ever does, the keyboard comes back
+                // rather than the board dying under it.
+                graph.errors.record(TypedCheck.WHERE, e)
+                _state.update { it.copy(checking = false) }
+                return@launch
+            }
+            lastVerdict = written.judge
+            if (written.accepted) {
+                graph.feedback.success()
+                finishing = true
+                _state.update { it.copy(checking = false, correct = true, whole = null, feedback = written.feedback) }
+                speaking { report(graph.speaker.speakText(sentence.text)) }
+                record(sentence, listOf(said), firstTry = written.firstTry, retries = s.wrongTries)
+            } else {
+                graph.feedback.nudge()
+                _state.update {
+                    it.copy(
+                        checking = false, correct = false, wrongTries = it.wrongTries + 1,
+                        whole = written.whole, feedback = written.feedback,
+                    )
+                }
+                written.whole?.let { whole -> speaking { report(graph.speaker.speakText("$CORRECTION $whole")) } }
+            }
+        }
+    }
+
+    /**
+     * «Το έγραψα»: he has copied the sentence off the screen and says so.
+     *
+     * Assisted work, on the same footing as a rebuilt sentence — the form was in front of him — and
+     * the only way off a typed board that is not another go at the keyboard or «Παράλειψη».
+     */
+    fun confirmTyped() {
+        val s = _state.value
+        val sentence = s.sentence ?: return
+        if (finishing || ending || s.checking) return
+        if (sentence.variant != Variant.TYPED || s.whole == null) return
+        graph.feedback.success()
+        finishing = true
+        _state.update { it.copy(correct = true) }
+        record(sentence, listOf(s.typed.trim()), firstTry = false, retries = s.wrongTries)
     }
 
     /**
@@ -316,7 +481,11 @@ class SentencesViewModel(
         if (finishing || ending) return
         finishing = true
         graph.feedback.nudge()
-        record(sentence, s.chosen, firstTry = false, retries = s.wrongTries, skipped = true)
+        // Whatever he had put down when he passed on it: the cards on a built board, the half a
+        // sentence on a typed one. A skip with nothing on it writes the empty board he left.
+        val left = if (sentence.variant == Variant.TYPED) listOfNotNull(s.typed.trim().takeIf { it.isNotEmpty() })
+        else s.chosen.map { it.label }
+        record(sentence, left, firstTry = false, retries = s.wrongTries, skipped = true)
         advance()
     }
 
@@ -336,6 +505,8 @@ class SentencesViewModel(
         val i = s.index + 1
         if (i >= sentences.size) { finishSitting(); return }
         val sentence = sentences[i]
+        typing = typedCheck(sentence)
+        lastVerdict = emptyMap()
         startedAt = now()
         // The listens belonged to the sentence being left, and so does whatever was being said: he
         // taps the green «Επόμενο» the instant the mark appears, while the sentence he just built
@@ -346,7 +517,10 @@ class SentencesViewModel(
         undos = 0
         silence()
         _state.update {
-            it.copy(index = i, sentence = sentence, shuffledTiles = board(sentence), chosen = emptyList(), correct = null, wrongTries = 0)
+            it.copy(
+                index = i, sentence = sentence, shuffledTiles = board(sentence), chosen = emptyList(),
+                correct = null, wrongTries = 0, typed = "", checking = false, whole = null, feedback = null,
+            )
         }
     }
 
@@ -396,7 +570,8 @@ class SentencesViewModel(
         onFailure = { e -> graph.errors.record("sentences speak", e); _state.update { it.copy(error = SPEECH_FAILED) } },
     )
 
-    private fun record(sentence: Sentence, chosen: List<Tile>, firstTry: Boolean, retries: Int, skipped: Boolean = false) {
+    /** [chosen] is what he put down, read as [Variant] says — see [sentencesDetail]. */
+    private fun record(sentence: Sentence, chosen: List<String>, firstTry: Boolean, retries: Int, skipped: Boolean = false) {
         // A sentence he asked to hear is a sentence he was given: assisted work, on the same footing
         // as one he had to be corrected on. The button stays; only the row knows.
         val heard = listens
@@ -412,13 +587,15 @@ class SentencesViewModel(
         val began = startedAt
         val detail = sentencesDetail(
             tiles = sentence.tiles.map { it.label },
-            chosen = chosen.map { it.label },
+            chosen = chosen,
             firstTry = firstTry,
             listened = heard,
             level = sentence.level,
             retries = retries,
             undo = undos,
             ms = now() - began,
+            variant = sentence.variant,
+            judge = lastVerdict,
         )
         // Chained, because the app scope runs on a pool with no ordering: whoever joins the last
         // write must be joining every write, or a row can land after the session has counted.
@@ -454,5 +631,26 @@ class SentencesViewModel(
          * the model to copy, which is the whole of the exercise anyway.
          */
         const val WRONG_ORDER = "Σχεδόν."
+
+        /**
+         * What comes before the sentence he is being shown to copy, on the screen and out loud.
+         *
+         * One constant for the builder's correction and the typed board's, because they are the same
+         * gesture — here is the whole thing, say it with me — and a man reading two different words
+         * for it on two boards of the same module would be reading two different exercises.
+         */
+        const val CORRECTION = "Σωστά:"
+
+        /** «Γράψε την πρόταση»: the one instruction in this app that asks for a keyboard. */
+        const val WRITE_IT = "Γράψε την πρόταση"
+
+        /** He has copied the sentence off the screen. Assisted work, and the way on. */
+        const val I_WROTE_IT = "Το έγραψα"
+
+        /** The blank a gap board leaves where the small word should be. */
+        const val BLANK = "____"
+
+        /** What a gap board is asking, said once above the sentence. */
+        const val WHICH_WORD = "Ποια λέξη λείπει;"
     }
 }

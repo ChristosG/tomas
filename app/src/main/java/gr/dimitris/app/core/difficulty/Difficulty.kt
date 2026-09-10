@@ -74,13 +74,15 @@ object Difficulty {
     // -------------------------------------------------------------- «Προτάσεις»
 
     /**
-     * The sentence-builder levels each dot stands for, as the ladder will be once Task 7 has added
-     * 5–8: 1 → 1–2, 2 → 3–4, 3 → 5–6, 4 → 7, 5 → 8. The shape follows «Αριθμοί» — two levels a band
-     * at the easy end, where the steps are whole new sentence shapes — and then one each at the top,
-     * where a level is a clause more to hold in mind and is a band of its own.
+     * The sentence-builder levels each dot stands for: 1 → 1–2, 2 → 3–4, 3 → 5–6, 4 → 7, 5 → 8. The
+     * shape follows «Αριθμοί» — two levels a band at the easy end, where the steps are whole new
+     * sentence shapes — and then one each at the top, where a level is a clause more to hold in mind
+     * and is a band of its own.
      *
-     * **Levels above 4 do not exist yet** ([SentenceTemplates.MAX_LEVEL]); until Task 7 lands, bands
-     * 3, 4 and 5 all clamp to level 4, the longest sentence the templates can build.
+     * All eight exist since Task 7 ([SentenceTemplates.MAX_LEVEL]): 5 the articles, 6 the
+     * prepositions, 7 a clause, 8 a question. Every dot now means something different and nothing
+     * below clamps — which is what Dimitris asked for when he told us the two-card sentences were
+     * trivial.
      */
     fun sentences(d: Int): IntRange = band(SENTENCES_BANDS, d, SentenceTemplates.MAX_LEVEL)
 
@@ -300,8 +302,8 @@ object Difficulty {
      * is the right answer if one ever does.
      *
      * A band of one level is the common case rather than the corner: «Γράψε» is `d..d` at every dot,
-     * and «Προτάσεις» is `4..4` at three of five until Task 7. Both directions then return [from],
-     * so the sitting writes nothing.
+     * and «Προτάσεις» is `7..7` and `8..8` at its top two. Both directions then return [from], so
+     * the sitting writes nothing.
      */
     fun levelAfterSitting(from: Int, next: Int, band: IntRange): Int {
         val held = next.coerceIn(band)
@@ -320,8 +322,8 @@ object Difficulty {
     // ----------------------------------------------------------------- internals
 
     /**
-     * Which dot owns [level], read off the **unclamped** ladder so that the answer does not change
-     * as Tasks 5 and 7 build the levels the top bands are waiting for. A level past the end of the
+     * Which dot owns [level], read off the **unclamped** ladder so that the answer did not change as
+     * Tasks 5 and 7 built the levels the top bands were waiting for. A level past the end of the
      * ladder belongs to the hardest dot.
      */
     private fun dotOf(bands: List<IntRange>, level: Int): Int =
@@ -330,8 +332,9 @@ object Difficulty {
     /**
      * One band out of [bands], with everything above [max] folded onto [max] — which is how a band
      * over levels that have not been built yet still names a level that exists. A band entirely
-     * above [max] collapses to `max..max`, which is what the top three dots of «Προτάσεις» do until
-     * Task 7 widens that ladder the way Task 5 widened «Αριθμοί».
+     * above [max] collapses to `max..max`, which is what the top three dots of «Προτάσεις» did until
+     * Task 7 widened that ladder the way Task 5 widened «Αριθμοί». Both ladders are whole now, so
+     * nothing folds today; the guard stays because the next ladder to be widened will need it.
      */
     private fun band(bands: List<IntRange>, d: Int, max: Int): IntRange {
         val b = bands[clamp(d) - 1]

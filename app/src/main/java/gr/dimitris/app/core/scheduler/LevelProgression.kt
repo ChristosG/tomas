@@ -5,7 +5,7 @@ package gr.dimitris.app.core.scheduler
  * Claude wrote a first version so nothing blocks; LevelProgressionTest describes the contract.
  *
  * The numbers module's rule, written once for any module that has levels, with the range as an
- * argument: numbers have seven, sentences have four. [gr.dimitris.app.modules.numbers.NumberProgression]
+ * argument: numbers have fifteen, sentences have eight. [gr.dimitris.app.modules.numbers.NumberProgression]
  * keeps its own copy — it is the one Chris is being asked to rewrite first, and the two are free to
  * end up different.
  *

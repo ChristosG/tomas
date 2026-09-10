@@ -91,14 +91,18 @@ class DifficultyTest {
         Difficulty.SENTENCES_BANDS.zipWithNext { a, b -> assertEquals(a.last + 1, b.first) }
     }
 
-    /** Levels 5 to 8 arrive in Task 7; until then the top three dots all mean level 4. */
-    @Test fun `the top sentence bands clamp to the hardest level that exists`() {
-        assertEquals(4, SentenceTemplates.MAX_LEVEL)
+    /**
+     * All eight levels exist since Task 7, so every dot means a different sentence: 3 the articles,
+     * 4 a clause, 5 a question. Nothing clamps any more — which is the answer to Dimitris telling us
+     * in September that the module was too easy.
+     */
+    @Test fun `every sentence dot names levels that exist`() {
+        assertEquals(8, SentenceTemplates.MAX_LEVEL)
         assertEquals(1..2, Difficulty.sentences(1))
         assertEquals(3..4, Difficulty.sentences(2))
-        assertEquals(4..4, Difficulty.sentences(3))
-        assertEquals(4..4, Difficulty.sentences(4))
-        assertEquals(4..4, Difficulty.sentences(5))
+        assertEquals(5..6, Difficulty.sentences(3))
+        assertEquals(7..7, Difficulty.sentences(4))
+        assertEquals(8..8, Difficulty.sentences(5))
     }
 
     // ------------------------------------------------------------------ «Γράψε»
@@ -323,9 +327,8 @@ class DifficultyTest {
 
     /**
      * A band of one level is the common case, not the corner: «Γράψε» is `d..d` at every dot, and
-     * «Προτάσεις» is `4..4` at three of the five until Task 7 builds levels 5–8. Both directions have
-     * to return where he started, so the sitting writes nothing and the dots stay the only thing that
-     * moves him.
+     * «Προτάσεις» is `7..7` and `8..8` at its top two. Both directions have to return where he
+     * started, so the sitting writes nothing and the dots stay the only thing that moves him.
      */
     @Test fun `a band of one level holds him whichever way the sitting went`() {
         listOf(Difficulty.trace(3), Difficulty.sentences(5)).forEach { band ->
@@ -352,7 +355,7 @@ class DifficultyTest {
         assertEquals(4, Difficulty.numbersDot(11))
         assertEquals(5, Difficulty.numbersDot(15))
         assertEquals(5, Difficulty.numbersDot(99))
-        // Sentences read off the full ladder, so the answer does not move when Task 7 builds 5..8.
+        // Sentences read off the full ladder, which is why the answer did not move when Task 7 built 5..8.
         assertEquals(1, Difficulty.sentencesDot(2))
         assertEquals(2, Difficulty.sentencesDot(4))
         assertEquals(3, Difficulty.sentencesDot(6))

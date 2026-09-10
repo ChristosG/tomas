@@ -12,6 +12,7 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollToNode
+import androidx.compose.ui.test.performTextInput
 import androidx.test.core.app.ApplicationProvider
 import gr.dimitris.app.DimitrisApp
 import gr.dimitris.app.MainActivity
@@ -20,6 +21,8 @@ import gr.dimitris.app.core.data.ItemKind
 import gr.dimitris.app.core.data.ModuleId
 import gr.dimitris.app.core.data.Outcome
 import gr.dimitris.app.core.data.now
+import gr.dimitris.app.core.judge.JudgeClient
+import gr.dimitris.app.core.judge.TurnJudge
 import gr.dimitris.app.today.MODULE_GRID_TAG
 import gr.dimitris.app.ui.components.LISTEN_TAG
 import kotlinx.coroutines.flow.first
@@ -50,8 +53,33 @@ class SentencesFlowTest {
         since = System.currentTimeMillis()
     }
 
-    /** His level is his; a test that borrows it puts it back. */
-    @After fun restoreLevel() = runBlocking<Unit> { graph.settings.setSentencesLevel(levelBefore) }
+    /** His level is his; a test that borrows it puts it back, and so is the judge. */
+    @After fun restoreLevel() = runBlocking<Unit> {
+        graph.settings.setSentencesLevel(levelBefore)
+        realJudge?.let { graph.judge = it }
+    }
+
+    /** The judge the typed cases run against: the emulator can reach the Anthropic API no more than a mic. */
+    private var realJudge: TurnJudge? = null
+
+    /** What the fake client answers, reply by reply. */
+    private val replies = ArrayDeque<String>()
+
+    /**
+     * A judge that answers with canned verdicts, with a key behind it so [TurnJudge.available] says
+     * yes and the sitting is planned with typed boards in it. The secret store is untouched: the key
+     * is the judge's own, which is what the seam is for.
+     */
+    private fun withJudge(vararg json: String) {
+        realJudge = graph.judge
+        replies.clear()
+        replies += json
+        graph.judge = TurnJudge(
+            secrets = { KEY },
+            enabled = { true },
+            client = JudgeClient { _, _, _ -> replies.removeFirstOrNull() },
+        )
+    }
 
     @Test fun theRightOrderIsAnAnswerOfHisOwn() {
         val right = openPractice()
@@ -153,6 +181,78 @@ class SentencesFlowTest {
     }
 
     /**
+     * Level 5 is the articles, and every third board asks for one of them on its own: the sentence
+     * with «τον» taken out of it and three small words to choose between.
+     *
+     * The right one is found by trying them, exactly as he would: a wrong tap is «Σχεδόν.» with the
+     * whole sentence left on the screen and the three cards still live, and there is no way to fail
+     * — which is the assertion that matters more than which card it was.
+     */
+    @Test fun aGapBoardAsksForOneSmallWordAndTakesOnlyTheOneThatFits() {
+        runBlocking { graph.settings.setSentencesLevel(5) }
+        openBoard()
+        // Boards one and two are cards; the third is the gap. Passing on a board is a legal way past it.
+        repeat(2) { skipBoard() }
+        compose.waitUntil(TIMEOUT_MS) { compose.onAllNodesWithTag(SENTENCE_GAP_TAG).fetchSemanticsNodes().size == 3 }
+
+        val options = compose.onAllNodesWithTag(SENTENCE_GAP_TAG).fetchSemanticsNodes()
+            .mapNotNull { n -> n.config.getOrNull(SemanticsProperties.Text)?.joinToString("") { it.text } }
+        assertEquals("three small words and no more: $options", 3, options.size)
+        for (option in options) {
+            compose.onNode(hasTestTag(SENTENCE_GAP_TAG) and hasText(option)).performClick()
+            if (compose.onAllNodes(hasText("Επόμενο")).fetchSemanticsNodes().isNotEmpty()) break
+            // Not the one: the sentence is on the screen to read, and the cards are still his.
+            compose.onNode(hasText(SentencesViewModel.WRONG_ORDER)).assertIsDisplayed()
+        }
+        compose.waitUntil(TIMEOUT_MS) { attempts().any { it.detail.contains(GAP_ROW) } }
+        // The two boards he passed on are level-5 rows too, so the gap board is found by how it was
+        // asked rather than by which level it was at.
+        val row = attempts().single { it.detail.contains(GAP_ROW) }
+        assertEquals("a gap board is a level-5 board", LEVEL_5, row.itemId)
+        assertTrue("the small word he chose is not in the row: ${row.detail}", options.any { row.detail.contains("\"$it\"") })
+    }
+
+    /**
+     * Level 7 is the one place in the app that asks him to write. A picture, «Γράψε την πρόταση», a
+     * keyboard — and the judge, because nothing on the phone can read a sentence.
+     *
+     * Two goes: the first is refused and answered with the whole form to copy, which is the thing
+     * this module gives instead of a wall; the second is accepted, and the row says the work was
+     * assisted because the sentence had been on the screen.
+     */
+    @Test fun aTypedBoardIsJudgedAndAWrongOneComesBackWhole() {
+        withJudge(
+            """{"accept":false,"expanded":"Θέλω να φάω ψωμί γιατί πεινάω.","feedback":"Κοντά είσαι.","score":0.4}""",
+            """{"accept":true,"expanded":null,"feedback":null,"score":1}""",
+        )
+        runBlocking { graph.settings.setSentencesLevel(7) }
+        openBoard()
+        repeat(2) { skipBoard() }
+        compose.waitUntil(TIMEOUT_MS) { compose.onAllNodesWithTag(SENTENCE_TYPED_TAG).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithText(SentencesViewModel.WRITE_IT).assertIsDisplayed()
+
+        compose.onNodeWithTag(SENTENCE_TYPED_TAG).performTextInput("θέλω ψωμί")
+        compose.onNodeWithText("Έτοιμο").performClick()
+
+        // Refused: the whole sentence, on the screen, with the keyboard still there and no «λάθος».
+        compose.waitUntil(TIMEOUT_MS) {
+            compose.onAllNodes(hasText("Θέλω να φάω ψωμί γιατί πεινάω.", substring = true)).fetchSemanticsNodes().isNotEmpty()
+        }
+        assertTrue("a refused sentence was written down as an attempt", attempts().none { it.detail.contains(TYPED_ROW) })
+        compose.onNodeWithText(SentencesViewModel.I_WROTE_IT).assertIsDisplayed()
+
+        compose.onNodeWithTag(SENTENCE_TYPED_TAG).performTextInput(" γιατί πεινάω")
+        compose.onNodeWithText("Έτοιμο").performClick()
+
+        compose.waitUntil(TIMEOUT_MS) { attempts().any { it.detail.contains(TYPED_ROW) } }
+        val row = attempts().single { it.detail.contains(TYPED_ROW) }
+        assertEquals("a typed board is a level-7 board", LEVEL_7, row.itemId)
+        assertEquals("a sentence copied off the screen is assisted work", Outcome.ASSISTED, row.outcome)
+        assertTrue("the judge is not in the row: ${row.detail}", row.detail.contains("\"judge\""))
+        assertTrue("nor is who answered: ${row.detail}", row.detail.contains("\"source\":\"JUDGE\""))
+    }
+
+    /**
      * A device whose words have all been deleted has no sentence to offer. It has to say so and let
      * him straight out — the one thing it must never do is hold him on a screen with nothing on it.
      */
@@ -199,6 +299,14 @@ class SentencesFlowTest {
 
     private fun tapInOrder(labels: List<String>) = labels.forEach { label ->
         compose.onNode(hasTestTag(SENTENCE_TILE_TAG) and hasText(label)).performClick()
+    }
+
+    /** Passes on the board he is on and waits for the next one to be drawn. */
+    private fun skipBoard() {
+        val before = attempts().size
+        compose.onNodeWithText("Παράλειψη").performClick()
+        compose.waitUntil(TIMEOUT_MS) { attempts().size > before }
+        compose.waitForIdle()
     }
 
     /** True once the sentence is finished, right or wrong. */
@@ -254,6 +362,16 @@ class SentencesFlowTest {
 
         const val CORRECTION = "Σωστά: "
         const val LEVEL_4 = "sentences:level:4"
+        const val LEVEL_5 = "sentences:level:5"
+        const val LEVEL_7 = "sentences:level:7"
+
+        /** How a row says which of the three ways its board asked. See `sentencesDetail`. */
+        const val GAP_ROW = "\"variant\":\"GAP\""
+        const val TYPED_ROW = "\"variant\":\"TYPED\""
+
+        /** Not a key: it is only ever handed to the fake client, which throws it away. */
+        const val KEY = "sk-ant-test"
+
         const val TIMEOUT_MS = 15_000L
     }
 }
