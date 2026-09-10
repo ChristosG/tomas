@@ -133,6 +133,27 @@ class SettingsTest {
         assertTrue(ModuleId.SINGSAY in s.enabledModules.first())
     }
 
+    /**
+     * The one write that can get in front of the pass. «Ποιανού είναι το τηλέφωνο;» is the first
+     * screen a brand-new phone ever shows and it writes `device_role` from the UI thread, which is
+     * not ordered against the startup coroutine. Tap the role, lose the process before the pass
+     * finishes, open the app again: the store is no longer empty, and a phone that has never had
+     * «Τραγούδα και πες το» would be handed it. The role is therefore not evidence of use.
+     *
+     * The same test covers the second half of "opened twice": the pass writes its own generation
+     * key, so on any launch after the first the store is non-empty by the pass's own doing. That is
+     * why the generation is checked before emptiness is.
+     */
+    @Test fun `a new install opened twice is still a new install`() = runBlocking {
+        val s = newSettings()
+        s.setDeviceRole(DeviceRole.DIMITRIS)     // first launch: the role screen, then the process dies
+        s.grandfatherNewlyDefaultOff()           // second launch
+        assertFalse(ModuleId.SINGSAY in s.enabledModules.first())
+
+        s.grandfatherNewlyDefaultOff()           // third launch, over the store the pass itself left
+        assertEquals(ModuleId.entries.toSet() - Settings.DEFAULT_OFF, s.enabledModules.first())
+    }
+
     /** Once per install: a later switch-off is not undone by the next launch. */
     @Test fun `the grandfathering runs once and never again`() = runBlocking {
         val s = newSettings()

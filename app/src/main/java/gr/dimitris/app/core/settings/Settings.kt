@@ -560,13 +560,25 @@ class Settings(private val store: DataStore<Preferences>) {
      * anything else writes a preference: [gr.dimitris.app.DimitrisApp] calls it first, ahead of the
      * seed importers. There is no other honest signal — every key that says "this app has been used"
      * is written by something that also runs on a first launch.
+     *
+     * One key is excepted: `device_role`. It is written from the very first screen a brand-new
+     * phone ever shows ([gr.dimitris.app.core.settings.RoleScreen]) on the UI thread, which is not
+     * ordered against this pass — so on a first launch where that tap lands first and the process
+     * then dies before the pass finishes, the next launch would read a non-empty store and
+     * grandfather a phone that never had the module. Ignoring it removes the only write that can
+     * plausibly get in front of the pass; every other key means the app was genuinely used.
+     *
+     * A backup restore does **not** carry this: [gr.dimitris.app.core.backup.Backup] replaces the
+     * database and the media, never the preference store, so a replacement phone that installs the
+     * app and imports his backup is a new install and loses the module he had. That is a caregiver's
+     * one switch to put back, and it is in the handover's verify list.
      */
     suspend fun grandfatherNewlyDefaultOff() {
         store.edit { p ->
             if (p[DEFAULT_OFF_GENERATION] == MODULES_GENERATION) return@edit
             // Nothing written yet: a phone that met this app a moment ago, which gets the defaults
-            // as they are today. Anything at all in the store is a phone that was here before.
-            if (p.asMap().isNotEmpty()) {
+            // as they are today. Anything but the role is a phone that was here before.
+            if (p.asMap().keys.any { it.name != DEVICE_ROLE.name }) {
                 val names = NEWLY_DEFAULT_OFF.map { it.name }.toSet()
                 // The ones a caregiver had already switched off are not switched back on — but the
                 // name comes out of the disabled set, because from today that set is not where their

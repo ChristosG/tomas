@@ -1,10 +1,15 @@
-# Dimitris' App — handover (2026-09-06)
+# Dimitris' App — handover (2026-09-10)
 
-All ten phases of `docs/superpowers/specs/2026-09-05-dimitris-app-design.md` are implemented on branch `worktree-phase0` (HEAD `61129cf`, 176 commits after master `4532747`). Nothing has been merged into `master` and nothing has been pushed anywhere: the merge is your call.
+**Phases 0–12** are implemented on branch `worktree-phase0`: phases 0–10 of
+`docs/superpowers/specs/2026-09-05-dimitris-app-design.md`, then **phase 11** (polish after the first
+field test) and **phase 12** (§13 of the spec — the re-scope after Dimitris tried it himself and said
+it was too easy). Nothing has been merged into `master` and nothing has been pushed anywhere: the
+merge is your call.
 
-Since then, on the same branch: **phase 11** (polish after the first field test) and **phase 12**
-(§13 of the spec — the re-scope after Dimitris tried it himself and said it was too easy). Both have
-their own section below, each with its own "what only you can verify" list.
+This file no longer names a commit, because the last one it named was two phases stale by the time
+anybody read it: `git log --oneline master..worktree-phase0` is the branch's real state, and
+`git log -1` is the real head. Phases 11 and 12 have their own section below, each with its own
+"what only you can verify" list.
 
 ## What is in the APK
 
@@ -137,6 +142,12 @@ tasks**, and that is the new centre of the app.
    measured on him. Sit with him, let him tap the dots himself, and watch whether four in five still
    land — especially «Αριθμοί» 4–5 (two-step problems) and «Προτάσεις» 4–5 (the clause and the typed
    sentence).
+5. **After any backup restore, check «Τραγούδα και πες το».** The grandfathering that keeps the
+   module on a phone that already had it reads the *preference store*, and a backup import replaces
+   the database and the media but never the preferences (`Backup.kt`). So a replacement phone that
+   installs the app and imports his backup counts as a new install and comes up without the module.
+   One switch in Ρυθμίσεις → «Ασκήσεις» puts it back; it is the only setting a restore does not
+   carry.
 
 ## What only you can verify
 
