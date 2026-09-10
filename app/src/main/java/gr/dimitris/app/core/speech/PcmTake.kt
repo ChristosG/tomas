@@ -106,15 +106,24 @@ class PcmTake private constructor(
     @Volatile private var endRequested = false
 
     /**
-     * True while the pipe thread is inside a `write` that has not come back. A recogniser holding
-     * the read end and not draining it blocks that write for ever, and a thread inside a blocking
-     * write will never look at [endRequested] — so [closePipe] reads this to know it has to close
-     * the descriptor itself.
+     * True while the pipe thread might be about to write, or is inside a `write` that has not come
+     * back. A recogniser holding the read end and not draining it blocks that write for ever, and a
+     * thread inside a blocking write will never look at [endRequested] — so [closePipe] reads this
+     * to know it has to close the descriptor itself.
      *
-     * Written and read under [pipeLock], and set in the same locked step that takes the stream to
-     * write into. Read outside the lock it was a lost close: «Στοπ» could look a hair before the
-     * flag went up, decide there was nothing to free, and leave a wedged writer holding the pipe
-     * until the wait ended — the twenty-second dead button, back in a narrow interleaving.
+     * Written and read under [pipeLock], and — this is the part two rounds of fixes got wrong — it
+     * goes up at the **start** of the interval it describes, before the thread goes looking for a
+     * block, and comes down only after the write for that block has returned. Set in the step that
+     * takes the stream instead, it left a hair between `queue.poll` handing over the last block and
+     * that step: «Στοπ» landing in there found an empty queue and a flag still down, closed nothing,
+     * and the write that followed wedged against a recogniser nobody was draining. Twenty seconds of
+     * a dead «Στοπ», in a window too narrow to test and wide enough to happen.
+     *
+     * The cost of starting it early is that the flag is up nearly all the time — the thread lives in
+     * its [POLL_MS] poll — so «Στοπ» almost always closes the descriptor itself rather than leaving
+     * it to the thread's own exit. That is the same close either way and it is the prompter of the
+     * two; the branch it bypasses only ever applied when the queue was empty, which is to say when
+     * there was nothing to lose by closing.
      */
     private var writing = false
 
@@ -169,11 +178,14 @@ class PcmTake private constructor(
         // Two cases, decided here under the one lock the pipe thread also takes, so there is no
         // interleaving between them.
         //
-        // **Nothing in flight and nothing queued** — a recogniser that has been keeping up. The flag
-        // is enough: the pipe thread comes round its loop within [POLL_MS], finds the queue dry and
-        // closes gracefully. It really will be dry, because the microphone stops feeding this queue
-        // the moment the flag goes up: what he says after «Στοπ» is audio he has said he is finished
-        // with, and the file keeps it without the engine being handed it.
+        // **Nothing in flight and nothing queued** — the pipe thread is between two turns of its
+        // loop, or already gone. The flag is enough: it comes round within [POLL_MS], finds the
+        // queue dry and closes gracefully. It really will be dry, because the microphone stops
+        // feeding this queue the moment the flag goes up: what he says after «Στοπ» is audio he has
+        // said he is finished with, and the file keeps it without the engine being handed it. This
+        // branch is narrow on purpose — [writing] is up from before the thread goes looking for a
+        // block, not from when it starts writing one, so a thread that is alive is nearly always
+        // holding the flag and takes the other branch.
         //
         // **Anything in flight or waiting** — a recogniser that is behind, which on this path means
         // one that has stopped reading. Nothing queued will reach it, and a write already in flight
@@ -322,31 +334,40 @@ class PcmTake private constructor(
                 // Drain first, end second: the last blocks are the end of what he said, and an engine
                 // given end-of-stream in front of them would decide on a truncated word.
                 if (endRequested && queue.isEmpty()) break
-                val block = try {
-                    queue.poll(POLL_MS, TimeUnit.MILLISECONDS)
-                } catch (e: InterruptedException) {
-                    break
-                }
-                if (block == null) {
-                    if (endRequested || !running) break else continue
-                }
-                // The stream and the flag in one locked step, so «Στοπ» either sees a write in
-                // flight or gets there first and closes the pipe this one is about to use.
-                val stream = synchronized(pipeLock) { sink?.also { writing = true } } ?: continue
+                // The flag goes up before the look, and comes down in the `finally` below whatever
+                // happened in between. That is what makes it safe to read: from here to the end of
+                // this turn there is no instant at which this thread holds a block and «Στοπ» can
+                // see an idle pipe. The gap between turns is safe for the other reason — no block is
+                // in hand there, and the `endRequested` check above is the next thing this thread
+                // does, so a «Στοπ» landing in it ends the thread rather than being missed by it.
+                synchronized(pipeLock) { writing = true }
                 try {
-                    stream.write(block)
-                } catch (e: IOException) {
-                    // Only the pipe this write was for. By the time a write fails the session that
-                    // owned it has usually been destroyed and the *next* one may already have opened
-                    // its pipe — closing whatever is current would then feed the new session nothing
-                    // and it would come back having heard him say nothing at all.
-                    synchronized(pipeLock) { if (sink === stream) closePipeLocked() }
+                    val block = try {
+                        queue.poll(POLL_MS, TimeUnit.MILLISECONDS)
+                    } catch (e: InterruptedException) {
+                        break
+                    }
+                    if (block == null) {
+                        if (endRequested || !running) break else continue
+                    }
+                    // No pipe open: the block is dropped, which is the honest thing to do with audio
+                    // nobody is listening to.
+                    val stream = synchronized(pipeLock) { sink } ?: continue
+                    try {
+                        stream.write(block)
+                    } catch (e: IOException) {
+                        // Only the pipe this write was for. By the time a write fails the session
+                        // that owned it has usually been destroyed and the *next* one may already
+                        // have opened its pipe — closing whatever is current would then feed the new
+                        // session nothing and it would come back having heard him say nothing at all.
+                        synchronized(pipeLock) { if (sink === stream) closePipeLocked() }
+                    }
                 } finally {
                     synchronized(pipeLock) { writing = false }
                 }
             }
         } finally {
-            synchronized(pipeLock) { closePipeLocked() }
+            synchronized(pipeLock) { writing = false; closePipeLocked() }
             pipeClosed.countDown()
         }
     }
