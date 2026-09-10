@@ -5,6 +5,7 @@ import gr.dimitris.app.core.data.Item
 import gr.dimitris.app.core.data.ItemKind
 import gr.dimitris.app.core.greek.Greek
 import gr.dimitris.app.core.greek.accusative
+import gr.dimitris.app.core.greek.nounForm
 import gr.dimitris.app.core.seed.SeedManifest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
@@ -48,8 +49,12 @@ class SentenceTemplatesTest {
         word("τώρα", Category.TIME), word("αύριο", Category.TIME), word("Δευτέρα", Category.TIME),
     )
 
-    /** What «πίνω» takes and «τρώω» does not, written out here rather than read from the templates. */
-    private val drinkable = setOf("νερό", "καφές", "τσάι", "γάλα", "μπύρα", "κρασί", "χυμός")
+    /**
+     * What «πίνω» takes and «τρώω» does not, written out here rather than read from the templates.
+     * The two the phase 13 vocabulary added are on it: a FOOD card that is not a drink is a meal,
+     * and «τρώω λεμονάδα» is a board he would have to unlearn.
+     */
+    private val drinkable = setOf("νερό", "καφές", "τσάι", "γάλα", "μπύρα", "κρασί", "χυμός", "λεμονάδα", "πορτοκαλάδα")
 
     private fun many(level: Int, times: Int = 60): List<Sentence> =
         List(times) { templates.generate(level, pool) }.map { assertNotNull("level $level made nothing", it); it!! }
@@ -423,6 +428,39 @@ class SentenceTemplatesTest {
         assertTrue("a word with no article we know was never used at all", bare > 0)
     }
 
+    /**
+     * The other half of the same rule, and what phase 13 changed: a noun this app cannot read the
+     * gender **of the word** for is admitted the moment the row itself says what it is.
+     *
+     * That is the whole of what the column is for. «ραντεβού» is a foreign indeclinable, and until
+     * now the article levels drew on the bundled vocabulary alone — a word the caregiver typed was
+     * simply never offered above level 4, however ordinary it was in his week. Now she taps «Ο» in
+     * the editor and it joins them, with the article her tap asks for and no guess anywhere.
+     */
+    @Test fun `a noun the rules cannot read joins the article levels once the row says what it is`() {
+        val hers = Item(text = "ραντεβού", kind = ItemKind.WORD, category = Category.THINGS)
+        assertNull("the ending cannot say what it is", Greek.nounForm(hers.text))
+        // The only noun on the board, so level 8 asks about her word or it makes nothing at all.
+        assertNull("ungraded, it is not offered above level 4", templates.generate(8, listOf(hers)))
+
+        val s = templates.generate(8, listOf(hers.copy(gender = "N")))
+            ?: throw AssertionError("a graded noun still made no question")
+        assertEquals("πού είναι το ραντεβού;", s.text)
+        // And a gender the app cannot read is nothing said, which is the app as it was.
+        assertNull(templates.generate(8, listOf(hers.copy(gender = "Θ"))))
+    }
+
+    /**
+     * The row wins over the list as well as over the ending: the app's own [FORMS] has «εφημερίδα»
+     * down as a feminine, and a caregiver who says otherwise about a word of hers is not overruled
+     * by a table she has never seen.
+     */
+    @Test fun `the row wins over the app's own list`() {
+        val hers = Item(text = "εφημερίδα", kind = ItemKind.WORD, category = Category.THINGS, gender = "N")
+        val s = templates.generate(8, listOf(hers)) ?: throw AssertionError("no question")
+        assertEquals("πού είναι το εφημερίδα;", s.text)
+    }
+
     @Test fun `session returns the count it was asked for`() {
         assertEquals(8, templates.session(1, pool).size)
         assertEquals(5, templates.session(3, pool, count = 5).size)
@@ -441,7 +479,10 @@ class SentenceTemplatesTest {
      */
     private fun seedPool(): List<Item> = SeedManifest.parse(asset("seed/seed.json").readText()).items
         .filter { it.kind == ItemKind.WORD.name }
-        .map { Item(text = it.text, kind = ItemKind.WORD, category = Category.valueOf(it.category)) }
+        // The gender comes with the word, exactly as SeedImporter.row writes it: since phase 13 that
+        // is what most of this vocabulary is read by, and a pool that dropped it would be testing an
+        // app nobody ships.
+        .map { Item(text = it.text, kind = ItemKind.WORD, category = Category.valueOf(it.category), gender = it.gender) }
 
     /**
      * The one string on this screen that answers an order he got wrong, pinned by value.
@@ -495,6 +536,29 @@ class SentenceTemplatesTest {
             'n', false, "σπίτι", "νοσοκομείο", "φαρμακείο", "σούπερ μάρκετ", "πάρκο", "γυμναστήριο",
             "σχολείο", "ταξί", "λεωφορείο", "αυτοκίνητο", "μπάνιο", "κρεβάτι", "γήπεδο", "μπαλκόνι",
         )
+
+        // ------------------------------------------------------ the phase 13 vocabulary (tier 3-5)
+        //
+        // Only the four categories the sentence builder draws on are here — PEOPLE, FOOD, THINGS,
+        // PLACES. Its abstract nouns and its adjectives are FEELINGS and BODY cards, which no
+        // template touches: «θέλω πρόβλημα» and «πού είναι η ελπίδα;» are sentences nobody says.
+        // PEOPLE
+        put('m', false, "εγγονός", "οδηγός", "σερβιτόρος", "υπάλληλος", "δάσκαλος")
+        put('f', false, "εγγονή")
+        // FOOD
+        put('f', false, "μπριζόλα", "σπανακόπιτα", "λεμονάδα", "πορτοκαλάδα", "ντομάτα")
+        put('n', false, "γιαούρτι", "κουλούρι", "μπισκότο", "καρπούζι", "σταφύλι", "αγγούρι", "λεμόνι")
+        // THINGS
+        put('m', false, "λογαριασμός", "φορτιστής", "υπολογιστής", "καθρέφτης")
+        put(
+            'f', false, "παραγγελία", "εφημερίδα", "συνταγή", "ταυτότητα", "απόδειξη", "κάρτα",
+            "φωτογραφία", "κουβέρτα", "πετσέτα", "οδοντόβουρτσα",
+        )
+        put('n', false, "μήνυμα", "μπαστούνι", "μαξιλάρι", "σαπούνι", "ψυγείο", "πλυντήριο", "ασανσέρ", "ελαιόλαδο")
+        // PLACES
+        put('m', false, "φούρνος")
+        put('f', false, "βιβλιοθήκη", "πλατεία", "παραλία", "πόλη", "γειτονιά")
+        put('n', false, "ταχυδρομείο", "κομμωτήριο", "περίπτερο", "αεροδρόμιο", "χωριό", "ιατρείο", "μανάβικο", "κουρείο")
     }
 
     /** «ο», «η», «το», «οι», «τα». */

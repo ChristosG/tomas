@@ -145,4 +145,56 @@ class GreekTest {
         assertEquals(true, Greek.plural("ρούχα"))
         assertEquals(false, Greek.plural("γάλα"))
     }
+
+    // ------------------------------------------------ the gender the word itself carries (phase 13)
+
+    /**
+     * A caregiver may add any word to this phone, and the ending rules are right about most of the
+     * seed and **silent** about the rest — which is why «ραντεβού», «ντομάτα» and her sister's name
+     * were never offered at the article levels at all. A gender on the row is what lets them in.
+     */
+    @Test fun `a stated gender answers where the ending says nothing`() {
+        assertNull("nothing said: the ending is unreadable", Greek.nounForm("ραντεβού"))
+        assertEquals(NounForm(Gender.NEUTER, plural = false), Greek.nounForm("ραντεβού", "N"))
+        assertEquals("το", Greek.article("ραντεβού", Case.NOMINATIVE, gender = "N"))
+        assertEquals("την", Greek.article("ντομάτα", Case.ACCUSATIVE, before = "ντομάτα", gender = "F"))
+        assertEquals("στην", Greek.contracted("ντομάτα", gender = "F"))
+    }
+
+    /**
+     * And where the ending says something else, the row wins: it is a person saying what the word is,
+     * against a rule that was only ever a guess. «οδός» is in the file's own list of feminines in
+     * -ος; a caregiver who writes «M» on a word of hers means it.
+     */
+    @Test fun `a stated gender beats the ending and the list both`() {
+        assertEquals(Gender.FEMININE, Greek.nounForm("οδός")!!.gender)
+        assertEquals(Gender.MASCULINE, Greek.nounForm("οδός", "M")!!.gender)
+        assertEquals(Gender.MASCULINE, Greek.nounForm("γάλα", "M")!!.gender)
+    }
+
+    /**
+     * The **number** is still read off the word, because a gender is one question and the editor asks
+     * it once: «πατάτες» stated feminine is a feminine plural and takes «οι», not «η».
+     */
+    @Test fun `a stated gender keeps the number the word is written in`() {
+        assertEquals(NounForm(Gender.FEMININE, plural = true), Greek.nounForm("πατάτες", "F"))
+        assertEquals("οι", Greek.article("πατάτες", Case.NOMINATIVE, gender = "F"))
+        // The list is what knows «δόντια» is a plural — nothing in the ending says so.
+        assertEquals("τα", Greek.article("δόντια", Case.NOMINATIVE, gender = "N"))
+    }
+
+    /**
+     * Nothing said, or something this app cannot read, is exactly the app as it was: the ending is
+     * consulted, and where the ending lies the answer is silence rather than a guess.
+     */
+    @Test fun `a blank or unreadable gender falls back on the ending`() {
+        assertEquals(Greek.nounForm("νερό"), Greek.nounForm("νερό", null))
+        assertEquals(Greek.nounForm("νερό"), Greek.nounForm("νερό", "  "))
+        assertEquals(Greek.nounForm("νερό"), Greek.nounForm("νερό", "Θ"))
+        assertNull(Greek.nounForm("τυρόπιτα", "X"))
+        // Written down the way the editor writes it, whatever the case and the spaces around it.
+        assertEquals(Gender.FEMININE, Gender.of(" f ")!!)
+        assertEquals(setOf("M", "F", "N"), Gender.entries.mapTo(mutableSetOf()) { it.code })
+        assertNull(Gender.of(null))
+    }
 }

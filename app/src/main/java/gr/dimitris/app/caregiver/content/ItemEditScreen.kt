@@ -58,6 +58,8 @@ import coil3.compose.AsyncImage
 import gr.dimitris.app.LocalAppGraph
 import gr.dimitris.app.core.data.Category
 import gr.dimitris.app.core.data.ItemKind
+import gr.dimitris.app.core.difficulty.Difficulty
+import gr.dimitris.app.core.greek.Gender
 import gr.dimitris.app.ui.components.BigButton
 import gr.dimitris.app.ui.components.ButtonTone
 import gr.dimitris.app.ui.components.DimitrisScreen
@@ -156,6 +158,34 @@ fun ItemEditScreen(itemId: String?, onClose: () -> Unit, onTry: (String) -> Unit
             }
             Spacer(Modifier.height(Sizes.gap))
 
+            // Only a word is ever a noun: a phrase takes no article, and a row of chips under
+            // «θέλω καφέ» would be asking her a question with no answer.
+            if (s.kind == ItemKind.WORD) {
+                Text("Γένος", style = MaterialTheme.typography.titleLarge)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    // The chip that is already on clears itself: a wrong tap is taken back here,
+                    // not by leaving the form.
+                    GENDERS.forEach { (code, label) ->
+                        KindChip(label, s.gender == code) { vm.setGender(if (s.gender == code) null else code) }
+                    }
+                }
+                Text(
+                    "Αρσενικό (ο), θηλυκό (η), ουδέτερο (το). Για τις προτάσεις με άρθρα — άφησέ το κενό αν δεν είναι ουσιαστικό.",
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                Spacer(Modifier.height(Sizes.gap))
+            }
+
+            Text("Δυσκολία", style = MaterialTheme.typography.titleLarge)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                (Difficulty.MIN..Difficulty.MAX).forEach { t -> KindChip("$t", s.tier == t) { vm.setTier(t) } }
+            }
+            Text(
+                "1 εύκολη, 5 δύσκολη. Ο Δημήτρης βλέπει στις «Λέξεις» ό,τι είναι μέχρι τη δυσκολία που έχει διαλέξει.",
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            Spacer(Modifier.height(Sizes.gap))
+
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
                 Text("Στα αγαπημένα του πίνακα", style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
                 Switch(checked = s.pinned, onCheckedChange = vm::setPinned)
@@ -250,6 +280,17 @@ fun ItemEditScreen(itemId: String?, onClose: () -> Unit, onTry: (String) -> Unit
         )
     }
 }
+
+/**
+ * The three genders as a caregiver writes them down — «Α» αρσενικό, «Θ» θηλυκό, «Ο» ουδέτερο —
+ * beside the one letter the column really holds ([gr.dimitris.app.core.greek.Gender.code]).
+ *
+ * Greek initials on the screen and Latin ones in the database on purpose: what she taps is Greek
+ * because everything she and he read is Greek, and what is stored is the enum's own code, which two
+ * phones and a sync server have to agree on letter for letter.
+ */
+private val GENDERS: List<Pair<String, String>> =
+    listOf(Gender.MASCULINE.code to "Α", Gender.FEMININE.code to "Θ", Gender.NEUTER.code to "Ο")
 
 @Composable
 private fun KindChip(label: String, selected: Boolean, onClick: () -> Unit) {

@@ -1,5 +1,6 @@
 package gr.dimitris.app.core.difficulty
 
+import gr.dimitris.app.core.data.Item
 import gr.dimitris.app.core.data.ItemKind
 import gr.dimitris.app.modules.arcade.Adaptive
 import gr.dimitris.app.modules.numbers.NumberProgression
@@ -132,6 +133,41 @@ class DifficultyTest {
         assertEquals(listOf(ItemKind.WORD, ItemKind.PHRASE), Difficulty.wordCoachKinds(Difficulty.DEFAULT))
         assertEquals(2, Difficulty.wordCoachTier(Difficulty.DEFAULT))
         assertEquals(1, Difficulty.wordCoachTier(1))
+    }
+
+    /**
+     * One dot, one tier, all five of them: before phase 13 the vocabulary was graded by kind alone,
+     * so dots 3, 4 and 5 all handed him the same two hundred everyday words. That is the half of
+     * "the app is too easy" this module was guilty of.
+     */
+    @Test fun `each word coach dot asks for a tier of its own`() {
+        for (n in 1..5) assertEquals("dot $n", n, Difficulty.wordCoachTier(n))
+    }
+
+    /**
+     * Cumulative, like the syllables and the dialogues: a dot admits every tier **at or below** it.
+     * «νερό» is still worth saying on the day he asks for «ελευθερία», and the sandwich wants an
+     * easy word at each end of the sitting.
+     */
+    @Test fun `a dot admits every tier at or below it and none above`() {
+        for (d in 1..5) for (t in 1..5) {
+            assertEquals("tier $t at dot $d", t <= d, Difficulty.admitsTier(t, d))
+        }
+    }
+
+    /**
+     * A word nobody has graded is the easiest tier and is in reach from every dot — which is every
+     * word already on a phone, every word a caregiver types without touching the chips, and every
+     * row pushed by a phone that has never heard of tiers (those arrive carrying a zero).
+     */
+    @Test fun `an ungraded word is in reach from every dot`() {
+        for (d in 1..5) {
+            assertTrue("a zero from an old phone at dot $d", Difficulty.admitsTier(0, d))
+            assertTrue("the default tier at dot $d", Difficulty.admitsTier(Item.DEFAULT_TIER, d))
+        }
+        // And a tier from beyond the row of dots is held to the hardest one there is, never dropped.
+        assertTrue(Difficulty.admitsTier(99, 5))
+        assertFalse(Difficulty.admitsTier(99, 4))
     }
 
     // ------------------------------------------------- «Τραγούδα και πες το»

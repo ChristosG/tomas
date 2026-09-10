@@ -188,6 +188,53 @@ class MigrationTest {
         }
     }
 
+    /**
+     * Phase 13 adds two columns to `items` and nothing else: `tier`, how hard the word is against
+     * his own dot row, and `gender`, what the sentence builder needs to put an article in front of a
+     * noun.
+     *
+     * Every word on every phone predates both — two hundred bundled ones and whatever the family has
+     * typed since — so what this really tests is that they all survive the upgrade and land where
+     * they belong: tier 1, the easiest, which is in reach from every dot; and no gender, which is a
+     * noun nobody has graded and not a noun asserted to have none. Her photo, her price and her pin
+     * come through as they were.
+     */
+    @Test fun migrate8To9AddsTierAndGenderAndKeepsEveryWord() {
+        val name = "migration-test-9.db"
+        helper.createDatabase(name, 8).use { db ->
+            // Every NOT NULL column v8 had, plus the nullable ones a caregiver fills in: this is the
+            // whole of a word before this phase.
+            db.execSQL(
+                "INSERT INTO items (id, text, kind, category, imagePath, modelRecordingId, firstSound, firstSyllable, " +
+                    "firstSyllableOverride, source, pinned, priceCents, createdAt, updatedAt, deleted) " +
+                    "VALUES ('a', 'ψωμί', 'WORD', 'FOOD', 'photos/p.jpg', 'r1', 'ψ', 'ψω', NULL, 'CAREGIVER', 1, 120, 1, 1, 0)"
+            )
+        }
+        helper.runMigrationsAndValidate(name, 9, true).use { db ->
+            db.query("SELECT text, kind, category, imagePath, priceCents, pinned, tier, gender FROM items WHERE id = 'a'").use { c ->
+                c.moveToFirst()
+                assertEquals("ψωμί", c.getString(0))
+                assertEquals("WORD", c.getString(1))
+                assertEquals("FOOD", c.getString(2))
+                assertEquals("her photograph stays on the word", "photos/p.jpg", c.getString(3))
+                assertEquals("her price stays on the word", 120, c.getInt(4))
+                assertEquals("a pinned word stays pinned", 1, c.getInt(5))
+                assertEquals("a word written before tiers is the easiest tier", 1, c.getInt(6))
+                assertTrue("nobody has said what gender this noun is", c.isNull(7))
+            }
+            // Writable straight away with both new columns, which is what makes them real.
+            db.execSQL(
+                "INSERT INTO items (id, text, kind, category, firstSound, source, pinned, tier, gender, createdAt, updatedAt, deleted) " +
+                    "VALUES ('b', 'ελπίδα', 'WORD', 'FEELINGS', 'ε', 'SEED', 0, 5, 'F', 2, 2, 0)"
+            )
+            db.query("SELECT tier, gender FROM items WHERE id = 'b'").use { c ->
+                c.moveToFirst()
+                assertEquals(5, c.getInt(0))
+                assertEquals("F", c.getString(1))
+            }
+        }
+    }
+
     /** Phase 5 only adds tables, so the rows a caregiver already has must come through untouched. */
     @Test fun migrate4To5CreatesScriptTablesAndKeepsTheOldRows() {
         val name = "migration-test-5.db"

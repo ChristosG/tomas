@@ -106,19 +106,35 @@ object Difficulty {
     // ------------------------------------------------------------------ «Λέξεις»
 
     /**
-     * Which tier of the vocabulary the word coach draws from: 1 single words only, 2 words and
-     * phrases.
+     * The hardest tier of the vocabulary this dot asks for, as a
+     * [gr.dimitris.app.core.data.Item.tier]: one dot, one tier, and dot n admits every word of tier
+     * n **and below**.
      *
-     * **There are only two tiers today.** The seed ships words and phrases and nothing graded beyond
-     * them, so 3, 4 and 5 all map to tier 2 — the hardest that exists — until phase 13 brings a
-     * graded vocabulary. Tier 2 is also [DEFAULT], which is why an upgraded phone sees the same
-     * words it saw yesterday.
+     * Five tiers exist since phase 13 — 1 the everyday words, 2 the phrases, 3 the long everyday
+     * words a chemist and a bank need, 4 the verbs and adjectives of an opinion, 5 the abstract
+     * nouns — so every dot now means something different. Before it there were two, and dots 3, 4
+     * and 5 all landed on the same two hundred words, which is the half of "the app is too easy"
+     * that «Λέξεις» was guilty of.
+     *
+     * Cumulative, like [syllableCeiling] and [scriptTier] and for the same reason: «νερό» is still
+     * worth saying on the day he asks for «ελευθερία», and the sandwich in
+     * [gr.dimitris.app.core.scheduler.SessionBuilder] wants an easy word at each end of the sitting.
+     * A word nobody has graded is tier 1 — every word already on a phone, and every word a caregiver
+     * types without touching the chips — so it is in reach from every dot, always.
      */
-    fun wordCoachTier(d: Int): Int = if (clamp(d) <= 1) 1 else 2
+    fun wordCoachTier(d: Int): Int = clamp(d)
 
-    /** The kinds tier [wordCoachTier] admits. A phrase is the harder thing to retrieve and to say. */
+    /** Whether a word of [tier] is one this dot asks for. Anything unreadable counts as the easiest. */
+    fun admitsTier(tier: Int, d: Int): Boolean = clamp(tier) <= wordCoachTier(d)
+
+    /**
+     * The kinds tier [wordCoachTier] admits. A phrase is the harder thing to retrieve and to say, so
+     * dot 1 is single words and everything above it is words and phrases — which is what the module
+     * did before tiers, and still does: it is the same cut, drawn in SQL where the tier ceiling is
+     * drawn in Kotlin.
+     */
     fun wordCoachKinds(d: Int): List<ItemKind> =
-        if (wordCoachTier(d) == 1) listOf(ItemKind.WORD) else listOf(ItemKind.WORD, ItemKind.PHRASE)
+        if (wordCoachTier(d) <= 1) listOf(ItemKind.WORD) else listOf(ItemKind.WORD, ItemKind.PHRASE)
 
     // ------------------------------------------------- «Τραγούδα και πες το»
 

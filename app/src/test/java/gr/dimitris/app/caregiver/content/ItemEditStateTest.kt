@@ -1,6 +1,10 @@
 package gr.dimitris.app.caregiver.content
 
+import gr.dimitris.app.core.data.Item
+import gr.dimitris.app.core.data.ItemKind
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -41,4 +45,32 @@ class ItemEditStateTest {
     /** A refusal she has read does not take the button away — she may fix it and try again. */
     @Test fun `an error on the form does not stop it`() =
         assertTrue(saved.copy(error = "Η τιμή θέλει μορφή 3,50").canTry)
+
+    // ------------------------------------------- the two gradings the form writes onto the row
+
+    /**
+     * A word she has not graded is tier 1 and no gender, which is exactly where every word already
+     * on the phone is: in reach from every dot, and read by the ending as it always was.
+     */
+    @Test fun `a form nobody has graded writes the easiest tier and no gender`() {
+        assertEquals(Item.DEFAULT_TIER, ItemEditState().savedTier)
+        assertNull(ItemEditState().savedGender)
+    }
+
+    /** Whatever a stepper, a backup or a sync put in the form, the row gets 1 to 5. */
+    @Test fun `the tier that reaches the row is inside the row of dots`() {
+        assertEquals(5, saved.copy(tier = 5).savedTier)
+        assertEquals(1, saved.copy(tier = 0).savedTier)
+        assertEquals(5, saved.copy(tier = 9).savedTier)
+    }
+
+    /**
+     * The chips are drawn for a word alone, so a gender left behind by a switch to «Φράση» is a tap
+     * she took back by changing her mind — the same rule the sung take has, which is deleted rather
+     * than attached when the kind switches under it. A phrase takes no article.
+     */
+    @Test fun `only a word carries a gender to the database`() {
+        assertEquals("F", saved.copy(gender = "F").savedGender)
+        assertNull(saved.copy(kind = ItemKind.PHRASE, gender = "F").savedGender)
+    }
 }

@@ -4,6 +4,7 @@ import gr.dimitris.app.core.data.Item
 import gr.dimitris.app.core.data.ItemKind
 import gr.dimitris.app.core.data.Source
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -14,6 +15,13 @@ import org.junit.Test
  */
 class SeedImporterTest {
     private fun entry(text: String) = SeedEntry(text = text, kind = "PHRASE", category = "QUICK", image = null, arasaacId = null)
+
+    /** A bundled word with a grading on it, which is what every entry carries since phase 13. */
+    private fun graded(text: String, tier: Int, gender: String? = null) =
+        SeedEntry(text = text, kind = "WORD", category = "FOOD", image = null, arasaacId = null, tier = tier, gender = gender)
+
+    /** The row that import would have written for [entry] at [version] — the same row on every phone. */
+    private fun seeded(entry: SeedEntry, version: Int = 2) = SeedImporter.row(entry, version, imagePath = null)
 
     private val v1 = listOf("Ναι", "Όχι", "καφές")
     private val v2 = v1 + listOf("θέλω καφέ", "πάμε σπίτι")
@@ -86,5 +94,86 @@ class SeedImporterTest {
             Item(text = "Ναι", kind = ItemKind.PHRASE, source = Source.SEED),
         )
         assertEquals(listOf("Πάμε"), SeedImporter.newEntries(manifest, SeedImporter.onDevice(rows)).map { it.text })
+    }
+
+    // ------------------------------------------------ the grading, and whose work it may not touch
+
+    /**
+     * What a bundled word arrives with: its tier, its gender, and an id and a stamp that come from
+     * the manifest rather than from this phone.
+     */
+    @Test fun `a bundled word carries its tier and its gender`() {
+        val row = seeded(graded("ελπίδα", tier = 5, gender = "F"), version = 3)
+        assertEquals(5, row.tier)
+        assertEquals("F", row.gender)
+        assertEquals(SeedIds.item("ελπίδα"), row.id)
+        assertEquals(SeedIds.stamp(3), row.updatedAt)
+    }
+
+    /** A manifest that says nothing is the easiest tier and an ungraded noun, never a zero. */
+    @Test fun `a word with no grading in the manifest is tier one and no gender`() {
+        val row = seeded(SeedEntry(text = "νερό", kind = "WORD", category = "FOOD", image = null, arasaacId = null, tier = 0))
+        assertEquals(1, row.tier)
+        assertNull(row.gender)
+    }
+
+    /** A typo in words.json is "nobody has said", not a value in the database no reader understands. */
+    @Test fun `a gender this app cannot read is stored as no gender at all`() {
+        assertNull(seeded(graded("καφές", tier = 1, gender = "Θ")).gender)
+        assertEquals("M", seeded(graded("καφές", tier = 1, gender = " m ")).gender)
+    }
+
+    /**
+     * The re-grade a version bump owes a phone that has had the vocabulary since day one: the two
+     * hundred words it already holds gain the tier and the gender phase 13 gave them, and their
+     * stamp moves to the new manifest's so the other phones take the change too.
+     */
+    @Test fun `a bump re-grades the bundled words the device already has`() {
+        val v3 = SeedManifest(version = 3, items = listOf(graded("καφές", tier = 1, gender = "M"), graded("ελπίδα", tier = 5, gender = "F")))
+        val onDevice = v3.items.map { seeded(it.copy(tier = 1, gender = null), version = 2) }
+
+        val rows = SeedImporter.regraded(v3, onDevice, SeedIds.stamp(3))
+
+        assertEquals(listOf("ελπίδα" to 5, "καφές" to 1), rows.sortedBy { it.text }.map { it.text to it.tier })
+        assertEquals(setOf("F", "M"), rows.mapTo(mutableSetOf()) { it.gender })
+        assertTrue("the re-grade travels as a newer row", rows.all { it.updatedAt == SeedIds.stamp(3) })
+    }
+
+    /** A re-import of the same manifest writes nothing, so no `updatedAt` moves for nobody's change. */
+    @Test fun `a word that already says what the manifest says is left alone`() {
+        val v3 = SeedManifest(version = 3, items = listOf(graded("ελπίδα", tier = 5, gender = "F")))
+        val onDevice = v3.items.map { seeded(it, version = 3) }
+        assertTrue(SeedImporter.regraded(v3, onDevice, SeedIds.stamp(3)).isEmpty())
+    }
+
+    /**
+     * The three ways a row is hers, and none of them is ever re-graded: she edited it (a real clock
+     * is eleven digits past any stamp), she re-typed the word, or she deleted it. The last one is the
+     * one with teeth — a deletion rewritten here would be pushed at the other phones on the next
+     * sync for a change nobody asked for.
+     */
+    @Test fun `the re-grade never touches a word the caregiver has had a hand in`() {
+        val v3 = SeedManifest(version = 3, items = listOf(graded("καφές", tier = 1, gender = "M")))
+        val stamp = SeedIds.stamp(3)
+        val seed = seeded(v3.items.single().copy(tier = 1, gender = null), version = 2)
+
+        assertTrue("she edited it", SeedImporter.regraded(v3, listOf(seed.copy(updatedAt = 1_757_000_000_000)), stamp).isEmpty())
+        assertTrue("she re-typed it", SeedImporter.regraded(v3, listOf(seed.copy(text = "καφες")), stamp).isEmpty())
+        assertTrue("she deleted it", SeedImporter.regraded(v3, listOf(seed.copy(deleted = true)), stamp).isEmpty())
+        // And a word of her own that happens to say the same thing is not our row at all.
+        assertTrue(
+            "hers, with an id of her own",
+            SeedImporter.regraded(v3, listOf(Item(id = "hers", text = "καφές", source = Source.CAREGIVER, updatedAt = 1)), stamp).isEmpty(),
+        )
+        // The bundled row itself, untouched, is re-graded — so the three refusals above are the
+        // conditions talking and not an empty list for some other reason.
+        assertEquals(listOf("M"), SeedImporter.regraded(v3, listOf(seed), stamp).map { it.gender })
+    }
+
+    /** A word the manifest has twice is re-graded once, like everything else the importer reads. */
+    @Test fun `a duplicate in the manifest re-grades once`() {
+        val v3 = SeedManifest(version = 3, items = listOf(graded("ελπίδα", tier = 5, gender = "F"), graded("ελπίδα", tier = 5, gender = "F")))
+        val onDevice = listOf(seeded(graded("ελπίδα", tier = 1), version = 2))
+        assertEquals(1, SeedImporter.regraded(v3, onDevice, SeedIds.stamp(3)).size)
     }
 }

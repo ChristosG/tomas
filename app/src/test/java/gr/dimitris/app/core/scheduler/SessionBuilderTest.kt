@@ -374,6 +374,22 @@ class SessionBuilderTest {
         assertEquals(setOf(w.id, phrase.id), builder.plan(m, Difficulty.wordCoachKinds(2)).map { it.id }.toSet())
     }
 
+    /**
+     * The word coach's other cut, wired exactly as [gr.dimitris.app.modules.wordcoach.WordCoachModule]
+     * wires it: the dot is a ceiling on the *tier* of the words the boxes may choose from.
+     *
+     * Cumulative, so the easy word never leaves the pool — it is what the sandwich starts and ends
+     * the sitting with — and a word nobody has graded is tier 1 and is always in reach.
+     */
+    @Test fun `the word coach's dots are a ceiling on the tier`() = runTest {
+        val easy = word("νερό")
+        val hard = Item(text = "ελευθερία", tier = 5, source = Source.SEED, createdAt = 2).also { items.upsert(it) }
+        fun at(dot: Int) = SessionBuilder(items, schedules, { noon }, filter = { Difficulty.admitsTier(it.tier, dot) })
+
+        assertEquals(listOf(easy.id), at(2).plan(m, listOf(ItemKind.WORD)).map { it.id })
+        assertEquals(setOf(easy.id, hard.id), at(5).plan(m, listOf(ItemKind.WORD)).map { it.id }.toSet())
+    }
+
     @Test fun `startOfDay is midnight local time`() {
         val start = startOfDay(noon)
         assert(start <= noon && noon - start < LeitnerPolicy.DAY_MS)

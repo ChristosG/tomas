@@ -5,6 +5,8 @@ import gr.dimitris.app.core.data.Category
 import gr.dimitris.app.core.data.Item
 import gr.dimitris.app.core.data.ItemKind
 import gr.dimitris.app.core.data.Source
+import gr.dimitris.app.core.difficulty.Difficulty
+import gr.dimitris.app.core.greek.Gender
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
@@ -18,15 +20,22 @@ class SeedImporter(private val graph: AppGraph) {
         try {
             val manifest = graph.app.assets.open("seed/seed.json").bufferedReader().use { SeedManifest.parse(it.readText()) }
             if (graph.settings.seedVersion.first() >= manifest.version) return@withContext
+            val stamp = SeedIds.stamp(manifest.version)
             // Every item the device has ever had, not only the seeded ones: see newEntries.
-            for (entry in newEntries(manifest, onDevice(graph.db.items().all()))) {
+            val all = graph.db.items().all()
+            for (entry in newEntries(manifest, onDevice(all))) {
                 val image = entry.image?.let { copyAsset("seed/$it") }
                 // Nothing here comes from the clock or from a fresh UUID — see [row] and SeedIds.
-                graph.items.save(
-                    row(entry, manifest.version, image?.let { graph.files.relativize(it) }),
-                    at = SeedIds.stamp(manifest.version),
-                )
+                graph.items.save(row(entry, manifest.version, image?.let { graph.files.relativize(it) }), at = stamp)
             }
+            // What a bump owes a device that already has the vocabulary: not the words — she may
+            // have re-typed one, and then it is hers — but the grading. Phase 13 gave every bundled
+            // word a tier and every bundled noun a gender, and without this the two hundred that
+            // shipped before it would have stayed tier 1 with no gender on every phone already in
+            // use, for ever: his dots 3 to 5 would have drawn on the new words alone and the article
+            // levels would have gone on guessing from endings. See [regraded].
+            val regrade = regraded(manifest, all, stamp)
+            if (regrade.isNotEmpty()) graph.db.items().upsertAll(regrade)
             graph.settings.setSeedVersion(manifest.version)
         } catch (ce: CancellationException) {
             throw ce
@@ -65,9 +74,57 @@ class SeedImporter(private val graph: AppGraph) {
             category = runCatching { Category.valueOf(entry.category) }.getOrDefault(Category.CUSTOM),
             imagePath = imagePath,
             source = Source.SEED,
+            tier = Difficulty.clamp(entry.tier),
+            gender = genderOf(entry),
             createdAt = SeedIds.stamp(version),
             updatedAt = SeedIds.stamp(version),
         )
+
+        /**
+         * The gender a bundled word claims, normalised to what the column holds — `"M"`, `"F"`,
+         * `"N"` — and null for anything else.
+         *
+         * Through [gr.dimitris.app.core.greek.Gender] rather than stored raw, so a typo in
+         * `words.json` («Θ» for «F», a stray space) becomes "nobody has said" and the ending is read
+         * as it always was, instead of a value in the database that no reader understands.
+         */
+        internal fun genderOf(entry: SeedEntry): String? = Gender.of(entry.gender)?.code
+
+        /**
+         * The bundled words already on the device whose grading a version bump may correct, and no
+         * others. Everything else the device holds is left exactly as it is.
+         *
+         * The same three conditions as the dialogues' [gr.dimitris.app.core.seed.ScriptSeedImporter.regraded],
+         * and all three are about not touching a caregiver's work:
+         *
+         * * **the row is ours** — its id is [SeedIds.item] for this text, so a word she typed
+         *   herself is not ours and is never seen, even when it says the same thing;
+         * * **the word is still ours** — the row's text is the manifest's, character for character
+         *   once trimmed. A word she re-typed («καφες» without its tonos) is hers now, and hers keeps
+         *   whatever tier and gender she gave it;
+         * * **nobody has touched it since it was seeded** — `updatedAt` is at or below [stamp], which
+         *   is [SeedIds.EPOCH] plus a version number. Anything the family does is stamped with a real
+         *   clock and is eleven digits larger, so a word she edited in the editor, or one that
+         *   arrived from another phone over sync, is out of reach of this by arithmetic.
+         *
+         * A deleted row is left deleted and ungraded: she decided against that word, and a bump that
+         * rewrote its `updatedAt` would push a pointless row at the other phones on the next sync.
+         *
+         * Rows that already say what the manifest says are left out too, so a re-import writes
+         * nothing and no `updatedAt` moves for a change nobody made.
+         */
+        fun regraded(manifest: SeedManifest, onDevice: List<Item>, stamp: Long): List<Item> {
+            val byId = onDevice.associateBy { it.id }
+            return manifest.items.distinctBy { SeedText.key(it.text) }.mapNotNull { entry ->
+                val row = byId[SeedIds.item(entry.text)] ?: return@mapNotNull null
+                if (row.deleted || row.updatedAt > stamp) return@mapNotNull null
+                if (row.text.trim() != entry.text.trim()) return@mapNotNull null
+                val tier = Difficulty.clamp(entry.tier)
+                val gender = genderOf(entry)
+                if (row.tier == tier && row.gender == gender) null
+                else row.copy(tier = tier, gender = gender, updatedAt = stamp)
+            }
+        }
 
         /**
          * What counts as "already on this device" for the vocabulary seed.

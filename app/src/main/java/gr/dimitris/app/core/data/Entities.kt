@@ -60,10 +60,51 @@ data class Item(
     @ColumnInfo(defaultValue = "0") val pinned: Boolean = false,
     /** Real price in cents, for the euro exercises (caregivers copy it from Wolt). */
     val priceCents: Int? = null,
+    /**
+     * How hard this word is, 1 to 5, against the dot row of
+     * [gr.dimitris.app.core.difficulty.Difficulty] — phase 13's answer to "the app is too easy".
+     *
+     * Until now the only grading the vocabulary had was its [kind]: a word, or a phrase. That is two
+     * steps for five dots, and Dimitris, who is stronger than the app assumed, spent three of them
+     * on the same two hundred everyday words. A tier is what the *word* says about its own
+     * difficulty: 1 «νερό», 2 «θέλω καφέ», 3 «λογαριασμός», 4 «αποφασίζω», 5 «ελευθερία». A dot
+     * admits every tier at or below it ([gr.dimitris.app.core.difficulty.Difficulty.wordCoachTier]),
+     * so the easy words never leave the pool — they are the easy ends of the sandwich.
+     *
+     * Defaulted in the database as well as in Kotlin: every word already on a phone, hers as much as
+     * ours, becomes tier 1 and stays exactly as reachable as it was. Read it through
+     * [gr.dimitris.app.core.difficulty.Difficulty.clamp] — a row pushed by a phone that has never
+     * heard of tiers arrives carrying a 0.
+     */
+    @ColumnInfo(defaultValue = "1") val tier: Int = DEFAULT_TIER,
+    /**
+     * What gender this noun is — `"M"`, `"F"`, `"N"` — or null when nobody has said.
+     *
+     * The sentence builder needs it for every noun it puts an article in front of, and until now it
+     * had to *guess* from the ending ([gr.dimitris.app.core.greek.nounForm]): «-ο» and «-ι» neuter,
+     * «-η» feminine, and a hand-written list for «γάλα», «πόρτα» and everything else whose ending
+     * lies. A word a caregiver adds is not in that list, so at levels 5–8 it was simply never
+     * offered — the article levels drew on the seed alone. A column she can set is what lets her own
+     * words in, and it wins over the guess wherever it is filled in.
+     *
+     * Nullable on purpose, and null nearly everywhere: a verb, an adjective, a phrase and a number
+     * have no gender, and a noun nobody has graded falls back on the inference exactly as before.
+     */
+    val gender: String? = null,
     val createdAt: Long = now(),
     val updatedAt: Long = now(),
     val deleted: Boolean = false,
-)
+) {
+    companion object {
+        /** The easiest tier, and what every word written before phase 13 is. */
+        const val DEFAULT_TIER = 1
+
+        /** The three values [gender] may carry. Read them with [gr.dimitris.app.core.greek.Gender.of]. */
+        const val MASCULINE = "M"
+        const val FEMININE = "F"
+        const val NEUTER = "N"
+    }
+}
 
 @Entity(tableName = "recordings", indices = [Index("itemId"), Index("updatedAt")])
 data class Recording(

@@ -11,7 +11,9 @@ import gr.dimitris.app.core.data.Item
 import gr.dimitris.app.core.data.ItemKind
 import gr.dimitris.app.core.data.RecordingStyle
 import gr.dimitris.app.core.data.Who
+import gr.dimitris.app.core.difficulty.Difficulty
 import gr.dimitris.app.core.greek.Euro
+import gr.dimitris.app.core.greek.Gender
 import gr.dimitris.app.core.greek.Syllabifier
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -32,6 +34,17 @@ data class ItemEditState(
     val pinned: Boolean = false,
     /** Real price as the caregiver types it, "3,50". Empty means the item has no price. */
     val priceText: String = "",
+    /**
+     * How hard this word is, 1 to 5, against his own dot row — see [gr.dimitris.app.core.data.Item.tier].
+     * Everything starts at 1, which is where every word already on the phone is.
+     */
+    val tier: Int = Item.DEFAULT_TIER,
+    /**
+     * `"M"`, `"F"`, `"N"` or null: what the sentence builder needs to put an article in front of a
+     * noun. Null is "nobody has said", which is a verb, a phrase, or a noun she has not graded — and
+     * then the ending is read as it always was.
+     */
+    val gender: String? = null,
     val imagePath: String? = null,
     val firstSyllableOverride: String = "",
     val autoSyllable: String? = null,
@@ -57,6 +70,19 @@ data class ItemEditState(
     val recordingPath: String? get() = newRecording?.file?.absolutePath ?: savedRecordingPath
     val sungPath: String? get() = newSungRecording?.file?.absolutePath ?: savedSungPath
     val isNew: Boolean get() = id == null
+
+    /** What goes into the row: 1 to 5 whatever the form holds. */
+    val savedTier: Int get() = Difficulty.clamp(tier)
+
+    /**
+     * The gender that goes into the row, which is hers only while the item is a **word**.
+     *
+     * The chips are drawn for a word alone, so a gender left in the form by a switch to «Φράση» is
+     * a tap she took back by changing her mind — the same rule the sung take has, which is deleted
+     * rather than attached when the kind switches under it. A phrase carrying a gender would tell
+     * the sentence builder something about it that is not true.
+     */
+    val savedGender: String? get() = gender.takeIf { kind == ItemKind.WORD }
 
     /**
      * Whether «Δοκίμασέ το» can be pressed.
@@ -86,6 +112,7 @@ class ItemEditViewModel(private val graph: AppGraph, private val itemId: String?
             _state.value = ItemEditState(
                 id = item.id, text = item.text, kind = item.kind, category = item.category, pinned = item.pinned,
                 priceText = item.priceCents?.let { Euro.format(it).removeSuffix(" €") } ?: "", imagePath = item.imagePath,
+                tier = Difficulty.clamp(item.tier), gender = Gender.of(item.gender)?.code,
                 firstSyllableOverride = item.firstSyllableOverride ?: "", autoSyllable = Syllabifier.firstSyllable(item.text),
                 savedRecordingPath = model?.path, savedSungPath = sung?.path,
             )
@@ -106,6 +133,16 @@ class ItemEditViewModel(private val graph: AppGraph, private val itemId: String?
         _state.update { it.copy(kind = kind, dirty = true) }
     }
     fun setCategory(category: Category) = _state.update { it.copy(category = category, dirty = true) }
+
+    /** 1 to 5, held to the row of dots whatever a caller passes. */
+    fun setTier(tier: Int) = _state.update { it.copy(tier = Difficulty.clamp(tier), dirty = true) }
+
+    /**
+     * The gender chips, and null to say nothing at all — tapping the chip that is already on clears
+     * it, which is how she takes back a wrong tap without leaving the form. Anything this file does
+     * not understand is stored as "nobody has said" rather than as an unreadable column.
+     */
+    fun setGender(code: String?) = _state.update { it.copy(gender = Gender.of(code)?.code, dirty = true) }
     fun setPinned(on: Boolean) = _state.update { it.copy(pinned = on, dirty = true) }
     fun setPriceText(t: String) = _state.update { it.copy(priceText = t, dirty = true, error = null) }
     fun setOverride(value: String) = _state.update { it.copy(firstSyllableOverride = value, dirty = true) }
@@ -234,6 +271,7 @@ class ItemEditViewModel(private val graph: AppGraph, private val itemId: String?
                 val draft = (existing ?: Item(text = s.text)).copy(
                     text = s.text, kind = s.kind, category = s.category, pinned = s.pinned, imagePath = s.imagePath,
                     priceCents = Euro.parse(s.priceText), firstSyllableOverride = s.firstSyllableOverride,
+                    tier = s.savedTier, gender = s.savedGender,
                 )
                 val saved = graph.items.save(draft)
                 _state.value.newRecording?.let { graph.items.addRecording(saved.id, it.file, it.durationMs, Who.CAREGIVER) }

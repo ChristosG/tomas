@@ -461,7 +461,7 @@ private class Roles(pool: List<Item>, private val random: Random) {
         // His own cards only: a small word the module minted is not a noun, and «στο» read as one
         // would say the board holds a neuter singular when it holds an article.
         val onBoard = shape.tiles.filterNot { it.madeUp }
-            .mapNotNullTo(mutableSetOf()) { Greek.nounForm(it.item.text) }
+            .mapNotNullTo(mutableSetOf()) { formOf(it.item) }
         // Banned by how it is *written*, not only by what it agrees with: «οι» is the nominative of
         // a masculine plural and of a feminine plural both, so a board holding «τις πατάτες» must
         // not be handed «οι» on the grounds that it has no masculine plural in it.
@@ -479,7 +479,7 @@ private class Roles(pool: List<Item>, private val random: Random) {
      * or more articles of another gender or number that would not agree with [noun] if he chose one.
      */
     private fun blank(at: Int, noun: Item, case: Case, contracted: Boolean = false): Blank? {
-        val form = Greek.nounForm(noun.text) ?: return null
+        val form = formOf(noun) ?: return null
         val answer = if (contracted) contractedOf(noun) else articleOf(noun, case)
         if (answer == null) return null
         val wrong = ARTICLE_SHAPES
@@ -488,19 +488,32 @@ private class Roles(pool: List<Item>, private val random: Random) {
         return if (wrong.size < SentenceTemplates.OPTIONS - 1) null else Blank(at, answer, wrong)
     }
 
+    /**
+     * What a card's word is, gender column first.
+     *
+     * Since phase 13 a row can say its own gender, and where it does it is the answer: that is what
+     * lets a word the caregiver typed — «ραντεβού», «ο λογαριασμός», her sister's name — stand at
+     * levels 5–8 at all. Where it does not, this is exactly the ending-and-list inference the module
+     * has always run on. See [gr.dimitris.app.core.greek.nounForm].
+     */
+    private fun formOf(item: Item): NounForm? = Greek.nounForm(item.text, item.gender)
+
     /** Whether this app can say what a card's word is, which is whether it may take an article. */
-    private fun readable(item: Item): Boolean = Greek.nounForm(item.text) != null
+    private fun readable(item: Item): Boolean = formOf(item) != null
 
     /**
      * The article that goes in front of a card. The word that follows it is what decides the
      * feminine's final «ν» — «τη θάλασσα» but «την τράπεζα» — and after a verb that word is the
      * accusative, not the card's own nominative.
      */
-    private fun articleOf(item: Item, case: Case): String? =
-        Greek.article(item.text, case, before = if (case == Case.ACCUSATIVE) Greek.accusative(item.text) else item.text)
+    private fun articleOf(item: Item, case: Case): String? = Greek.article(
+        item.text, case,
+        before = if (case == Case.ACCUSATIVE) Greek.accusative(item.text) else item.text,
+        gender = item.gender,
+    )
 
     private fun contractedOf(item: Item): String? =
-        Greek.contracted(item.text, before = Greek.accusative(item.text))
+        Greek.contracted(item.text, before = Greek.accusative(item.text), gender = item.gender)
 
     /** A noun after a verb is its object, and an object is written in the accusative: «θέλω καφέ». */
     private fun objectTile(item: Item) = Tile(item, Greek.accusative(item.text))
@@ -550,8 +563,13 @@ private const val IS = "είναι"
 /** The Greek question mark. Written as itself, on the sentence rather than on the last card. */
 private const val QUESTION_MARK = ";"
 
-/** What «πίνω» takes, and what «τρώω» does not. */
-private val DRINKABLE = setOf("νερο", "καφες", "τσαι", "γαλα", "μπυρα", "κρασι", "χυμος")
+/**
+ * What «πίνω» takes, and what «τρώω» does not.
+ *
+ * Everything FOOD holds that is not here is a meal, so a drink missing from this line is a board
+ * that says «τρώω λεμονάδα» — which is why the two the phase 13 vocabulary added are on it.
+ */
+private val DRINKABLE = setOf("νερο", "καφες", "τσαι", "γαλα", "μπυρα", "κρασι", "χυμος", "λεμοναδα", "πορτοκαλαδα")
 
 /** The time words that end a sentence. The seed's other TIME cards are days and parts of the day. */
 private val TIME_WORDS = setOf("τωρα", "σημερα", "αυριο", "μετα")
@@ -567,8 +585,15 @@ private val TIME_WORDS = setOf("τωρα", "σημερα", "αυριο", "μετ
  * rooms of a house are the whole of it; the other fifteen are bare-noun goals.
  *
  * Level 6 has the preposition, so it uses [VEHICLES] alone and every other place is a destination.
+ *
+ * Swept again over the fourteen places phase 13 added: «πάμε φούρνο», «πάμε περίπτερο», «πάμε
+ * παραλία», «πάμε πλατεία» are all whole sentences as they stand, and the two that are not are the
+ * two that name where one already *is* rather than somewhere to go — «πάμε στη γειτονιά», «πάμε
+ * στην πόλη» — so they wait for the preposition at level 6.
  */
-private val NOT_DESTINATIONS = setOf("ταξι", "λεωφορειο", "αυτοκινητο", "δρομος", "κουζινα", "κρεβατι", "μπαλκονι")
+private val NOT_DESTINATIONS = setOf(
+    "ταξι", "λεωφορειο", "αυτοκινητο", "δρομος", "κουζινα", "κρεβατι", "μπαλκονι", "γειτονια", "πολη",
+)
 
 /** The PLACES cards that are not somewhere to be but something to go in: «με το λεωφορείο». */
 private val VEHICLES = setOf("ταξι", "λεωφορειο", "αυτοκινητο")

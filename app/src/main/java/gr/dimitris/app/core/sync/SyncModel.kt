@@ -118,8 +118,13 @@ object Tables {
     val RECORDING_EXTS: Set<String> = setOf(RECORDING_EXT, WAV_EXT)
 
     val all: List<TableSpec> = listOf(
+        // `tier` and `gender` arrived with phase 13, on a table that has been syncing since phase 10.
+        // `gender` is nullable and excuses itself; `tier` has a database default under it, so a word
+        // pushed by a v8 phone — which is every word on the father's server today — is a whole word
+        // and is taken.
         TableSpec(ITEMS, Item::class.java, appendOnly = false, mediaFields = mapOf("imagePath" to PHOTO_EXT),
-            idOf = ::plainId, sample = { Item(text = "") }),
+            idOf = ::plainId, sample = { Item(text = "", gender = null) },
+            optional = setOf("tier", "gender")),
         TableSpec(SCRIPTS, Script::class.java, appendOnly = false,
             idOf = ::plainId, sample = { Script(title = "") }),
         // `tier` and `intent` arrived with phase 12. `intent` is nullable and excuses itself; `tier`

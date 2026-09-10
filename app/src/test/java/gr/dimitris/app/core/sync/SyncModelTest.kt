@@ -25,13 +25,15 @@ class SyncModelTest {
     @Test fun `an item survives the round trip through a row`() {
         val item = Item(
             text = "ψωμί", kind = ItemKind.WORD, category = Category.FOOD, imagePath = "photos/x.jpg",
-            firstSound = "ψ", firstSyllable = "ψω", pinned = true, priceCents = 120,
+            firstSound = "ψ", firstSyllable = "ψω", pinned = true, priceCents = 120, tier = 1, gender = "N",
             createdAt = 1_757_000_000_000, updatedAt = 1_757_000_000_001,
         )
         val row = Rows.of(item)
 
         assertEquals("ψωμί", row["text"])
         assertEquals("FOOD", row["category"])
+        assertEquals(1L, row["tier"])
+        assertEquals("N", row["gender"])
         assertEquals(1_757_000_000_001L, row["updatedAt"])
         assertEquals(item, Rows.to(row, Item::class.java))
     }
@@ -193,6 +195,30 @@ class SyncModelTest {
         assertEquals(listOf("itemId"), spec.missing(whole - "itemId"))
         // And what does arrive is read back as it was written.
         assertEquals(3, Rows.to(whole, ScriptLine::class.java).tier)
+    }
+
+    /**
+     * The two columns phase 13 added to a table that has been syncing since phase 10.
+     *
+     * Every word on the father's server was pushed by a phone that had never heard of either, and
+     * those rows are the family's own work — her photographs, her prices, her pins. Setting them
+     * aside as unreadable would mean her vocabulary simply never arriving on the phone that pulls
+     * them next. `gender` is nullable and excuses itself; `tier` is not, and is excused by hand
+     * because the schema's own default is under it.
+     */
+    @Test fun `a word pushed before tiers existed is still a whole word`() {
+        val spec = Tables.of(Tables.ITEMS)!!
+        val whole = Rows.of(Item(id = "i1", text = "ελπίδα", tier = 5, gender = "F"))
+        assertTrue(spec.missing(whole).isEmpty())
+        assertTrue(spec.required.containsAll(listOf("id", "text", "kind", "category", "source", "updatedAt")))
+        assertFalse("tier has a default under it", "tier" in spec.required)
+        assertFalse("a noun nobody graded is not a missing column", "gender" in spec.required)
+        assertTrue(spec.missing(whole - "tier" - "gender").isEmpty())
+        assertEquals(listOf("text"), spec.missing(whole - "text"))
+        // And what does arrive is read back as it was written.
+        val back = Rows.to(whole, Item::class.java)
+        assertEquals(5, back.tier)
+        assertEquals("F", back.gender)
     }
 
     @Test fun `only attempts and error logs are append-only`() {

@@ -10,8 +10,13 @@ package gr.dimitris.app.core.greek
  * the board as cards of their own, which means the module has to know, for every card in his
  * vocabulary, what its article is.
  *
- * Three rules and a list, in that order:
+ * A column, three rules and a list, in that order:
  *
+ *  0. **What the word itself says.** Since phase 13 a row can carry its own gender
+ *     ([gr.dimitris.app.core.data.Item.gender]), set by the caregiver in the editor or shipped with
+ *     the seed, and where it is filled in it is the answer — see [nounForm] with a gender. The rules
+ *     below are what happens when it is not, which is every word already on a phone and every word
+ *     she adds without touching the chips.
  *  1. **The ending, where the ending is the whole answer.** -ο and -ι are neuter, -η is feminine,
  *     -ος/-ας/-ης/-ές are masculine. Those cover most of the seed and any word a caregiver types.
  *  2. **The list, where the ending lies.** «γάλα» is neuter and «πόρτα» is feminine and both end in
@@ -30,8 +35,29 @@ package gr.dimitris.app.core.greek
 /** The two cases a sentence card is ever written in: what does it, and what it is done to. */
 enum class Case { NOMINATIVE, ACCUSATIVE }
 
-/** Greek has three, and an article that gets it wrong is the mistake this module exists to unteach. */
-enum class Gender { MASCULINE, FEMININE, NEUTER }
+/**
+ * Greek has three, and an article that gets it wrong is the mistake this module exists to unteach.
+ *
+ * [code] is how one is written down in [gr.dimitris.app.core.data.Item.gender] — one letter, because
+ * it is a database column read by two phones and a sync server and not a word anybody sees. The
+ * Greek initials the caregiver taps in the editor («Α», «Θ», «Ο») are the *screen's* business.
+ */
+enum class Gender(val code: String) {
+    MASCULINE("M"), FEMININE("F"), NEUTER("N");
+
+    companion object {
+        /**
+         * What a stored code says, or null when it says nothing this file understands — an empty
+         * column, a word nobody has graded, or a value from a version of the app that knew a fourth
+         * gender. Null means "fall back on the ending", which is where every word was before phase
+         * 13, so an unreadable code costs a card at levels 5–8 and never a wrong article.
+         */
+        fun of(code: String?): Gender? {
+            val c = code?.trim()?.uppercase() ?: return null
+            return entries.firstOrNull { it.code == c }
+        }
+    }
+}
 
 /** Everything an article needs to know about a noun, and nothing else. */
 data class NounForm(val gender: Gender, val plural: Boolean)
@@ -77,6 +103,26 @@ fun Greek.nounForm(noun: String): NounForm? {
 }
 
 /**
+ * The same, for a word that has been **told** what it is: [gr.dimitris.app.core.data.Item.gender],
+ * as a caregiver set it in the editor or as the seed ships it.
+ *
+ * A stated gender always wins. The three rules above are an inference over an ending, and an ending
+ * is a guess: they are right about most of the seed and silent about the rest, and a word she typed
+ * herself — «ραντεβού», «λογαριασμός», her sister's name — was very often the "rest", which is why
+ * the article levels could only ever draw on the bundled vocabulary. When the column says «Θ», this
+ * is a feminine, whatever it ends in, and nothing here second-guesses her.
+ *
+ * The **number** is still read off the word: [plural] knows «πατάτες» from «καφές», the column says
+ * nothing about it, and one thing at a time is what the editor asks her for.
+ *
+ * A blank or unreadable column is exactly the old behaviour — see [Gender.of].
+ */
+fun Greek.nounForm(noun: String, gender: String?): NounForm? {
+    val stated = Gender.of(gender) ?: return Greek.nounForm(noun)
+    return NounForm(stated, plural = Greek.plural(noun))
+}
+
+/**
  * The definite article [noun] takes in [case] — «ο», «τον», «στη» — or null when [nounForm] cannot
  * say what the noun is.
  *
@@ -88,8 +134,8 @@ fun Greek.nounForm(noun: String): NounForm? {
  * that «ν». It is [noun] itself in the nominative, and the **accusative** after a verb or a
  * preposition: «τη θάλασσα» is read off «θάλασσα», but «τον χυμό» is read off «χυμό», not «χυμός».
  */
-fun Greek.article(noun: String, case: Case, before: String = noun): String? {
-    val form = Greek.nounForm(noun) ?: return null
+fun Greek.article(noun: String, case: Case, before: String = noun, gender: String? = null): String? {
+    val form = Greek.nounForm(noun, gender) ?: return null
     return articleFor(form, case, before = before)
 }
 
@@ -109,8 +155,8 @@ fun Greek.article(form: NounForm, case: Case): String = articleFor(form, case, b
  * same final-«ν» rule; that it comes out as one card rather than two is the point — «σε το» is not
  * something anybody says, and a board that offered it would be teaching a form he must unlearn.
  */
-fun Greek.contracted(noun: String, before: String = noun): String? {
-    val form = Greek.nounForm(noun) ?: return null
+fun Greek.contracted(noun: String, before: String = noun, gender: String? = null): String? {
+    val form = Greek.nounForm(noun, gender) ?: return null
     return "σ" + articleFor(form, Case.ACCUSATIVE, before = before)
 }
 
@@ -232,6 +278,11 @@ private val FORMS: Map<String, NounForm> = buildMap {
     // THINGS
     f("τσαντα", "ομπρελα", "καρεκλα", "πορτα", "μπαλα", "εφημεριδα", "κουβερτα")
     nPl("κλειδια", "ρουχα", "παπουτσια", "φαρμακα", "χρηματα", "γυαλια")
+    // BODY. The one part of him written in the plural, and the *number* is what this list is for:
+    // the seed now says «δόντια» is a neuter ([gr.dimitris.app.core.data.Item.gender]), and a stated
+    // gender is read with the number this file works out — so without the line it would be a neuter
+    // singular and «το δόντια».
+    nPl("δοντια")
     // PLACES
     f("καφετερια", "θαλασσα", "εκκλησια", "τραπεζα", "ταβερνα", "κουζινα", "δουλεια", "πλατεια", "αγορα", "παραλια")
     n("σουπερ μαρκετ", "μαρκετ")

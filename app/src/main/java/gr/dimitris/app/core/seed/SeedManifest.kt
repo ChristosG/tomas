@@ -1,9 +1,30 @@
 package gr.dimitris.app.core.seed
 
 import com.google.gson.Gson
+import gr.dimitris.app.core.data.Item
 import gr.dimitris.app.core.greek.Greek
 
-data class SeedEntry(val text: String, val kind: String, val category: String, val image: String?, val arasaacId: Int?)
+/**
+ * One bundled word.
+ *
+ * [tier] is how hard it is, 1 to 5, against the dot row of
+ * [gr.dimitris.app.core.difficulty.Difficulty] — see [gr.dimitris.app.core.data.Item.tier]. Zero
+ * when the manifest left it out, because Gson fills a JVM zero rather than the default declared
+ * here, and [gr.dimitris.app.core.difficulty.Difficulty.clamp] reads a zero as the easiest tier.
+ *
+ * [gender] is `"M"`, `"F"` or `"N"` for a noun and null for everything else — a verb, an adjective,
+ * a phrase and a number have no gender. It is what lets the sentence builder put an article in front
+ * of a word whose ending does not say what it is; see [gr.dimitris.app.core.greek.Gender].
+ */
+data class SeedEntry(
+    val text: String,
+    val kind: String,
+    val category: String,
+    val image: String?,
+    val arasaacId: Int?,
+    val tier: Int = Item.DEFAULT_TIER,
+    val gender: String? = null,
+)
 data class SeedManifest(val version: Int, val items: List<SeedEntry>) {
     companion object {
         fun parse(json: String): SeedManifest = Gson().fromJson(json, SeedManifest::class.java)
