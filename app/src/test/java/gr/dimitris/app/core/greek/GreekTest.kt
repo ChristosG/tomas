@@ -53,6 +53,39 @@ class GreekTest {
     }
 
     /**
+     * The ending -ές lies in **both** directions: «καφές» is a masculine singular and «δουλειές» is a
+     * feminine plural stressed exactly the same way. The masculines are a closed handful; the plurals
+     * are open-ended. So the handful is named and everything else is silence — never «ο δουλειές».
+     */
+    @Test fun `a plural stressed on -ές is never read as a masculine singular`() {
+        assertEquals("ο", nom("καφές"))
+        // Named in the list, so they get their real form.
+        assertEquals("οι", nom("δουλειές"))
+        assertEquals("τις", acc("δουλειές"))
+        assertEquals("οι", nom("αδερφές"))
+        assertEquals("οι", nom("ελιές"))
+        assertEquals("τις", acc("καρδιές"))
+        // Not in the list, and the rule refuses to guess rather than making them masculine.
+        assertNull(nom("μπουκιές"))
+        assertNull(nom("κουβέντες"))
+        assertNull(nom("σκάλες"))
+    }
+
+    /**
+     * And the accusative makes the same call before it takes a final sigma off. «θέλω ελιέ» is not a
+     * Greek word; «θέλω μεζές» for a masculine nobody listed is merely an ending left on.
+     */
+    @Test fun `an end-stressed plural keeps its sigma in the accusative`() {
+        assertEquals("καφέ", Greek.accusative("καφές"))
+        assertEquals("κεφτέ", Greek.accusative("κεφτές"))
+        assertEquals("ελιές", Greek.accusative("ελιές"))
+        assertEquals("δουλειές", Greek.accusative("δουλειές"))
+        assertEquals("καρδιές", Greek.accusative("καρδιές"))
+        assertEquals("μπουκιές", Greek.accusative("μπουκιές"))
+        assertEquals("πατάτες", Greek.accusative("πατάτες"))
+    }
+
+    /**
      * The masculine keeps its final «ν» always — that is what tells «τον καφέ» from «το γάλα» out
      * loud — and the feminine keeps it before a vowel, κ, π, τ, ξ, ψ and μπ, ντ, γκ, τσ, τζ.
      */

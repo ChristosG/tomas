@@ -38,10 +38,18 @@ private fun dropFinalSigma(word: String): String {
     if (!ends || word.length < 2) return word
     // Typed in a hurry: «ΚΑΦΕΣ» and «κρεας» have to be recognised as the words they are.
     val bare = Greek.stripAccents(Greek.normalize(word))
-    // A plural that is already the accusative: «πατάτες», «γυναίκες», «πόλεις». Told apart from the
-    // masculine singulars that end the same way — «καφές», «χυμός» — by where the accent sits, which
-    // is [pluralEnding]'s rule: the article levels need exactly the same call, and one copy of it.
-    if (bare in NEUTER_IN_SIGMA || pluralEnding(word)) return word
+    // A neuter that ends in sigma keeps it: «τρώω κρέας».
+    if (bare in NEUTER_IN_SIGMA) return word
+    // A plural is already the accusative: «πατάτες», «γυναίκες», «πόλεις». [Greek.plural] is the one
+    // place that decides it — the curated list first, then the accent, which is what separates
+    // «πατάτες» from «καφές».
+    if (Greek.plural(word)) return word
+    // What is left ending in -ές carries the accent there, and only a **named** handful of those is
+    // a masculine singular ([nounForm]'s -ές branch). Everything else is a feminine plural stressed
+    // on the ending — «ελιές», «καρδιές», «δουλειές» — and it keeps its sigma. Keeping a sigma that
+    // should have gone is «θέλω μεζές» for a word nobody listed; dropping one that should have
+    // stayed is «θέλω ελιέ», which is not a Greek word at all.
+    if (bare.endsWith("ες") && !masculineInEs(bare)) return word
     return word.dropLast(1)
 }
 
@@ -61,4 +69,5 @@ internal val NEUTER_IN_SIGMA = setOf(
     "κρεας", "τερας", "περας", "γηρας",
     "φως", "λαθος", "μερος", "τελος", "ειδος", "μεγεθος", "βαρος", "υψος", "μηκος", "πλατος", "βαθος",
     "δασος", "κρατος", "ετος", "πληθος", "χρεος", "στηθος", "ηθος", "εδαφος", "γεγονος",
+    "αγχος", "παθος", "κοστος", "βρεφος", "σκευος", "θρασος", "ψυχος", "θαρρος", "μισος",
 )

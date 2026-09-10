@@ -251,9 +251,11 @@ class SentencesViewModel(
         while (at >= SentenceTemplates.MIN_LEVEL) {
             val made = templates.session(at, pool, wanted, judged).toMutableList()
             if (made.isNotEmpty()) {
-                // Short only because a shape came up empty by chance — ask again at the same level.
+                // Short only because a shape came up empty by chance — ask again at the same level,
+                // from where the sitting has got to, so the every-third rhythm is not restarted and
+                // two variants cannot land next to each other.
                 while (made.size < wanted) {
-                    val more = templates.session(at, pool, wanted - made.size, judged)
+                    val more = templates.session(at, pool, wanted - made.size, judged, from = made.size)
                     if (more.isEmpty()) break
                     made += more
                 }
@@ -379,7 +381,11 @@ class SentencesViewModel(
         _state.update { it.copy(checking = true) }
         viewModelScope.launch {
             val written = try {
-                check.weigh(said, prompt = sentence.picture?.item?.text.orEmpty(), target = sentence.text)
+                // The judge is given the line he is reading, word and all — «Γράψε μια ερώτηση για:
+                // φαρμακείο» — and not just the word. A model told only «φαρμακείο» has the same
+                // problem he would: it cannot know a question was wanted, and the SENTENCE contract
+                // makes it refuse anything whose meaning does not agree with the target.
+                check.weigh(said, prompt = asked(sentence), target = sentence.text)
             } catch (ce: CancellationException) {
                 throw ce
             } catch (e: Throwable) {
@@ -642,7 +648,29 @@ class SentencesViewModel(
         const val CORRECTION = "Σωστά:"
 
         /** «Γράψε την πρόταση»: the one instruction in this app that asks for a keyboard. */
-        const val WRITE_IT = "Γράψε την πρόταση"
+        const val WRITE_IT = "Γράψε την πρόταση για:"
+
+        /**
+         * The same instruction on a level-8 board, which wants a question and has to say so.
+         *
+         * Without it the board is unanswerable on the first try: a picture of a chemist's and «γράψε
+         * την πρόταση» is answered just as well by «θέλω να πάω στο φαρμακείο», and the judge — told
+         * to accept only when the meaning agrees with the target — would call that «Σχεδόν.» The only
+         * other way to find out what was wanted is «Άκου», which reads the answer out and spends the
+         * mark, so every level-8 typed board would have come out ASSISTED.
+         */
+        const val WRITE_A_QUESTION = "Γράψε μια ερώτηση για:"
+
+        /**
+         * The whole line a typed board puts on the screen: the instruction and the word under the
+         * picture. The judge is handed exactly this as its `prompt`, so what it is told the board
+         * asked for and what he read are the same sentence.
+         */
+        fun asked(sentence: Sentence): String {
+            val instruction = if (sentence.question) WRITE_A_QUESTION else WRITE_IT
+            val word = sentence.picture?.item?.text?.trim().orEmpty()
+            return if (word.isEmpty()) instruction else "$instruction $word"
+        }
 
         /** He has copied the sentence off the screen. Assisted work, and the way on. */
         const val I_WROTE_IT = "Το έγραψα"

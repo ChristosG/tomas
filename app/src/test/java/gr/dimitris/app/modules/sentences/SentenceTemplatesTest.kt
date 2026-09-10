@@ -244,6 +244,47 @@ class SentenceTemplatesTest {
             assertEquals("the noun of a question is its subject: ${s.text}", thing.item.text, thing.label)
             assertTrue("a question without a question mark: ${s.text}", s.text.endsWith(";"))
             assertTrue("the mark belongs to the sentence, not to a card", s.tiles.none { it.label.contains(";") })
+            assertTrue("a level-8 board has to know it is a question: ${s.text}", s.question)
+            // Not everything with a picture is somewhere. «πού είναι ο ήλιος;» parses and nobody says it.
+            assertTrue("«${thing.item.text}» is not anywhere: ${s.text}", thing.item.text !in NOT_SOMEWHERE)
+        }
+    }
+
+    /**
+     * A typed board says what it wants, and the judge is told the same thing.
+     *
+     * A picture of a chemist's under «Γράψε την πρόταση» is answered just as well by «θέλω να πάω στο
+     * φαρμακείο» — faultless Greek, and not the question level 8 asked for. Nothing on the screen
+     * said which, and the only other way to find out is «Άκου», which reads the answer out loud and
+     * spends the mark: every level-8 typed board would have come out ASSISTED.
+     */
+    @Test fun `a typed board asks for a question at level 8 and a sentence at level 7`() {
+        val pool = seedPool()
+        repeat(BOARDS / 5) {
+            val seven = templates.generate(7, pool, Variant.TYPED)!!
+            assertEquals(false, seven.question)
+            assertEquals("${SentencesViewModel.WRITE_IT} ${seven.picture!!.item.text}", SentencesViewModel.asked(seven))
+
+            val eight = templates.generate(8, pool, Variant.TYPED)!!
+            assertEquals(true, eight.question)
+            val line = SentencesViewModel.asked(eight)
+            assertEquals("${SentencesViewModel.WRITE_A_QUESTION} ${eight.picture!!.item.text}", line)
+            assertTrue("the line does not say a question is wanted: $line", "ερώτηση" in line)
+        }
+    }
+
+    /**
+     * The top-up loop must not restart the every-third rhythm: a first pass that came back one short
+     * would otherwise put two variants next to each other in the same sitting.
+     */
+    @Test fun `a sitting topped back up keeps counting from where it got to`() {
+        val pool = seedPool()
+        val first = templates.session(5, pool, count = 4)
+        val rest = templates.session(5, pool, count = 4, from = first.size)
+        val whole = first + rest
+        for ((i, s) in whole.withIndex()) {
+            val wanted = if (i % 3 == 2) Variant.GAP else Variant.BUILD
+            assertEquals("board $i of a topped-up sitting", wanted, s.variant)
         }
     }
 
@@ -260,9 +301,10 @@ class SentenceTemplatesTest {
             assertTrue("the odd card is not a small word: ${odd.label}", odd.madeUp && odd.label in ARTICLES)
             assertTrue("the odd card is already in the sentence: ${s.text}", s.tiles.none { it.label == odd.label })
             for (tile in s.tiles.filterNot { it.madeUp }) {
+                if (tile.item.category == Category.VERBS) continue
+                // No `?: continue` here: a seed word missing from the hand-written table has to fail
+                // by name, which is what `nominative`/`accusative` do when they cannot find one.
                 val word = tile.item.text
-                val form = FORMS[word] ?: continue
-                assertNotNull("no gender written down for «$word»", form)
                 assertTrue(
                     "«${odd.label}» would fit «$word» in «${s.text}»",
                     odd.label !in setOf(nominative(word), accusative(word), "σ" + accusative(word)),
@@ -491,6 +533,9 @@ class SentenceTemplatesTest {
 
     /** The PLACES cards that are something to go in rather than somewhere to be. */
     private val VEHICLES = setOf("ταξί", "λεωφορείο", "αυτοκίνητο")
+
+    /** The cards that are not anywhere, so no level-8 board asks where they are. */
+    private val NOT_SOMEWHERE = setOf("ήλιος", "βροχή", "μουσική")
 
     /** How many boards a sweep over the real vocabulary is worth. See the level-4 test above. */
     private val BOARDS = 500

@@ -60,6 +60,18 @@ data class Sentence(
 ) {
     val text: String = tiles.joinToString(" ") { it.label } + ending
 
+    /**
+     * Whether what the board wants is a **question** rather than a statement.
+     *
+     * A typed board has to say so. With a picture of a chemist's and «Γράψε την πρόταση» on the
+     * screen, «θέλω να πάω στο φαρμακείο» is faultless Greek and is not what level 8 asked for, and
+     * the judge — which is told to accept only when the meaning agrees with the target — would
+     * answer it with «Σχεδόν.» A man cannot be marked down for not guessing which of two good
+     * sentences the app had in mind; see the level-4 distractor rule, which is the same principle
+     * one level of the sentence up.
+     */
+    val question: Boolean = ending == QUESTION_MARK
+
     /** The word the blank is waiting for, on a [Variant.GAP] board. */
     val answer: String? = gap?.let { tiles.getOrNull(it.at)?.label }
 
@@ -153,18 +165,23 @@ class SentenceTemplates(private val random: Random = Random.Default) {
      *
      * [judged] says whether «Έλεγχος με Claude» will really answer. Only it can read a sentence he
      * typed, so with it off there are no typed boards at all — see [variantFor].
+     *
+     * [from] is where in the sitting these boards begin, and it exists so that a caller topping a
+     * short run back up does not restart the every-third rhythm at zero and put two variants next to
+     * each other.
      */
     fun session(
         level: Int,
         pool: List<Item>,
         count: Int = SENTENCES_PER_SESSION,
         judged: Boolean = false,
+        from: Int = 0,
     ): List<Sentence> {
         val out = mutableListOf<Sentence>()
         var tries = 0
         while (out.size < count && tries < count * TRIES_PER_SENTENCE) {
             tries++
-            generate(level, pool, variantFor(out.size, level, judged))?.let { out += it }
+            generate(level, pool, variantFor(from + out.size, level, judged))?.let { out += it }
         }
         return out
     }
@@ -269,8 +286,14 @@ private class Roles(pool: List<Item>, private val random: Random) {
     /** What takes him there: the three the seed holds, and any vehicle a caregiver adds to them. */
     private val vehicles = allPlaces.filter { key(it) in VEHICLES && readable(it) }
 
-    /** What a level-8 question asks after: anything with a place in the world and a readable article. */
-    private val locatable = (things + allPlaces).filter { readable(it) }
+    /**
+     * What a level-8 question asks after: something with a place in the world and a readable article.
+     *
+     * Not everything with a picture is somewhere. «πού είναι ο ήλιος;» and «πού είναι η βροχή;» are
+     * grammatical and are not questions anybody asks, and a model sentence nobody would say is a
+     * model sentence he has to unlearn — the same reason [NOT_DESTINATIONS] exists.
+     */
+    private val locatable = (things + allPlaces).filter { readable(it) && key(it) !in NOT_SOMEWHERE }
 
     /** What a verb can really take. Anything else would be teaching him a sentence he must unlearn. */
     private fun objectsOf(verb: Item): List<Item> = when (key(verb)) {
@@ -374,13 +397,16 @@ private class Roles(pool: List<Item>, private val random: Random) {
      */
     fun becauseClause(): Shape? {
         val want = verbs.firstOrNull { key(it) == WANT } ?: return null
+        // The form, not the card's text: a caregiver who renames the card to «θέλει» must not turn
+        // this into «θέλει να φάω…». The card is matched by what it *means*, and written by the table.
+        val wants = FIRST_PERSON[WANT] ?: return null
         val verb = takers.filter { key(it) in setOf(EAT, DRINK) }.randomOrNull(random) ?: return null
         val subjunctive = SUBJUNCTIVE[key(verb)] ?: return null
         val because = BECAUSE_VERB[key(verb)] ?: return null
         val obj = objectsOf(verb).randomOrNull(random) ?: return null
         val objectCard = objectTile(obj)
         val tiles = listOf(
-            Tile(want, want.text), small(TO), Tile(verb, subjunctive), objectCard,
+            Tile(want, wants), small(TO), Tile(verb, subjunctive), objectCard,
             small(BECAUSE), small(because),
         )
         return Shape(tiles = tiles, picture = objectCard)
@@ -546,6 +572,12 @@ private val NOT_DESTINATIONS = setOf("ταξι", "λεωφορειο", "αυτο
 
 /** The PLACES cards that are not somewhere to be but something to go in: «με το λεωφορείο». */
 private val VEHICLES = setOf("ταξι", "λεωφορειο", "αυτοκινητο")
+
+/**
+ * The THINGS cards that are not anywhere: the weather and the sky, and a thing you hear rather than
+ * find. «πού είναι ο ήλιος;» parses and nobody says it. See [Roles.locatable].
+ */
+private val NOT_SOMEWHERE = setOf("ηλιος", "βροχη", "μουσικη")
 
 /** One article, and what it agrees with. See [Roles.oddArticle] and [Roles.blank]. */
 private class ArticleShape(val form: NounForm, val case: Case, val contracted: Boolean, val label: String)

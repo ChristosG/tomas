@@ -73,8 +73,10 @@ internal class TypedCheck(
         val first = !nudged
         val said = typed.trim()
         // Nothing typed is nothing to judge, and the screen does not offer «Έτοιμο» on an empty
-        // field anyway. Guarded here so that no path can spend eight seconds on an empty string.
-        if (said.isEmpty()) return refused(target, feedback = null, first = first, judge = emptyMap())
+        // field anyway. Guarded here so that no path can spend eight seconds on an empty string —
+        // and it goes back **without** touching [nudged] or handing him a sentence to copy: a board
+        // he has not answered yet must not spend the mark it has not been given a chance to earn.
+        if (said.isEmpty()) return Written(accepted = false, whole = null, feedback = null, firstTry = first, judge = emptyMap())
         if (!judged()) {
             // The toggle went off between the board being planned and him pressing the button. The
             // phase-11 comparison is not a judgement of his grammar, but it is honest about the one

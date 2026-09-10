@@ -140,18 +140,15 @@ fun SentencesScreen(count: Int, sessionId: String?, onDone: () -> Unit, onLeave:
             when {
                 // Finished: the only way on is «Επόμενο», and it is green because he found it himself.
                 s.correct == true -> BigButton("Επόμενο", onClick = vm::next, tone = ButtonTone.Success)
+                // Three actions down here and never four: «Το έγραψα» lives in the body, under the
+                // sentence it is about — the move «Βοήθεια» already made in `ScriptsScreen`, and for
+                // the same reason. A block under his thumb that grows a fourth button between one
+                // frame and the next is one more thing than one working thumb should have to choose
+                // between.
                 variant == Variant.TYPED -> {
                     BigButton("Έτοιμο", onClick = vm::submitTyped, enabled = s.typed.isNotBlank() && !s.checking)
                     Spacer(Modifier.height(Sizes.gapSmall))
-                    Row {
-                        // Only once the whole form is on the screen: before that there is nothing to
-                        // have copied, and a man who has not been shown the sentence cannot confirm it.
-                        if (s.whole != null) {
-                            QuietButton(SentencesViewModel.I_WROTE_IT, onClick = vm::confirmTyped, modifier = Modifier.weight(1f))
-                            Spacer(Modifier.width(Sizes.gapSmall))
-                        }
-                        QuietButton("Παράλειψη", onClick = vm::skip, modifier = Modifier.weight(1f))
-                    }
+                    QuietButton("Παράλειψη", onClick = vm::skip)
                 }
                 // A gap board has nothing to take back: one tap is the whole answer.
                 variant == Variant.GAP -> QuietButton("Παράλειψη", onClick = vm::skip)
@@ -265,9 +262,12 @@ private fun GapBoard(s: SentencesState, sentence: Sentence, vm: SentencesViewMod
  * it is the last two levels and one board in three of them. The picture is what the sentence is
  * about and the only thing on the screen: the words are his.
  *
- * Scrollable, because the keyboard takes two thirds of the phone. `imePadding` keeps the field itself
- * clear of it; the buttons below are held above it by the screen's own `safeDrawingPadding`, which
- * counts the keyboard as one more thing not to draw under.
+ * Scrollable, because the keyboard takes two thirds of the phone. What actually holds everything
+ * clear of it is [DimitrisScreen]'s own `safeDrawingPadding`, one level up: the safe-drawing insets
+ * include the IME, so the whole screen — the bottom block included — is already laid out above the
+ * keyboard, and the scroll here is what lets him reach the picture in the third of the phone that is
+ * left. The `imePadding` below is a no-op while that stays true and is kept as the local statement
+ * of the same intent, so this column keeps working if it is ever lifted out of that screen.
  */
 @Composable
 private fun TypedBoard(s: SentencesState, sentence: Sentence, vm: SentencesViewModel, picture: (Tile) -> File?) {
@@ -275,23 +275,50 @@ private fun TypedBoard(s: SentencesState, sentence: Sentence, vm: SentencesViewM
     // One request per board, so the keyboard is already up when he arrives and the first thing he
     // does is write rather than aim at a text field with his left hand.
     LaunchedEffect(s.index) { runCatching { focus.requestFocus() } }
-    Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).imePadding()) {
-        sentence.picture?.let { card ->
+    // And again the moment the judge has finished. He presses «Έτοιμο», waits up to eight seconds,
+    // and the answer lands: without this the keyboard would have to be found and hit again with his
+    // left hand before he could change a word of what he wrote.
+    LaunchedEffect(s.checking) {
+        if (!s.checking && s.correct != true) runCatching { focus.requestFocus() }
+    }
+    val scroll = rememberScrollState()
+    // A refusal puts the sentence to copy and «Το έγραψα» at the foot of a column that is a third of
+    // a phone tall with the keyboard up, so the column is brought down to them. Keyed on the extent
+    // as well as on the answer, because the correction has to be laid out before there is anything to
+    // scroll to; once it is, this settles in one more pass.
+    LaunchedEffect(s.whole, scroll.maxValue) {
+        if (s.whole != null) runCatching { scroll.animateScrollTo(scroll.maxValue) }
+    }
+    Column(Modifier.fillMaxWidth().verticalScroll(scroll).imePadding()) {
+        // The picture goes once there is a sentence to copy. With the keyboard up this column is a
+        // third of a phone tall, and after a refusal the three things he needs in it are the sentence,
+        // the field and the button — the picture has done its work, and the sentence names the word
+        // it was of. It comes back on the next board.
+        if (s.whole == null) sentence.picture?.let { card ->
             Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
                 Pictogram(picture(card), size = Sizes.pictureCard)
             }
+            // The instruction first and the word under it, so the two read as one line: «Γράψε μια
+            // ερώτηση για: φαρμακείο». Level 8 wants a question and has to say so — see
+            // [SentencesViewModel.WRITE_A_QUESTION] — and the judge is handed this same line.
+            Text(
+                if (sentence.question) SentencesViewModel.WRITE_A_QUESTION else SentencesViewModel.WRITE_IT,
+                style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
             Text(
                 card.item.text, style = MaterialTheme.typography.headlineMedium,
                 textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth(),
             )
         }
         Spacer(Modifier.height(Sizes.gapSmall))
-        Text(SentencesViewModel.WRITE_IT, style = MaterialTheme.typography.bodyLarge)
-        Spacer(Modifier.height(Sizes.gapSmall))
         OutlinedTextField(
             value = s.typed,
             onValueChange = vm::onTypedChange,
-            enabled = s.correct != true && !s.checking,
+            // Never disabled while the judge is reading: Material3 folds `enabled` into the field's
+            // own `focusable`, so switching it off takes the focus away and the keyboard with it, and
+            // he would come back from an eight-second wait to a screen he has to aim at again.
+            // `readOnly` stops the typing without touching the focus.
+            readOnly = s.checking || s.correct == true,
             textStyle = MaterialTheme.typography.headlineSmall,
             shape = RoundedCornerShape(Sizes.corner),
             keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences, imeAction = ImeAction.Done),
@@ -303,12 +330,19 @@ private fun TypedBoard(s: SentencesState, sentence: Sentence, vm: SentencesViewM
             Spacer(Modifier.height(Sizes.gapSmall))
             Text("Διαβάζω...", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
+        // The judge's one warm line, whichever way the sentence went. On an accepted one it is the
+        // only thing said about a sentence he got right, and it used to be fetched and thrown away.
+        s.feedback?.let {
+            Spacer(Modifier.height(Sizes.gapSmall))
+            Text(it, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.secondary)
+        }
         // What he wrote did not land: the whole sentence, to copy or to confirm. Never «λάθος».
         s.whole?.let { whole ->
             Correction(whole)
-            s.feedback?.let {
-                Text(it, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.secondary)
-            }
+            Spacer(Modifier.height(Sizes.gapSmall))
+            // Here rather than in the bottom slot, so that block stays «Άκου» / «Έτοιμο» /
+            // «Παράλειψη» — and so the button sits under the sentence it is about.
+            QuietButton(SentencesViewModel.I_WROTE_IT, onClick = vm::confirmTyped)
         }
         if (s.error != null) ScreenError(s.error)
     }

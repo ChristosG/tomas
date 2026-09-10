@@ -141,10 +141,20 @@ class SentencesViewModelTest {
         assertTrue("nothing was asked of anybody", asked.isEmpty())
     }
 
-    @Test fun `an empty field is not a turn and costs nobody eight seconds`() = runTest {
-        val written = check().weigh("   ", prompt, target)
+    /**
+     * A board he has not answered yet must not spend the mark it has never been given a chance to
+     * earn: an empty field costs nobody the eight seconds, and it does not hand him a sentence to
+     * copy or turn his next go into assisted work.
+     */
+    @Test fun `an empty field is not a turn and costs nobody eight seconds or the mark`() = runTest {
+        val check = check()
+        val written = check.weigh("   ", prompt, target)
         assertFalse(written.accepted)
         assertTrue("an empty string went to the judge", asked.isEmpty())
+        assertNull("an empty field was answered with a sentence to copy", written.whole)
+
+        verdicts += accepted()
+        assertTrue("the next go is still his own", check.weigh(target, prompt, target).firstTry)
     }
 
     /**

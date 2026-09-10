@@ -56,11 +56,18 @@ fun Greek.nounForm(noun: String): NounForm? {
         // A neuter that ends in sigma keeps it and takes «το»: «το κρέας», «το φως».
         bare in NEUTER_IN_SIGMA -> NounForm(Gender.NEUTER, plural = false)
         bare in FEMININE_IN_OS -> NounForm(Gender.FEMININE, plural = false)
-        // A plural in -ες or -εις is told from a masculine singular in -ές by the accent, exactly as
-        // [accusative] tells them apart, and its gender is not readable from the ending at all: «οι
-        // γυναίκες» and «οι άντρες» end the same way. So it is the list's business, not a rule's.
+        // A plural in -ες or -εις: its gender is not readable from the ending at all — «οι γυναίκες»
+        // and «οι άντρες» end the same way — so it is the list's business, not a rule's.
         pluralEnding(word) -> null
-        bare.endsWith("ος") || bare.endsWith("ας") || bare.endsWith("ης") || bare.endsWith("ες") ->
+        // What is left ending in -ές carries the accent on that ending, and there the ending is a
+        // liar in the other direction: «καφές» is a masculine singular, but «δουλειές», «αδερφές»,
+        // «ελιές», «καρδιές», «γραμμές», «φορές» are feminine plurals stressed the same way. The
+        // masculines are a closed handful and the plurals are open-ended, so the handful is named
+        // ([MASCULINE_IN_ES]) and everything else is silence. Reading «δουλειές» as a masculine
+        // singular would put «ο δουλειές θέλει τον δουλειέ» on the screen as the sentence to copy,
+        // which is exactly what rule 3 at the top of this file exists to prevent.
+        bare.endsWith("ες") -> if (bare in MASCULINE_IN_ES) NounForm(Gender.MASCULINE, plural = false) else null
+        bare.endsWith("ος") || bare.endsWith("ας") || bare.endsWith("ης") ->
             NounForm(Gender.MASCULINE, plural = false)
         bare.endsWith("η") -> NounForm(Gender.FEMININE, plural = false)
         bare.endsWith("ο") || bare.endsWith("ι") -> NounForm(Gender.NEUTER, plural = false)
@@ -175,8 +182,26 @@ private const val VOWELS = "αεηιουω"
 private const val NU_CONSONANTS = "κπτξψ"
 private val NU_DIGRAPHS = setOf("μπ", "ντ", "γκ", "τσ", "τζ")
 
-/** The nouns in -ος that are feminine. A closed and short class; none of them is in the seed yet. */
-private val FEMININE_IN_OS = setOf("οδος", "λεωφορος", "εισοδος", "εξοδος", "νησος", "ηπειρος", "ψηφος", "διαμετρος")
+/**
+ * The nouns in -ος that are feminine. A closed and short class; none of them is in the seed yet, and
+ * one missing from here would be read as a masculine and lose its sigma — «ο μέθοδος», «τον μέθοδο»
+ * — so it is worth adding to rather than being clever about.
+ */
+private val FEMININE_IN_OS = setOf(
+    "οδος", "λεωφορος", "εισοδος", "εξοδος", "νησος", "ηπειρος", "ψηφος", "διαμετρος",
+    "μεθοδος", "περιοδος", "προοδος", "καθοδος", "ανοδος", "συνοδος", "αμμος", "παρθενος",
+    "διαλεκτος", "ψαμμος", "πλατανος", "δοκος",
+)
+
+/**
+ * The masculine singulars in -ές. **A closed handful, and that is the point**: every other Greek
+ * word ending in an accented -ές is a feminine plural, so [nounForm] answers for these and stays
+ * silent for the rest. See the comment at the -ές branch.
+ */
+private val MASCULINE_IN_ES = setOf("καφες", "κεφτες", "μεζες", "τενεκες", "μπουφες", "ναργιλες")
+
+/** The same handful, for [accusative], which has to make the same call before it takes a sigma off. */
+internal fun masculineInEs(bare: String): Boolean = bare in MASCULINE_IN_ES
 
 /**
  * Every word whose ending does not say what it is, written out one by one.
@@ -210,4 +235,10 @@ private val FORMS: Map<String, NounForm> = buildMap {
     // PLACES
     f("καφετερια", "θαλασσα", "εκκλησια", "τραπεζα", "ταβερνα", "κουζινα", "δουλεια", "πλατεια", "αγορα", "παραλια")
     n("σουπερ μαρκετ", "μαρκετ")
+    // The -μα neuters, by hand rather than by rule. «-μα is neuter» would be a new bug of its own:
+    // «η κρέμα», «η φόρμα», «η πιτζάμα» end the same way and are feminine, and they are above.
+    n("γραμμα", "ονομα", "προβλημα", "χρωμα", "στομα", "δωματιο", "κτημα", "βλεμμα", "αιμα", "σωμα", "ρευμα", "κλιμα")
+    // The feminine plurals stressed on the ending that a caregiver is most likely to type. The rule
+    // stays silent about this whole class ([MASCULINE_IN_ES]); these are the ones worth answering.
+    fPl("δουλειες", "αδερφες", "αδελφες", "καρδιες", "φωτιες", "μηχανες", "γραμμες", "φορες", "μπριζολες")
 }

@@ -13,6 +13,8 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performTextInput
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import androidx.test.core.app.ApplicationProvider
 import gr.dimitris.app.DimitrisApp
 import gr.dimitris.app.MainActivity
@@ -229,7 +231,10 @@ class SentencesFlowTest {
         openBoard()
         repeat(2) { skipBoard() }
         compose.waitUntil(TIMEOUT_MS) { compose.onAllNodesWithTag(SENTENCE_TYPED_TAG).fetchSemanticsNodes().isNotEmpty() }
-        compose.onNodeWithText(SentencesViewModel.WRITE_IT).assertIsDisplayed()
+        compose.onNodeWithText(SentencesViewModel.WRITE_IT, substring = true).assertIsDisplayed()
+        // The field takes the focus on arrival, so the keyboard is already up and his first act is
+        // to write rather than to aim at a text field with his left hand.
+        waitForIme(up = true)
 
         compose.onNodeWithTag(SENTENCE_TYPED_TAG).performTextInput("θέλω ψωμί")
         compose.onNodeWithText("Έτοιμο").performClick()
@@ -241,6 +246,15 @@ class SentencesFlowTest {
         assertTrue("a refused sentence was written down as an attempt", attempts().none { it.detail.contains(TYPED_ROW) })
         compose.onNodeWithText(SentencesViewModel.I_WROTE_IT).assertIsDisplayed()
 
+        // The keyboard survived the judge. Disabling the field while it was thinking used to take the
+        // focus away and the keyboard with it, and he came back from the wait to a screen he had to
+        // aim at again before he could change a word of what he wrote.
+        waitForIme(up = true)
+
+        // And the bottom block is still the three it has always been: «Άκου», «Έτοιμο», «Παράλειψη».
+        // «Το έγραψα» belongs to the sentence it is about, in the body, above all three of them.
+        assertThreeActionsInTheBottom()
+
         compose.onNodeWithTag(SENTENCE_TYPED_TAG).performTextInput(" γιατί πεινάω")
         compose.onNodeWithText("Έτοιμο").performClick()
 
@@ -250,6 +264,40 @@ class SentencesFlowTest {
         assertEquals("a sentence copied off the screen is assisted work", Outcome.ASSISTED, row.outcome)
         assertTrue("the judge is not in the row: ${row.detail}", row.detail.contains("\"judge\""))
         assertTrue("nor is who answered: ${row.detail}", row.detail.contains("\"source\":\"JUDGE\""))
+    }
+
+    /**
+     * A level-8 typed board asks for a **question**, out loud on the screen and in what the judge is
+     * told the board wanted.
+     *
+     * Without it the board cannot be answered on the first try: a picture of a chemist's under
+     * «Γράψε την πρόταση» is answered just as well by «θέλω να πάω στο φαρμακείο» — faultless Greek —
+     * and the judge, told to accept only when the meaning agrees with the target, would call that
+     * «Σχεδόν.» The only other way to find out what was wanted is «Άκου», which reads the answer out
+     * and spends the mark, so every one of these would have come out ASSISTED.
+     */
+    @Test fun aLevel8TypedBoardAsksForAQuestionAndSaysSo() {
+        withJudge("""{"accept":true,"expanded":null,"feedback":"Ωραία ερώτηση.","score":1}""")
+        runBlocking { graph.settings.setSentencesLevel(8) }
+        openBoard()
+        repeat(2) { skipBoard() }
+        compose.waitUntil(TIMEOUT_MS) { compose.onAllNodesWithTag(SENTENCE_TYPED_TAG).fetchSemanticsNodes().isNotEmpty() }
+
+        compose.onNodeWithText(SentencesViewModel.WRITE_A_QUESTION, substring = true).assertIsDisplayed()
+        assertTrue(
+            "a question board still says «Γράψε την πρόταση»",
+            compose.onAllNodes(hasText(SentencesViewModel.WRITE_IT, substring = true)).fetchSemanticsNodes().isEmpty(),
+        )
+
+        compose.onNodeWithTag(SENTENCE_TYPED_TAG).performTextInput("πού είναι το φαρμακείο;")
+        compose.onNodeWithText("Έτοιμο").performClick()
+
+        compose.waitUntil(TIMEOUT_MS) { attempts().any { it.detail.contains(TYPED_ROW) } }
+        val row = attempts().single { it.detail.contains(TYPED_ROW) }
+        assertEquals("a level-8 typed board", LEVEL_8, row.itemId)
+        assertEquals("a question he wrote himself is his own work", Outcome.CORRECT, row.outcome)
+        // The judge's one warm line about a sentence he got right is on the screen, not thrown away.
+        compose.onNodeWithText("Ωραία ερώτηση.").assertIsDisplayed()
     }
 
     /**
@@ -299,6 +347,44 @@ class SentencesFlowTest {
 
     private fun tapInOrder(labels: List<String>) = labels.forEach { label ->
         compose.onNode(hasTestTag(SENTENCE_TILE_TAG) and hasText(label)).performClick()
+    }
+
+    /**
+     * The bottom block is the three actions it has always been, and nothing else has moved into it.
+     *
+     * Read by position rather than by slot, which is the only thing a semantics tree can see: «Άκου»,
+     * «Έτοιμο» and «Παράλειψη» in that order down the screen, and «Το έγραψα» — which is on screen at
+     * this point — above all three of them, in the body, under the sentence it is about.
+     */
+    private fun assertThreeActionsInTheBottom() {
+        val listen = compose.onNodeWithTag(LISTEN_TAG).fetchSemanticsNode().boundsInRoot.top
+        val ready = compose.onNodeWithText("Έτοιμο").fetchSemanticsNode().boundsInRoot.top
+        val skip = compose.onNodeWithText("Παράλειψη").fetchSemanticsNode().boundsInRoot.top
+        val wrote = compose.onNodeWithText(SentencesViewModel.I_WROTE_IT).fetchSemanticsNode().boundsInRoot.top
+        assertTrue("«Άκου» is not the first of the bottom three: $listen vs $ready", listen < ready)
+        assertTrue("«Έτοιμο» is not above «Παράλειψη»: $ready vs $skip", ready < skip)
+        assertTrue("«Το έγραψα» is a fourth button in the bottom block: $wrote vs $listen", wrote < listen)
+    }
+
+    /**
+     * Waits for the soft keyboard to be [up], read off the window's own IME insets.
+     *
+     * The one thing `performTextInput` cannot tell us: it puts text into the semantics node directly,
+     * so a board whose keyboard has gone looks identical to one whose keyboard is there.
+     */
+    private fun waitForIme(up: Boolean) {
+        val deadline = System.currentTimeMillis() + TIMEOUT_MS
+        while (System.currentTimeMillis() < deadline) {
+            compose.waitForIdle()
+            if (imeVisible() == up) return
+            Thread.sleep(IME_POLL_MS)
+        }
+        assertEquals("the keyboard", up, imeVisible())
+    }
+
+    private fun imeVisible(): Boolean = compose.runOnUiThread {
+        ViewCompat.getRootWindowInsets(compose.activity.window.decorView)
+            ?.isVisible(WindowInsetsCompat.Type.ime()) == true
     }
 
     /** Passes on the board he is on and waits for the next one to be drawn. */
@@ -364,6 +450,10 @@ class SentencesFlowTest {
         const val LEVEL_4 = "sentences:level:4"
         const val LEVEL_5 = "sentences:level:5"
         const val LEVEL_7 = "sentences:level:7"
+        const val LEVEL_8 = "sentences:level:8"
+
+        /** How often the IME insets are read while waiting for the keyboard to settle. */
+        const val IME_POLL_MS = 200L
 
         /** How a row says which of the three ways its board asked. See `sentencesDetail`. */
         const val GAP_ROW = "\"variant\":\"GAP\""
