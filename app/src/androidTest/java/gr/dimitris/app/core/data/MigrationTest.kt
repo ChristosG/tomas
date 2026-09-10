@@ -134,6 +134,60 @@ class MigrationTest {
         }
     }
 
+    /**
+     * Phase 12 adds two columns to `script_lines` and nothing else: `tier`, which is how hard a
+     * dialogue is against his own dot row, and `intent`, what a good answer to one of his turns has
+     * to convey.
+     *
+     * Every dialogue a caregiver has written predates both, so what this really tests is that her
+     * work survives the upgrade and lands where it belongs: tier 1, the easiest, which is in reach
+     * from every dot; and no intent, which is a turn nobody has said anything about yet — not a turn
+     * with an empty demand on it.
+     */
+    @Test fun migrate7To8AddsTierAndIntentAndKeepsHerDialogue() {
+        val name = "migration-test-8.db"
+        helper.createDatabase(name, 7).use { db ->
+            db.execSQL(
+                "INSERT INTO scripts (id, title, source, createdAt, updatedAt, deleted) " +
+                    "VALUES ('s1', 'Στην καφετέρια', 'CAREGIVER', 1, 1, 0)"
+            )
+            db.execSQL(
+                "INSERT INTO items (id, text, kind, category, firstSound, source, pinned, createdAt, updatedAt, deleted) " +
+                    "VALUES ('i1', 'Έναν καφέ, παρακαλώ.', 'SCRIPT_LINE', 'CUSTOM', 'Έ', 'CAREGIVER', 0, 1, 1, 0)"
+            )
+            // Every NOT NULL column v7 had, which is the whole of a line before this phase.
+            db.execSQL(
+                "INSERT INTO script_lines (id, scriptId, position, speaker, itemId, createdAt, updatedAt, deleted) " +
+                    "VALUES ('l1', 's1', 1, 'DIMITRIS', 'i1', 1, 1, 0)"
+            )
+        }
+        helper.runMigrationsAndValidate(name, 8, true).use { db ->
+            db.query("SELECT scriptId, position, speaker, itemId, tier, intent FROM script_lines WHERE id = 'l1'").use { c ->
+                c.moveToFirst()
+                assertEquals("s1", c.getString(0))
+                assertEquals("her turn keeps its place", 1, c.getInt(1))
+                assertEquals("DIMITRIS", c.getString(2))
+                assertEquals("i1", c.getString(3))
+                assertEquals("a line written before tiers is the easiest tier", 1, c.getInt(4))
+                assertTrue("nobody has said what this turn is after", c.isNull(5))
+            }
+            // Writable straight away with both new columns, which is what makes them real.
+            db.execSQL(
+                "INSERT INTO script_lines (id, scriptId, position, speaker, itemId, tier, intent, createdAt, updatedAt, deleted) " +
+                    "VALUES ('l2', 's1', 2, 'DIMITRIS', 'i1', 4, 'λέει τι θέλει και πόσο', 2, 2, 0)"
+            )
+            db.query("SELECT tier, intent FROM script_lines WHERE id = 'l2'").use { c ->
+                c.moveToFirst()
+                assertEquals(4, c.getInt(0))
+                assertEquals("λέει τι θέλει και πόσο", c.getString(1))
+            }
+            db.query("SELECT title FROM scripts WHERE id = 's1'").use { c ->
+                c.moveToFirst()
+                assertEquals("Στην καφετέρια", c.getString(0))
+            }
+        }
+    }
+
     /** Phase 5 only adds tables, so the rows a caregiver already has must come through untouched. */
     @Test fun migrate4To5CreatesScriptTablesAndKeepsTheOldRows() {
         val name = "migration-test-5.db"

@@ -9,6 +9,8 @@ import gr.dimitris.app.core.data.ItemKind
 import gr.dimitris.app.core.data.ModuleId
 import gr.dimitris.app.core.data.Outcome
 import gr.dimitris.app.core.data.Schedule
+import gr.dimitris.app.core.data.ScriptLine
+import gr.dimitris.app.core.data.Speaker
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -169,6 +171,28 @@ class SyncModelTest {
         val notes = Tables.of(Tables.NOTES)!!
         assertTrue(notes.required.containsAll(listOf("id", "at", "text", "author", "updatedAt")))
         assertEquals(listOf("author"), notes.missing(mapOf("id" to "n", "at" to 1L, "text" to "x", "createdAt" to 1L, "updatedAt" to 1L, "deleted" to false)))
+    }
+
+    /**
+     * The two columns phase 12 added to a table that was already syncing.
+     *
+     * A dialogue line pushed by a phone that predates them is still a whole line, and has to be
+     * taken: the rows on the father's server are the caregiver's own work, and setting them aside as
+     * unreadable would mean her dialogue simply never arriving on the phone that pulls them next.
+     * `intent` is nullable and excuses itself; `tier` is not, and is excused by hand — the schema's
+     * own default is under it.
+     */
+    @Test fun `a dialogue line pushed before tiers existed is still a whole line`() {
+        val spec = Tables.of(Tables.SCRIPT_LINES)!!
+        val whole = Rows.of(ScriptLine(id = "l1", scriptId = "s1", position = 1, speaker = Speaker.DIMITRIS, itemId = "i1", tier = 3))
+        assertTrue(spec.missing(whole).isEmpty())
+        assertTrue(spec.required.containsAll(listOf("id", "scriptId", "position", "speaker", "itemId", "updatedAt")))
+        assertFalse("tier has a default under it", "tier" in spec.required)
+        assertFalse("an intent nobody wrote is not a missing column", "intent" in spec.required)
+        assertTrue(spec.missing(whole - "tier" - "intent").isEmpty())
+        assertEquals(listOf("itemId"), spec.missing(whole - "itemId"))
+        // And what does arrive is read back as it was written.
+        assertEquals(3, Rows.to(whole, ScriptLine::class.java).tier)
     }
 
     @Test fun `only attempts and error logs are append-only`() {

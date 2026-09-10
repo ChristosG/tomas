@@ -181,6 +181,10 @@ data class Script(
 /**
  * One turn of a dialogue. The index on itemId is what lets a session item find its way back to the
  * script it came from, so nothing has to remember "the script we are in" between screens.
+ *
+ * [tier] and [intent] are phase 12's two columns, and both are about the same thing: a dialogue that
+ * can be *hard*. Dimitris told us the app is too easy, and until now a dialogue carried nothing that
+ * said how much it asked of him.
  */
 @Entity(tableName = "script_lines", indices = [Index("scriptId"), Index("itemId"), Index("updatedAt")])
 data class ScriptLine(
@@ -189,10 +193,36 @@ data class ScriptLine(
     val position: Int,
     val speaker: Speaker,
     val itemId: String,
+    /**
+     * How hard this turn is, 1 to 5, against the dot row of
+     * [gr.dimitris.app.core.difficulty.Difficulty]. A dialogue is as hard as its hardest line, and a
+     * dot admits every tier at or below it.
+     *
+     * Defaulted in the database as well as in Kotlin, because a phone upgrading from v7 has rows
+     * that predate the whole idea: they become tier 1, the easiest, which is where the six dialogues
+     * the app shipped with belong anyway. Read it through [gr.dimitris.app.core.difficulty.Difficulty.clamp]
+     * — a row that arrived over sync from a phone that has never heard of tiers carries a 0.
+     */
+    @ColumnInfo(defaultValue = "1") val tier: Int = DEFAULT_TIER,
+    /**
+     * What a good answer to this turn has to convey, in Greek, for one of *his* lines: «λέει τι θέλει
+     * και πόσο». The line itself is only ever a sample answer (spec §13) — there is no single right
+     * reply to an open question — so this is what the caregiver writes down when she wants to say
+     * what she is really after, and it goes into the attempt row so a later reader knows what the
+     * turn was asking for.
+     *
+     * Null everywhere else: the other person's lines are said, not judged.
+     */
+    val intent: String? = null,
     val createdAt: Long = now(),
     val updatedAt: Long = now(),
     val deleted: Boolean = false,
-)
+) {
+    companion object {
+        /** The easiest tier, and what every line written before phase 12 is. */
+        const val DEFAULT_TIER = 1
+    }
+}
 
 /**
  * One answer from Claude, kept for ever.

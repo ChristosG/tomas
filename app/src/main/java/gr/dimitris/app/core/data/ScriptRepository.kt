@@ -3,8 +3,20 @@ package gr.dimitris.app.core.data
 import kotlinx.coroutines.flow.Flow
 import java.io.File
 
-/** One turn as the caregiver typed it, before it becomes an item and a row. */
-data class LineDraft(val speaker: Speaker, val text: String, val recordingFile: File? = null, val recordingMs: Long = 0)
+/**
+ * One turn as the caregiver typed it, before it becomes an item and a row.
+ *
+ * [tier] is the whole dialogue's, written onto each of its lines — see [ScriptLine.tier]. [intent] is
+ * only ever set on one of his own turns: what a good answer has to convey.
+ */
+data class LineDraft(
+    val speaker: Speaker,
+    val text: String,
+    val recordingFile: File? = null,
+    val recordingMs: Long = 0,
+    val tier: Int = ScriptLine.DEFAULT_TIER,
+    val intent: String? = null,
+)
 
 /** A script with its live lines, each paired with the item that carries its text, picture and voice. */
 data class ScriptWithLines(val script: Script, val lines: List<Pair<ScriptLine, Item>>)
@@ -105,10 +117,13 @@ class ScriptRepository(
             }
             if (d.recordingFile != null) items.addRecording(itemId, d.recordingFile, d.recordingMs, Who.CAREGIVER)
             // The kept row's own id, so nothing that pointed at the turn has to be rewritten; the
-            // soft-delete below is undone by this very upsert, inside the same transaction.
-            kept?.first?.copy(position = i, updatedAt = t, deleted = false)
+            // soft-delete below is undone by this very upsert, inside the same transaction. The tier
+            // and the intent are taken from the draft either way: they are what she came to change
+            // on a turn whose words she left alone.
+            val intent = d.intent?.trim()?.takeIf { it.isNotEmpty() }
+            kept?.first?.copy(position = i, tier = d.tier, intent = intent, updatedAt = t, deleted = false)
                 ?: ScriptLine(id = fixed?.first ?: newId(), scriptId = script.id, position = i, speaker = d.speaker,
-                    itemId = itemId, createdAt = t, updatedAt = t)
+                    itemId = itemId, tier = d.tier, intent = intent, createdAt = t, updatedAt = t)
         }
         inTransaction {
             scripts.upsertScript(script)

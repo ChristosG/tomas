@@ -53,10 +53,20 @@ data class TableSpec(
      * list to keep in step with the first.
      */
     val sample: () -> Any,
+    /**
+     * Columns that are non-null on the entity and still not required on the wire: a column added to
+     * a table that was already syncing, with a database default under it.
+     *
+     * The rows already on the father's server were pushed by a phone that had never heard of the
+     * column, and they are the caregiver's own work. Requiring it would set every one of them aside
+     * as unreadable on the phone that pulls them next — her dialogue would simply not arrive — where
+     * letting it through costs only the default the schema would have given it anyway.
+     */
+    val optional: Set<String> = emptySet(),
 ) {
     /**
      * The columns a row must carry to be worth handing to Room: every one that is non-null on a
-     * freshly built entity.
+     * freshly built entity, less whatever [optional] excuses.
      *
      * Gson does not complain about a field that is absent — [Rows] says so itself — it leaves a JVM
      * zero, so a partial row becomes an entity with `null` where a non-null Kotlin property should
@@ -66,7 +76,7 @@ data class TableSpec(
      * over here, before Room ever sees it.
      */
     val required: Set<String> by lazy {
-        Rows.of(sample()).filterValues { it != null }.keys
+        Rows.of(sample()).filterValues { it != null }.keys - optional
     }
 
     /** The required columns this row does not carry, or an empty list when it is whole. */
@@ -112,8 +122,12 @@ object Tables {
             idOf = ::plainId, sample = { Item(text = "") }),
         TableSpec(SCRIPTS, Script::class.java, appendOnly = false,
             idOf = ::plainId, sample = { Script(title = "") }),
+        // `tier` and `intent` arrived with phase 12. `intent` is nullable and excuses itself; `tier`
+        // has a database default, so a line pushed by a v7 phone is a whole line and is taken.
         TableSpec(SCRIPT_LINES, ScriptLine::class.java, appendOnly = false,
-            idOf = ::plainId, sample = { ScriptLine(scriptId = "", position = 0, speaker = Speaker.OTHER, itemId = "") }),
+            idOf = ::plainId,
+            sample = { ScriptLine(scriptId = "", position = 0, speaker = Speaker.OTHER, itemId = "", intent = null) },
+            optional = setOf("tier")),
         TableSpec(RECORDINGS, Recording::class.java, appendOnly = false, mediaFields = mapOf("path" to RECORDING_EXT),
             idOf = ::plainId, sample = { Recording(itemId = "", path = "", who = Who.CAREGIVER, durationMs = 0) }),
         TableSpec(SESSIONS, Session::class.java, appendOnly = false,
