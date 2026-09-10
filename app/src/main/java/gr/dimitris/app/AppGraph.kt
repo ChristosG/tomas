@@ -220,10 +220,21 @@ class AppGraph(context: Context) {
      */
     val dbGeneration = MutableStateFlow(0)
 
-    /** After a backup import, close and reopen so the restored file is read. */
+    /**
+     * After a backup import, close and reopen so the restored file is read.
+     *
+     * The pending-removals list goes with it. That list lives in `filesDir`, which an import does
+     * not touch, while the import replaces the database *and* swaps the whole recordings folder in
+     * — so an entry left over from a prune can name a path the restored backup has just brought
+     * back, with a live row for it. One later push would move the mark past that entry's stamp and
+     * delete the bytes under the row: one take that plays nothing, after a caregiver action. The
+     * list is a cache of "these bytes belong to nobody", and nothing in it survives the database it
+     * was true of.
+     */
     fun reopenDatabase() {
         db.close()
         db = AppDatabase.open(app)
+        files.pendingRemovals.clear()
         dbGeneration.update { it + 1 }
     }
 }

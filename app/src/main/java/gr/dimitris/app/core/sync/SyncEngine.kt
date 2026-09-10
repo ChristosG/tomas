@@ -212,23 +212,52 @@ class SyncEngine(
      * Nothing here is his work and nothing here is urgent: a file that will not delete stays on the
      * list and is tried again next time, and none of it is worth a Greek line.
      */
-    private fun retire(mark: Long, tally: Tally) {
+    private suspend fun retire(mark: Long, tally: Tally) {
         val waiting = pending ?: return
-        runCatching { tally.mediaGone += waiting.release(mark) { files.resolve(it) } }
+        runCatching { tally.mediaGone += waiting.release(mark, stillUsed(waiting)) { files.resolve(it) } }
     }
 
     /**
-     * The same, for a phone that has no server to push to.
+     * The same, for a phone whose deletions are not going anywhere.
      *
-     * Sync is off until a caregiver types in an address, and on his father's phone that may be for
-     * good. There is no "after the push" to wait for, so a week is the wait instead — long past the
-     * point where a pruned take was of use to anyone, and the only thing standing between a phone
-     * with no server and a recordings folder that only ever grows.
+     * Two phones need this and they look different from the outside. One has no server at all —
+     * sync is off until a caregiver types in an address, and on his father's phone that may be for
+     * good. The other has an address typed in and a server that stopped answering: the machine at
+     * home switched off, the address still in the settings. Every push fails, so the mark never
+     * moves and [retire] frees nothing, and a phone that merely *looks* configured would keep every
+     * pruned take for ever — the exact outcome this exists to prevent. So the question is not "is
+     * there an address" but "has anything actually got through lately", and a week without that is
+     * a week without sync either way.
+     *
+     * A week is long past the point where a pruned take was of use to anyone, and it is the only
+     * thing standing between such a phone and a recordings folder that only ever grows.
      */
     suspend fun retireUnsynced() {
         val waiting = pending ?: return
-        if (runCatching { configured() }.getOrDefault(false)) return
-        runCatching { waiting.release(clock() - PendingRemovals.UNSYNCED_MS) { files.resolve(it) } }
+        val syncing = runCatching {
+            configured() && clock() - settings.lastSyncAt.first() < PendingRemovals.UNSYNCED_MS
+        }.getOrDefault(false)
+        if (syncing) return
+        runCatching {
+            waiting.release(clock() - PendingRemovals.UNSYNCED_MS, stillUsed(waiting)) { files.resolve(it) }
+        }
+    }
+
+    /**
+     * The paths on [waiting] that a live row still names, as a plain predicate for
+     * [PendingRemovals.release] — which is `@Synchronized` and so cannot ask the database itself.
+     *
+     * A path gets onto that list because retention finished with the row that named it; it can get
+     * a live row again afterwards — a backup restored over this phone, a pull bringing the take
+     * back — and then the bytes are not this list's to delete. It is the same question the
+     * receiver's sweep asks at [sweep], asked by the sender too. A few dozen short strings at the
+     * most, one indexed count each.
+     */
+    private suspend fun stillUsed(waiting: PendingRemovals): (String) -> Boolean {
+        val used = runCatching {
+            waiting.all().map { it.path }.distinct().filter { store.mediaStillUsed(it) }.toSet()
+        }.getOrDefault(emptySet())
+        return { it in used }
     }
 
     /**

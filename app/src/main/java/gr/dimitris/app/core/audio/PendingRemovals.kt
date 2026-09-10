@@ -43,8 +43,18 @@ class PendingRemovals(private val file: File) {
      * Called with the moment a successful push started: everything recorded before then travelled in
      * it, so the other phone has the deletion and these bytes are no longer anyone's. A file that has
      * already gone — a backup restored over it, a caregiver clearing storage — counts as done.
+     *
+     * [stillUsed] is the question the receiver's own sweep asks before it deletes anything
+     * (`SyncEngine`/`SyncStore.mediaStillUsed`), asked here too so both ends of the same deletion
+     * ask it. An entry whose path a *live* row names is not this list's to delete any more —
+     * a restore or a pull can hand a file back with a row for it — so it is dropped from the list
+     * rather than acted on, and it is not counted as gone, because nothing went.
      */
-    @Synchronized fun release(upTo: Long, resolve: (String) -> File): Int {
+    @Synchronized fun release(
+        upTo: Long,
+        stillUsed: (String) -> Boolean = { false },
+        resolve: (String) -> File,
+    ): Int {
         val waiting = read()
         if (waiting.isEmpty()) return 0
         val (due, later) = waiting.partition { it.since <= upTo }
@@ -52,6 +62,7 @@ class PendingRemovals(private val file: File) {
         var gone = 0
         val stuck = mutableListOf<Waiting>()
         for (entry in due) {
+            if (runCatching { stillUsed(entry.path) }.getOrDefault(false)) continue
             val removed = runCatching {
                 val target = resolve(entry.path)
                 !target.exists() || target.delete()
@@ -62,7 +73,10 @@ class PendingRemovals(private val file: File) {
         return gone
     }
 
-    /** Forgets everything. For a database that has been replaced under it: see `AppGraph`. */
+    /**
+     * Forgets everything. For a database that has been replaced under it:
+     * [gr.dimitris.app.AppGraph.reopenDatabase], which is the backup import.
+     */
     @Synchronized fun clear() {
         runCatching { file.delete() }
     }

@@ -683,6 +683,70 @@ class SyncEngineTest {
         assertTrue("the surviving row would have played nothing", landed.isFile)
     }
 
+    // ---------------------------------------------------------------- the week-long fallback
+
+    /** One pruned take, waiting on the list with its bytes still on disk. */
+    private fun Phone.pruned(name: String): File {
+        val file = files.recording(name, gr.dimitris.app.core.audio.Wav.header(4))
+        pending.add("recordings/$name", AT)
+        return file
+    }
+
+    /** A phone that has never had an address: there is no push to wait for, so the week is the wait. */
+    @Test fun `a phone with no server frees a pruned take after a week`() = runBlocking {
+        val fresh = Phone()
+        val file = fresh.pruned("a.wav")
+
+        fresh.engine { AT + PendingRemovals.UNSYNCED_MS - 1 }.retireUnsynced()
+        assertTrue("not before the week is up", file.isFile)
+
+        fresh.engine { AT + PendingRemovals.UNSYNCED_MS + 1 }.retireUnsynced()
+        assertTrue("and then it goes", !file.exists())
+    }
+
+    /**
+     * The father's phone with the address still typed in and the machine at home switched off. Every
+     * push fails, so the mark never moves and the ordinary release frees nothing; keyed on "is there
+     * an address" this phone would keep every pruned take for ever, which is the outcome the
+     * fallback exists to prevent. A server that never answers is a phone without sync.
+     */
+    @Test fun `a phone whose server stopped answering frees them too`() = runBlocking {
+        val dead = Phone().apply { configure() }
+        val file = dead.pruned("b.wav")
+
+        dead.engine { AT + PendingRemovals.UNSYNCED_MS + 1 }.retireUnsynced()
+        assertTrue("nothing has got through in a week", !file.exists())
+    }
+
+    /** A phone that is syncing keeps them: the push is what frees them, and it is doing its job. */
+    @Test fun `a phone that synced this week keeps them for the push`() = runBlocking {
+        val live = Phone().apply { configure() }
+        val file = live.pruned("c.wav")
+        live.settings.setLastSyncAt(AT + PendingRemovals.UNSYNCED_MS)
+
+        live.engine { AT + PendingRemovals.UNSYNCED_MS + 1 }.retireUnsynced()
+        assertTrue(file.isFile)
+    }
+
+    /**
+     * The hazard the list's `clear()` exists for, from the other side. A backup taken before a prune
+     * is restored: it brings back `recordings/<name>` *and* a live row for it, while the old entry
+     * is still on the list. The sender now asks what the receiver's sweep asks — does any live row
+     * name this file — so the bytes stay under the row instead of going out from under it.
+     */
+    @Test fun `a pruned path a live row names again is not deleted`() = runBlocking {
+        val fresh = Phone()
+        val file = fresh.pruned("d.wav")
+        fresh.recordings.upsert(
+            Recording(id = "r9", itemId = "i1", path = "recordings/d.wav", who = Who.DIMITRIS, durationMs = 900, updatedAt = 10)
+        )
+
+        fresh.engine { AT + PendingRemovals.UNSYNCED_MS + 1 }.retireUnsynced()
+
+        assertTrue("a take that would have played nothing", file.isFile)
+        assertTrue("and the list has let it go", fresh.pending.all().isEmpty())
+    }
+
     /**
      * Only what is under `recordings/`. A row whose path came from another phone's data directory,
      * or points anywhere else at all, is written and its file left exactly where it is: deleting a
