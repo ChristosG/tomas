@@ -8,6 +8,7 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.os.ParcelFileDescriptor
 import android.os.SystemClock
 import android.speech.ModelDownloadListener
 import android.speech.RecognitionListener
@@ -48,7 +49,12 @@ class AndroidSpeechToText(
     /** The session that is open right now, so «Στοπ» has something to close. Main thread only. */
     private var current: SpeechRecognizer? = null
 
-    /** The take the open window is filling, so «Στοπ» ends the microphone as well as the session. */
+    /**
+     * The take the open window is filling, so «Στοπ» can tell the engine that no more audio is
+     * coming. It is not the microphone's off switch — [listen] closes that when the wait ends, so
+     * the file holds everything up to the moment he said he had finished — it is how the *pipe* gets
+     * an end-of-stream while the session is still open.
+     */
     @Volatile private var take: PcmTake? = null
 
     /** One wait at a time. Main thread only, and every caller of [listen] is on it. */
@@ -109,13 +115,18 @@ class AndroidSpeechToText(
             return Result.failure(SpeechFailure.NotWorking(SpeechRecognizer.ERROR_NETWORK))
         }
         val onDevice = engine == OnDeviceSupport.Engine.ON_DEVICE
+        // The microphone is the app's own on this path, and opening one is not something the screen
+        // may wait on: an `AudioRecord` and a file, off the drawing thread, before the loop below
+        // ever touches the main looper. A take that cannot be started is not a failure — the session
+        // simply runs with the engine's own microphone, as it always did.
+        var pcm = if (onDevice) withContext(Dispatchers.IO) { startTake() } else null
         return withContext(Dispatchers.Main) {
-            if (waiting) return@withContext Result.failure(SpeechFailure.NotWorking(ALREADY_LISTENING))
+            if (waiting) {
+                pcm?.let { withContext(NonCancellable + Dispatchers.IO) { it.cancel() } }
+                return@withContext Result.failure(SpeechFailure.NotWorking(ALREADY_LISTENING))
+            }
             waiting = true
             stopped = false
-            // The microphone is the app's own on this path. A take that cannot be started is not a
-            // failure: the session simply runs with the engine's own microphone, as it always did.
-            val pcm = if (onDevice) startTake() else null
             take = pcm
             val startedAt = SystemClock.elapsedRealtime()
             try {
@@ -123,7 +134,19 @@ class AndroidSpeechToText(
                 var restarts = 0
                 while (true) {
                     val sessionStartedAt = SystemClock.elapsedRealtime()
-                    outcome = oneSession(onDevice, pcm)
+                    // One pipe per session, because a session is the only thing that can read one.
+                    // A pipe that cannot be made leaves no honest way to run this window with the
+                    // take: the app is holding the microphone, so letting the engine open it as well
+                    // would be two captures on one device, which usually silences one of them. The
+                    // take goes and the rest of the wait is a plain recognition session.
+                    val pipe = pcm?.newPipe()
+                    if (pcm != null && pipe == null) {
+                        val abandoned = pcm
+                        pcm = null
+                        take = null
+                        withContext(NonCancellable + Dispatchers.IO) { abandoned.cancel() }
+                    }
+                    outcome = oneSession(onDevice, pipe)
                     val now = SystemClock.elapsedRealtime()
                     if (outcome.exceptionOrNull() !is SpeechFailure.HeardNothing) break
                     val goOn = Recognition.restartsAfterSilence(
@@ -135,10 +158,11 @@ class AndroidSpeechToText(
                     if (!goOn) break
                     restarts++
                 }
-                // Off the main thread and beyond cancellation: closing the take joins the reading
+                // Off the main thread and beyond cancellation: closing the take joins the microphone
                 // thread and patches the header, and his file must be finished even if the screen is
                 // going away underneath this very line.
-                val kept = pcm?.let { withContext(NonCancellable + Dispatchers.IO) { finishTake(it) } }
+                val closing = pcm
+                val kept = closing?.let { withContext(NonCancellable + Dispatchers.IO) { finishTake(it) } }
                 outcome.withTake(kept)
             } finally {
                 waiting = false
@@ -146,18 +170,31 @@ class AndroidSpeechToText(
                 _level.value = 0f
                 // A wait that was cancelled — he pressed back, the session moved on — never reached
                 // the line above, and a microphone left open would outlive the word it belonged to.
-                // The take goes with it: it is a recording of a word he has left behind.
-                pcm?.let { if (it.isRecording) it.cancel() }
+                // The take goes with it: it is a recording of a word he has left behind. Off the
+                // main thread, because cancelling joins a reader and rewrites a header, and the
+                // screen he is leaving must not stutter for it.
+                pcm?.let { open -> if (open.isRecording) withContext(NonCancellable + Dispatchers.IO) { open.cancel() } }
             }
         }
     }
 
-    /** One recognition session, created and destroyed here so no path can leak one. */
-    private suspend fun oneSession(onDevice: Boolean, pcm: PcmTake?): Result<Transcript> {
+    /**
+     * One recognition session, created and destroyed here so no path can leak one.
+     *
+     * `destroy()` in the `finally` is also what frees a pipe writer blocked against a service that
+     * stopped reading: it closes the service's copy of the read end, and only then does a pending
+     * write into that pipe fail. Nothing in [PcmTake] waits for that, which is why a wedged engine
+     * costs the recogniser audio and costs his take nothing.
+     */
+    private suspend fun oneSession(onDevice: Boolean, pipe: ParcelFileDescriptor?): Result<Transcript> {
         val recognizer = newRecognizer(onDevice) ?: return Result.failure(SpeechFailure.NotWorking(NO_RECOGNIZER))
         current = recognizer
         return try {
-            withTimeoutOrNull(RecognizerIntents.BOUND_MS) { listenOnce(recognizer, pcm) }
+            // A session with no pipe is one the engine opens its own microphone for, so the bar comes
+            // from `onRmsChanged` again. Which *engine* answers is a separate question and is not
+            // changed by a pipe that could not be made: on-device Greek is free and offline, and
+            // losing the take is no reason to go back to the cloud for the words.
+            withTimeoutOrNull(RecognizerIntents.BOUND_MS) { listenOnce(recognizer, pipe, ownMicrophone = pipe != null) }
                 ?: Result.failure(SpeechFailure.HeardNothing())
         } finally {
             current = null
@@ -188,17 +225,31 @@ class AndroidSpeechToText(
      * happens to be open at this instant (one is a millisecond away during a restart).
      *
      * Posted to the main looper because the recognizer belongs to the thread that made it. The
-     * identity check inside the post is for the session having ended in the meantime. The take is
-     * deliberately *not* stopped here: [listen] closes it when the wait ends, so his file is finished
-     * exactly once and contains everything up to the moment he said he had finished.
+     * identity check inside the post is for the session having ended in the meantime.
+     *
+     * The pipe is closed here as well, and that is the other half of «Στοπ» on the on-device path.
+     * An engine fed from a descriptor may be waiting for end-of-stream before it decides what it
+     * heard, and `stopListening()` says nothing about the descriptor — so without this the session
+     * would sit there to its twenty-second bound and the words he did get out would be thrown away
+     * while the indicator stayed on the screen. Everything still queued goes down the pipe first, so
+     * the engine hears the end of his word rather than a cut one.
+     *
+     * The microphone and the file are deliberately *not* stopped here: [listen] closes those when the
+     * wait ends, so his take is finished exactly once and holds everything up to the moment he said
+     * he had finished.
      */
     override fun stop() {
         stopped = true
+        take?.closePipe()
         val recognizer = current ?: return
         main.post { if (current === recognizer) runCatching { recognizer.stopListening() } }
     }
 
-    private suspend fun listenOnce(recognizer: SpeechRecognizer, pcm: PcmTake?): Result<Transcript> =
+    private suspend fun listenOnce(
+        recognizer: SpeechRecognizer,
+        pipe: ParcelFileDescriptor?,
+        ownMicrophone: Boolean,
+    ): Result<Transcript> =
         suspendCancellableCoroutine { cont ->
             recognizer.setRecognitionListener(object : RecognitionListener {
                 override fun onResults(results: Bundle) {
@@ -229,33 +280,31 @@ class AndroidSpeechToText(
                         }
                     )
                 }
-                override fun onReadyForSpeech(params: Bundle?) { if (pcm == null) _level.value = 0f }
+                override fun onReadyForSpeech(params: Bundle?) { if (!ownMicrophone) _level.value = 0f }
                 override fun onBeginningOfSpeech() {}
                 /**
                  * The one thing the screen can show him: that the phone can hear a voice at all.
                  * Only on the path where the engine owns the microphone — when the app owns it, the
                  * bar comes from the app's own samples and the engine never calls this at all.
                  */
-                override fun onRmsChanged(rmsdB: Float) { if (pcm == null) _level.value = levelOf(rmsdB) }
+                override fun onRmsChanged(rmsdB: Float) { if (!ownMicrophone) _level.value = levelOf(rmsdB) }
                 override fun onBufferReceived(buffer: ByteArray?) {}
-                override fun onEndOfSpeech() { if (pcm == null) _level.value = 0f }
+                override fun onEndOfSpeech() { if (!ownMicrophone) _level.value = 0f }
                 override fun onPartialResults(partialResults: Bundle?) {}
                 override fun onEvent(eventType: Int, params: Bundle?) {}
             })
             val intent = greekIntent()
             // The app's own microphone, handed over as a pipe: the engine is told the format through
             // the three extras, and reads the same samples that are going into his WAV.
-            val read = pcm?.newPipe()
-            if (read != null) {
+            if (pipe != null) {
                 RecognizerIntents.audioSource().forEach { (key, value) -> intent.putExtra(key, value as Int) }
-                intent.putExtra(RecognizerIntent.EXTRA_AUDIO_SOURCE, read)
+                intent.putExtra(RecognizerIntent.EXTRA_AUDIO_SOURCE, pipe)
             }
             recognizer.startListening(intent)
             // Our own copy of the read end goes now that the binder transaction has duplicated it
             // into the service: holding it open would keep the pipe alive after the engine closed its
-            // end, so the writer would never see the `EPIPE` that tells it to stop and his take would
-            // stall behind a full buffer instead of finishing.
-            if (read != null) runCatching { read.close() }
+            // end, so the pipe writer would never see the `EPIPE` that tells it this session is over.
+            if (pipe != null) runCatching { pipe.close() }
             // Whichever thread cancels: `cancel()` throws off the main one, and a cancelled wait is
             // already on its way out — it must not take the coroutine down with it.
             cont.invokeOnCancellation { runCatching { recognizer.cancel() } }
@@ -285,10 +334,12 @@ class AndroidSpeechToText(
      * Closes the microphone and hands back his file — unless nobody spoke into it, in which case it
      * is deleted here and the window simply has no take.
      *
-     * The silence line is [Recorded.SILENCE_PEAK], the same one the old recorder was calibrated
-     * against, measured now from the PCM samples rather than from the AAC encoder. Chris found that a
-     * take checked nothing, so a silent one was kept and played back to him as his own voice; on this
-     * path the peak is known exactly, so that cannot happen.
+     * The silence line travels with the take ([Recorded.silenceFloor]); on this path it is
+     * [Recorded.SILENCE_PEAK_PCM], which is lower than the recorder's because raw PCM off
+     * `VOICE_RECOGNITION` is not the same signal the AAC encoder was calibrated against. Chris found
+     * that a take checked nothing, so a silent one was kept and played back to him as his own voice;
+     * here the peak is known exactly, so that cannot happen — and erring low is deliberate, because
+     * deleting a quiet word he really said would be the worse of the two mistakes.
      */
     private fun finishTake(pcm: PcmTake): Recorded? {
         val recorded = runCatching { pcm.stop() }.getOrNull() ?: return null
