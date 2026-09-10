@@ -275,9 +275,19 @@ object Difficulty {
      *
      * [from] is the level he actually practised ([levelAtLoad]), [next] what
      * [gr.dimitris.app.core.scheduler.LevelProgression] or
-     * [gr.dimitris.app.modules.numbers.NumberProgression] made of it. A level below the band's floor
-     * only ever rises at load; nothing that happens *in* a sitting can push him up into a band he
-     * has not entered.
+     * [gr.dimitris.app.modules.numbers.NumberProgression] made of it. A sitting he did not earn a
+     * step in can never push him up into a band he has not entered — that jump belongs to
+     * [levelAtLoad], where his own tap caused it.
+     *
+     * The exactly-honest statement of the guard, since the summary above is one word too broad: a
+     * [from] below the band that *earns* a step up is admitted to the band's floor. No caller can
+     * reach it — all three ViewModels pass [levelAtLoad]'s output, and «Προτάσεις» passes a `played`
+     * that `LevelProgression` has already held to the band — and admitting a level he has just earned
+     * is the right answer if one ever does.
+     *
+     * A band of one level is the common case rather than the corner: «Γράψε» is `d..d` at every dot,
+     * and «Προτάσεις» is `4..4` at three of five until Task 7. Both directions then return [from],
+     * so the sitting writes nothing.
      */
     fun levelAfterSitting(from: Int, next: Int, band: IntRange): Int {
         val held = next.coerceIn(band)

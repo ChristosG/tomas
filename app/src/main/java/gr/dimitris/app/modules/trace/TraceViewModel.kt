@@ -211,9 +211,19 @@ class TraceViewModel(
                 .getOrElse { graph.errors.record("trace difficulty read", it); Difficulty.DEFAULT }
             // In «Γράψε» the dot *is* the level, and the store keeps them equal from both directions
             // ([gr.dimitris.app.core.settings.Settings.setTraceLevel]). This is the same clamp the
-            // other two levelled modules do at load, stated rather than assumed: what he writes is
-            // what the row he is looking at says he writes.
+            // other two levelled modules do at load: what he writes is what the row he is looking at
+            // says he writes — and, like them, the clamp is written back.
+            //
+            // Writing back is not decoration here. `finishSitting` cannot heal a disagreement, because
+            // a band of one level makes `newLevel == level` and nothing is saved; so a `trace_level`
+            // that had drifted from `difficulty_TRACE` — reachable when a caregiver's bound refuses
+            // the derived dot, since the migration deliberately moves no level — would have left him
+            // writing at one level while the store and her stepper showed another, for ever.
             val level = Difficulty.levelAtLoad(stored, Difficulty.trace(difficulty))
+            if (level != stored) {
+                runCatching { graph.settings.setTraceLevel(level) }
+                    .onFailure { graph.errors.record("trace level clamp", it) }
+            }
             val hand = runCatching { graph.settings.traceHand.first() }
                 .getOrElse { graph.errors.record("trace hand read", it); Settings.HAND_LEFT }
             val strictness = runCatching { graph.settings.traceStrictness.first() }

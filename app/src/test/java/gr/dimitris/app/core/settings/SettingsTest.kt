@@ -389,13 +389,38 @@ class SettingsTest {
         assertEquals(4, s.traceLevel.first())
     }
 
-    /** «Δεξί χέρι» has four sizes instead of a level, and all four go back to the band's easiest. */
-    @Test fun `moving the arcade dots resets every game to the easiest size of the band`() = runBlocking {
+    /**
+     * «Δεξί χέρι» has four sizes instead of a level, and a size is a **ceiling** whichever door the
+     * change comes through — his own tap included.
+     *
+     * The first version of this asserted the opposite, and it was the I3 harm wearing the fix's
+     * clothes: a hand at 40 dp, the hardest target the games can draw, was handed a 94 dp circle back
+     * by a tap on dot 3. Worse on his real device, where the pinch sits near 120 dp and the tap game
+     * near 50: the dot is derived from the biggest, so a tap on the *hardest* dot made one game
+     * harder and the other easier, with nothing said.
+     */
+    @Test fun `a tap on the arcade dots never hands a game a bigger target`() = runBlocking {
         val s = newSettings()
-        s.setArcadeTargetDp(ArcadeGame.TAP, Adaptive.MIN)
+        s.setArcadeTargetDp(ArcadeGame.TAP, Adaptive.MIN)          // 40 dp, worked down to over months
+        s.setArcadeTargetDp(ArcadeGame.PINCH, Adaptive.MAX)        // 130 dp, the game he finds hardest
         s.setDifficulty(ModuleId.ARCADE, 3)
-        ArcadeGame.entries.forEach {
-            assertEquals("size for $it", Difficulty.arcadeStart(3), s.arcadeTargetDp(it).first(), 0.01f)
+
+        assertEquals("40 dp earned was handed back", Adaptive.MIN, s.arcadeTargetDp(ArcadeGame.TAP).first(), 0.01f)
+        // Bigger than the dot asks for is what does move — that is the dot doing its job.
+        assertEquals(Difficulty.arcadeStart(3), s.arcadeTargetDp(ArcadeGame.PINCH).first(), 0.01f)
+        // A game he has never played starts where a hand that has never played starts, held to the dot.
+        assertEquals(Difficulty.arcadeClamp(Adaptive.START, 3), s.arcadeTargetDp(ArcadeGame.DRAG).first(), 0.01f)
+    }
+
+    /** And a 50 dp hand keeps its 50 dp at every dot whose ceiling still admits it. */
+    @Test fun `a hand at fifty dp stays at fifty dp on every dot that admits it`() = runBlocking {
+        val s = newSettings()
+        ArcadeGame.entries.forEach { s.setArcadeTargetDp(it, 50f) }
+        (Difficulty.MIN..Difficulty.MAX).filter { 50f <= Difficulty.arcadeStart(it) }.forEach { dot ->
+            s.setDifficulty(ModuleId.ARCADE, dot)
+            ArcadeGame.entries.forEach {
+                assertEquals("dot $dot moved $it", 50f, s.arcadeTargetDp(it).first(), 0.01f)
+            }
         }
     }
 
@@ -525,6 +550,67 @@ class SettingsTest {
         s.setDifficultyCeiling(ModuleId.SINGSAY, 2)
         s.initialiseDifficulty(ModuleId.SINGSAY, derived = 5)
         assertEquals(2, s.difficulty(ModuleId.SINGSAY).first())
+    }
+
+    /**
+     * A tap of his own ends the migration for that module, before it has run.
+     *
+     * The two seed importers go first at startup and the derivation waits for them, so there is a
+     * window — a few seconds on a first launch — in which he can reach a module's first screen and
+     * tap a dot. His own tap is the strongest evidence there is, and it was being overwritten a
+     * second later by a migration that had never met him.
+     */
+    @Test fun `a dot he taps is never overwritten by the migration`() = runBlocking {
+        val s = newSettings()
+        s.setDifficulty(ModuleId.SINGSAY, 5)
+        assertEquals(false, s.difficultyNeedsInit(ModuleId.SINGSAY).first())
+        s.initialiseDifficulty(ModuleId.SINGSAY, derived = 1)
+        assertEquals(5, s.difficulty(ModuleId.SINGSAY).first())
+    }
+
+    /** So does a caregiver's level stepper, which is the same decision from the other side. */
+    @Test fun `a level a caregiver set is never overwritten by the migration`() = runBlocking {
+        val s = newSettings()
+        s.setNumbersLevel(13)
+        s.initialiseDifficulty(ModuleId.NUMBERS, derived = 1)
+        assertEquals(Difficulty.numbersDot(13), s.difficulty(ModuleId.NUMBERS).first())
+    }
+
+    /**
+     * The database can arrive after the app has started — a backup restored, or the first sync pull
+     * onto a second phone — and two of the six dots are read out of it. Forgetting the derivation
+     * lets the next run work them out again over the data that has actually turned up.
+     */
+    @Test fun `forgetting a derived dot lets the migration run again`() = runBlocking {
+        val s = newSettings()
+        s.initialiseDifficulty(ModuleId.SINGSAY, derived = null)   // nothing to read yet: the default
+        assertEquals(Difficulty.DEFAULT, s.difficulty(ModuleId.SINGSAY).first())
+
+        s.forgetDerivedDifficulty(setOf(ModuleId.SINGSAY))
+        assertEquals(true, s.difficultyNeedsInit(ModuleId.SINGSAY).first())
+        s.initialiseDifficulty(ModuleId.SINGSAY, derived = 4)
+        assertEquals(4, s.difficulty(ModuleId.SINGSAY).first())
+    }
+
+    /** But a decision a person made is not evidence the database can invalidate. */
+    @Test fun `forgetting never reaches a dot a person set`() = runBlocking {
+        val s = newSettings()
+        s.setDifficulty(ModuleId.SCRIPTS, 5)
+        s.forgetDerivedDifficulty(setOf(ModuleId.SCRIPTS))
+        assertEquals(false, s.difficultyNeedsInit(ModuleId.SCRIPTS).first())
+        s.initialiseDifficulty(ModuleId.SCRIPTS, derived = 1)
+        assertEquals(5, s.difficulty(ModuleId.SCRIPTS).first())
+    }
+
+    /** And forgetting one module says nothing about the other five. */
+    @Test fun `forgetting one module leaves the rest derived`() = runBlocking {
+        val s = newSettings()
+        ModuleId.entries.forEach { s.initialiseDifficulty(it) }
+        s.forgetDerivedDifficulty(setOf(ModuleId.SINGSAY))
+        assertEquals(true, s.difficultyNeedsInit(ModuleId.SINGSAY).first())
+        (ModuleId.entries - ModuleId.SINGSAY).forEach {
+            assertEquals("$it", false, s.difficultyNeedsInit(it).first())
+        }
     }
 
     /**

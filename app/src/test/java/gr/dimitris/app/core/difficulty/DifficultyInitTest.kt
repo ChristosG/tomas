@@ -10,6 +10,9 @@ import gr.dimitris.app.core.data.Schedule
 import gr.dimitris.app.core.data.Script
 import gr.dimitris.app.core.data.ScriptLine
 import gr.dimitris.app.core.data.Speaker
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -102,5 +105,52 @@ class DifficultyInitTest {
         val id = dialogue("Στην καφετέρια", turns = 4)
         practised(id, ModuleId.SCRIPTS)
         assertEquals(Difficulty.DEFAULT, DifficultyInit.scriptsDot(scripts, schedules))
+    }
+
+    // ------------------------------------------- when the database arrives after the app does
+
+    /**
+     * The realistic second-device flow, as the DAOs see it: the derivation is asked once over a
+     * database that holds nothing but the seed, and **then** his practice history turns up — by a
+     * backup restored, or by the first sync pull. Asked again over the same DAOs, it now answers.
+     *
+     * Without the second ask the dots stayed at the default, and at the default the sing-then-say
+     * ceiling is four syllables: every longer phrase that came with his data would have sat out of
+     * the pool with its schedule row overdue for ever.
+     */
+    @Test fun `a derivation over an empty database answers once his rows arrive`() = runTest {
+        assertNull("nothing on the device yet", DifficultyInit.singSayDot(items, schedules))
+
+        val long = phrase("θέλω να πάω στο σπίτι μου")     // 9 syllables, restored with his data
+        practised(long.id, ModuleId.SINGSAY)
+
+        assertEquals(Difficulty.syllableDot(9), DifficultyInit.singSayDot(items, schedules))
+    }
+
+    /**
+     * And the rule that gets it asked again: a database swap forgets the two dots that are read out
+     * of the database, and nothing else. The first generation is the one the startup run was already
+     * given, so it is not a swap.
+     */
+    @Test fun `a database swap forgets the two dots that came out of the database`() = runTest {
+        val generations = MutableStateFlow(0)
+        val forgotten = mutableListOf<Set<ModuleId>>()
+        var derivations = 0
+        backgroundScope.launch {
+            DifficultyInit.watch(generations, forget = { forgotten += it }, derive = { derivations++ })
+        }
+        runCurrent()
+        assertEquals("the generation the startup run already had is not a swap", 0, derivations)
+
+        generations.value = 1                    // a backup restored
+        runCurrent()
+        generations.value = 2                    // and then a sync pull
+        runCurrent()
+
+        assertEquals(2, derivations)
+        assertEquals(listOf(DifficultyInit.FROM_DATABASE, DifficultyInit.FROM_DATABASE), forgotten)
+        // The other four read a level or a target size out of the preference store, which neither a
+        // restore nor a sync touches.
+        assertEquals(setOf(ModuleId.SINGSAY, ModuleId.SCRIPTS), DifficultyInit.FROM_DATABASE)
     }
 }

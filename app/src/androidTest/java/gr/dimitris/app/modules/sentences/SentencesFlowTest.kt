@@ -143,7 +143,10 @@ class SentencesFlowTest {
             return
         }
         assertTrue("the whole board is the sentence: $shown against $board", shown.size < board.size)
-        assertTrue("the sentence uses a card that is not on the board: $shown", board.containsAll(shown))
+        // Named, not counted: which card the sentence left out is the thing level 4 is about. That
+        // every word of it *is* on the board is asserted inside `correction`, where the first word
+        // that is not can say so by name.
+        assertTrue("every card on the board was used: $shown against $board", board.any { it !in shown })
 
         tapInOrder(shown)
         compose.waitUntil(TIMEOUT_MS) { attempts().any { it.itemId == LEVEL_4 && it.outcome == Outcome.ASSISTED } }
@@ -214,15 +217,28 @@ class SentencesFlowTest {
      * spaces counted four cards in a three-card sentence and the size assertion below failed
      * whenever the templates happened to pick one. Longest label first, so one card is never
      * mistaken for the beginning of another.
+     *
+     * The reconstruction is checked rather than trusted. Rebuilding a sentence *out of* the board
+     * would otherwise make «every word is on the board» a tautology and turn the real bug this test
+     * hunts — a correction naming a word the board never offered — into a short list that slips past
+     * the size assertion and dies minutes later on a timeout with nothing to read. So the first word
+     * that is not a card fails here, by name, and a reconstruction that does not add back up to the
+     * sentence as written fails too.
      */
     private fun correction(board: List<String>): List<String>? {
-        var rest = correctionText() ?: return null
+        val text = correctionText() ?: return null
         val cards = mutableListOf<String>()
+        var rest = text
         while (rest.isNotEmpty()) {
-            val card = board.filter { rest.startsWith(it) }.maxByOrNull { it.length } ?: break
-            cards += card
+            val card = board.filter { rest.startsWith(it) }.maxByOrNull { it.length }
+            assertTrue(
+                "the sentence uses «${rest.substringBefore(' ')}», which is on no card of $board",
+                card != null,
+            )
+            cards += card!!
             rest = rest.removePrefix(card).trimStart()
         }
+        assertEquals("the sentence did not add back up out of the board's cards", text, cards.joinToString(" "))
         return cards
     }
 

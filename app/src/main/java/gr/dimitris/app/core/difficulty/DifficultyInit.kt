@@ -6,6 +6,8 @@ import gr.dimitris.app.core.data.ModuleId
 import gr.dimitris.app.core.data.ScheduleDao
 import gr.dimitris.app.core.data.ScriptDao
 import gr.dimitris.app.core.data.Speaker
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.first
 
 /**
@@ -28,16 +30,67 @@ import kotlinx.coroutines.flow.first
  */
 object DifficultyInit {
 
+    /**
+     * The two modules whose evidence is the **database** rather than the preference store: how long a
+     * phrase he has been singing, and how many turns his dialogues ask of him. They are the ones
+     * [watch] has to work out again when the database is replaced under the app.
+     */
+    internal val FROM_DATABASE = setOf(ModuleId.SINGSAY, ModuleId.SCRIPTS)
+
     /** Every module that has a row of dots, in Today order. The talk board has none. */
     suspend fun run(graph: AppGraph) {
         for (module in graph.modules.map { it.id }) {
             val needed = runCatching { graph.settings.difficultyNeedsInit(module).first() }
                 .getOrElse { graph.errors.record("difficulty init $module", it); false }
             if (!needed) continue
+            // A derivation that *threw* is not a derivation, and must not be marked done: one
+            // transient Room failure at startup would otherwise pin «Τραγούδα και πες το» at dot 2
+            // for the life of the install. Nothing is written, and the next launch tries again —
+            // which is what already happens when the flag itself cannot be read.
             val derived = runCatching { derive(graph, module) }
-                .getOrElse { graph.errors.record("difficulty derive $module", it); null }
+                .getOrElse { graph.errors.record("difficulty derive $module", it); continue }
             runCatching { graph.settings.initialiseDifficulty(module, derived) }
                 .onFailure { graph.errors.record("difficulty init write $module", it) }
+        }
+    }
+
+    /**
+     * And again, whenever the database is replaced underneath the app.
+     *
+     * [gr.dimitris.app.AppGraph.dbGeneration] is bumped by exactly the two events that move his
+     * practice history without touching a single preference: a backup restored
+     * ([gr.dimitris.app.AppGraph.reopenDatabase]) and a sync pull that brought rows down
+     * (`onPulled`). Both are how a *second* phone gets his data, and on that phone [run] has already
+     * been spent, at startup, on a database that held nothing but the seed.
+     *
+     * Only [FROM_DATABASE] is worked out again: the other four read a level or a target size out of
+     * the preference store, which neither event changes. A dot a person has set is never revisited.
+     *
+     * Collects for the life of the process, on the graph's own scope. The first value is dropped
+     * because it is the generation [run] has just been given.
+     */
+    suspend fun watch(graph: AppGraph) = watch(
+        generations = graph.dbGeneration,
+        forget = { modules ->
+            runCatching { graph.settings.forgetDerivedDifficulty(modules) }
+                .onFailure { graph.errors.record("difficulty reset", it) }
+        },
+        derive = { run(graph) },
+    )
+
+    /**
+     * The rule on its own, so that "a database swap makes the two DB-backed dots be worked out again,
+     * and the first generation is not a swap" is a thing a test can drive rather than a thing a device
+     * has to be talked into. An [AppGraph] needs a `Context` and cannot be built on the JVM.
+     */
+    internal suspend fun watch(
+        generations: Flow<Int>,
+        forget: suspend (Set<ModuleId>) -> Unit,
+        derive: suspend () -> Unit,
+    ) {
+        generations.drop(1).collect {
+            forget(FROM_DATABASE)
+            derive()
         }
     }
 

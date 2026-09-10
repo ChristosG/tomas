@@ -40,5 +40,11 @@ class DimitrisApp : Application() {
             // folder that only ever grows is not something his father should have to think about.
             graph.sync.retireUnsynced()
         }
+        // Its own coroutine, because it never returns. Two of the six dots are read out of the
+        // database, and the database can arrive *after* the app has started: a backup restored, or
+        // the first sync pull bringing his vocabulary and his Leitner rows down onto a second phone.
+        // The run above would have spent those two derivations on a database holding nothing but the
+        // seed, and nothing would ever have asked again.
+        graph.scope.launch { DifficultyInit.watch(graph) }
     }
 }

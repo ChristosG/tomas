@@ -166,9 +166,10 @@ class ArcadeViewModel(
     fun onResult(hits: Int, misses: Int, newSizeDp: Float, play: ArcadePlay = ArcadePlay()) {
         if (finishing || ending) return
         finishing = true
-        // What the round ended on, held inside the band the dots ask for: the shrink and the grow
-        // live inside the four games, so this is where a target that wandered out of the band comes
-        // back to it. Within one round it may dip below; across sittings it never does.
+        // What the round ended on, held to the ceiling the dots ask for. The shrink and the grow live
+        // inside the four games, so this is where a target that grew past what he asked to be given
+        // is pulled back. Smaller than the band is not pulled back at all: that is his hand doing
+        // better than the dots require, and no rule of this app hands that back.
         val size = Difficulty.arcadeClamp(newSizeDp, difficulty)
         graph.feedback.success()
         sizes[_state.value.game] = size

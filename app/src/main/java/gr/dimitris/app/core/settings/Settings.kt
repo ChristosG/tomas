@@ -111,7 +111,9 @@ class Settings(private val store: DataStore<Preferences>) {
         val (floor, ceiling) = bounds(p, module)
         val allowed = Difficulty.clamp(dot, floor, ceiling)
         p[difficultyKey(module)] = allowed
-        p[initialisedKey(module)] = true
+        // A caregiver moving the stepper is a person deciding, exactly as his own tap is: the
+        // migration must never derive over it. See [decidedKey].
+        p[decidedKey(module)] = true
         if (allowed != dot) clampLevelIntoBand(p, module, allowed)
     }
 
@@ -203,6 +205,10 @@ class Settings(private val store: DataStore<Preferences>) {
             val (floor, ceiling) = bounds(p, module)
             val wanted = Difficulty.clamp(n, floor, ceiling)
             p[difficultyKey(module)] = wanted
+            // He has decided, so nothing may decide for him afterwards: the seed importers run before
+            // the migration does, and a dot he taps in that window was otherwise overwritten by it a
+            // second later. His own tap is the strongest evidence there is.
+            p[decidedKey(module)] = true
             // Tapping the dot he is already on changes nothing — not even the level. He re-reads the
             // row more than once; a re-read must not cost him the level he has climbed to inside it.
             if (wanted != before) jumpToBandFloor(p, module, wanted)
@@ -283,17 +289,22 @@ class Settings(private val store: DataStore<Preferences>) {
 
     /**
      * The module's own level, set to the easiest level of the band the dots now ask for. The three
-     * modules that keep a level keep it here; «Δεξί χέρι» keeps four target sizes instead, one per
-     * game, and they all go back to the band's biggest — its easiest — together. «Λέξεις»,
-     * «Τραγούδα και πες το» and «Διάλογοι» have no level to move: their difficulty is which items
-     * the plan admits, and the next plan admits them.
+     * modules that keep a level keep it here. «Λέξεις», «Τραγούδα και πες το» and «Διάλογοι» have no
+     * level to move: their difficulty is which items the plan admits, and the next plan admits them.
+     *
+     * **«Δεξί χέρι» is not one of the three.** It has no level — it has four target sizes, and a
+     * stored target size is a ceiling ([Difficulty.arcadeClamp]), never a starting point, whichever
+     * door the change came through. Assigning the band's biggest size here was the one path that had
+     * not followed that rule, and it undid the very thing the ceiling was written for: with the pinch
+     * at 120 dp and the tap game at 50 dp, a tap on the *hardest* dot handed the tap game a 58 dp
+     * circle back. He asked for harder work and one game got easier, with nothing said.
      */
     private fun jumpToBandFloor(p: MutablePreferences, module: ModuleId, difficulty: Int) {
         when (module) {
             ModuleId.NUMBERS -> p[NUMBERS_LEVEL] = Difficulty.numbers(difficulty).first
             ModuleId.SENTENCES -> p[SENTENCES_LEVEL] = Difficulty.sentences(difficulty).first
             ModuleId.TRACE -> p[TRACE_LEVEL] = Difficulty.trace(difficulty).first
-            ModuleId.ARCADE -> ArcadeGame.entries.forEach { p[arcadeKey(it)] = Difficulty.arcadeStart(difficulty) }
+            ModuleId.ARCADE -> clampLevelIntoBand(p, module, difficulty)
             else -> Unit
         }
     }
@@ -330,7 +341,11 @@ class Settings(private val store: DataStore<Preferences>) {
      * away everything he had climbed. [gr.dimitris.app.core.difficulty.DifficultyInit] therefore reads
      * his stored progress once, per module, and writes the dot that already describes him.
      */
-    fun difficultyNeedsInit(module: ModuleId): Flow<Boolean> = store.data.map { it[initialisedKey(module)] != true }
+    fun difficultyNeedsInit(module: ModuleId): Flow<Boolean> = store.data.map { !derivedAlready(it, module) }
+
+    /** Derived once, or decided by a person: either ends the migration for that module. */
+    private fun derivedAlready(p: Preferences, module: ModuleId): Boolean =
+        p[initialisedKey(module)] == true || p[decidedKey(module)] == true
 
     /**
      * The one-time write. Sets the dot to [derived] — inside the caregiver's bounds — and marks the
@@ -346,12 +361,33 @@ class Settings(private val store: DataStore<Preferences>) {
      */
     suspend fun initialiseDifficulty(module: ModuleId, derived: Int? = null) {
         store.edit { p ->
-            if (p[initialisedKey(module)] == true) return@edit
+            if (derivedAlready(p, module)) return@edit
             val (floor, ceiling) = bounds(p, module)
             val value = derived ?: derivedFromStore(p, module) ?: Difficulty.DEFAULT
             p[difficultyKey(module)] = Difficulty.clamp(value, floor, ceiling)
             p[initialisedKey(module)] = true
         }
+    }
+
+    /**
+     * Forget that these modules' dots were ever derived, so the next
+     * [gr.dimitris.app.core.difficulty.DifficultyInit] run works them out again.
+     *
+     * For the case where the *evidence moved*: two of the six derivations are read out of the
+     * database — how long a phrase he has been singing, how many turns his dialogues ask of him — and
+     * the flag that says "done" lives in DataStore, which a restore does not touch and sync does not
+     * carry. The realistic second-device flow is install → seed → derive over an empty database →
+     * **and then** his real vocabulary and his real Leitner rows arrive. Without this the two dots
+     * were spent on a phone that knew nothing about him, and at [Difficulty.DEFAULT] the sing-then-say
+     * ceiling is four syllables: every longer phrase that came with his data would sit out of the pool
+     * with its schedule row overdue for ever, and the widen-back would not fire because the pool is
+     * not empty.
+     *
+     * A dot a **person** has set is never forgotten ([decidedKey]): the database changing says nothing
+     * about a decision he or a caregiver made.
+     */
+    suspend fun forgetDerivedDifficulty(modules: Set<ModuleId>) {
+        store.edit { p -> modules.forEach { p.remove(initialisedKey(it)) } }
     }
 
     /**
@@ -537,6 +573,17 @@ class Settings(private val store: DataStore<Preferences>) {
 
         /** Set once, when this module's dot has been derived from what he was already doing. */
         private fun initialisedKey(module: ModuleId) = booleanPreferencesKey("difficulty_ready_${module.name}")
+
+        /**
+         * Set when this module's dot has been **settled by something better than a guess**: his own
+         * tap ([setDifficulty]), or a level write — a caregiver's stepper, a sitting's progression,
+         * a module healing its own clamp — which [followLevel] turns into the dot that owns it.
+         *
+         * Its own key, separate from [initialisedKey], and never cleared. [forgetDerivedDifficulty]
+         * exists so the migration runs again when the database changes underneath it, and neither a
+         * restore nor a sync says anything about a choice somebody made or a level he earned.
+         */
+        private fun decidedKey(module: ModuleId) = booleanPreferencesKey("difficulty_set_${module.name}")
 
         /**
          * The one size the arcade had before each game kept its own. Read as the starting point for

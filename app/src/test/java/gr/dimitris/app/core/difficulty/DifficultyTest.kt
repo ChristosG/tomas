@@ -303,6 +303,22 @@ class DifficultyTest {
         assertEquals(7, Difficulty.levelAfterSitting(from = 7, next = 7, band = band))
     }
 
+    /**
+     * A band of one level is the common case, not the corner: «Γράψε» is `d..d` at every dot, and
+     * «Προτάσεις» is `4..4` at three of the five until Task 7 builds levels 5–8. Both directions have
+     * to return where he started, so the sitting writes nothing and the dots stay the only thing that
+     * moves him.
+     */
+    @Test fun `a band of one level holds him whichever way the sitting went`() {
+        listOf(Difficulty.trace(3), Difficulty.sentences(5)).forEach { band ->
+            val only = band.first
+            assertEquals("$band runs backwards", only, band.last)
+            assertEquals("a good sitting moved him out of $band", only, Difficulty.levelAfterSitting(only, only + 1, band))
+            assertEquals("a bad sitting moved him out of $band", only, Difficulty.levelAfterSitting(only, only - 1, band))
+            assertEquals(only, Difficulty.levelAfterSitting(only, only, band))
+        }
+    }
+
     @Test fun `a sitting he earned moves him one step, never past the band`() {
         val band = Difficulty.numbers(3)   // 5..7
         assertEquals(6, Difficulty.levelAfterSitting(from = 5, next = 6, band = band))
