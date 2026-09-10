@@ -70,11 +70,16 @@ primary. `QuietButton` is the app's genuinely secondary control — outlined, an
 | | finished | «Εντάξει» | «Εντάξει» |
 | Δεξί χέρι (`ArcadeScreen`) | playing | «Παράλειψη» | — |
 | | finished | «Εντάξει» | «Εντάξει» |
+| SQL (`SqlScreen`) | answered or revealed | «Άκου», «Επόμενο» | «Επόμενο» |
+| | ordering board (levels 1, 5) | «Άκου», «Έτοιμο», «Παράλειψη» | «Έτοιμο» |
+| | typed board (levels 4, 5) | «Άκου», «Έτοιμο», «Παράλειψη» | «Έτοιμο» |
+| | choosing board (levels 2, 3) | «Άκου», «Παράλειψη» | — |
+| | finished | «Εντάξει» | «Εντάξει» |
 | Μίλα (`TalkBoardScreen`) | always | «Πες το», σβήσε, καθάρισε | «Πες το» |
 
-Six of his screens carry a control in the *content* rather than in the bottom area. Every one of them
-is listed here, deliberately: the rule below is that a content control is an escape hatch and not a
-loophole, and a list that is only *mostly* complete is how the loophole gets in.
+Seven of his screens carry a control in the *content* rather than in the bottom area. Every one of
+them is listed here, deliberately: the rule below is that a content control is an escape hatch and
+not a loophole, and a list that is only *mostly* complete is how the loophole gets in.
 
 - **Λέξεις**: «Βοήθεια», beside the picture it is a hint about; and the second «Μίλα» offered after
   the phone has asked him twice.
@@ -84,6 +89,11 @@ loophole, and a list that is only *mostly* complete is how the loophole gets in.
 - **Προτάσεις**: «Το έγραψα», under the sentence he typed.
 - **Αριθμοί**: «Άκου», between the question and the options — the question said again, next to the
   question, where the bottom area holds only «Παράλειψη».
+- **SQL**: the words he has already laid down, in the strip above the board — tapping one takes it
+  back. The undo lives next to the query he is building because the bottom block is already
+  «Άκου» / «Έτοιμο» / «Παράλειψη», and because the thing being undone is *that word in that place*.
+  The three options of a «διάλεξε» board are content too, like the numbers module's answers: they are
+  the question, not an action.
 - **Μίλα**: the whole of «Ολόκληρη», inside the sentence strip. «Ολόκληρη» while the strip is only
   words; then, over the chips, the sentence with «Μίλα» / «Το είπα!» and «Κλείσε» under it, and
   «Στοπ» alone while the microphone is open. The board's own three at the bottom («Πες το», σβήσε,
@@ -139,4 +149,31 @@ are 104 dp tall and a phone screen holds four rows of them under the greeting, w
 does not fit cut across rather than landing on the edge — a half-tile is what tells him there is
 more below.
 
+## What phase 13 added: the «SQL» tile
+
+One new tile, and it is a tile like any other — that is the whole of what the audit has to say about
+it. «SQL» is on the grid ([`Icons.Rounded.TableChart`]), it has the same row of five dots on its first
+screen, its bottom block is «Άκου» / «Έτοιμο» / «Παράλειψη» in the order every other module uses them,
+and it ends on «Εντάξει».
+
+Two things about it are worth writing down because they were decisions and not defaults.
+
+**«Άκου» reads the question, never the answer.** In the four speech modules «Άκου» *is* the model —
+the word or the sentence he is being asked for — and it costs the row its first-try mark. Here the
+question is Greek prose («Από τον πίνακα users, δείξε τη στήλη name όπου city = 'Αθήνα'») and the
+answer is SQL, so hearing the question again gives away nothing at all. It costs him nothing, and the
+attempt row carries no cue level: there is no ladder here to be on.
+
+**The strip he lays the words into does not grow.** It is one 72 dp row that scrolls sideways. While
+it grew with what he had put down, every tile he laid pushed the board below it further down — so on
+a four-word query the last word was off the bottom of the screen by the time he needed it, on the one
+board whose whole exercise is reaching each word in turn. The instrumented `SqlFlowTest` is what
+found it and what keeps it found.
+
+**On by default, for everybody.** «SQL» is not in [`Settings.DEFAULT_OFF`], so it needs no
+grandfathering pass: it is on the grid the day this build lands, on a phone that has been in use for
+months as much as on a new one. Chris asked for it because Dimitris was a programmer and still does
+very basic SQL exercises; the switch in Ρυθμίσεις is there for anyone who decides otherwise.
+
 [`Settings.DEFAULT_OFF`]: ../app/src/main/java/gr/dimitris/app/core/settings/Settings.kt
+[`Icons.Rounded.TableChart`]: ../app/src/main/java/gr/dimitris/app/modules/sql/SqlModule.kt

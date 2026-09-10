@@ -37,6 +37,7 @@ import gr.dimitris.app.modules.numbers.NumbersModule
 import gr.dimitris.app.modules.scripts.ScriptsModule
 import gr.dimitris.app.modules.sentences.SentencesModule
 import gr.dimitris.app.modules.singsay.SingSayModule
+import gr.dimitris.app.modules.sql.SqlModule
 import gr.dimitris.app.modules.trace.TraceModule
 import gr.dimitris.app.modules.wordcoach.WordCoachModule
 import gr.dimitris.app.ui.theme.Feedback
@@ -208,11 +209,16 @@ class AppGraph(context: Context) {
     /**
      * Therapy modules in Today-screen order. Empty in phase 0; each later phase adds one. Two of
      * them — the arcade and, since phase 12, sing-then-say — are off until a caregiver switches them
-     * on, so the grid is normally five tiles: see
+     * on, so the grid is normally six tiles: see
      * [gr.dimitris.app.core.settings.Settings.DEFAULT_OFF].
+     *
+     * «SQL» is last because it is the one tile that is not speech therapy — he was a programmer and
+     * asked for it — and the day should still open with the words.
      */
-    val modules: List<Module> =
-        listOf(WordCoachModule, NumbersModule, SingSayModule, ScriptsModule, SentencesModule, TraceModule, ArcadeModule)
+    val modules: List<Module> = listOf(
+        WordCoachModule, NumbersModule, SingSayModule, ScriptsModule, SentencesModule, TraceModule,
+        ArcadeModule, SqlModule,
+    )
 
     /**
      * Bumped every time [db] is replaced. Screens key their flows on it, because a Flow from the

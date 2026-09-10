@@ -19,6 +19,7 @@ import gr.dimitris.app.modules.arcade.ArcadeGame
 import gr.dimitris.app.modules.numbers.NumberProgression
 import gr.dimitris.app.modules.sentences.SentenceTemplates
 import gr.dimitris.app.modules.singsay.Key
+import gr.dimitris.app.modules.sql.SqlPuzzles
 import gr.dimitris.app.modules.singsay.Tempo
 import gr.dimitris.app.modules.trace.TraceStrictness
 import kotlinx.coroutines.flow.Flow
@@ -90,6 +91,23 @@ class Settings(private val store: DataStore<Preferences>) {
             val n = level.coerceIn(SentenceTemplates.MIN_LEVEL, SentenceTemplates.MAX_LEVEL)
             p[SENTENCES_LEVEL] = n
             followLevel(p, ModuleId.SENTENCES, Difficulty.sentencesDot(n))
+        }
+    }
+
+    /**
+     * Which kind of SQL puzzle he is on, 1..5: order the words, choose the query, fill in the
+     * keyword, write it, two tables. See [numbersLevel] for why the dot follows the level.
+     *
+     * Unlike the other three this one is a **ceiling** rather than a band ([Difficulty.sql]), so the
+     * dot and the level are the same number: a sitting that promotes him to 4 is a phone whose dots
+     * say 4, which is exactly what he would have tapped himself.
+     */
+    val sqlLevel: Flow<Int> = store.data.map { it[SQL_LEVEL] ?: SqlPuzzles.MIN_LEVEL }
+    suspend fun setSqlLevel(level: Int) {
+        store.edit { p ->
+            val n = level.coerceIn(SqlPuzzles.MIN_LEVEL, SqlPuzzles.MAX_LEVEL)
+            p[SQL_LEVEL] = n
+            followLevel(p, ModuleId.SQL, Difficulty.sqlDot(n))
         }
     }
 
@@ -308,7 +326,10 @@ class Settings(private val store: DataStore<Preferences>) {
             ModuleId.NUMBERS -> p[NUMBERS_LEVEL] = Difficulty.numbers(difficulty).first
             ModuleId.SENTENCES -> p[SENTENCES_LEVEL] = Difficulty.sentences(difficulty).first
             ModuleId.TRACE -> p[TRACE_LEVEL] = Difficulty.trace(difficulty).first
-            ModuleId.ARCADE -> clampLevelIntoBand(p, module, difficulty)
+            // «SQL» and «Δεξί χέρι» are the two whose dot is a **ceiling** and not a band, so there
+            // is no floor to jump to: everything at or below the new dot stays in play, and a level
+            // he has already earned is held rather than given back. See [Difficulty.sql].
+            ModuleId.SQL, ModuleId.ARCADE -> clampLevelIntoBand(p, module, difficulty)
             else -> Unit
         }
     }
@@ -328,6 +349,8 @@ class Settings(private val store: DataStore<Preferences>) {
                 p[SENTENCES_LEVEL] = (p[SENTENCES_LEVEL] ?: SentenceTemplates.MIN_LEVEL).coerceIn(Difficulty.sentences(difficulty))
             ModuleId.TRACE ->
                 p[TRACE_LEVEL] = (p[TRACE_LEVEL] ?: Difficulty.MIN).coerceIn(Difficulty.trace(difficulty))
+            ModuleId.SQL ->
+                p[SQL_LEVEL] = (p[SQL_LEVEL] ?: SqlPuzzles.MIN_LEVEL).coerceIn(Difficulty.sql(difficulty))
             ModuleId.ARCADE -> ArcadeGame.entries.forEach { g ->
                 p[arcadeKey(g)] = Difficulty.arcadeClamp(p[arcadeKey(g)] ?: Adaptive.START, difficulty)
             }
@@ -431,6 +454,7 @@ class Settings(private val store: DataStore<Preferences>) {
         ModuleId.NUMBERS -> p[NUMBERS_LEVEL]?.let { Difficulty.numbersDot(it) }
         ModuleId.SENTENCES -> p[SENTENCES_LEVEL]?.let { Difficulty.sentencesDot(it) }
         ModuleId.TRACE -> p[TRACE_LEVEL]?.let { Difficulty.traceDot(it) }
+        ModuleId.SQL -> p[SQL_LEVEL]?.let { Difficulty.sqlDot(it) }
         ModuleId.ARCADE ->
             (ArcadeGame.entries.mapNotNull { p[arcadeKey(it)] } + listOfNotNull(p[LEGACY_ARCADE_TARGET_DP]))
                 .maxOrNull()?.let { Difficulty.arcadeDot(it) }
@@ -530,6 +554,12 @@ class Settings(private val store: DataStore<Preferences>) {
      *
      * Two keys, because "never switched on" and "switched off" are different states: absence cannot
      * mean on for most modules and off for the extras at the same time.
+     *
+     * A module that is *not* in [DEFAULT_OFF] is therefore on the moment it exists, on a phone that
+     * has been in use for months as much as on one installed this morning — no grandfathering pass
+     * is involved, because there is nothing to grandfather. That is «SQL» in phase 13: Chris asked
+     * for it, so it is on his phone the day the build lands, and the switch in Ρυθμίσεις is there
+     * for anyone who decides otherwise.
      */
     val enabledModules: Flow<Set<ModuleId>> = store.data.map { p ->
         val off = p[DISABLED_MODULES].orEmpty()
@@ -652,6 +682,7 @@ class Settings(private val store: DataStore<Preferences>) {
         private val NUMBERS_LEVEL = intPreferencesKey("numbers_level")
         private val SENTENCES_LEVEL = intPreferencesKey("sentences_level")
         private val TRACE_LEVEL = intPreferencesKey("trace_level")
+        private val SQL_LEVEL = intPreferencesKey("sql_level")
         private val TRACE_HAND = stringPreferencesKey("trace_hand")
         private val TRACE_STRICTNESS = stringPreferencesKey("trace_strictness")
         private val MELODY_TEMPO = stringPreferencesKey("melody_tempo")

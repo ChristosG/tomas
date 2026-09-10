@@ -33,7 +33,17 @@ enum class Who { DIMITRIS, CAREGIVER }
  * "Τραγούδα και πες το"; it is never the model voice the talk board or the word coach plays.
  */
 enum class RecordingStyle { SPOKEN, SUNG }
-enum class ModuleId { TALKBOARD, WORDCOACH, NUMBERS, SINGSAY, SCRIPTS, SENTENCES, TRACE, ARCADE }
+/**
+ * Every module that can write an attempt row, plus the talk board, which writes them for his own
+ * speech. Stored by *name* everywhere it is stored — Room's enum converter, the sync wire, the
+ * preference keys in [gr.dimitris.app.core.settings.Settings] — so a new one may be appended without
+ * moving anything that already exists.
+ *
+ * `SQL` is phase 13's: Dimitris was a programmer, his father runs a software company, and he still
+ * does very basic SQL exercises. It is a module on exactly the same footing as the rest — it rotates
+ * into the daily sitting, it has its own row of five dots, and it writes one attempt per puzzle.
+ */
+enum class ModuleId { TALKBOARD, WORDCOACH, NUMBERS, SINGSAY, SCRIPTS, SENTENCES, TRACE, ARCADE, SQL }
 enum class Outcome { CORRECT, ASSISTED, SKIPPED }
 
 /**

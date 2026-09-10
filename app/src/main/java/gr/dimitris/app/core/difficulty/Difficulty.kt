@@ -5,6 +5,7 @@ import gr.dimitris.app.core.greek.Syllabifier
 import gr.dimitris.app.modules.arcade.Adaptive
 import gr.dimitris.app.modules.numbers.NumberProgression
 import gr.dimitris.app.modules.sentences.SentenceTemplates
+import gr.dimitris.app.modules.sql.SqlPuzzles
 
 /**
  * The one number he sets himself: how hard each module is, 1 to 5 (spec §13).
@@ -135,6 +136,34 @@ object Difficulty {
      */
     fun wordCoachKinds(d: Int): List<ItemKind> =
         if (wordCoachTier(d) <= 1) listOf(ItemKind.WORD) else listOf(ItemKind.WORD, ItemKind.PHRASE)
+
+    // -------------------------------------------------------------------- «SQL»
+
+    /**
+     * The puzzle levels «SQL» may reach at this dot: **1 up to n**, and dot n admits every level at
+     * or below it — cumulative, like [wordCoachTier] and [scriptTier] rather than banded like
+     * [numbers] and [sentences].
+     *
+     * The five levels are five different *kinds* of question and not five sizes of one: 1 put the
+     * words of a query in order, 2 choose the query that gives a result, 3 fill in the missing
+     * keyword, 4 write the query, 5 two tables at once. A ceiling is the honest shape for that.
+     * Putting the words in order is still worth doing on the day he writes a `JOIN` — it is how
+     * every sitting starts, and the progression inside the band is what decides when he meets the
+     * harder kind — whereas a *band* of 4..4 would have retired the first three kinds the moment he
+     * asked for hard work, which is exactly the mistake [syllableCeiling] documents.
+     *
+     * So the dot is a real cap: at dot 1 the module is ordering tiles and nothing else, and at dot 5
+     * the whole ladder is in play. [SqlPuzzles.MAX_LEVEL] is 5, so every dot means something
+     * different and nothing below clamps.
+     */
+    fun sql(d: Int): IntRange = SqlPuzzles.MIN_LEVEL..clamp(d).coerceAtMost(SqlPuzzles.MAX_LEVEL)
+
+    /**
+     * The dot a «SQL» level belongs to: the level *is* the dot, because the dot is that level's
+     * ceiling. It is what [gr.dimitris.app.core.settings.Settings.setSqlLevel] moves the dot to when a
+     * sitting promotes him — a man who has just earned level 4 is a man whose dots say 4.
+     */
+    fun sqlDot(level: Int): Int = clamp(level)
 
     // ------------------------------------------------- «Τραγούδα και πες το»
 

@@ -73,6 +73,10 @@ object InsightRules {
         ModuleId.SENTENCES -> "Οι Προτάσεις"
         ModuleId.TRACE -> "Τα γράμματα"
         ModuleId.ARCADE -> "Οι ασκήσεις για το δεξί χέρι"
+        // The one line in this file that is not a Greek noun: «Τα SQL» is not Greek and «Οι
+        // ερωτήσεις SQL» is what he is actually doing — writing queries — said as a plural, like
+        // every other subject here, so «... πάνε πολύ καλά» still agrees with it.
+        ModuleId.SQL -> "Οι ερωτήσεις SQL"
     }
 
     fun percent(accuracy: Float): Int = (accuracy * 100).roundToInt()
