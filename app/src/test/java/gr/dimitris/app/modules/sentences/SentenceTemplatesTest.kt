@@ -10,7 +10,9 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
+import org.junit.Rule
 import org.junit.Test
+import org.junit.rules.TestName
 import kotlin.random.Random
 
 /**
@@ -19,7 +21,19 @@ import kotlin.random.Random
  * once has not been shown to hold.
  */
 class SentenceTemplatesTest {
-    private val templates = SentenceTemplates(Random(7))
+    /** The running test's own name — the one thing in scope that differs from test to test. */
+    @get:Rule val test = TestName()
+
+    /**
+     * The templates this test draws from, seeded by this test's own name.
+     *
+     * One `Random(7)` for the whole class meant every case here read the same trajectory through the
+     * generator: two tests at the same level saw the same sentences, so the second proved nothing
+     * the first had not, and a rule that only breaks off seed 7's path had twenty-seven chances to
+     * hide. The name is stable (`String.hashCode` is specified, so a failure reproduces) and it is
+     * this test's alone, so adding or renaming a test moves that test's draws and nobody else's.
+     */
+    private val templates by lazy { SentenceTemplates(Random(test.methodName.hashCode())) }
 
     private fun word(text: String, category: Category) = Item(text = text, category = category, kind = ItemKind.WORD)
 

@@ -4,11 +4,16 @@ import gr.dimitris.app.core.greek.GreekNumbers
 import gr.dimitris.app.core.greek.GreekTime
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
+import org.junit.Rule
 import org.junit.Test
+import org.junit.rules.TestName
 import kotlin.random.Random
 
 class ExerciseGeneratorTest {
     private val prices = listOf(Price("καφές", 250), Price("σουβλάκι", 380), Price("νερό", 50))
+
+    /** The running test's own name — the one thing in scope that differs from test to test. */
+    @get:Rule val test = TestName()
 
     /**
      * A generator of this test's own, from a seed of its own.
@@ -18,11 +23,20 @@ class ExerciseGeneratorTest {
      * take, so adding or renaming any test silently reshuffles all the others — and an assertion
      * that would have caught a real defect can go green for a whole release on the draws it was
      * handed. One did.
+     *
+     * And not one *seed* for the whole class either, which is what a shared `42` amounted to: two
+     * tests calling [many] at the same level were reading the same two hundred exercises, so the
+     * second of them proved nothing the first had not. The seed is the test's own name, which is
+     * stable (`String.hashCode` is specified, so a failure reproduces) and is the test's alone — so
+     * adding, renaming or reordering a test moves that test's draws and nobody else's.
      */
-    private fun gen(seed: Int = 42) = ExerciseGenerator(Random(seed))
+    private fun gen(seed: Int = ownSeed()) = ExerciseGenerator(Random(seed))
 
-    /** [n] draws at [level], from a stream that depends on the level and on nothing else. */
-    private fun many(level: Int, n: Int = 200) = gen(level * 31).let { g -> List(n) { g.generate(level, prices) } }
+    private fun ownSeed(): Int = test.methodName.hashCode()
+
+    /** [n] draws at [level], from a stream that depends on this test and on the level. */
+    private fun many(level: Int, n: Int = 200) =
+        gen(ownSeed() + level * 31).let { g -> List(n) { g.generate(level, prices) } }
 
     @Test fun `level 1 compares numbers 0 to 10 with dots, never two neighbours`() {
         many(1).forEach { e ->
@@ -481,6 +495,45 @@ class ExerciseGeneratorTest {
         collided.forEach { assertEquals("only the 25 € bill may collide: ${it.prompt}", 50, paidOf(it)) }
     }
 
+    /**
+     * What the buy-and-change story can really ask him for: **1 to 40 ευρώ**, and the whole of that.
+     *
+     * The bill is `k × n` with `k` in 2..5 and `n` in 2..6, so it is one of thirteen amounts, and the
+     * note is the smallest above it that is not exactly twice it. The exclusion is the point of the
+     * level (at a 10 € bill paid with a twenty the change *is* the cost, and the button that catches
+     * a man who stopped halfway would be filtered out as a duplicate) — but with only four notes it
+     * has somewhere odd to fall to: at a 10 € bill the twenty is excluded and nothing else is left
+     * under fifty, so the story hands over a fifty and the answer is 40. That is the top of the
+     * range, and it is a real story he will meet — «Αγοράζεις 2 μπουκάλια προς 5 ευρώ. Δίνεις 50
+     * ευρώ.» — which reads oddly and is pinned here rather than left to be rediscovered. The sweep
+     * above only ever checked membership of 1..150, which is why it never said so.
+     *
+     * Both ends are asserted, and asserted **tight**: a change to `NOTE_EUROS` or to either bound of
+     * `k`/`n` moves one of them and fails here.
+     */
+    @Test fun `the buy-and-change story asks for 1 to 40 ευρώ and no more`() {
+        val bought = (0 until 600).flatMap { seed -> gen(ownSeed() + seed).let { g -> List(5) { g.generate(15, prices) } } }
+            .filterIsInstance<NumberExercise.WordProblem>()
+            .filter { BUY in it.prompt }
+        assertTrue("no buy stories to look at", bought.size > 100)
+
+        bought.forEach {
+            assertTrue("an answer outside 1..40: ${it.answer} — ${it.prompt}", it.answer in BUY_ANSWERS)
+        }
+        assertEquals("the cheapest change", BUY_ANSWERS.first, bought.minOf { it.answer })
+        assertEquals("the fifty handed over for a ten", BUY_ANSWERS.last, bought.maxOf { it.answer })
+
+        // And the exclusion that puts it there, from the other side: the note is never twice the
+        // bill — except at 25 €, where the fifty is the only note above it and there is nowhere
+        // else to fall.
+        bought.forEach {
+            val paid = paidOf(it)
+            val cost = paid - it.answer
+            if (paid == 2 * cost) assertEquals("only the 25 € bill may collide: ${it.prompt}", 25, cost)
+        }
+        assertTrue("the 10 € bill really does reach for the fifty", bought.any { paidOf(it) == 50 && it.answer == 40 })
+    }
+
     /** The note in «Δίνεις 20 ευρώ», read back off the sentence. */
     private fun paidOf(e: NumberExercise.WordProblem): Int =
         e.prompt.substringAfter("Δίνεις ").substringBefore(" ευρώ").toInt()
@@ -503,5 +556,8 @@ class ExerciseGeneratorTest {
         /** One word out of each of the five stories, enough to tell them apart. */
         val SHAPES = listOf("κουτιά", "λεωφορείο", "Ξοδεύεις", "Μοιράζεις", "Αγοράζεις")
         const val BUY = "Αγοράζεις"
+
+        /** Every change this shape can hand back: 1 € off a five, up to 40 € off a fifty. */
+        val BUY_ANSWERS = 1..40
     }
 }
