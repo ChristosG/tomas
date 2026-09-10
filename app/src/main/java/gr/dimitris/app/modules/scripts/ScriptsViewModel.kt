@@ -14,10 +14,12 @@ import gr.dimitris.app.core.data.Who
 import gr.dimitris.app.core.data.now
 import gr.dimitris.app.core.audio.Recorded
 import gr.dimitris.app.core.speech.GentleCheck
+import gr.dimitris.app.core.speech.OnDeviceSupport
 import gr.dimitris.app.core.speech.Recognition
 import gr.dimitris.app.core.speech.RecognizerIntents
 import gr.dimitris.app.core.speech.SpeechFailure
 import gr.dimitris.app.core.speech.SpeechMatch
+import gr.dimitris.app.core.speech.take
 import gr.dimitris.app.modules.wordcoach.CueLadder
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineStart
@@ -92,6 +94,11 @@ data class ScriptsState(
     val selfRecordingPath: String? = null,
     /** Recognition is on and this device has it: his turns are checked, gently. */
     val sttOn: Boolean = false,
+    /**
+     * The recogniser keeps his take itself, so «Μίλα» is the only microphone on this turn and
+     * «Ηχογράφηση» is gone from the card. False on the fallback path, where it stays as it was.
+     */
+    val oneControl: Boolean = false,
     /**
      * False until the settings read has landed. Until then the green primary is drawn but greyed:
      * a button that changes what it does under the thumb of a man with a right hemiparesis is worse
@@ -234,13 +241,22 @@ class ScriptsViewModel(
      */
     private var recogniserBroke = false
 
+    /**
+     * Which honest error classes have already reached the caregiver's «Σφάλματα» in this run. One row
+     * per kind of trouble rather than one per tap — and both, when a phone has two things wrong.
+     */
+    private val reported = mutableSetOf<Recognition.ErrorClass>()
+
     init {
         load()
         viewModelScope.launch {
             // isAvailable asks the package manager across a binder: not on the thread drawing the turn.
             val on = graph.settings.sttEnabled.first() && withContext(Dispatchers.Default) { graph.stt.isAvailable }
+            // Which engine will answer decides how many microphone buttons the turn has: one when the
+            // recogniser hands his own audio back, the old pair when it does not.
+            val one = on && graph.stt.engine() == OnDeviceSupport.Engine.ON_DEVICE
             // With recognition off nothing about this screen changes, «Το είπα!» included.
-            _state.update { it.copy(sttOn = on, sttResolved = true, canConfirm = !on || check.canConfirm) }
+            _state.update { it.copy(sttOn = on, oneControl = one, sttResolved = true, canConfirm = !on || check.canConfirm) }
         }
         // Only while a window is open: the bar belongs to the microphone, and nothing else draws it.
         viewModelScope.launch {
@@ -373,6 +389,10 @@ class ScriptsViewModel(
      * old «Άκου ξανά» dead until «Βοήθεια» had been pressed; a man who cannot retrieve a word is
      * not helped by being made to fail for it first (spec §12).
      *
+     * Once there is a take of his own it plays that straight after the model, back to back: the old
+     * «Σύγκριση», folded into the button it was always next to. One «Άκου», and what it does grows
+     * with what there is to hear.
+     *
      * The help is written down instead of being refused: [CueLadder.listened] scores the turn at 3
      * without moving the hint sequence, so «Βοήθεια» carries on from where it was and the
      * conversation gives nothing away that it had not already.
@@ -387,7 +407,11 @@ class ScriptsViewModel(
         val item = lines.getOrNull(s.index)?.second ?: return
         listens++
         l.listened()
-        cue { report(graph.speaker.speak(item)) }
+        val take = s.selfRecordingPath
+        cue {
+            report(graph.speaker.speak(item))
+            if (take != null) report(graph.voice.play(graph.files.resolve(take)))
+        }
     }
 
     /** A line already said, tapped again: what did they ask me? A dialogue he cannot re-hear is a trap. */
@@ -463,29 +487,13 @@ class ScriptsViewModel(
         if (_state.value.isRecording) {
             runCatching { graph.voice.stopRecording() }
                 .onSuccess { rec ->
-                    val itemId = lines[_state.value.index].second.id
-                    lastPeak = rec.peakAmplitude
-                    lastTakeMs = rec.durationMs
                     // A take nobody spoke into is not a take: it is deleted, he is asked again, the
                     // turn stays open and nothing is written. Silence used to pass as his voice.
-                    if (rec.isSilent) {
-                        rec.file.delete()
+                    if (!keep(rec)) {
                         _state.update { it.copy(isRecording = false, error = Recorded.SILENT_TAKE) }
                         return@onSuccess
                     }
-                    _state.update { it.copy(isRecording = false, selfRecordingPath = graph.files.relativize(rec.file), error = null) }
-                    // The app scope, not this screen's: the take is on disk, its row must land too.
-                    recordingSave = graph.scope.async {
-                        try {
-                            graph.items.addRecording(itemId, rec.file, rec.durationMs, Who.DIMITRIS).id
-                        } catch (ce: CancellationException) {
-                            // A cancelled write is not a failed one, and must not be logged as one.
-                            throw ce
-                        } catch (e: Exception) {
-                            graph.errors.record("scripts save recording", e)
-                            null
-                        }
-                    }
+                    _state.update { it.copy(isRecording = false, error = null) }
                 }
                 .onFailure { e ->
                     graph.errors.record("scripts record stop", e)
@@ -512,21 +520,45 @@ class ScriptsViewModel(
         _state.update { it.copy(isRecording = false, error = MIC_DENIED) }
     }
 
-    /** The model line, then his own take, back to back. */
-    fun playComparison() {
-        // The model half of the comparison is his own line, said aloud: never into an open window.
-        if (_state.value.phase != ScriptPhase.WAITING_FOR_DIMITRIS || _state.value.listening) return
-        val path = _state.value.selfRecordingPath ?: return
-        val item = lines.getOrNull(_state.value.index)?.second ?: return
-        cue {
-            report(graph.speaker.speak(item))
-            report(graph.voice.play(graph.files.resolve(path)))
+    /**
+     * One finished take, from whichever microphone made it: [toggleRecording]'s, or the one «Μίλα»
+     * opened on the on-device path. False when nobody spoke into it, in which case it is already
+     * deleted and nothing was written.
+     *
+     * Both paths end here so that a take is a take: the same silence line, the same row with
+     * [Who.DIMITRIS] on it, the same peak and duration in the attempt's detail.
+     */
+    private fun keep(rec: Recorded): Boolean {
+        lastPeak = rec.peakAmplitude
+        lastTakeMs = rec.durationMs
+        if (rec.isSilent) {
+            rec.file.delete()
+            return false
         }
+        val itemId = lines.getOrNull(_state.value.index)?.second?.id ?: return false
+        _state.update { it.copy(selfRecordingPath = graph.files.relativize(rec.file)) }
+        // The app scope, not this screen's: the take is on disk, its row must land too.
+        recordingSave = graph.scope.async {
+            try {
+                graph.items.addRecording(itemId, rec.file, rec.durationMs, Who.DIMITRIS).id
+            } catch (ce: CancellationException) {
+                // A cancelled write is not a failed one, and must not be logged as one.
+                throw ce
+            } catch (e: Exception) {
+                graph.errors.record("scripts save recording", e)
+                null
+            }
+        }
+        return true
     }
 
     /**
      * «Μίλα». The recognition window opens on his turn and waits for him — no stopwatch, and no
      * plain take that checks nothing. What comes back goes to [judge].
+     *
+     * On the on-device path the same window also hands back his own voice as a file, because the app
+     * held the microphone and the engine was fed from it. That take is kept whatever the phone made
+     * of the words.
      */
     fun listen() {
         val s = _state.value
@@ -537,7 +569,9 @@ class ScriptsViewModel(
         stopCue()
         _state.update { it.copy(listening = true, listenLevel = 0f, heard = null, heardMatched = false, nudge = false, error = null) }
         listenJob = viewModelScope.launch {
-            graph.stt.listen().fold(
+            val heard = graph.stt.listen()
+            heard.take?.let { keep(it) }
+            heard.fold(
                 onSuccess = { t -> judge(t.text.takeIf { it.isNotBlank() }) },
                 onFailure = { e -> recogniserFailed(e) },
             )
@@ -587,14 +621,18 @@ class ScriptsViewModel(
             judge(null)
             return
         }
-        // Once per run, not once per window: «Μίλα» stays on the screen after the latch, and an
-        // offline phone would otherwise fill the caregiver's Σφάλματα with the same row every tap.
-        if (!recogniserBroke) graph.errors.record("scripts listen", e)
+        // The line names the real trouble — no connection, no Greek, busy — rather than saying only
+        // that something went wrong: Chris' phone gave codes 12 and 2 on two different days.
+        val klass = Recognition.classOf(e.code)
+        // Once per class per run, not once per window: «Μίλα» stays on the screen after the latch,
+        // and an offline phone would otherwise fill the caregiver's Σφάλματα with the same row every
+        // tap — while a phone with two things wrong with it must still report both.
+        if (reported.add(klass)) graph.errors.record("scripts listen", e)
         recogniserBroke = true
         _state.update {
             it.copy(
                 listening = false, listenLevel = 0f, heard = null, heardMatched = false,
-                nudge = false, canConfirm = true, error = Recognition.NOT_WORKING,
+                nudge = false, canConfirm = true, error = klass.line,
             )
         }
     }

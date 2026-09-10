@@ -1,6 +1,7 @@
 package gr.dimitris.app.modules.singsay
 
 import android.Manifest
+import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.hasScrollAction
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
@@ -23,6 +24,7 @@ import gr.dimitris.app.core.data.Item
 import gr.dimitris.app.core.data.ModuleId
 import gr.dimitris.app.core.data.Outcome
 import gr.dimitris.app.core.speech.FakeSpeechToText
+import gr.dimitris.app.core.speech.OnDeviceSupport
 import gr.dimitris.app.core.speech.SpeechToText
 import gr.dimitris.app.ui.components.LISTEN_TAG
 import kotlinx.coroutines.runBlocking
@@ -114,10 +116,11 @@ class SingSayFlowTest {
     /**
      * The phrase may not be sung into a window he has open.
      *
-     * The last stage is the one where the phone checks him, and it is also the one where «Άκου» and
-     * «Σύγκριση» will happily say the phrase aloud. Into a live recogniser that is the phone hearing
-     * itself, matching, and congratulating him for a phrase he never said. Both doors are shut while
-     * the window is open, and the refused «Άκου» is not counted against the row either.
+     * The last stage is the one where the phone checks him, and it is also the one where «Άκου» will
+     * happily say the phrase aloud — his own take after it, once he has made one. Into a live
+     * recogniser that is the phone hearing itself, matching, and congratulating him for a phrase he
+     * never said. The door is shut while the window is open, and the refused «Άκου» is not counted
+     * against the row either.
      */
     @Test fun thePhraseCannotBeSungIntoAnOpenWindow() {
         val stt = withRecognition()
@@ -133,7 +136,7 @@ class SingSayFlowTest {
 
         compose.runOnUiThread { vm.listen() }
         compose.waitUntil(TIMEOUT_MS) { vm.state.value.listening }
-        compose.runOnUiThread { vm.listenModel(); vm.playComparison() }
+        compose.runOnUiThread { vm.listenModel() }
 
         assertEquals("nothing was sung over the open microphone", false, vm.state.value.playing)
         compose.runOnUiThread { vm.stopListening() }
@@ -149,6 +152,41 @@ class SingSayFlowTest {
         assertTrue("the refused listen was not counted: ${row.detail}", row.detail.contains("\"listened\":0"))
         assertEquals("a phrase said alone at the last stage is still his own", Outcome.CORRECT, row.outcome)
         compose.runOnUiThread { vm.leave {} }
+    }
+
+    /**
+     * The last stage's bottom area, counted: «Μίλα», «Άκου», «Παράλειψη» and nothing else.
+     *
+     * The speech moment of this module is stage five, and that is where the UX rule bites. Before this
+     * phase it had the pad, a second «Μίλα» under it once «Το είπα!» came back, «Άκου» and
+     * «Παράλειψη» — and «Ηχογράφηση» and «Σύγκριση» up with the syllables, which made three ways to
+     * open one microphone. The four tapping stages are unchanged: they are tapping, which recognition
+     * has nothing to do with.
+     */
+    @Test fun theLastStagesBottomAreaIsSpeakListenSkipAndNothingElse() {
+        val stt = withRecognition()
+        stt.engine = OnDeviceSupport.Engine.ON_DEVICE
+        openModule()
+        // With recognition on, the last stage's primary is «Μίλα» and not «Το είπα!», so that — and
+        // not the confirm — is what the walk up the stages is looking for.
+        tapUntil { onScreen(SPEAK) }
+
+        compose.waitUntil(TIMEOUT_MS) { enabled(SPEAK) }
+        compose.onNodeWithTag(LISTEN_TAG).assertIsEnabled()
+        compose.onNodeWithText(SKIP).assertIsEnabled()
+        compose.onNodeWithText(RECORD).assertDoesNotExist()
+        compose.onNodeWithText(COMPARE).assertDoesNotExist()
+    }
+
+    /** Without the engine that keeps his take, the old take button stays where it was. */
+    @Test fun theFallbackPathKeepsTheOldTakeButton() {
+        val stt = withRecognition()
+        stt.engine = OnDeviceSupport.Engine.NETWORK
+        openModule()
+
+        compose.waitUntil(TIMEOUT_MS) { onScreen(RECORD) }
+        // «Σύγκριση» is gone either way: «Άκου» plays the phrase and then his take, which is its job.
+        compose.onNodeWithText(COMPARE).assertDoesNotExist()
     }
 
     /** Recognition on, with a recogniser that hears whatever the case says it hears. */
@@ -340,6 +378,9 @@ class SingSayFlowTest {
         const val DID_IT = "Το έκανα"
         const val SAID_IT = "Το είπα!"
         const val SKIP = "Παράλειψη"
+        const val SPEAK = "Μίλα"
+        const val RECORD = "Ηχογράφηση"
+        const val COMPARE = "Σύγκριση"
         const val THE_END = "Τέλος με το τραγούδι!"
         const val TIMEOUT_MS = 20_000L
 

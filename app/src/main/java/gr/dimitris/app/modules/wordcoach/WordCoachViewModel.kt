@@ -11,10 +11,12 @@ import gr.dimitris.app.core.data.Who
 import gr.dimitris.app.core.data.now
 import gr.dimitris.app.core.audio.Recorded
 import gr.dimitris.app.core.speech.GentleCheck
+import gr.dimitris.app.core.speech.OnDeviceSupport
 import gr.dimitris.app.core.speech.Recognition
 import gr.dimitris.app.core.speech.RecognizerIntents
 import gr.dimitris.app.core.speech.SpeechFailure
 import gr.dimitris.app.core.speech.SpeechMatch
+import gr.dimitris.app.core.speech.take
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
@@ -78,6 +80,12 @@ data class WordCoachState(
     val modelPlaying: Boolean = false,
     val selfRecordingPath: String? = null,
     val sttOn: Boolean = false,
+    /**
+     * The recogniser keeps his take itself, so «Μίλα» is the only microphone on this screen and
+     * «Ηχογράφηση» is gone. False on the fallback path — no on-device engine, or an Android older
+     * than 13 — where the old take button stays exactly as it was.
+     */
+    val oneControl: Boolean = false,
     /**
      * False until the settings read has landed. Until then the green primary is drawn but greyed:
      * a button that changes what it does under the thumb of a man with a right hemiparesis is worse
@@ -172,6 +180,16 @@ class WordCoachViewModel(private val graph: AppGraph, private val items: List<It
      */
     private var recogniserBroke = false
 
+    /**
+     * Which honest error classes have already reached the caregiver's «Σφάλματα» in this run.
+     *
+     * One row per kind of trouble, not one per tap: an offline phone answering code 2 to every «Μίλα»
+     * used to fill the list with the same sentence. But a phone that is offline *and* missing Greek
+     * has two things wrong with it, and she is entitled to read both — which is why this is a set of
+     * classes rather than the single latch it used to be.
+     */
+    private val reported = mutableSetOf<Recognition.ErrorClass>()
+
     private val _state = MutableStateFlow(WordCoachState(total = items.size, item = items.first()))
     val state: StateFlow<WordCoachState> = _state.asStateFlow()
 
@@ -179,8 +197,11 @@ class WordCoachViewModel(private val graph: AppGraph, private val items: List<It
         viewModelScope.launch {
             // isAvailable asks the package manager across a binder: not on the thread drawing the word.
             val on = graph.settings.sttEnabled.first() && withContext(Dispatchers.Default) { graph.stt.isAvailable }
+            // Which engine will answer decides how many microphone buttons this screen has: one when
+            // the recogniser hands his own audio back, the old pair when it does not.
+            val one = on && graph.stt.engine() == OnDeviceSupport.Engine.ON_DEVICE
             // With recognition off nothing about this screen changes, «Το είπα!» included.
-            _state.update { it.copy(sttOn = on, sttResolved = true, canConfirm = !on || check.canConfirm) }
+            _state.update { it.copy(sttOn = on, oneControl = one, sttResolved = true, canConfirm = !on || check.canConfirm) }
         }
         // Only while a window is open: the bar belongs to the microphone, and nothing else draws it.
         viewModelScope.launch {
@@ -209,6 +230,10 @@ class WordCoachViewModel(private val graph: AppGraph, private val items: List<It
      * the caregiver's recording if she made one, else Greek TTS — whatever rung the ladder is on,
      * level 0 included: this is the one thing the app never makes him earn.
      *
+     * Once there is a take of his own it plays that straight after the model, back to back: the old
+     * «Σύγκριση», folded into the button it was always next to. One «Άκου», and what it does grows
+     * with what there is to hear — before he has spoken, the model; after, the model and himself.
+     *
      * It costs him the cue level, not the word: [CueLadder.listened] scores the attempt at 3
      * without moving the hint sequence, so the screen shows no more than it did and the caregiver's
      * numbers still say the word needed help.
@@ -224,7 +249,11 @@ class WordCoachViewModel(private val graph: AppGraph, private val items: List<It
         // change nothing — the listen that decides the row is always one he made before answering.
         listens++
         ladder.listened()
-        speaking { report(graph.speaker.speak(s.item)) }
+        val take = s.selfRecordingPath
+        speaking {
+            report(graph.speaker.speak(s.item))
+            if (take != null) report(graph.voice.play(graph.files.resolve(take)))
+        }
     }
 
     private fun speakCue() {
@@ -271,31 +300,15 @@ class WordCoachViewModel(private val graph: AppGraph, private val items: List<It
         if (_state.value.isRecording) {
             runCatching { graph.voice.stopRecording() }
                 .onSuccess { rec ->
-                    val itemId = _state.value.item.id
-                    lastPeak = rec.peakAmplitude
-                    lastTakeMs = rec.durationMs
                     // A take nobody spoke into is not a take. Chris found that recording never
                     // checked anything, so silence "passed" and was saved as his voice — and then
-                    // played back to him by «Σύγκριση» as his. It is deleted and he is asked again;
-                    // the word stays open and nothing is written.
-                    if (rec.isSilent) {
-                        rec.file.delete()
+                    // played back to him as his. It is deleted and he is asked again; the word stays
+                    // open and nothing is written.
+                    if (!keep(rec)) {
                         _state.update { it.copy(isRecording = false, error = Recorded.SILENT_TAKE) }
                         return@onSuccess
                     }
-                    _state.update { it.copy(isRecording = false, selfRecordingPath = graph.files.relativize(rec.file), error = null) }
-                    // The app scope, not this screen's: the take is on disk, its row must land too.
-                    recordingSave = graph.scope.async {
-                        try {
-                            graph.items.addRecording(itemId, rec.file, rec.durationMs, Who.DIMITRIS).id
-                        } catch (ce: CancellationException) {
-                            // A cancelled write is not a failed one, and must not be logged as one.
-                            throw ce
-                        } catch (e: Exception) {
-                            graph.errors.record("wordcoach save recording", e)
-                            null
-                        }
-                    }
+                    _state.update { it.copy(isRecording = false, error = null) }
                 }
                 .onFailure { e -> graph.errors.record("wordcoach record stop", e); _state.update { it.copy(isRecording = false, error = "Πολύ σύντομη ηχογράφηση") } }
         } else {
@@ -325,21 +338,47 @@ class WordCoachViewModel(private val graph: AppGraph, private val items: List<It
     /** The microphone was refused: say so instead of a button that does nothing. */
     fun micDenied() = _state.update { it.copy(error = MIC_DENIED) }
 
-    /** Model voice, then his own recording. */
-    fun playComparison() {
-        // Never into a live recogniser: the phone would hear its own model, match it, and
-        // congratulate him for a word he never said.
-        if (_state.value.listening) return
-        val path = _state.value.selfRecordingPath ?: return
-        speaking {
-            report(graph.speaker.speak(_state.value.item))
-            report(graph.voice.play(graph.files.resolve(path)))
+    /**
+     * One finished take, from whichever microphone made it: [toggleRecording]'s, or the one «Μίλα»
+     * opened on the on-device path. False when nobody spoke into it, in which case it is already
+     * deleted and nothing was written.
+     *
+     * Both paths end here so that a take is a take: the same silence line, the same row with
+     * [Who.DIMITRIS] on it, the same peak and duration in the attempt's detail. The caregiver reading
+     * his recordings cannot tell which button made them, and should not have to.
+     */
+    private fun keep(rec: Recorded): Boolean {
+        lastPeak = rec.peakAmplitude
+        lastTakeMs = rec.durationMs
+        if (rec.isSilent) {
+            rec.file.delete()
+            return false
         }
+        val itemId = _state.value.item.id
+        _state.update { it.copy(selfRecordingPath = graph.files.relativize(rec.file)) }
+        // The app scope, not this screen's: the take is on disk, its row must land too.
+        recordingSave = graph.scope.async {
+            try {
+                graph.items.addRecording(itemId, rec.file, rec.durationMs, Who.DIMITRIS).id
+            } catch (ce: CancellationException) {
+                // A cancelled write is not a failed one, and must not be logged as one.
+                throw ce
+            } catch (e: Exception) {
+                graph.errors.record("wordcoach save recording", e)
+                null
+            }
+        }
+        return true
     }
 
     /**
      * «Μίλα». The recognition window opens and waits for him — no stopwatch, and no plain take that
      * checks nothing. What comes back goes to [judge].
+     *
+     * On the on-device path the same window also hands back his own voice as a file, because the app
+     * held the microphone and the engine was fed from it. That take is kept whatever the phone made
+     * of the words: the recogniser being unsure about his Greek has never been a reason to delete the
+     * recording of him speaking it.
      */
     fun listen() {
         val s = _state.value
@@ -349,7 +388,9 @@ class WordCoachViewModel(private val graph: AppGraph, private val items: List<It
         silence()
         _state.update { it.copy(listening = true, listenLevel = 0f, heard = null, heardMatched = false, nudge = false, error = null) }
         listenJob = viewModelScope.launch {
-            graph.stt.listen().fold(
+            val heard = graph.stt.listen()
+            heard.take?.let { keep(it) }
+            heard.fold(
                 onSuccess = { t -> judge(t.text.takeIf { it.isNotBlank() }) },
                 onFailure = { e -> recogniserFailed(e) },
             )
@@ -398,14 +439,19 @@ class WordCoachViewModel(private val graph: AppGraph, private val items: List<It
             judge(null)
             return
         }
-        // Once per run, not once per window: «Μίλα» stays on the screen after the latch, and an
-        // offline phone would otherwise fill the caregiver's Σφάλματα with the same row every tap.
-        if (!recogniserBroke) graph.errors.record("wordcoach listen", e)
+        // The line names the real trouble — no connection, no Greek, busy — rather than saying only
+        // that something went wrong. Chris' phone gave codes 12 and 2 on two different days and the
+        // app said the same useless sentence to both.
+        val klass = Recognition.classOf(e.code)
+        // Once per class per run, not once per window: «Μίλα» stays on the screen after the latch,
+        // and an offline phone would otherwise fill the caregiver's Σφάλματα with the same row every
+        // tap — while a phone with two things wrong with it must still report both.
+        if (reported.add(klass)) graph.errors.record("wordcoach listen", e)
         recogniserBroke = true
         _state.update {
             it.copy(
                 listening = false, listenLevel = 0f, heard = null, heardMatched = false,
-                nudge = false, canConfirm = true, error = Recognition.NOT_WORKING,
+                nudge = false, canConfirm = true, error = klass.line,
             )
         }
     }
@@ -507,7 +553,8 @@ class WordCoachViewModel(private val graph: AppGraph, private val items: List<It
         // Resolved once per run, not once per word: only the first word can ever wait for it.
         _state.value = WordCoachState(
             index = i, total = items.size, item = items[i],
-            sttOn = on, sttResolved = _state.value.sttResolved, canConfirm = !on || recogniserBroke,
+            sttOn = on, oneControl = _state.value.oneControl,
+            sttResolved = _state.value.sttResolved, canConfirm = !on || recogniserBroke,
         )
     }
 

@@ -17,12 +17,16 @@ import gr.dimitris.app.DimitrisApp
 import gr.dimitris.app.LocalAppGraph
 import gr.dimitris.app.MainActivity
 import gr.dimitris.app.core.audio.Recorded
+import gr.dimitris.app.core.audio.Wav
 import gr.dimitris.app.core.data.Attempt
 import gr.dimitris.app.core.data.Category
 import gr.dimitris.app.core.data.Item
 import gr.dimitris.app.core.data.ModuleId
 import gr.dimitris.app.core.data.Outcome
+import gr.dimitris.app.core.data.RecordingStyle
+import gr.dimitris.app.core.data.Who
 import gr.dimitris.app.core.speech.FakeSpeechToText
+import gr.dimitris.app.core.speech.OnDeviceSupport
 import gr.dimitris.app.core.speech.Recognition
 import gr.dimitris.app.core.speech.SpeechToText
 import gr.dimitris.app.ui.components.LISTEN_TAG
@@ -64,6 +68,7 @@ class WordCoachFlowTest {
         graph.items.delete(word.id)
         graph.stt = realStt
         graph.settings.setSttEnabled(false)
+        takes.forEach { it.delete() }
     }
 
     /** Recognition on, with a recogniser that hears whatever the case says it hears. */
@@ -105,7 +110,7 @@ class WordCoachFlowTest {
      * launched, so «Πες το» (`isRecording || (!modelPlaying && !listening)`) and «Άκου» itself are
      * both off for exactly as long as the model sounds. He hears the first syllable and reaches
      * straight for the microphone — the behaviour this screen now invites — and the take would
-     * otherwise be the phone's own voice, played back to him by «Σύγκριση» as his.
+     * otherwise be the phone's own voice, which «Άκου» then plays back to him as his.
      *
      * Driven through the ViewModel because the assertions have to land in the same call stack as
      * the taps: on a device with a working Greek voice the flag lives for as long as the word takes
@@ -251,16 +256,24 @@ class WordCoachFlowTest {
         compose.runOnUiThread { vm.listen() }
 
         compose.waitUntil(TIMEOUT_MS) { !vm.state.value.listening }
-        assertEquals("the line is about the phone, not about his voice", Recognition.NOT_WORKING, vm.state.value.error)
+        // And it names which trouble it is. Chris' phone answered this code for a whole day while the
+        // app said only «δεν λειτούργησε», which sent him to a settings screen that could not help.
+        assertEquals(
+            "the line is about the phone, not about his voice",
+            Recognition.ErrorClass.NO_CONNECTION.line,
+            vm.state.value.error,
+        )
         assertEquals("no try was spent on the phone's bad morning", 0, vm.state.value.sttTries)
         assertEquals("and he is not nudged for it", false, vm.state.value.nudge)
         assertEquals("«Το είπα!» is his at once", true, vm.state.value.canConfirm)
         assertEquals("nothing was written", before.size, attempts().size)
 
-        // And a second failure does not take the confirm away again.
-        stt.willFail(SpeechRecognizer.ERROR_SERVER)
+        // And a second failure does not take the confirm away again. A different class of trouble, so
+        // a different sentence — and a second row in «Σφάλματα», which is the point of counting them
+        // per class: a phone with two things wrong with it has two things to tell her.
+        stt.willFail(SpeechRecognizer.ERROR_LANGUAGE_NOT_SUPPORTED)
         compose.runOnUiThread { vm.listen() }
-        compose.waitUntil(TIMEOUT_MS) { !vm.state.value.listening }
+        compose.waitUntil(TIMEOUT_MS) { vm.state.value.error == Recognition.ErrorClass.NO_GREEK.line }
         assertEquals("the confirm a broken recogniser opened is not taken back", true, vm.state.value.canConfirm)
         assertEquals(0, vm.state.value.sttTries)
 
@@ -304,7 +317,7 @@ class WordCoachFlowTest {
         compose.runOnUiThread { vm.listen() }
         compose.waitUntil(TIMEOUT_MS) { vm.state.value.listening }
         // «Βοήθεια» too: at cue level 3 it says the whole word, which is the same door.
-        compose.runOnUiThread { vm.listenModel(); vm.playComparison(); vm.hint() }
+        compose.runOnUiThread { vm.listenModel(); vm.hint() }
 
         assertEquals("nothing was said over the open microphone", false, vm.state.value.modelPlaying)
         assertEquals("and the ladder did not move under him either", 0, vm.state.value.level)
@@ -323,6 +336,165 @@ class WordCoachFlowTest {
         assertTrue("and the phone never agreed with him: ${row.detail}", row.detail.contains("\"sttMatched\":false"))
         compose.runOnUiThread { vm.leave {} }
     }
+
+    /**
+     * The one speech control, on the engine that makes it possible.
+     *
+     * On the on-device path the app holds the microphone itself and feeds the recogniser from it, so
+     * one window produces the transcript *and* the file he plays back. What that has to mean for the
+     * word is asserted here: his take is attached to it as his own, with [Who.DIMITRIS] on the row,
+     * exactly as the old «Ηχογράφηση» used to do it — and the peak and the length of that take reach
+     * the attempt's detail, which is where `SILENCE_PEAK` would ever be re-calibrated from.
+     *
+     * The take is handed in by the fake: the emulator has no engine to read a pipe, so a real one
+     * can only be proved on Chris' phone. What is proved here is everything that happens to it after.
+     */
+    @Test fun oneWindowIsBothTheTranscriptAndHisTake() {
+        val stt = withRecognition()
+        stt.engine = OnDeviceSupport.Engine.ON_DEVICE
+        val take = aTake(peak = 9_000)
+        stt.willHear("νερό", take)
+        val before = attempts()
+        val vm = viewModel()
+        compose.waitUntil(TIMEOUT_MS) { vm.state.value.oneControl }
+
+        compose.runOnUiThread { vm.listen() }
+
+        compose.waitUntil(TIMEOUT_MS) { attempts().size == before.size + 1 }
+        assertEquals("the same window kept his voice", "recordings/${take.file.name}", vm.state.value.selfRecordingPath)
+        val row = written(before)
+        assertTrue("the take's peak belongs in the row: ${row.detail}", row.detail.contains("\"peak\":9000"))
+        assertTrue("and its length: ${row.detail}", row.detail.contains("\"takeMs\":1200"))
+        val kept = runBlocking { graph.db.recordings().latestFor(word.id, Who.DIMITRIS, RecordingStyle.SPOKEN) }
+        assertEquals("his take is attached to the word as his", "recordings/${take.file.name}", kept?.path)
+        assertEquals("and the attempt points at it", kept?.id, row.selfRecordingId)
+        compose.runOnUiThread { vm.leave {} }
+    }
+
+    /**
+     * A window the recogniser made nothing of still keeps his voice.
+     *
+     * This is the half that matters most for effortful, dysarthric Greek: `ERROR_NO_MATCH` is a
+     * likely answer to a man who *did* say the word, and deleting the recording of him saying it
+     * because the phone was unsure would be the app disagreeing with him and hiding the evidence.
+     */
+    @Test fun aWindowThePhoneMadeNothingOfStillKeepsHisVoice() {
+        val stt = withRecognition()
+        stt.engine = OnDeviceSupport.Engine.ON_DEVICE
+        val take = aTake(peak = 7_000)
+        stt.willHearNothing(take)
+        val vm = viewModel()
+        compose.waitUntil(TIMEOUT_MS) { vm.state.value.oneControl }
+
+        compose.runOnUiThread { vm.listen() }
+
+        compose.waitUntil(TIMEOUT_MS) { !vm.state.value.listening }
+        assertEquals("his voice was kept", "recordings/${take.file.name}", vm.state.value.selfRecordingPath)
+        assertEquals("and the window still cost him no try", 0, vm.state.value.sttTries)
+        compose.runOnUiThread { vm.leave {} }
+    }
+
+    /** A take with nothing in it is still thrown away, whichever microphone made it. */
+    @Test fun aSilentWindowKeepsNothing() {
+        val stt = withRecognition()
+        stt.engine = OnDeviceSupport.Engine.ON_DEVICE
+        val take = aTake(peak = 40)
+        stt.willHearNothing(take)
+        val vm = viewModel()
+        compose.waitUntil(TIMEOUT_MS) { vm.state.value.oneControl }
+
+        compose.runOnUiThread { vm.listen() }
+
+        compose.waitUntil(TIMEOUT_MS) { !vm.state.value.listening }
+        assertEquals("nothing of his was kept", null, vm.state.value.selfRecordingPath)
+        assertTrue("and the silent file is gone", !take.file.exists())
+        compose.runOnUiThread { vm.leave {} }
+    }
+
+    /**
+     * The bottom area, counted: «Μίλα», «Άκου», «Παράλειψη» and nothing else.
+     *
+     * The UX rule Chris made binding is one primary and at most three actions down there. Before this
+     * phase the word coach had four — «Άκου», «Βοήθεια», the green one and «Παράλειψη» — and two of
+     * them opened the microphone for different reasons. «Βοήθεια» has moved up beside the word and
+     * «Ηχογράφηση» is gone, so there is exactly one microphone on the screen.
+     */
+    @Test fun theBottomAreaIsSpeakListenSkipAndNothingElse() {
+        val stt = withRecognition()
+        stt.engine = OnDeviceSupport.Engine.ON_DEVICE
+        show(listOf(word))
+
+        compose.waitUntil(TIMEOUT_MS) { enabled(SPEAK) }
+        compose.onNodeWithText(SPEAK).assertIsEnabled()
+        compose.onNodeWithTag(LISTEN_TAG).assertIsEnabled()
+        compose.onNodeWithText(SKIP).assertIsEnabled()
+        // «Βοήθεια» is still there, and still one tap — up with the word it is a hint about.
+        compose.onNodeWithText(HELP).assertIsEnabled()
+        // And the two that used to mean "speak now" a second time are gone.
+        compose.onNodeWithText(RECORD).assertDoesNotExist()
+        compose.onNodeWithText(COMPARE).assertDoesNotExist()
+    }
+
+    /** Without the engine that keeps his take, the old take button stays exactly as it was. */
+    @Test fun theFallbackPathKeepsTheOldTakeButton() {
+        val stt = withRecognition()
+        stt.engine = OnDeviceSupport.Engine.NETWORK
+        show(listOf(word))
+
+        compose.waitUntil(TIMEOUT_MS) { enabled(SPEAK) }
+        compose.onNodeWithText(RECORD).assertIsEnabled()
+        // Still no «Σύγκριση»: «Άκου» plays the model and then his take, which is what it was for.
+        compose.onNodeWithText(COMPARE).assertDoesNotExist()
+    }
+
+    /**
+     * One «Άκου» that does both halves of the old pair: the model, then his own take.
+     *
+     * Driven through the ViewModel, because on this emulator there is no Greek voice and both halves
+     * are over within a frame — a click-and-look test would be measuring the speech engine.
+     */
+    @Test fun listenPlaysTheModelAndThenHisTake() {
+        val stt = withRecognition()
+        stt.engine = OnDeviceSupport.Engine.ON_DEVICE
+        // A miss rather than a silence: the word stays open, so «Άκου» is still there to press, and
+        // the screen's error slot stays empty for the assertion at the end to mean something.
+        stt.willHear("ψωμί", aTake(peak = 9_000))
+        val vm = viewModel()
+        compose.waitUntil(TIMEOUT_MS) { vm.state.value.oneControl }
+
+        compose.runOnUiThread { vm.listenModel() }
+        assertEquals("before a take, «Άκου» is the model alone", true, vm.state.value.modelPlaying)
+        compose.waitUntil(TIMEOUT_MS) { !vm.state.value.modelPlaying }
+
+        compose.runOnUiThread { vm.listen() }
+        compose.waitUntil(TIMEOUT_MS) { vm.state.value.selfRecordingPath != null }
+        compose.runOnUiThread { vm.listenModel() }
+        // Two sounds in one job now. What can be asserted without a speech engine is that the second
+        // one is reached at all: a failure to play his file would raise the screen's Greek error slot.
+        compose.waitUntil(TIMEOUT_MS) { !vm.state.value.modelPlaying }
+        assertEquals("his own take played without complaint", null, vm.state.value.error)
+        compose.runOnUiThread { vm.leave {} }
+    }
+
+    /**
+     * One real WAV in the recordings folder, as a finished take.
+     *
+     * Written rather than recorded: the point of these cases is what the module does with a take the
+     * recogniser handed it, and the emulator has no engine to hand one over. `PcmTakeTest` is where a
+     * take made by a real microphone is proved.
+     */
+    private fun aTake(peak: Int): Recorded {
+        val file = graph.files.newWavFile()
+        val samples = ByteArray(Wav.SAMPLE_RATE * 2)
+        // One loud sample is all the peak needs; the rest is the silence a quiet room really is.
+        samples[100] = (peak and 0xFF).toByte()
+        samples[101] = (peak shr 8).toByte()
+        file.writeBytes(Wav.header(samples.size) + samples)
+        takes += file
+        return Recorded(file, durationMs = 1_200, peakAmplitude = peak)
+    }
+
+    private val takes = mutableListOf<java.io.File>()
 
     private fun viewModel(): WordCoachViewModel {
         lateinit var vm: WordCoachViewModel
@@ -356,6 +528,10 @@ class WordCoachFlowTest {
     private companion object {
         const val HELP = "Βοήθεια"
         const val SAID_IT = "Το είπα!"
+        const val SPEAK = "Μίλα"
+        const val SKIP = "Παράλειψη"
+        const val RECORD = "Ηχογράφηση"
+        const val COMPARE = "Σύγκριση"
         const val TIMEOUT_MS = 20_000L
 
         /** Long enough for a dozen loudness samples and for MediaRecorder to close cleanly. */

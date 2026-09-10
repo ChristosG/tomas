@@ -27,6 +27,7 @@ import gr.dimitris.app.core.data.Outcome
 import gr.dimitris.app.core.data.ScriptWithLines
 import gr.dimitris.app.core.data.Speaker
 import gr.dimitris.app.core.speech.FakeSpeechToText
+import gr.dimitris.app.core.speech.OnDeviceSupport
 import gr.dimitris.app.core.speech.SpeechToText
 import gr.dimitris.app.ui.components.LISTEN_TAG
 import gr.dimitris.app.ui.theme.DimitrisTheme
@@ -310,7 +311,7 @@ class ScriptsFlowTest {
         compose.runOnUiThread { vm.listen() }
         compose.waitUntil(TIMEOUT_MS) { vm.state.value.listening }
         // «Βοήθεια» too: at cue level 3 it says the whole line, which is the same door.
-        compose.runOnUiThread { vm.listenModel(); vm.replay(0); vm.playComparison(); vm.hint() }
+        compose.runOnUiThread { vm.listenModel(); vm.replay(0); vm.hint() }
 
         assertEquals("nothing was said over the open microphone", false, vm.state.value.modelPlaying)
         assertEquals("and the ladder did not move under him either", 0, vm.state.value.level)
@@ -330,6 +331,43 @@ class ScriptsFlowTest {
     }
 
     /** Waits for the dialogue to be loaded, his turn to be on screen, and recognition to be settled. */
+    /**
+     * The bottom area of his turn, counted: «Μίλα», «Άκου», «Παράλειψη» and nothing else.
+     *
+     * The UX rule Chris made binding is one primary and at most three actions down there. Before this
+     * phase the turn had four — «Άκου», «Βοήθεια», the green one and «Παράλειψη» — plus «Ηχογράφηση»
+     * and «Σύγκριση» in the card above, which made three separate ways to open the microphone on one
+     * screen. «Βοήθεια» has moved into the card and the two microphones are now one.
+     */
+    @Test fun theBottomAreaOfHisTurnIsSpeakListenSkipAndNothingElse() {
+        val stt = withRecognition()
+        stt.engine = OnDeviceSupport.Engine.ON_DEVICE
+        val script = dialogue(Speaker.DIMITRIS to "Θέλω έναν καφέ.")
+        show(hisTurns(script))
+
+        compose.waitUntil(TIMEOUT_MS) { enabled(SPEAK) }
+        compose.onNodeWithText(SPEAK).assertIsEnabled()
+        compose.onNodeWithTag(LISTEN_TAG).assertIsEnabled()
+        compose.onNodeWithText(SKIP).assertIsEnabled()
+        // «Βοήθεια» is still one tap, up in the card with the line it is a hint about.
+        compose.onNodeWithText(HELP).assertIsEnabled()
+        compose.onNodeWithText(RECORD).assertDoesNotExist()
+        compose.onNodeWithText(COMPARE).assertDoesNotExist()
+    }
+
+    /** Without the engine that keeps his take, the card's own take button stays as it was. */
+    @Test fun theFallbackPathKeepsTheCardsTakeButton() {
+        val stt = withRecognition()
+        stt.engine = OnDeviceSupport.Engine.NETWORK
+        val script = dialogue(Speaker.DIMITRIS to "Θέλω έναν καφέ.")
+        show(hisTurns(script))
+
+        compose.waitUntil(TIMEOUT_MS) { enabled(SPEAK) }
+        compose.onNodeWithText(RECORD).assertIsEnabled()
+        // «Σύγκριση» is gone either way: «Άκου» plays the line and then his take, which is its job now.
+        compose.onNodeWithText(COMPARE).assertDoesNotExist()
+    }
+
     private fun viewModel(script: ScriptWithLines): ScriptsViewModel {
         val seed = hisTurns(script).first().id
         lateinit var vm: ScriptsViewModel
@@ -392,6 +430,10 @@ class ScriptsFlowTest {
         const val MODULE = "Διάλογοι"
         const val SAID_IT = "Το είπα!"
         const val SKIP = "Παράλειψη"
+        const val SPEAK = "Μίλα"
+        const val HELP = "Βοήθεια"
+        const val RECORD = "Ηχογράφηση"
+        const val COMPARE = "Σύγκριση"
         const val CONTINUE = "Συνέχεια"
         const val THE_END = "Τέλος διαλόγου!"
         const val GONE = "Ο διάλογος δεν είναι πια εδώ."

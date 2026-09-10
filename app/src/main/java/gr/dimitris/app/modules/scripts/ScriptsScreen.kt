@@ -20,7 +20,6 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.CheckCircle
-import androidx.compose.material.icons.rounded.Compare
 import androidx.compose.material.icons.rounded.Mic
 import androidx.compose.material.icons.rounded.Stop
 import androidx.compose.material3.Icon
@@ -112,26 +111,19 @@ fun ScriptsScreen(items: List<Item>, sessionId: String?, onDone: () -> Unit, onL
         onBack = { vm.leave(onLeave) },
         bottom = {
             when (s.phase) {
-                // «Άκου» is the first button of the top row from the moment the turn appears, and
-                // the confirm gets the whole width below it: three big buttons in one row would each
-                // be narrower than his thumb, and nothing shrinks to make room for this one.
+                // Three actions and one primary, which is the UX rule: the green button, «Άκου»
+                // under it, «Παράλειψη» at the foot. «Βοήθεια» has moved into the turn card, where
+                // the line it is a hint about is — four buttons down here was one more than a man
+                // with one working thumb should have to choose between.
                 ScriptPhase.WAITING_FOR_DIMITRIS -> if (s.listening) {
                     // The window is open. Everything else goes away: there is one thing to do, which
                     // is to speak, and one button, which stops it when he decides he is finished.
                     ListeningIndicator(level = s.listenLevel, onStop = vm::stopListening)
                 } else {
-                    Row {
-                        ListenButton(
-                            onClick = vm::listenModel, enabled = !s.modelPlaying && !s.isRecording,
-                            modifier = Modifier.weight(1f),
-                        )
-                        Spacer(Modifier.width(Sizes.gapSmall))
-                        BigButton("Βοήθεια", onClick = vm::hint, tone = ButtonTone.Secondary, enabled = s.canHint, modifier = Modifier.weight(1f))
-                    }
-                    Spacer(Modifier.height(Sizes.gapSmall))
                     // With recognition on, the green button is «Μίλα» until the phone has agreed
                     // with him or has asked him twice. After that «Το είπα!» is back and confirms
-                    // exactly as it always did, with «Μίλα» still beside it for another go.
+                    // exactly as it always did, and another go waits in the card rather than as a
+                    // fourth button here.
                     when (GentleCheck.primaryFor(s.sttResolved, s.sttOn, s.canConfirm)) {
                         // One DataStore read long, on the first turn only: the button cannot be
                         // pressed into the wrong mode before the settings have been read.
@@ -139,14 +131,13 @@ fun ScriptsScreen(items: List<Item>, sessionId: String?, onDone: () -> Unit, onL
                             BigButton("Το είπα!", onClick = {}, tone = ButtonTone.Success, enabled = false)
                         GentleCheck.Primary.SPEAK ->
                             BigButton(SPEAK, onClick = { askListen.launch(Manifest.permission.RECORD_AUDIO) }, icon = Icons.Rounded.Mic, tone = ButtonTone.Success)
-                        GentleCheck.Primary.CONFIRM -> {
+                        GentleCheck.Primary.CONFIRM ->
                             BigButton("Το είπα!", onClick = vm::confirm, tone = ButtonTone.Success)
-                            if (s.sttOn) {
-                                Spacer(Modifier.height(Sizes.gapSmall))
-                                QuietButton(SPEAK, onClick = { askListen.launch(Manifest.permission.RECORD_AUDIO) }, icon = Icons.Rounded.Mic)
-                            }
-                        }
                     }
+                    Spacer(Modifier.height(Sizes.gapSmall))
+                    // One «Άκου», and what it plays grows with what there is to hear: his line
+                    // before he has spoken, his line and then his own take afterwards.
+                    ListenButton(onClick = vm::listenModel, enabled = !s.modelPlaying && !s.isRecording)
                     Spacer(Modifier.height(Sizes.gapSmall))
                     QuietButton("Παράλειψη", onClick = vm::skip)
                 }
@@ -177,13 +168,19 @@ fun ScriptsScreen(items: List<Item>, sessionId: String?, onDone: () -> Unit, onL
                         recording = s.isRecording,
                         modelPlaying = s.modelPlaying,
                         listening = s.listening,
+                        canHint = s.canHint,
                         nudge = s.sttOn && s.nudge,
                         heard = if (s.sttOn) s.heard else null,
                         heardMatched = s.heardMatched,
-                        hasTake = s.selfRecordingPath != null,
+                        // The take button survives only where the recogniser does not keep his own
+                        // audio; «Μίλα» has already done its job on the other path.
+                        showsRecord = !s.oneControl,
+                        // Another go, once «Το είπα!» has come back. Never asked of him.
+                        showsSpeakAgain = s.sttOn && GentleCheck.primaryFor(s.sttResolved, s.sttOn, s.canConfirm) == GentleCheck.Primary.CONFIRM,
+                        onHint = vm::hint,
                         // Stopping is not a permission question: only starting asks.
                         onRecord = { if (s.isRecording) vm.toggleRecording() else askMic.launch(Manifest.permission.RECORD_AUDIO) },
-                        onCompare = vm::playComparison,
+                        onSpeak = { askListen.launch(Manifest.permission.RECORD_AUDIO) },
                     )
                 } else {
                     Bubble(
@@ -243,8 +240,9 @@ private fun Bubble(text: String, mine: Boolean, skipped: Boolean, onClick: (() -
  * show the sound and the syllable, 3 says it aloud without writing it, and only 4 puts it on screen.
  * Hearing it is another matter — «Άκου» sits in the bottom row and is live from the first second.
  *
- * At any level he may record himself and hear the model and his own take back to back — the half of
- * the cue ladder that gives him feedback on how it came out, and the same pair the word coach has.
+ * «Βοήθεια» lives here now rather than in the bottom row: the bottom holds three actions and no
+ * more, and a hint belongs beside the line it is a hint about. Hearing the line is another matter —
+ * «Άκου» is the bottom row's secondary and is live from the first second of the turn.
  */
 @Composable
 private fun TurnCard(
@@ -254,12 +252,15 @@ private fun TurnCard(
     recording: Boolean,
     modelPlaying: Boolean,
     listening: Boolean,
+    canHint: Boolean,
     nudge: Boolean,
     heard: String?,
     heardMatched: Boolean,
-    hasTake: Boolean,
+    showsRecord: Boolean,
+    showsSpeakAgain: Boolean,
+    onHint: () -> Unit,
     onRecord: () -> Unit,
-    onCompare: () -> Unit,
+    onSpeak: () -> Unit,
 ) {
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
         Surface(
@@ -308,24 +309,25 @@ private fun TurnCard(
                 Spacer(Modifier.height(Sizes.gapSmall))
                 // «Άκου ξανά» used to live here, dead until «Βοήθεια» had been pressed — which is
                 // what Chris found in the field. It is gone: the one «Άκου» this screen has is the
-                // big one in the bottom row, live from the first second of the turn. Two buttons
-                // both called «Άκου» is one too many, so the pair below is «Σύγκριση», the word the
-                // word coach and «Τραγούδα και πες το» already use for the same thing.
-                QuietButton(
-                    if (recording) "Στοπ" else "Ηχογράφηση", onClick = onRecord,
-                    icon = if (recording) Icons.Rounded.Stop else Icons.Rounded.Mic,
-                    // Not while the line is being said to him: he hears «Άκου», reaches straight
-                    // for the mic, and the take would be the phone's own voice — which is then what
-                    // «Σύγκριση» plays back to him as his, and what his caregiver hears in the
-                    // word's recordings. «Στοπ» stays live, or a take could not be closed. Nor
-                    // while the recogniser has the microphone: two mouths on one microphone.
-                    enabled = recording || (!modelPlaying && !listening),
-                )
-                // Only once there is something of his to compare the model against, and never
-                // while the recogniser is open: the comparison starts by saying his own line.
-                if (hasTake && !recording && !listening) {
+                // big one in the bottom row, live from the first second of the turn, and it plays
+                // his own take after the line once he has made one. «Βοήθεια» took its place.
+                QuietButton("Βοήθεια", onClick = onHint, enabled = canHint && !listening)
+                if (showsRecord) {
                     Spacer(Modifier.height(Sizes.gapSmall))
-                    QuietButton("Σύγκριση", onClick = onCompare, icon = Icons.Rounded.Compare)
+                    QuietButton(
+                        if (recording) "Στοπ" else "Ηχογράφηση", onClick = onRecord,
+                        icon = if (recording) Icons.Rounded.Stop else Icons.Rounded.Mic,
+                        // Not while the line is being said to him: he hears «Άκου», reaches straight
+                        // for the mic, and the take would be the phone's own voice — which «Άκου»
+                        // then plays back to him as his, and which his caregiver hears in the word's
+                        // recordings. «Στοπ» stays live, or a take could not be closed. Nor while
+                        // the recogniser has the microphone: two mouths on one microphone.
+                        enabled = recording || (!modelPlaying && !listening),
+                    )
+                }
+                if (showsSpeakAgain && !recording && !listening) {
+                    Spacer(Modifier.height(Sizes.gapSmall))
+                    QuietButton(SPEAK, onClick = onSpeak, icon = Icons.Rounded.Mic, enabled = !modelPlaying)
                 }
             }
         }

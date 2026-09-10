@@ -5,15 +5,12 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.Compare
 import androidx.compose.material.icons.rounded.Mic
 import androidx.compose.material.icons.rounded.Stop
 import androidx.compose.material3.MaterialTheme
@@ -66,14 +63,16 @@ fun WordCoachScreen(items: List<Item>, sessionId: String?, onDone: () -> Unit, o
         // Back is "I want out", not "I finished": the module drops what it was doing and says so.
         onBack = { vm.leave(onLeave) },
         bottom = {
-            // «Άκου» is the first button of the top row at every level, «Βοήθεια» beside it, and the
-            // green button gets the whole width below them: three big buttons in one row would each
-            // be narrower than his thumb, and the rule is that nothing shrinks to make room for this.
-            // Whatever the state, the green one is full width and bottom-left, where his thumb is.
+            // Three actions and one primary, which is the UX rule: the green button, «Άκου» under it,
+            // «Παράλειψη» at the foot. «Βοήθεια» used to share the top row and has moved up beside
+            // the word it is a hint for — four buttons down here was one more than a man with one
+            // working thumb should have to choose between, and the two microphones that used to be
+            // among them are now one.
             //
-            // Off only for the two things that cannot share the moment with it: the model already
-            // sounding, and the microphone open — which the recogniser («Ακούω...») holds just as
-            // much as a take does. A model spoken into a live recogniser is the phone hearing itself.
+            // «Άκου» is off only for the two things that cannot share the moment with it: the model
+            // already sounding, and the microphone open — which the recogniser («Ακούω...») holds
+            // just as much as a take does. A model spoken into a live recogniser is the phone
+            // hearing itself.
             val canListen = !s.modelPlaying && !s.isRecording && !s.listening
             if (s.listening) {
                 // The window is open. Everything else goes away: there is one thing to do, which is
@@ -84,16 +83,10 @@ fun WordCoachScreen(items: List<Item>, sessionId: String?, onDone: () -> Unit, o
                 Spacer(Modifier.height(Sizes.gapSmall))
                 BigButton("Επόμενο", onClick = vm::next, tone = ButtonTone.Success)
             } else {
-                Row {
-                    ListenButton(onClick = vm::listenModel, enabled = canListen, modifier = Modifier.weight(1f))
-                    Spacer(Modifier.width(Sizes.gapSmall))
-                    BigButton("Βοήθεια", onClick = vm::hint, tone = ButtonTone.Secondary, enabled = s.canHint, modifier = Modifier.weight(1f))
-                }
-                Spacer(Modifier.height(Sizes.gapSmall))
                 // With recognition on, the green button is «Μίλα» until the phone has agreed with
                 // him or has asked him twice — a take that checked nothing is what Chris found in
                 // the field. After that «Το είπα!» is back and confirms exactly as it always did,
-                // with «Μίλα» still beside it for a man who wants another go.
+                // and another go is offered up in the content rather than as a fourth button here.
                 when (GentleCheck.primaryFor(s.sttResolved, s.sttOn, s.canConfirm)) {
                     // One DataStore read long, on the first word only: the button is already the
                     // right size and in the right place, it simply cannot be pressed into the
@@ -102,14 +95,14 @@ fun WordCoachScreen(items: List<Item>, sessionId: String?, onDone: () -> Unit, o
                         BigButton("Το είπα!", onClick = {}, tone = ButtonTone.Success, enabled = false)
                     GentleCheck.Primary.SPEAK ->
                         BigButton(SPEAK, onClick = { askListen.launch(Manifest.permission.RECORD_AUDIO) }, icon = Icons.Rounded.Mic, tone = ButtonTone.Success)
-                    GentleCheck.Primary.CONFIRM -> {
+                    GentleCheck.Primary.CONFIRM ->
                         BigButton("Το είπα!", onClick = vm::confirm, tone = ButtonTone.Success)
-                        if (s.sttOn) {
-                            Spacer(Modifier.height(Sizes.gapSmall))
-                            QuietButton(SPEAK, onClick = { askListen.launch(Manifest.permission.RECORD_AUDIO) }, icon = Icons.Rounded.Mic)
-                        }
-                    }
                 }
+                Spacer(Modifier.height(Sizes.gapSmall))
+                // One «Άκου», and what it plays grows with what there is to hear: the model before
+                // he has spoken, the model and then his own take afterwards. That second half used
+                // to be a separate «Σύγκριση».
+                ListenButton(onClick = vm::listenModel, enabled = canListen)
                 Spacer(Modifier.height(Sizes.gapSmall))
                 QuietButton("Παράλειψη", onClick = vm::skip)
             }
@@ -130,26 +123,26 @@ fun WordCoachScreen(items: List<Item>, sessionId: String?, onDone: () -> Unit, o
                 Text(s.cueText ?: "", style = MaterialTheme.typography.displayLarge, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
             }
             Spacer(Modifier.height(Sizes.gapSmall))
-            // Listening lives in the bottom row now, where his thumb is and where it cannot be
-            // missed; there is exactly one «Άκου» on this screen. Once he has said the word there
-            // is nothing left to record either: only «Άκου» and «Επόμενο» remain.
+            // «Βοήθεια» belongs with the word it is a hint about rather than in the bottom row, which
+            // holds three actions and no more. It is still one tap and still never withheld.
             if (!s.confirmed && !s.listening) {
+                QuietButton("Βοήθεια", onClick = vm::hint, enabled = s.canHint)
+            }
+            // The take button, on the fallback path only. Where the recogniser hands his own audio
+            // back there is nothing for it to do that «Μίλα» has not already done, and two buttons
+            // that both mean "speak now" is the confusion this phase exists to remove.
+            if (!s.confirmed && !s.listening && !s.oneControl) {
+                Spacer(Modifier.height(Sizes.gapSmall))
                 QuietButton(
-                    // «Ηχογράφηση» once «Μίλα» is on the screen: two buttons that both mean "speak
-                    // now" would be one too many, and this is the one that only keeps a take.
                     if (s.isRecording) "Στοπ" else if (s.sttOn) "Ηχογράφηση" else "Πες το",
                     onClick = { askMic.launch(Manifest.permission.RECORD_AUDIO) },
                     icon = if (s.isRecording) Icons.Rounded.Stop else Icons.Rounded.Mic,
                     // Not while the model is speaking: he hears «Άκου», reaches straight for the
-                    // mic, and the take would be the phone's own voice — which is then what
-                    // «Σύγκριση» plays back to him as his. Not while the recogniser has the
-                    // microphone either. «Στοπ» always stays live, or a take could not be closed.
+                    // mic, and the take would be the phone's own voice — which «Άκου» then plays
+                    // back to him as his. Not while the recogniser has the microphone either.
+                    // «Στοπ» always stays live, or a take could not be closed.
                     enabled = s.isRecording || (!s.modelPlaying && !s.listening),
                 )
-            }
-            if (!s.confirmed && !s.listening && s.selfRecordingPath != null && !s.isRecording) {
-                Spacer(Modifier.height(Sizes.gapSmall))
-                QuietButton("Σύγκριση", onClick = vm::playComparison, icon = Icons.Rounded.Compare)
             }
             if (s.sttOn && !s.listening) {
                 // One nudge and no more. The cue has not moved, «Άκου» is where it was, and the
@@ -171,6 +164,15 @@ fun WordCoachScreen(items: List<Item>, sessionId: String?, onDone: () -> Unit, o
                             style = MaterialTheme.typography.bodyLarge, textAlign = TextAlign.Center,
                         )
                     }
+                }
+                // Once «Το είπα!» has come back, another go is still his to take — never asked of
+                // him, and up here rather than as a fourth button in the bottom row.
+                if (!s.confirmed && s.canConfirm && GentleCheck.primaryFor(s.sttResolved, s.sttOn, s.canConfirm) == GentleCheck.Primary.CONFIRM) {
+                    Spacer(Modifier.height(Sizes.gapSmall))
+                    QuietButton(
+                        SPEAK, onClick = { askListen.launch(Manifest.permission.RECORD_AUDIO) },
+                        icon = Icons.Rounded.Mic, enabled = !s.modelPlaying && !s.isRecording,
+                    )
                 }
             }
             if (s.error != null) {

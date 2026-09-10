@@ -21,7 +21,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.CheckCircle
-import androidx.compose.material.icons.rounded.Compare
 import androidx.compose.material.icons.rounded.Mic
 import androidx.compose.material.icons.rounded.Stop
 import androidx.compose.material3.Icon
@@ -119,11 +118,6 @@ fun SingSayScreen(items: List<Item>, sessionId: String?, onDone: () -> Unit, onL
                     modifier = Modifier.height(110.dp),
                     enabled = !s.playing && !s.isRecording && !waitingToKnow,
                 )
-                // Still on offer once «Το είπα!» is back: another go is his to take, never asked of him.
-                if (last && s.sttOn && primary == GentleCheck.Primary.CONFIRM) {
-                    Spacer(Modifier.height(Sizes.gapSmall))
-                    QuietButton(SPEAK, onClick = { askListen.launch(Manifest.permission.RECORD_AUDIO) }, icon = Icons.Rounded.Mic, enabled = !s.playing && !s.isRecording)
-                }
                 Spacer(Modifier.height(Sizes.gapSmall))
                 // «Άκου» is here rather than up with the syllables: it is the one control that must
                 // not be hunted for, and it belongs where his thumb already is. It shares the row
@@ -188,20 +182,32 @@ fun SingSayScreen(items: List<Item>, sessionId: String?, onDone: () -> Unit, onL
             }
             Spacer(Modifier.height(Sizes.gap))
             // Listening moved to the bottom row, where his thumb is and where it is on every screen
-            // of every module: there is exactly one «Άκου» here now.
-            QuietButton(
-                if (s.isRecording) "Στοπ" else "Ηχογράφηση",
-                onClick = { askMic.launch(Manifest.permission.RECORD_AUDIO) },
-                icon = if (s.isRecording) Icons.Rounded.Stop else Icons.Rounded.Mic,
-                // Refused while the model is playing, rather than silently killing it, and while
-                // the recogniser has the microphone. A running take leaves `playing` false, so
-                // «Στοπ» is always reachable.
-                enabled = !s.playing && !s.listening,
-            )
-            // Never while the recogniser is open: the comparison starts by saying the phrase.
-            if (s.selfRecordingPath != null && !s.isRecording && !s.listening) {
+            // of every module: there is exactly one «Άκου» here now, and it plays his own take after
+            // the phrase once he has made one — which is what «Σύγκριση» used to be.
+            //
+            // The take button survives only where the recogniser does not keep his own audio. On the
+            // on-device path «Μίλα» is the one microphone on this screen.
+            if (!s.oneControl) {
+                QuietButton(
+                    if (s.isRecording) "Στοπ" else "Ηχογράφηση",
+                    onClick = { askMic.launch(Manifest.permission.RECORD_AUDIO) },
+                    icon = if (s.isRecording) Icons.Rounded.Stop else Icons.Rounded.Mic,
+                    // Refused while the model is playing, rather than silently killing it, and while
+                    // the recogniser has the microphone. A running take leaves `playing` false, so
+                    // «Στοπ» is always reachable.
+                    enabled = !s.playing && !s.listening,
+                )
+            }
+            // Another go once «Το είπα!» is back: his to take, never asked of him, and up here rather
+            // than as a fourth button in the bottom row.
+            if (s.stage == SingStage.SPEAK && s.sttOn && !s.listening &&
+                GentleCheck.primaryFor(s.sttResolved, s.sttOn, s.canConfirm) == GentleCheck.Primary.CONFIRM
+            ) {
                 Spacer(Modifier.height(Sizes.gapSmall))
-                QuietButton("Σύγκριση", onClick = vm::playComparison, icon = Icons.Rounded.Compare)
+                QuietButton(
+                    SPEAK, onClick = { askListen.launch(Manifest.permission.RECORD_AUDIO) },
+                    icon = Icons.Rounded.Mic, enabled = !s.playing && !s.isRecording,
+                )
             }
             // One nudge and no more. «Άκου» is where it was and the microphone is one tap away
             // again: nothing has been taken away from him.

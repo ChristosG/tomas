@@ -11,10 +11,12 @@ import gr.dimitris.app.core.data.Who
 import gr.dimitris.app.core.data.now
 import gr.dimitris.app.core.audio.Recorded
 import gr.dimitris.app.core.speech.GentleCheck
+import gr.dimitris.app.core.speech.OnDeviceSupport
 import gr.dimitris.app.core.speech.Recognition
 import gr.dimitris.app.core.speech.RecognizerIntents
 import gr.dimitris.app.core.speech.SpeechFailure
 import gr.dimitris.app.core.speech.SpeechMatch
+import gr.dimitris.app.core.speech.take
 import gr.dimitris.app.modules.wordcoach.CueLadder
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Deferred
@@ -94,6 +96,11 @@ data class SingSayState(
     val selfRecordingPath: String? = null,
     /** Recognition is on and this device has it: the last stage is checked, gently. */
     val sttOn: Boolean = false,
+    /**
+     * The recogniser keeps his take itself, so «Μίλα» is the only microphone on this screen and
+     * «Ηχογράφηση» is gone. False on the fallback path, where it stays exactly as it was.
+     */
+    val oneControl: Boolean = false,
     /**
      * False until the settings read has landed. Until then the green primary is drawn but greyed:
      * a button that changes what it does under the thumb of a man with a right hemiparesis is worse
@@ -211,6 +218,18 @@ class SingSayViewModel(private val graph: AppGraph, private val items: List<Item
     /** Recognition, resolved once for the run: the settings and the device are asked, not the phrase. */
     private var sttOn = false
 
+    /**
+     * Whether the engine that will answer «Μίλα» keeps his take itself. Resolved once for the run
+     * beside [sttOn]: it decides how many microphone buttons this screen has.
+     */
+    private var oneControl = false
+
+    /**
+     * Which honest error classes have already reached the caregiver's «Σφάλματα» in this run. One row
+     * per kind of trouble rather than one per tap — and both, when a phone has two things wrong.
+     */
+    private val reported = mutableSetOf<Recognition.ErrorClass>()
+
     /** Whether that read has landed. Only the first phrase of a run can ever wait for it. */
     private var sttResolved = false
 
@@ -235,6 +254,9 @@ class SingSayViewModel(private val graph: AppGraph, private val items: List<Item
                 // isAvailable asks the package manager across a binder: not on the thread drawing
                 // the phrase.
                 sttOn = graph.settings.sttEnabled.first() && withContext(Dispatchers.Default) { graph.stt.isAvailable }
+                // Which engine will answer decides how many microphone buttons this screen has: one
+                // when the recogniser hands his own audio back, the old pair when it does not.
+                oneControl = sttOn && graph.stt.engine() == OnDeviceSupport.Engine.ON_DEVICE
             } catch (ce: CancellationException) {
                 throw ce
             } catch (e: Exception) {
@@ -274,7 +296,7 @@ class SingSayViewModel(private val graph: AppGraph, private val items: List<Item
         _state.value = SingSayState(
             index = i, total = items.size, item = item, notes = Melody.forPhrase(item.text), playing = true,
             // A recogniser that broke stays broken: the confirm it opened is not taken back.
-            sttOn = sttOn, sttResolved = sttResolved, canConfirm = !sttOn || recogniserBroke,
+            sttOn = sttOn, oneControl = oneControl, sttResolved = sttResolved, canConfirm = !sttOn || recogniserBroke,
         )
         loadJob = viewModelScope.launch {
             val sung = try {
@@ -345,6 +367,10 @@ class SingSayViewModel(private val graph: AppGraph, private val items: List<Item
      * «Άκου»: the caregiver's sung model if there is one, else TTS, then the melody — at every one
      * of the five stages, the last one included, where the whole point is that the music is gone.
      * Hearing the phrase is never withheld (spec §12); what it costs is the row, not the button.
+     *
+     * Once there is a take of his own it plays that last, after the model and the melody: the old
+     * «Σύγκριση», folded into the button it was always next to. One «Άκου», and what it does grows
+     * with what there is to hear.
      */
     fun listenModel() {
         val s = _state.value
@@ -357,6 +383,7 @@ class SingSayViewModel(private val graph: AppGraph, private val items: List<Item
         // listen in the middle of a stage, not a stage boundary: a man three syllables into a
         // phrase who asks to hear it must not be handed back to the start for asking.
         val keptLit = s.lit
+        val take = s.selfRecordingPath
         val token = claimPlayback()
         playJob = viewModelScope.launch {
             _state.update { it.copy(playing = true) }
@@ -365,6 +392,7 @@ class SingSayViewModel(private val graph: AppGraph, private val items: List<Item
                 // Not always at full volume: «Άκου» is there all through the fading stage, and a
                 // model at gain 1 would hand back the backing that stage is taking away.
                 playMelody(gain = maxOf(SingStage.gainFor(s.stage, s.repetition), MODEL_MIN_GAIN))
+                if (take != null) report(graph.voice.play(graph.files.resolve(take)), SPEECH_FAILED, "singsay play self")
             } finally {
                 releasePlayback(token, lit = keptLit)
             }
@@ -512,7 +540,12 @@ class SingSayViewModel(private val graph: AppGraph, private val items: List<Item
             )
         }
         listenJob = viewModelScope.launch {
-            graph.stt.listen().fold(
+            val heard = graph.stt.listen()
+            // On the on-device path the window also hands back his own voice as a file, because the
+            // app held the microphone and the engine was fed from it. Kept whatever the phone made
+            // of the words: being unsure about his Greek is no reason to delete the proof he said it.
+            heard.take?.let { keep(it) }
+            heard.fold(
                 onSuccess = { t -> judge(t.text.takeIf { it.isNotBlank() }) },
                 onFailure = { e -> recogniserFailed(e) },
             )
@@ -561,14 +594,18 @@ class SingSayViewModel(private val graph: AppGraph, private val items: List<Item
             judge(null)
             return
         }
-        // Once per run, not once per window: «Μίλα» stays on the screen after the latch, and an
-        // offline phone would otherwise fill the caregiver's Σφάλματα with the same row every tap.
-        if (!recogniserBroke) graph.errors.record("singsay listen", e)
+        // The line names the real trouble — no connection, no Greek, busy — rather than saying only
+        // that something went wrong: Chris' phone gave codes 12 and 2 on two different days.
+        val klass = Recognition.classOf(e.code)
+        // Once per class per run, not once per window: «Μίλα» stays on the screen after the latch,
+        // and an offline phone would otherwise fill the caregiver's Σφάλματα with the same row every
+        // tap — while a phone with two things wrong with it must still report both.
+        if (reported.add(klass)) graph.errors.record("singsay listen", e)
         recogniserBroke = true
         _state.update {
             it.copy(
                 listening = false, listenLevel = 0f, heard = null, heardMatched = false,
-                nudge = false, canConfirm = true, error = Recognition.NOT_WORKING,
+                nudge = false, canConfirm = true, error = klass.line,
             )
         }
     }
@@ -587,29 +624,13 @@ class SingSayViewModel(private val graph: AppGraph, private val items: List<Item
         if (_state.value.isRecording) {
             runCatching { graph.voice.stopRecording() }
                 .onSuccess { rec ->
-                    val itemId = _state.value.item.id
-                    lastPeak = rec.peakAmplitude
-                    lastTakeMs = rec.durationMs
                     // A take nobody spoke into is not a take: it is deleted, he is asked again, the
                     // phrase stays open and nothing is written. Silence used to pass as his voice.
-                    if (rec.isSilent) {
-                        rec.file.delete()
+                    if (!keep(rec)) {
                         _state.update { it.copy(isRecording = false, error = Recorded.SILENT_TAKE) }
                         return@onSuccess
                     }
-                    _state.update { it.copy(isRecording = false, selfRecordingPath = graph.files.relativize(rec.file), error = null) }
-                    // The app scope, not this screen's: the take is on disk, its row must land too.
-                    recordingSave = graph.scope.async {
-                        try {
-                            graph.items.addRecording(itemId, rec.file, rec.durationMs, Who.DIMITRIS).id
-                        } catch (ce: CancellationException) {
-                            // A cancelled write is not a failed one, and must not be logged as one.
-                            throw ce
-                        } catch (e: Exception) {
-                            graph.errors.record("singsay save recording", e)
-                            null
-                        }
-                    }
+                    _state.update { it.copy(isRecording = false, error = null) }
                 }
                 .onFailure { e -> graph.errors.record("singsay record stop", e); _state.update { it.copy(isRecording = false, error = TOO_SHORT) } }
         } else {
@@ -622,29 +643,40 @@ class SingSayViewModel(private val graph: AppGraph, private val items: List<Item
         }
     }
 
-    /** The microphone was refused: say so instead of a button that does nothing. */
-    fun micDenied() = _state.update { it.copy(error = MIC_DENIED) }
-
     /**
-     * The model voice, then his own take, back to back in one job. The model playback is written out
-     * here rather than calling [listenModel]: that would cancel the very job it was started from, and
-     * the comparison would stop before his own voice was ever reached.
+     * One finished take, from whichever microphone made it: [toggleRecording]'s, or the one «Μίλα»
+     * opened on the on-device path. False when nobody spoke into it, in which case it is already
+     * deleted and nothing was written.
+     *
+     * Both paths end here so that a take is a take: the same silence line, the same row with
+     * [Who.DIMITRIS] on it, the same peak and duration in the attempt's detail.
      */
-    fun playComparison() {
-        // The model half of the comparison is the phrase itself: never into an open window.
-        if (_state.value.listening) return
-        val path = _state.value.selfRecordingPath ?: return
-        val token = claimPlayback()
-        playJob = viewModelScope.launch {
-            _state.update { it.copy(playing = true, lit = -1) }
+    private fun keep(rec: Recorded): Boolean {
+        lastPeak = rec.peakAmplitude
+        lastTakeMs = rec.durationMs
+        if (rec.isSilent) {
+            rec.file.delete()
+            return false
+        }
+        val itemId = _state.value.item.id
+        _state.update { it.copy(selfRecordingPath = graph.files.relativize(rec.file)) }
+        // The app scope, not this screen's: the take is on disk, its row must land too.
+        recordingSave = graph.scope.async {
             try {
-                sayModel()
-                report(graph.voice.play(graph.files.resolve(path)), SPEECH_FAILED, "singsay play self")
-            } finally {
-                releasePlayback(token)
+                graph.items.addRecording(itemId, rec.file, rec.durationMs, Who.DIMITRIS).id
+            } catch (ce: CancellationException) {
+                // A cancelled write is not a failed one, and must not be logged as one.
+                throw ce
+            } catch (e: Exception) {
+                graph.errors.record("singsay save recording", e)
+                null
             }
         }
+        return true
     }
+
+    /** The microphone was refused: say so instead of a button that does nothing. */
+    fun micDenied() = _state.update { it.copy(error = MIC_DENIED) }
 
     fun skip() {
         if (finishing || _state.value.done) return
