@@ -109,9 +109,14 @@ class PcmTake private constructor(
      * True while the pipe thread is inside a `write` that has not come back. A recogniser holding
      * the read end and not draining it blocks that write for ever, and a thread inside a blocking
      * write will never look at [endRequested] — so [closePipe] reads this to know it has to close
-     * the descriptor itself. Racy by nature and harmless either way: see [closePipe].
+     * the descriptor itself.
+     *
+     * Written and read under [pipeLock], and set in the same locked step that takes the stream to
+     * write into. Read outside the lock it was a lost close: «Στοπ» could look a hair before the
+     * flag went up, decide there was nothing to free, and leave a wedged writer holding the pipe
+     * until the wait ended — the twenty-second dead button, back in a narrow interleaving.
      */
-    @Volatile private var writing = false
+    private var writing = false
 
     /** Counted down by the pipe thread once it has closed the pipe. [stop] waits on it, briefly. */
     private val pipeClosed = CountDownLatch(1)
@@ -150,24 +155,33 @@ class PcmTake private constructor(
      * doing nothing while the words he got out were thrown away. The microphone and the file are
      * untouched: this closes the pipe and nothing else.
      *
-     * If the pipe thread happens to be blocked inside a write (a recogniser holding the read end and
-     * not reading it), the close lands when that write returns or throws. Nothing waits for it.
+     * Prompt in both directions, and nothing waits for it: with a recogniser that is keeping up the
+     * queued tail of his word goes down the pipe first and the close follows within a [POLL_MS] turn;
+     * with one that has stopped reading the descriptor is closed here and now.
+     *
+     * Only [AndroidSpeechToText.stop] and [stop] call this, and both run where [newPipe] cannot be
+     * interleaving — «Στοπ» is posted to the main looper, which is also the only thread that opens a
+     * session's pipe. That is what makes closing "whatever is current" safe here without the identity
+     * check [toPipe] needs.
      */
-    fun closePipe() {
-        // Behind whatever is still queued, not in front of it: the last thing he said is in those
-        // blocks, and an engine given end-of-stream before them would decide on a truncated word.
-        // With a recogniser reading normally the queue is empty and the pipe thread closes on its
-        // next turn round the loop, which is within [POLL_MS].
+    fun closePipe() = synchronized(pipeLock) {
         endRequested = true
-        // Unless it is wedged. A pipe thread inside a blocked write will never come round that loop,
-        // so the flag alone would leave «Στοπ» waiting on a recogniser that has stopped reading —
-        // which is the twenty-second dead button this whole method exists to prevent. Closing the
-        // descriptor here is what frees it: Android's `FileOutputStream.close` signals threads
-        // blocked on that descriptor, so the write throws and the pipe thread carries on to its own
-        // close. Reading [writing] is racy, and both ways round are harmless: a false positive
-        // closes a pipe that was about to finish one block, a false negative leaves the flag to do
-        // it a moment later.
-        if (writing) synchronized(pipeLock) { closePipeLocked() }
+        // Two cases, decided here under the one lock the pipe thread also takes, so there is no
+        // interleaving between them.
+        //
+        // **Nothing in flight and nothing queued** — a recogniser that has been keeping up. The flag
+        // is enough: the pipe thread comes round its loop within [POLL_MS], finds the queue dry and
+        // closes gracefully. It really will be dry, because the microphone stops feeding this queue
+        // the moment the flag goes up: what he says after «Στοπ» is audio he has said he is finished
+        // with, and the file keeps it without the engine being handed it.
+        //
+        // **Anything in flight or waiting** — a recogniser that is behind, which on this path means
+        // one that has stopped reading. Nothing queued will reach it, and a write already in flight
+        // never returns, so the descriptor is closed here and now. Android's
+        // `FileOutputStream.close` signals threads blocked on that descriptor, so the blocked write
+        // throws and the pipe thread carries on to its own close. What is lost is a tail the engine
+        // was never going to read; what is saved is «Στοπ» meaning something.
+        if (writing || queue.isNotEmpty()) closePipeLocked()
     }
 
     /**
@@ -273,9 +287,16 @@ class PcmTake private constructor(
         // A copy, because this buffer is about to be filled again. Never a blocking put: when the
         // queue is full the oldest block goes, so a recogniser that has stopped reading costs the
         // engine a syllable and costs his take nothing at all.
-        val block = buffer.copyOf(read)
-        while (!queue.offer(block)) {
-            if (queue.poll() == null) break
+        //
+        // Nothing at all once he has said «Στοπ». The microphone runs on until the wait ends, so the
+        // file holds everything up to the moment he finished — but the engine has been told there is
+        // no more coming, and a queue the microphone kept refilling would never run dry for the pipe
+        // thread to close on.
+        if (!endRequested) {
+            val block = buffer.copyOf(read)
+            while (!queue.offer(block)) {
+                if (queue.poll() == null) break
+            }
         }
         // The bar, drawn from the app's own samples: with the engine fed through a pipe it never
         // calls `onRmsChanged`, and a man who cannot ask "is it hearing me?" would have no answer.
@@ -291,8 +312,9 @@ class PcmTake private constructor(
      * keep feeding it. Blocks arriving while no pipe is open are dropped, which is the honest thing
      * to do with audio nobody is listening to.
      *
-     * The thread ends on the end-of-stream marker, or when the microphone has stopped and the queue
-     * has run dry.
+     * The thread ends when the end of the stream has been asked for and the queue has run dry, or
+     * when the microphone has stopped and the queue has run dry. The first of those is reachable
+     * because [keep] stops feeding this queue the moment [endRequested] goes up.
      */
     private fun toPipe() {
         try {
@@ -308,8 +330,9 @@ class PcmTake private constructor(
                 if (block == null) {
                     if (endRequested || !running) break else continue
                 }
-                val stream = synchronized(pipeLock) { sink } ?: continue
-                writing = true
+                // The stream and the flag in one locked step, so «Στοπ» either sees a write in
+                // flight or gets there first and closes the pipe this one is about to use.
+                val stream = synchronized(pipeLock) { sink?.also { writing = true } } ?: continue
                 try {
                     stream.write(block)
                 } catch (e: IOException) {
@@ -319,7 +342,7 @@ class PcmTake private constructor(
                     // and it would come back having heard him say nothing at all.
                     synchronized(pipeLock) { if (sink === stream) closePipeLocked() }
                 } finally {
-                    writing = false
+                    synchronized(pipeLock) { writing = false }
                 }
             }
         } finally {
