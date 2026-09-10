@@ -50,6 +50,12 @@ interface SyncStore {
      * asks for these itself.
      */
     suspend fun awaitingMedia(table: String): List<Map<String, Any?>>
+
+    /**
+     * Whether any row still alive in [table] points at [path]. Asked before a deletion pulled from
+     * another phone takes the local file with it, because two rows can name one file.
+     */
+    suspend fun mediaStillUsed(table: String, path: String): Boolean
 }
 
 /** The nine DAOs the sync writes through. [of] takes them from the live database. */
@@ -134,6 +140,15 @@ class DaoSyncStore(private val daos: () -> SyncDaos) : SyncStore {
         }
         return entities.map { spec.withId(Rows.of(it)) }
     }
+
+    /**
+     * Only recordings are asked, because they are the only rows a phone deletes on its own account:
+     * his takes are pruned to the newest three of each word
+     * ([gr.dimitris.app.core.data.ItemRepository.HIS_TAKES]). A photograph's row is deleted with its
+     * item, which is a caregiver's decision on both phones, and there is no pruning behind it.
+     */
+    override suspend fun mediaStillUsed(table: String, path: String): Boolean =
+        table == Tables.RECORDINGS && daos().recordings.activeWithPath(path) > 0
 
     override suspend fun apply(table: String, rows: List<Map<String, Any?>>): List<String> {
         if (rows.isEmpty()) return emptyList()

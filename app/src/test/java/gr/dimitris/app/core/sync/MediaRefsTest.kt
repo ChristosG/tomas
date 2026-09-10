@@ -194,6 +194,18 @@ class MediaRefsTest {
         assertNull(MediaRefs.existing(files.recordingsDir, abcSha, Tables.RECORDING_EXT))
     }
 
+    // Whether a row arrived as a deletion decides whether its file goes with it.
+
+    @Test fun `a deletion is read whichever way it was written`() {
+        assertTrue(Rows.deleted(mapOf("deleted" to true)))
+        assertTrue("a row pushed by hand may carry 1", Rows.deleted(mapOf("deleted" to 1)))
+        assertTrue(Rows.deleted(mapOf("deleted" to 1.0)))
+        assertFalse(Rows.deleted(mapOf("deleted" to false)))
+        assertFalse(Rows.deleted(mapOf("deleted" to 0)))
+        assertFalse("a row with no such column is not a deletion", Rows.deleted(mapOf("id" to "r1")))
+        assertFalse(Rows.deleted(mapOf("deleted" to null)))
+    }
+
     @Test fun `a value that only looks like a media url is not one`() {
         assertNull(MediaRefs.shaOf("media://not-a-hash"))
         assertNull(MediaRefs.shaOf("photos/x.jpg"))

@@ -10,6 +10,7 @@ class FakeRecordingDao : RecordingDao {
         rows.values.filter { it.itemId == itemId && it.who == who && it.style == style && !it.deleted }
             .sortedByDescending { it.recordedAt }
     override suspend fun softDelete(id: String, now: Long) { rows[id]?.let { rows[id] = it.copy(deleted = true, updatedAt = now) } }
+    override suspend fun activeWithPath(path: String): Int = rows.values.count { it.path == path && !it.deleted }
     override suspend fun itemsWithVoice(who: Who): List<String> =
         rows.values.filter { !it.deleted && it.who == who }.map { it.itemId }.distinct()
 

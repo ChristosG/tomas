@@ -333,8 +333,60 @@ class SyncEngine(
             val written = write(table, keep, tally)
             if (written.applied > 0) changed = true
             if (!written.ok) ok = false
+            if (written.applied > 0) sweep(table, keep, tally)
         }
         return Landed(changed, ok)
+    }
+
+    /**
+     * A deletion that arrived from another phone takes the local file with it.
+     *
+     * Without this, retention only ever freed disk on the phone that did the pruning. His takes are
+     * kept to the newest three of each word — since «Μίλα» began keeping the audio of every
+     * recognition window a practised word would otherwise gather a raw-PCM file a minute of speech
+     * long every time — and the soft-deleted rows travel, but the caregiver's phone kept every one
+     * of the files they stood for, for ever. That is half a fix.
+     *
+     * Three things bound it, because deleting a file is the one thing here that cannot be taken
+     * back:
+     *
+     * * only a row that really arrived as a deletion ([Rows.deleted]);
+     * * only a path under [MediaPaths.recordingsDir] — never a photograph, never an absolute path
+     *   from some other phone's data directory, never a `media://` that has not landed yet;
+     * * only when no row still alive names the same file. Two rows can: a dialogue line re-saved
+     *   hands its existing take straight back in, and deleting the bytes under the survivor would
+     *   leave a caregiver a row that plays nothing.
+     *
+     * The row is written either way. A file that will not delete is untidy; a deletion that does not
+     * land is a phone that disagrees with the other one.
+     */
+    private suspend fun sweep(table: String, rows: List<Map<String, Any?>>, tally: Tally) {
+        val fields = Tables.of(table)?.mediaFields.orEmpty()
+        if (fields.isEmpty()) return
+        for (row in rows) {
+            if (!Rows.deleted(row)) continue
+            for (field in fields.keys) {
+                val path = row[field] as? String ?: continue
+                if (path.startsWith(MediaRefs.SCHEME)) continue
+                try {
+                    val file = files.resolve(path)
+                    if (!file.isFile || !under(file, files.recordingsDir)) continue
+                    if (store.mediaStillUsed(table, path)) continue
+                    if (file.delete()) tally.mediaGone++
+                } catch (ce: CancellationException) {
+                    throw ce
+                } catch (e: Throwable) {
+                    tally.fail(SWEEP_FAILED, "sync media sweep", e)
+                }
+            }
+        }
+    }
+
+    /** Inside a folder, canonically: a path that climbs out of it with `..` is not under it. */
+    private fun under(file: File, dir: File): Boolean {
+        val root = runCatching { dir.canonicalPath }.getOrNull() ?: dir.absolutePath
+        val path = runCatching { file.canonicalPath }.getOrNull() ?: file.absolutePath
+        return path.startsWith(root + File.separator)
     }
 
     private class Written(val applied: Int, val ok: Boolean)
@@ -505,6 +557,9 @@ class SyncEngine(
         var pulled = 0
         var mediaUp = 0
         var mediaDown = 0
+
+        /** Files removed here because the row that named them arrived deleted. See [sweep]. */
+        var mediaGone = 0
         private val errors = LinkedHashSet<String>()
         private val written = HashSet<String>()
 
@@ -559,6 +614,12 @@ class SyncEngine(
         const val DOWNLOAD_FAILED = "Δεν κατέβηκε κάποιο αρχείο. Θα ξαναδοκιμάσω."
         const val READ_FAILED = "Δεν μπόρεσα να διαβάσω τη βάση."
         const val WRITE_FAILED = "Δεν μπόρεσα να γράψω στη βάση. Θα ξαναδοκιμάσω."
+
+        /**
+         * A file another phone deleted that this one could not remove. Nothing of his is lost by it
+         * — the row is deleted either way — so the sentence is about tidiness, not about work.
+         */
+        const val SWEEP_FAILED = "Δεν έσβησα κάποιο παλιό αρχείο ήχου."
 
         /** [name] is `table/id` — enough to find the row, never a word of what is in it. */
         fun rowRefused(name: String) = "Ο διακομιστής δεν δέχτηκε μία εγγραφή ($name). Την προσπέρασα."

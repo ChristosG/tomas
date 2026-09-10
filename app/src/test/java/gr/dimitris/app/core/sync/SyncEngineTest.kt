@@ -574,6 +574,94 @@ class SyncEngineTest {
         assertEquals(Who.CAREGIVER, other.recordings.rows["r1"]?.who)
     }
 
+    /**
+     * A deletion that arrives takes the file with it.
+     *
+     * Retention keeps only the newest three of *his* takes of each word — since «Μίλα» began keeping
+     * the audio of every recognition window a practised word would gather a raw-PCM file a minute of
+     * speech long every time — and the soft-deleted rows travel. Without this sweep only the phone
+     * that pruned ever freed the disk: the caregiver's kept every file it had ever pulled.
+     */
+    @Test fun `a recording deleted on one phone loses its file on the other`() = runBlocking {
+        // Real WAV bytes: the receiver names a downloaded recording by what is in it, so this also
+        // walks the RIFF sniff end to end.
+        val voice = phone.files.recording("v.wav", gr.dimitris.app.core.audio.Wav.header(0))
+        val sha = MediaRefs.sha256(voice)
+        phone.recordings.upsert(
+            Recording(id = "r1", itemId = "i1", path = "recordings/v.wav", who = Who.DIMITRIS, durationMs = 900, updatedAt = 10)
+        )
+        phone.sync()
+        val other = Phone().apply { configure() }
+        other.sync()
+        val landed = File(other.files.recordingsDir, "$sha.wav")
+        assertTrue("the take arrived first", landed.isFile)
+
+        // Pruned on his phone: the row is soft-deleted and stamped, and travels as a deletion.
+        phone.recordings.softDelete("r1", 20)
+        phone.sync()
+        val swept = other.sync()
+
+        assertEquals(true, other.recordings.rows["r1"]?.deleted)
+        assertFalse("the file went with the row", landed.exists())
+        assertTrue("and nothing was said about it", swept.errors.isEmpty())
+    }
+
+    /** Two rows can name one take — a dialogue line re-saved hands its file back in. */
+    @Test fun `a file another live row still names is left alone`() = runBlocking {
+        val voice = phone.files.recording("v.wav", gr.dimitris.app.core.audio.Wav.header(0))
+        val sha = MediaRefs.sha256(voice)
+        for (id in listOf("r1", "r2")) {
+            phone.recordings.upsert(
+                Recording(id = id, itemId = "i1", path = "recordings/v.wav", who = Who.DIMITRIS, durationMs = 900, updatedAt = 10)
+            )
+        }
+        phone.sync()
+        val other = Phone().apply { configure() }
+        other.sync()
+        val landed = File(other.files.recordingsDir, "$sha.wav")
+
+        phone.recordings.softDelete("r1", 20)
+        phone.sync()
+        other.sync()
+
+        assertEquals(true, other.recordings.rows["r1"]?.deleted)
+        assertTrue("the surviving row would have played nothing", landed.isFile)
+    }
+
+    /**
+     * Only what is under `recordings/`. A row whose path came from another phone's data directory,
+     * or points anywhere else at all, is written and its file left exactly where it is: deleting a
+     * file is the one thing here that cannot be taken back.
+     */
+    @Test fun `a deleted row outside the recordings folder takes nothing with it`() = runBlocking {
+        val stray = File(phone.files.filesDir, "stray.wav").apply { writeBytes("φωνή".toByteArray()) }
+        client.seed(
+            Tables.RECORDINGS,
+            Rows.of(
+                Recording(
+                    id = "r1", itemId = "i1", path = stray.absolutePath, who = Who.DIMITRIS,
+                    durationMs = 900, updatedAt = 30, deleted = true,
+                )
+            ),
+        )
+
+        phone.sync()
+
+        assertEquals(true, phone.recordings.rows["r1"]?.deleted)
+        assertTrue("a path outside the media folders is not ours to delete", stray.isFile)
+    }
+
+    /** A deleted photograph keeps its file: a caregiver deleting a word is not pruning. */
+    @Test fun `a deleted item does not sweep its photograph`() = runBlocking {
+        val photo = phone.files.photo("p.jpg", "εικόνα".toByteArray())
+        client.seed(Tables.ITEMS, Rows.of(item("i1", "ψωμί", 30, image = "photos/p.jpg").copy(deleted = true)))
+
+        phone.sync()
+
+        assertEquals("the word arrived deleted", true, phone.items.get("i1")?.deleted)
+        assertTrue("but a caregiver deleting a word is not pruning his takes", photo.isFile)
+    }
+
     /** A picture that will not download must never hold up the word it belongs to. */
     @Test fun `a failing download still lands the row`() = runBlocking {
         val sha = "0".repeat(64)

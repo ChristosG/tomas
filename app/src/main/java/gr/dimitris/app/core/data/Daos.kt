@@ -86,6 +86,15 @@ interface RecordingDao {
     @Query("UPDATE recordings SET deleted = 1, updatedAt = :now WHERE id = :id") suspend fun softDelete(id: String, now: Long)
 
     /**
+     * How many rows still alive point at this file. Asked before a deletion that arrived from
+     * another phone takes the local file with it: two rows can name one recording — a dialogue line
+     * re-saved hands its existing file back in — and deleting the bytes out from under the survivor
+     * would leave a caregiver a row that plays nothing.
+     */
+    @Query("SELECT COUNT(*) FROM recordings WHERE path = :path AND deleted = 0")
+    suspend fun activeWithPath(path: String): Int
+
+    /**
      * The words a **caregiver** has put a voice on. The journey report says «φωνή ναι/όχι» per word
      * so the people around him can be told which words are still silent, and that is the whole use:
      * ids of items, never paths.

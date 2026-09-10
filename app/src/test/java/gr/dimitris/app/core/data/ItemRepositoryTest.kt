@@ -3,6 +3,7 @@ package gr.dimitris.app.core.data
 import gr.dimitris.app.core.greek.Syllabifier
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
+import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
@@ -95,6 +96,9 @@ class ItemRepositoryTest {
     }
 
     private val takes = File(System.getProperty("java.io.tmpdir"), "takes-${System.nanoTime()}")
+
+    /** Its own folder per test, and taken away again: these are real files on a real disk. */
+    @After fun removeTakes() { takes.deleteRecursively() }
 
     @Test fun `only the newest three of his takes of a word are kept`() = runTest {
         val item = repo.save(Item(text = "νερό"))

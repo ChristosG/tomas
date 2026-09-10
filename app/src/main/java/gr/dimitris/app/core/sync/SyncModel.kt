@@ -169,6 +169,17 @@ object Rows {
 
     fun updatedAt(row: Map<String, Any?>): Long = (row["updatedAt"] as? Number)?.toLong() ?: 0L
 
+    /**
+     * Whether a row arrived as a deletion. Gson gives back a [Boolean] for a JSON `true`, but a row
+     * pushed by hand — `README.md` §4's own `curl` example — may carry `1`, and a deletion read as
+     * "not deleted" would leave the file it stands for on the phone for ever.
+     */
+    fun deleted(row: Map<String, Any?>): Boolean = when (val value = row["deleted"]) {
+        is Boolean -> value
+        is Number -> value.toInt() != 0
+        else -> false
+    }
+
     fun toJson(row: Map<String, Any?>): JsonObject {
         val out = JsonObject()
         for ((key, value) in row) out.add(key, element(value))
