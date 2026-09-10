@@ -234,6 +234,27 @@ class ClaudeAdvisorParseTest {
         assertTrue("aiming at four in five", p.contains("τέσσερα στα πέντε"))
     }
 
+    /**
+     * The prompt is now asked to name a dot per module, so a clause that says the app does more than
+     * it does becomes advice. Typed sentence boards are `SentenceTemplates.TYPED_LEVELS = 7..8`,
+     * which is dot 4 and dot 5 of `Difficulty.SENTENCES_BANDS`, and only when the judge is on
+     * (`variantFor(…, judged)`); dot 3 is the gap board. And a module a caregiver has switched off
+     * is not on his screen at all, so a dot for it is advice he cannot take.
+     */
+    @Test fun `the prompt says where the keyboard really starts and that a module can be off`() {
+        val p = flowing(ClaudeAdvisor.SYSTEM_PROMPT)
+        assertTrue("typed boards start at dot 4", p.contains("από το 4 και πάνω γράφει και ολόκληρες"))
+        assertTrue("and only with the judge on", p.contains("μόνο όταν είναι ανοιχτός ο «Έλεγχος με Claude»"))
+        assertTrue("dot 3 fills the gap", p.contains("στο 3 συμπληρώνει τη λέξη που λείπει"))
+        assertFalse("never «from 3 and up»", p.contains("από το 3 και πάνω"))
+        // Numbers' top band is levels 12–15: change, the clock and the day after, four-digit number
+        // words, two-step problems. No dates anywhere on the ladder.
+        assertFalse("no dates on the numbers ladder", p.contains("ημερομηνί"))
+        assertTrue("the week day is what level 13 has", p.contains("τη μέρα της εβδομάδας"))
+        assertTrue("a module can be switched off", p.contains("μπορεί να κλείσει τελείως μια άσκηση"))
+        assertTrue("and then he cannot do it", p.contains("δεν φαίνεται καθόλου στην οθόνη"))
+    }
+
     /** The scales the numbers are on, so «μέση βοήθεια 2,4» is read as what it is. */
     @Test fun `the prompt explains the help scale and the boxes`() {
         val p = flowing(ClaudeAdvisor.SYSTEM_PROMPT)

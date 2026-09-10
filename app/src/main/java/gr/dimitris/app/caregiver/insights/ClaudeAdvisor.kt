@@ -5,6 +5,7 @@ import com.anthropic.errors.AnthropicServiceException
 import com.anthropic.models.messages.Message
 import com.anthropic.models.messages.MessageCreateParams
 import com.anthropic.models.messages.ThinkingConfigAdaptive
+import gr.dimitris.app.core.judge.JudgeContract
 import gr.dimitris.app.core.secrets.Secrets
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -222,16 +223,20 @@ class ClaudeAdvisor(private val secrets: Secrets, private val model: suspend () 
             - Γράψε = TRACE (γράφει γράμματα και λέξεις με το δάχτυλο)
             - Δεξί χέρι = ARCADE (ασκήσεις για το δεξί του χέρι, όχι λόγος)
             - Μίλα = TALKBOARD, ο πίνακας επικοινωνίας — δεν είναι άσκηση
+            Ο φροντιστής μπορεί να κλείσει τελείως μια άσκηση: τότε δεν φαίνεται καθόλου στην οθόνη
+            του Δημήτρη και δεν μπορεί να την κάνει. Αν μια άσκηση δεν έχει κανένα στοιχείο, μπορεί
+            να είναι κλειστή — πες το ως ερώτηση προς τους φροντιστές αντί να επιμείνεις σε κουκκίδα.
 
             Η δυσκολία: κάθε άσκηση έχει στην πρώτη της οθόνη μια σειρά από πέντε κουκκίδες, 1 έως 5.
             Τις πατάει ο ίδιος ο Δημήτρης· ο φροντιστής βάζει μόνο κάτω και πάνω όριο. Το 1 είναι το
             πιο εύκολο, το 5 το πιο δύσκολο, και σε κάθε άσκηση σημαίνει κάτι δικό της:
             - Λέξεις: 1 μόνο λέξεις· 2 έως 5 λέξεις και φράσεις
-            - Αριθμοί: ζώνη επιπέδων 1–2, 3–4, 5–7, 8–11, 12–15 (στο 5 φτάνει σε προβλήματα δύο
-              βημάτων, ρέστα, ώρα και ημερομηνίες)
+            - Αριθμοί: ζώνη επιπέδων 1–2, 3–4, 5–7, 8–11, 12–15 (στο 5 φτάνει σε ρέστα, ώρα, τη
+              μέρα της εβδομάδας, τετραψήφιους αριθμούς με λέξεις και προβλήματα δύο βημάτων)
             - Προτάσεις: ζώνη επιπέδων 1–2, 3–4, 5–6, 7, 8 (στο 3 μπαίνουν τα άρθρα, στο 4 μια
-              δευτερεύουσα πρόταση, στο 5 η ερώτηση· από το 3 και πάνω γράφει και ολόκληρες
-              προτάσεις στο πληκτρολόγιο)
+              δευτερεύουσα πρόταση, στο 5 η ερώτηση· στο 3 συμπληρώνει τη λέξη που λείπει, και από
+              το 4 και πάνω γράφει και ολόκληρες προτάσεις στο πληκτρολόγιο — μόνο όταν είναι
+              ανοιχτός ο «Έλεγχος με Claude»)
             - Γράψε: 1 κεφαλαία, 2 μικρά, 3 το όνομά του, 4 λέξεις, 5 λέξεις από μνήμης
             - Διάλογοι: πόσο δύσκολο διάλογο δέχεται — η κουκκίδα n παίρνει τους διαλόγους μέχρι και
               το επίπεδο n
@@ -368,35 +373,19 @@ class ClaudeAdvisor(private val secrets: Secrets, private val model: suspend () 
          * gives "" and the app simply plans the next session as it always did.
          *
          * It used to run first-brace to **last**-brace, which is the same bug
-         * [gr.dimitris.app.core.judge.JudgeContract.jsonObject] was fixed for and is fixed the same
-         * way here: one stray `}` in a sentence after the object, or a second object, and the
-         * substring is not JSON any more — Gson refuses trailing content — so a perfectly good
-         * focus became no focus at all and his next session was planned as though the advisor had
-         * said nothing about it.
+         * [JudgeContract.jsonObject] was fixed for: one stray `}` in a sentence after the object, or
+         * a second object, and the substring is not JSON any more — Gson refuses trailing content —
+         * so a perfectly good focus became no focus at all and his next session was planned as
+         * though the advisor had said nothing about it.
+         *
+         * The scan itself **is** [JudgeContract.jsonObject]. It used to be a second copy of it, kept
+         * byte for byte in step by hand, which is the one way two scanners whose whole value is that
+         * they agree stop agreeing. All that is left here is the shape this caller wants: "" for
+         * nothing found rather than null, and the object flattened onto one line so a model that
+         * pretty-printed it still gives [Focus] something to parse.
          */
-        internal fun jsonObject(raw: String): String {
-            val start = raw.indexOf('{')
-            if (start < 0) return ""
-            var depth = 0
-            var inString = false
-            var escaped = false
-            for (i in start until raw.length) {
-                val c = raw[i]
-                when {
-                    escaped -> escaped = false
-                    c == '\\' && inString -> escaped = true
-                    c == '"' -> inString = !inString
-                    inString -> Unit
-                    c == '{' -> depth++
-                    c == '}' -> {
-                        depth--
-                        if (depth == 0) return raw.substring(start, i + 1).replace(NEWLINES, " ").trim()
-                    }
-                }
-            }
-            // Never closed: an answer cut off by max_tokens mid-object. Not a focus.
-            return ""
-        }
+        internal fun jsonObject(raw: String): String =
+            JudgeContract.jsonObject(raw)?.replace(NEWLINES, " ")?.trim().orEmpty()
 
         private val NEWLINES = Regex("\\s*\\R\\s*")
 
