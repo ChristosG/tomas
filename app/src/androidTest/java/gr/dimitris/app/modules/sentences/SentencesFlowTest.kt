@@ -1,5 +1,7 @@
 package gr.dimitris.app.modules.sentences
 
+import android.content.res.Configuration
+import android.view.inputmethod.InputMethodManager
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.assertIsDisplayed
@@ -31,6 +33,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assume
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
@@ -371,6 +374,13 @@ class SentencesFlowTest {
      *
      * The one thing `performTextInput` cannot tell us: it puts text into the semantics node directly,
      * so a board whose keyboard has gone looks identical to one whose keyboard is there.
+     *
+     * Not every device can answer it. An AVD (or a phone) with a hardware keyboard suppresses the
+     * soft one altogether, and then the IME insets never report it visible however right the screen
+     * is — so on such a device the honest outcome is "not asked here", not "his keyboard is gone".
+     * The check is made only *after* the wait has run out, so a device that does have a soft
+     * keyboard can never be skipped by a misread of its configuration: it is the failure that is
+     * re-examined, never the pass.
      */
     private fun waitForIme(up: Boolean) {
         val deadline = System.currentTimeMillis() + TIMEOUT_MS
@@ -379,7 +389,20 @@ class SentencesFlowTest {
             if (imeVisible() == up) return
             Thread.sleep(IME_POLL_MS)
         }
+        Assume.assumeTrue("this device shows no soft keyboard, so its IME insets say nothing", hasSoftKeyboard())
         assertEquals("the keyboard", up, imeVisible())
+    }
+
+    /** A soft keyboard exists here at all: some IME is enabled, and no hardware keyboard is hiding it. */
+    private fun hasSoftKeyboard(): Boolean {
+        val activity = compose.activity
+        val anyIme = runCatching {
+            activity.getSystemService(InputMethodManager::class.java)?.enabledInputMethodList?.isNotEmpty() == true
+        }.getOrDefault(false)
+        val config = activity.resources.configuration
+        val hardware = config.keyboard != Configuration.KEYBOARD_NOKEYS &&
+            config.hardKeyboardHidden == Configuration.HARDKEYBOARDHIDDEN_NO
+        return anyIme && !hardware
     }
 
     private fun imeVisible(): Boolean = compose.runOnUiThread {

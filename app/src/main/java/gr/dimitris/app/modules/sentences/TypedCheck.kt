@@ -65,9 +65,12 @@ internal class TypedCheck(
         private set
 
     /**
-     * One press of «Έτοιμο». [prompt] is the word under the picture — the thing the sentence is
-     * about, and the only hint the judge is given about what he was looking at — and [target] is the
-     * sentence the board was built from.
+     * One press of «Έτοιμο». [prompt] is the whole instruction he was given —
+     * [gr.dimitris.app.modules.sentences.SentencesViewModel.asked], which is «Γράψε την πρόταση» or,
+     * at level 8, «Γράψε την ερώτηση», with the word under the picture in it — and it is the only
+     * hint the judge gets about what he was looking at and what was wanted of him. It says the
+     * *kind* of thing too, which a bare word cannot: a question asked for and a sentence given back
+     * is not the same answer. [target] is the sentence the board was built from.
      */
     suspend fun weigh(typed: String, prompt: String, target: String): Written {
         val first = !nudged
