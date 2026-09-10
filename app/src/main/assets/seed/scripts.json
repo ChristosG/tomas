@@ -1,4 +1,4 @@
-{"version": 3, "scripts": [
+{"version": 4, "scripts": [
  {"title": "Στην καφετέρια", "tier": 1, "lines": [
   {"speaker": "OTHER", "text": "Καλημέρα! Τι θα πάρετε;"},
   {"speaker": "DIMITRIS", "text": "Έναν καφέ, παρακαλώ.", "intent": "λέει τι θέλει να πιει"},
@@ -65,7 +65,7 @@
   {"speaker": "OTHER", "text": "Δημήτρη! Τι κάνεις, πού είσαι;"},
   {"speaker": "DIMITRIS", "text": "Καλά είμαι, στο σπίτι.", "intent": "λέει πώς είναι και πού είναι"},
   {"speaker": "OTHER", "text": "Θέλεις να περάσω το απόγευμα;"},
-  {"speaker": "DIMITRIS", "text": "Ναι, έλα κατά τις έξι.", "intent": "απαντάει αν θέλει, και πότε"},
+  {"speaker": "DIMITRIS", "text": "Ναι, έλα κατά τις έξι.", "intent": "λέει αν θέλει να έρθει"},
   {"speaker": "OTHER", "text": "Εντάξει, τα λέμε τότε."},
   {"speaker": "DIMITRIS", "text": "Τα λέμε. Γεια σου.", "intent": "κλείνει το τηλέφωνο"}
  ]},

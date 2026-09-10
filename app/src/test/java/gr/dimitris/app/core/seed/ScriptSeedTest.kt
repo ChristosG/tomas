@@ -38,7 +38,9 @@ class ScriptSeedTest {
     @Test fun `the bundled dialogues parse and are all his and someone else`() {
         val json = asset("seed/scripts.json").readText()
         val m = ScriptSeedManifest.parse(json)
-        assertEquals(3, m.version)
+        // 4 since the «Θέλεις να περάσω το απόγευμα;» intent stopped asking for two things: a bump
+        // is how a re-worded intent reaches a line already seeded on his phone.
+        assertEquals(4, m.version)
         assertEquals(14, m.scripts.size)
         assertEquals(14, m.scripts.map { it.title }.distinct().size)
         for (s in m.scripts) {
@@ -90,6 +92,19 @@ class ScriptSeedTest {
                 }
             }
         }
+    }
+
+    /**
+     * And it asks for no more than the question did. «Θέλεις να περάσω το απόγευμα;» is one yes-or-no
+     * question with the time already in it, and its intent used to be «απαντάει αν θέλει, και πότε» —
+     * two things, so a plain «Ναι» was a refusal and he was handed back a sentence for an answer that
+     * was already right. An intent is the space a good answer may live in, not a script of it.
+     */
+    @Test fun `an intent asks for no more than its question does`() {
+        val m = ScriptSeedManifest.parse(asset("seed/scripts.json").readText())
+        val call = m.scripts.first { it.title == "Τηλεφώνημα σε φίλο" }
+        val answer = call.lines.first { it.text.startsWith("Ναι, έλα") }
+        assertEquals("λέει αν θέλει να έρθει", answer.intent)
     }
 
     /**
