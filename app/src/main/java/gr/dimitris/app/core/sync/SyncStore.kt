@@ -52,10 +52,15 @@ interface SyncStore {
     suspend fun awaitingMedia(table: String): List<Map<String, Any?>>
 
     /**
-     * Whether any row still alive in [table] points at [path]. Asked before a deletion pulled from
-     * another phone takes the local file with it, because two rows can name one file.
+     * Whether any row still alive anywhere points at [path]. Asked before a deletion pulled from
+     * another phone takes the local file with it.
+     *
+     * Across every table that has a media column, not only the one the deletion came from: two rows
+     * can name one file — a dialogue line re-saved hands its existing take back in — and a
+     * photograph column holding a recordings path, which a row pushed by hand can do, is no reason
+     * to delete a take a live row still plays.
      */
-    suspend fun mediaStillUsed(table: String, path: String): Boolean
+    suspend fun mediaStillUsed(path: String): Boolean
 }
 
 /** The nine DAOs the sync writes through. [of] takes them from the live database. */
@@ -142,13 +147,15 @@ class DaoSyncStore(private val daos: () -> SyncDaos) : SyncStore {
     }
 
     /**
-     * Only recordings are asked, because they are the only rows a phone deletes on its own account:
-     * his takes are pruned to the newest three of each word
-     * ([gr.dimitris.app.core.data.ItemRepository.HIS_TAKES]). A photograph's row is deleted with its
-     * item, which is a caregiver's decision on both phones, and there is no pruning behind it.
+     * Every media column in the schema: `recordings.path` and `items.imagePath`, matched on the
+     * relative path this phone stores — which is what both columns hold once a row has landed
+     * ([MediaRefs.incoming] relativizes them). The recordings side is asked first because it is the
+     * one that answers on any real phone.
      */
-    override suspend fun mediaStillUsed(table: String, path: String): Boolean =
-        table == Tables.RECORDINGS && daos().recordings.activeWithPath(path) > 0
+    override suspend fun mediaStillUsed(path: String): Boolean {
+        val d = daos()
+        return d.recordings.activeWithPath(path) > 0 || d.items.activeWithImage(path) > 0
+    }
 
     override suspend fun apply(table: String, rows: List<Map<String, Any?>>): List<String> {
         if (rows.isEmpty()) return emptyList()

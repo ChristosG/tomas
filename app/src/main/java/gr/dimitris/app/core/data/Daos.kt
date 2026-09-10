@@ -51,6 +51,14 @@ interface ItemDao {
 
     // Sync (phase 10). Deleted rows are included on purpose: a word the caregiver removed here has
     // to be removed on the other phones too, and a soft delete is an ordinary row change.
+    /**
+     * How many words still alive point at this file. Asked, beside [RecordingDao.activeWithPath],
+     * before a deletion pulled from another phone takes a local file with it: the question is "does
+     * anything still show or play this", and only every media column together can answer it.
+     */
+    @Query("SELECT COUNT(*) FROM items WHERE imagePath = :path AND deleted = 0")
+    suspend fun activeWithImage(path: String): Int
+
     @Query("SELECT * FROM items WHERE updatedAt > :since ORDER BY updatedAt") suspend fun changedSince(since: Long): List<Item>
     @Query("SELECT id, updatedAt FROM items WHERE id IN (:ids)") suspend fun stamps(ids: List<String>): List<RowStamp>
 
@@ -58,7 +66,7 @@ interface ItemDao {
      * Words whose picture arrived as a content hash the phone could not fetch — a sync on a bad
      * connection. Every sync asks again for these, which is what makes «Θα ξαναδοκιμάσω.» true.
      */
-    @Query("SELECT * FROM items WHERE imagePath LIKE 'media://%'") suspend fun awaitingMedia(): List<Item>
+    @Query("SELECT * FROM items WHERE imagePath LIKE 'media://%' AND deleted = 0") suspend fun awaitingMedia(): List<Item>
 
     /**
      * Rows exactly as another phone wrote them. Not [upsert]: nothing here may touch `updatedAt`,
@@ -110,8 +118,15 @@ interface RecordingDao {
     @Query("SELECT * FROM recordings WHERE updatedAt > :since ORDER BY updatedAt") suspend fun changedSince(since: Long): List<Recording>
     @Query("SELECT id, updatedAt FROM recordings WHERE id IN (:ids)") suspend fun stamps(ids: List<String>): List<RowStamp>
 
-    /** See [ItemDao.awaitingMedia]: a caregiver's voice that has not landed here yet. */
-    @Query("SELECT * FROM recordings WHERE path LIKE 'media://%'") suspend fun awaitingMedia(): List<Recording>
+    /**
+     * See [ItemDao.awaitingMedia]: a caregiver's voice that has not landed here yet.
+     *
+     * `deleted = 0`, on both, because a row that has been deleted has no use for its bytes. Without
+     * it a pulled deletion — which arrives naming its file by content, never having been downloaded —
+     * would send every later sync back to the server for a file it was about to throw away, and on
+     * the run that swept it, straight back again to fetch it a second time.
+     */
+    @Query("SELECT * FROM recordings WHERE path LIKE 'media://%' AND deleted = 0") suspend fun awaitingMedia(): List<Recording>
     @Upsert suspend fun upsertFromSync(rows: List<Recording>)
 }
 

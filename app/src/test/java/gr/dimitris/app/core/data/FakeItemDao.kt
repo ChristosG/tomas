@@ -23,10 +23,12 @@ class FakeItemDao : ItemDao {
     override suspend fun byIds(ids: List<String>): List<Item> = active().filter { it.id in ids }
     override suspend fun withPrices(): List<Item> = active().filter { it.priceCents != null }
 
+    override suspend fun activeWithImage(path: String): Int = active().count { it.imagePath == path }
     override suspend fun changedSince(since: Long): List<Item> =
         rows.value.values.filter { it.updatedAt > since }.sortedBy { it.updatedAt }
     override suspend fun stamps(ids: List<String>): List<RowStamp> =
         rows.value.values.filter { it.id in ids }.map { RowStamp(it.id, it.updatedAt) }
     override suspend fun upsertFromSync(rows: List<Item>) { rows.forEach { upsert(it) } }
-    override suspend fun awaitingMedia(): List<Item> = rows.value.values.filter { it.imagePath?.startsWith("media://") == true }
+    override suspend fun awaitingMedia(): List<Item> =
+        active().filter { it.imagePath?.startsWith("media://") == true }
 }

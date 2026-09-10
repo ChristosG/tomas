@@ -13,7 +13,10 @@ import gr.dimitris.app.core.data.FakeSessionDao
 import gr.dimitris.app.core.data.Item
 import gr.dimitris.app.core.data.ModuleId
 import gr.dimitris.app.core.data.Outcome
+import gr.dimitris.app.core.audio.PendingRemovals
+import gr.dimitris.app.core.data.ItemRepository
 import gr.dimitris.app.core.data.Recording
+import gr.dimitris.app.core.data.RecordingStyle
 import gr.dimitris.app.core.data.Schedule
 import gr.dimitris.app.core.data.Session
 import gr.dimitris.app.core.data.Who
@@ -58,7 +61,15 @@ class SyncEngineTest {
         val advice = FakeAdviceDao()
         val notes = FakeNoteDao()
         val files = FakeMediaPaths()
+        val pending = PendingRemovals(File(files.filesDir, "pending.tsv"))
         val settings = newSettings()
+
+        /** Its own clock, so a test can walk a prune and a push past each other. */
+        var now = AT
+
+        /** The real repository, wired the way `AppGraph` wires it: retention retires, never deletes. */
+        val repo: ItemRepository
+            get() = ItemRepository(items, recordings, files::relativize, pending::add) { now }
         val recorded = mutableListOf<Pair<String, Throwable>>()
         var bumps = 0
 
@@ -66,8 +77,8 @@ class SyncEngineTest {
             DaoSyncStore { SyncDaos(items, recordings, attempts, schedules, sessions, errorLogs, scripts, advice, notes) }
         )
 
-        fun engine(clock: () -> Long = { AT }) = SyncEngine(
-            client = server, store = store, files = files, settings = settings,
+        fun engine(clock: () -> Long = { now }) = SyncEngine(
+            client = server, store = store, files = files, pending = pending, settings = settings,
             onPulled = { bumps++ },
             record = { where, e -> recorded += where to e },
             clock = clock,
@@ -606,6 +617,50 @@ class SyncEngineTest {
         assertTrue("and nothing was said about it", swept.errors.isEmpty())
     }
 
+    /**
+     * The whole of retention, walked as the app really performs it: four takes of one word through
+     * [ItemRepository.addRecording], a push, a pull on the other phone, and the file gone from both.
+     *
+     * The three cases beside this one drive `sweep` from a hand-made soft delete, which is a state
+     * the app never actually produces. This one goes through `prune`, which is where the flow used to
+     * break in a way no test could see: it deleted the file in the same breath as the row, so at push
+     * time there was nothing left to hash and the deletion travelled naming *this* phone's
+     * `recordings/<uuid>.wav`. The other phone stored the row, looked for a file it had never heard
+     * of, found nothing, and kept its own copy for ever.
+     */
+    @Test fun `a take pruned on his phone is gone from the caregiver's too`() = runBlocking {
+        val word = phone.repo.save(Item(id = "i1", text = "νερό"))
+        val takes = (1..4).map { n ->
+            phone.now = AT + n * 1_000L
+            val file = phone.files.recording("$n.wav", gr.dimitris.app.core.audio.Wav.header(n * 4))
+            phone.repo.addRecording(word.id, file, durationMs = 900, who = Who.DIMITRIS)
+        }
+        val pruned = takes.first()
+        val prunedFile = File(phone.files.recordingsDir, "1.wav")
+        val sha = MediaRefs.sha256(prunedFile)
+
+        // Retention has soft-deleted the oldest row, and — the point of it — kept the file.
+        assertEquals("only the newest three are alive", 3, phone.recordings.allFor(word.id, Who.DIMITRIS, RecordingStyle.SPOKEN).size)
+        assertEquals(true, phone.recordings.rows[pruned.id]?.deleted)
+        assertTrue("its file waits for the push", prunedFile.isFile)
+
+        phone.now = AT + 100_000
+        phone.sync()
+        assertTrue("and goes once the deletion has gone up", !prunedFile.exists())
+
+        val other = Phone().apply { configure() }
+        other.sync()
+
+        assertEquals("the deletion arrived", true, other.recordings.rows[pruned.id]?.deleted)
+        assertEquals("the three live takes arrived with their files", 3, other.recordings.allFor(word.id, Who.DIMITRIS, RecordingStyle.SPOKEN).size)
+        assertEquals(
+            "and the pruned one is on neither phone",
+            null,
+            MediaRefs.existing(other.files.recordingsDir, sha, Tables.RECORDING_EXT),
+        )
+        assertEquals("without downloading a file to delete it", 3, other.files.recordingsDir.listFiles()!!.size)
+    }
+
     /** Two rows can name one take — a dialogue line re-saved hands its file back in. */
     @Test fun `a file another live row still names is left alone`() = runBlocking {
         val voice = phone.files.recording("v.wav", gr.dimitris.app.core.audio.Wav.header(0))
@@ -649,6 +704,51 @@ class SyncEngineTest {
 
         assertEquals(true, phone.recordings.rows["r1"]?.deleted)
         assertTrue("a path outside the media folders is not ours to delete", stray.isFile)
+    }
+
+    /** A path that climbs out of the recordings folder is not ours to delete either. */
+    @Test fun `a deleted row whose path climbs out of the folder takes nothing with it`() = runBlocking {
+        val stray = File(phone.files.filesDir, "stray.wav").apply { writeBytes("φωνή".toByteArray()) }
+        client.seed(
+            Tables.RECORDINGS,
+            Rows.of(
+                Recording(
+                    id = "r1", itemId = "i1", path = "recordings/../stray.wav", who = Who.DIMITRIS,
+                    durationMs = 900, updatedAt = 30, deleted = true,
+                )
+            ),
+        )
+
+        phone.sync()
+
+        assertEquals(true, phone.recordings.rows["r1"]?.deleted)
+        assertTrue("`..` does not lead anywhere the sweep may go", stray.isFile)
+    }
+
+    /**
+     * A live row anywhere protects a file, not only one in the same table: a word whose picture
+     * column somehow names a recording is still something that would play nothing without it.
+     */
+    @Test fun `a file a live item still names is left alone`() = runBlocking {
+        val voice = phone.files.recording("v.wav", gr.dimitris.app.core.audio.Wav.header(0))
+        val sha = MediaRefs.sha256(voice)
+        phone.recordings.upsert(
+            Recording(id = "r1", itemId = "i1", path = "recordings/v.wav", who = Who.DIMITRIS, durationMs = 900, updatedAt = 10)
+        )
+        phone.sync()
+        val other = Phone().apply { configure() }
+        other.sync()
+        val landed = File(other.files.recordingsDir, "$sha.wav")
+        assertTrue(landed.isFile)
+        // Nothing legitimate does this; a row pushed by hand can.
+        other.items.upsert(item("i9", "ψωμί", 5).copy(imagePath = "recordings/$sha.wav"))
+
+        phone.recordings.softDelete("r1", 20)
+        phone.sync()
+        other.sync()
+
+        assertEquals(true, other.recordings.rows["r1"]?.deleted)
+        assertTrue("the word that names it would have shown nothing", landed.isFile)
     }
 
     /** A deleted photograph keeps its file: a caregiver deleting a word is not pruning. */

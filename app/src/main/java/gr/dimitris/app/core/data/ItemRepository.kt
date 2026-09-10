@@ -11,8 +11,12 @@ class ItemRepository(
     private val recordings: RecordingDao,
     /** How a media file becomes a stored path. The app passes MediaFiles::relativize; JVM tests keep it absolute. */
     private val relativize: (File) -> String = { it.absolutePath },
-    /** The other direction, for the one thing that has to reach a file: pruning his old takes. */
-    private val resolve: (String) -> File = ::File,
+    /**
+     * What to do with the file behind a take retention has finished with: hand its stored path to
+     * something that will delete it *later*, once the deletion has been pushed. See [prune].
+     * Ignoring it, which is the default, keeps the file — which is the safe direction.
+     */
+    private val retire: (String, Long) -> Unit = { _, _ -> },
     private val clock: () -> Long = ::now,
 ) {
     fun observeAll(): Flow<List<Item>> = items.observeActive()
@@ -73,6 +77,14 @@ class ItemRepository(
      * to hear whether it is coming easier. The delete is soft and stamped, so it travels as a
      * deletion on the next sync and the other phone loses the file too.
      *
+     * **The file does not go here.** It is handed to [retire] and deleted only once the deletion has
+     * actually been pushed. Deleting it in this breath is what the first version did, and it broke
+     * the half that matters: a row travels as `media://<sha>` only while its file is still there to
+     * be hashed, so a deletion whose bytes had already gone went out carrying *this* phone's
+     * `recordings/<uuid>.wav` — a name the other phone had never heard of. It stored the row, looked
+     * for that file, found nothing, and kept its own copy for ever. See
+     * [gr.dimitris.app.core.audio.PendingRemovals].
+     *
      * A caregiver's model voice is never pruned. Hers is the thing being practised against, there is
      * one of it per word, and it is not hers to lose.
      */
@@ -83,9 +95,9 @@ class ItemRepository(
         val at = clock()
         for (row in old) {
             recordings.softDelete(row.id, at)
-            // The row is gone whatever happens to the file: a delete that fails — a file already
-            // removed, a path from a phone this backup came from — must not stop the next one.
-            runCatching { resolve(row.path).takeIf { it.isFile }?.delete() }
+            // The row is gone whatever happens to the file, and a file nobody can retire is a file
+            // that stays: neither is worth failing an attempt he has just finished.
+            runCatching { retire(row.path, at) }
         }
     }
 

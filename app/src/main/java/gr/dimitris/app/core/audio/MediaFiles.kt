@@ -12,6 +12,13 @@ class MediaFiles(context: Context) : MediaPaths {
     override val recordingsDir: File = File(filesDir, "recordings").apply { mkdirs() }
     val exportDir: File = File(context.cacheDir, "export").apply { mkdirs() }
 
+    /**
+     * Files retention has finished with but that must not go until their deletion has been pushed.
+     * See [gr.dimitris.app.core.audio.PendingRemovals] — the file is a few short lines, and it lives
+     * beside the media it is about.
+     */
+    val pendingRemovals = PendingRemovals(File(filesDir, "pending-removals.tsv"))
+
     fun newPhotoFile(): File = File(photosDir, "${UUID.randomUUID()}.jpg")
     fun newRecordingFile(): File = File(recordingsDir, "${UUID.randomUUID()}.m4a")
 

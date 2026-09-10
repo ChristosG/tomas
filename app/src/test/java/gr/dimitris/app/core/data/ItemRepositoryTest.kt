@@ -13,7 +13,9 @@ class ItemRepositoryTest {
     private val items = FakeItemDao()
     private val recordings = FakeRecordingDao()
     private var clock = 1_000L
-    private val repo = ItemRepository(items, recordings, { it.absolutePath }, ::File) { clock }
+    /** What retention hands over instead of deleting: see [ItemRepository.prune]. */
+    private val retired = mutableListOf<Pair<String, Long>>()
+    private val repo = ItemRepository(items, recordings, { it.absolutePath }, { path, at -> retired += path to at }) { clock }
 
     @Test fun `save trims text and derives first sound`() = runTest {
         val saved = repo.save(Item(text = "  Καφές ", category = Category.FOOD))
@@ -108,11 +110,25 @@ class ItemRepositoryTest {
         val fourth = take(item.id, "4.wav")
 
         assertEquals("the oldest is gone", true, recordings.rows[first.id]?.deleted)
-        assertEquals("and its file with it", false, File(takes, "1.wav").exists())
         for (kept in listOf(second, third, fourth)) {
             assertEquals("the newest three stay", false, recordings.rows[kept.id]?.deleted)
         }
-        assertEquals("three files on disk", 3, takes.listFiles()!!.size)
+    }
+
+    /**
+     * The file is **not** deleted here. It is handed over to be removed once the deletion has been
+     * pushed, because a row only travels as `media://<sha>` while its bytes are still there to be
+     * hashed — and a deletion the other phone cannot resolve leaves its copy behind for ever, which
+     * is the whole failure this exists to close. See `PendingRemovals`.
+     */
+    @Test fun `a pruned take keeps its file until the deletion has been pushed`() = runTest {
+        val item = repo.save(Item(text = "νερό"))
+        val first = take(item.id, "1.wav")
+        repeat(3) { take(item.id, "${it + 2}.wav") }
+
+        assertEquals("nothing was deleted from disk", 4, takes.listFiles()!!.size)
+        assertEquals("the pruned take is waiting to go", listOf(File(takes, "1.wav").absolutePath), retired.map { it.first })
+        assertEquals("stamped with the same moment the row was", clock, retired.single().second)
     }
 
     /**
@@ -152,6 +168,7 @@ class ItemRepositoryTest {
 
         assertEquals(4, recordings.allFor(item.id, Who.CAREGIVER, RecordingStyle.SPOKEN).size)
         assertEquals("nothing of hers was deleted", 4, takes.listFiles()!!.size)
+        assertEquals("and nothing of hers is waiting to be", emptyList<String>(), retired.map { it.first })
     }
 
     /** Three is the number, and it is said in one place. */

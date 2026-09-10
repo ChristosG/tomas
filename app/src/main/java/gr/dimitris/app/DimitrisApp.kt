@@ -29,6 +29,10 @@ class DimitrisApp : Application() {
             // was about to import anyway. Nothing waits for this — it is off the main thread, on the
             // graph's own scope, and a phone with no server address does not even open a socket.
             graph.sync.syncAtStart()
+            // And on a phone that has no server to push to, the takes retention finished with go on
+            // their own clock instead: there is no "after the push" to wait for, and a recordings
+            // folder that only ever grows is not something his father should have to think about.
+            graph.sync.retireUnsynced()
         }
     }
 }

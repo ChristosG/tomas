@@ -141,7 +141,8 @@ class AppGraph(context: Context) {
     )
 
     /** Always built from the current db, so it survives a backup import. */
-    val items: ItemRepository get() = ItemRepository(db.items(), db.recordings(), files::relativize, files::resolve)
+    val items: ItemRepository get() =
+        ItemRepository(db.items(), db.recordings(), files::relativize, files.pendingRemovals::add)
 
     /**
      * Always built from the current db, so it survives a backup import. The database is read once
@@ -189,6 +190,7 @@ class AppGraph(context: Context) {
             client = HttpSyncClient(baseUrl = { settings.syncUrl.first() }, token = { secrets.getSyncToken() }),
             store = DaoSyncStore { SyncDaos.of(db) },
             files = files,
+            pending = files.pendingRemovals,
             settings = settings,
             onPulled = { dbGeneration.update { it + 1 } },
             record = { where, e -> errors.record(where, e) },

@@ -1,6 +1,7 @@
 package gr.dimitris.app.core.sync
 
 import gr.dimitris.app.core.settings.DeviceRole
+import gr.dimitris.app.core.audio.PendingRemovals
 import gr.dimitris.app.core.settings.Settings
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -68,6 +69,11 @@ class SyncEngine(
     private val client: SyncClient,
     private val store: SyncStore,
     private val files: MediaPaths,
+    /**
+     * Files retention has finished with, kept until their deletion has actually gone up. Nothing by
+     * default, because a `SyncEngine` in a test has nothing to retire.
+     */
+    private val pending: PendingRemovals? = null,
     private val settings: Settings,
     /** Bumped after a pull that changed rows, so open screens re-read the database. */
     private val onPulled: () -> Unit = {},
@@ -189,7 +195,40 @@ class SyncEngine(
             for (skipped in left) blocked = minOf(blocked, skipped.at)
         }
 
-        settings.setSyncPushedUpTo(maxOf(from, minOf(accepted, blocked - 1, startedAt)))
+        val mark = maxOf(from, minOf(accepted, blocked - 1, startedAt))
+        settings.setSyncPushedUpTo(mark)
+        retire(mark, tally)
+    }
+
+    /**
+     * The files retention finished with, now that their deletions have gone up.
+     *
+     * [mark] is where this phone's push really got to: every row stamped at or before it is on the
+     * server, deletions included. A file recorded for removal at or before that point has therefore
+     * travelled as `media://<sha>` — which it could only do while it still existed, which is the
+     * whole reason it was kept — and the other phone can find its own copy by that hash and delete
+     * it. Nobody needs these bytes any more.
+     *
+     * Nothing here is his work and nothing here is urgent: a file that will not delete stays on the
+     * list and is tried again next time, and none of it is worth a Greek line.
+     */
+    private fun retire(mark: Long, tally: Tally) {
+        val waiting = pending ?: return
+        runCatching { tally.mediaGone += waiting.release(mark) { files.resolve(it) } }
+    }
+
+    /**
+     * The same, for a phone that has no server to push to.
+     *
+     * Sync is off until a caregiver types in an address, and on his father's phone that may be for
+     * good. There is no "after the push" to wait for, so a week is the wait instead — long past the
+     * point where a pruned take was of use to anyone, and the only thing standing between a phone
+     * with no server and a recordings folder that only ever grows.
+     */
+    suspend fun retireUnsynced() {
+        val waiting = pending ?: return
+        if (runCatching { configured() }.getOrDefault(false)) return
+        runCatching { waiting.release(clock() - PendingRemovals.UNSYNCED_MS) { files.resolve(it) } }
     }
 
     /**
@@ -322,6 +361,10 @@ class SyncEngine(
             // rows can point at the same photo, and one hash is one download.
             val fetched = mutableMapOf<String, File?>()
             for (row in winners.values) {
+                // A deletion needs no bytes. Downloading a file in order to delete it a moment later
+                // is a caregiver's data allowance spent on nothing; [sweep] finds the copy this phone
+                // already has by the same hash.
+                if (Rows.deleted(row)) continue
                 for ((sha, extension) in MediaRefs.needed(table, row)) {
                     if (!fetched.containsKey(sha)) fetched[sha] = fetch(sha, extension, tally)
                 }
@@ -333,7 +376,9 @@ class SyncEngine(
             val written = write(table, keep, tally)
             if (written.applied > 0) changed = true
             if (!written.ok) ok = false
-            if (written.applied > 0) sweep(table, keep, tally)
+            // Only rows the database really took, and only when the write itself was sound: a row
+            // that was set aside is not a deletion this phone has agreed to.
+            if (written.ok) sweep(table, keep.filter { spec.idOf(it) !in written.unreadable }, tally)
         }
         return Landed(changed, ok)
     }
@@ -366,12 +411,14 @@ class SyncEngine(
         for (row in rows) {
             if (!Rows.deleted(row)) continue
             for (field in fields.keys) {
-                val path = row[field] as? String ?: continue
-                if (path.startsWith(MediaRefs.SCHEME)) continue
                 try {
-                    val file = files.resolve(path)
+                    val file = localFile(row[field]) ?: continue
                     if (!file.isFile || !under(file, files.recordingsDir)) continue
-                    if (store.mediaStillUsed(table, path)) continue
+                    // Asked of every table's media columns, not only the one this row came from: the
+                    // question is "does anything still play this file", and a photograph column
+                    // holding a recordings path — a row pushed by hand, a bug on another phone — is
+                    // no reason to delete a take a live row still names.
+                    if (store.mediaStillUsed(files.relativize(file))) continue
                     if (file.delete()) tally.mediaGone++
                 } catch (ce: CancellationException) {
                     throw ce
@@ -382,6 +429,25 @@ class SyncEngine(
         }
     }
 
+    /**
+     * The file on *this* phone that a media value stands for, or null when there is none to speak of.
+     *
+     * A deletion arrives naming the file by its content — `media://<sha>` — because the phone that
+     * pruned it kept the bytes until the push had gone (see [PendingRemovals]), and its own
+     * `recordings/<uuid>.wav` would mean nothing here. This phone stores what it pulled under the
+     * hash, so the hash is exactly what finds it: `<sha>.wav` for one of his takes, `<sha>.m4a` for a
+     * caregiver's, and [MediaRefs.settle] decided which by reading the bytes when it landed.
+     *
+     * A plain path is resolved as any other row's is, which is what an older deletion — or one from a
+     * phone that never had the file — carries.
+     */
+    private fun localFile(value: Any?): File? {
+        val text = value as? String ?: return null
+        val sha = MediaRefs.shaOf(text)
+            ?: return runCatching { files.resolve(text) }.getOrNull()
+        return MediaRefs.existing(files.recordingsDir, sha, Tables.RECORDING_EXT)
+    }
+
     /** Inside a folder, canonically: a path that climbs out of it with `..` is not under it. */
     private fun under(file: File, dir: File): Boolean {
         val root = runCatching { dir.canonicalPath }.getOrNull() ?: dir.absolutePath
@@ -389,7 +455,7 @@ class SyncEngine(
         return path.startsWith(root + File.separator)
     }
 
-    private class Written(val applied: Int, val ok: Boolean)
+    private class Written(val applied: Int, val ok: Boolean, val unreadable: Set<String> = emptySet())
 
     /**
      * One table's share of a page, written.
@@ -411,7 +477,7 @@ class SyncEngine(
             unreadable.forEach { skipped(table, it, tally) }
             val applied = keep.size - unreadable.size
             tally.pulled += applied
-            return Written(applied, true)
+            return Written(applied, true, unreadable.toSet())
         } catch (ce: CancellationException) {
             throw ce
         } catch (e: Throwable) {
@@ -558,7 +624,12 @@ class SyncEngine(
         var mediaUp = 0
         var mediaDown = 0
 
-        /** Files removed here because the row that named them arrived deleted. See [sweep]. */
+        /**
+         * Files this run removed: the ones a pulled deletion named ([sweep]), and the ones this phone
+         * had been keeping until its own deletions went up ([retire]). Not shown to anyone — a
+         * caregiver has no decision to make about it — and read only by the tests that prove the two
+         * halves meet.
+         */
         var mediaGone = 0
         private val errors = LinkedHashSet<String>()
         private val written = HashSet<String>()
