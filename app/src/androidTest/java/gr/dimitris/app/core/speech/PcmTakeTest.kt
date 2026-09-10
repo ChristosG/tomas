@@ -8,9 +8,16 @@ import androidx.test.rule.GrantPermissionRule
 import gr.dimitris.app.DimitrisApp
 import gr.dimitris.app.core.audio.Recorded
 import gr.dimitris.app.core.audio.Wav
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withContext
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -197,6 +204,88 @@ class PcmTakeTest {
         assertEquals(null, take.newPipe())
     }
 
+    /**
+     * «Στοπ» reaches a recogniser that has stopped reading, and reaches it *now*.
+     *
+     * An engine fed from a descriptor may be waiting for end-of-stream before it says what it heard,
+     * and one that has stopped draining will never see anything the pipe thread is trying to write —
+     * so the end-of-stream is a flag, and a wedged writer is freed by closing the descriptor from
+     * under it. Without that, «Στοπ» would stand there while the session ran to its twenty-second
+     * bound: a button that does nothing, which is the one thing this app must never be.
+     *
+     * Proved from the reader's side, which is where a real engine sits: after «Στοπ», draining the
+     * read end reaches end-of-file. If the pipe had not been closed the drain would empty the buffer
+     * and then block for ever behind a writer that had more to give.
+     */
+    @Test fun closingThePipeReachesARecogniserThatStoppedReading() {
+        val file = newFile()
+        val take = PcmTake.start(file)
+        val pipe = take.newPipe()
+        assertNotNull("a pipe was made for the session", pipe)
+        // Long past the point where the pipe buffer and the queue behind it are both full, so the
+        // pipe thread is certainly inside a write that will never return on its own.
+        Thread.sleep(STALLED_MS)
+
+        take.closePipe()
+
+        val ended = java.util.concurrent.CountDownLatch(1)
+        val drained = Thread {
+            val input = java.io.FileInputStream(pipe!!.fileDescriptor)
+            val buffer = ByteArray(8 * 1024)
+            while (input.read(buffer) >= 0) Unit
+            ended.countDown()
+        }.apply { isDaemon = true; start() }
+        assertTrue(
+            "the recogniser never reached the end of his voice",
+            ended.await(EOF_BOUND_MS, java.util.concurrent.TimeUnit.MILLISECONDS),
+        )
+        drained.join(EOF_BOUND_MS)
+        runCatching { pipe?.close() }
+        take.stop()
+    }
+
+    /**
+     * A cancelled start must still hand back the take, or the microphone is orphaned for ever.
+     *
+     * This is the shape of the one thing that would be invisible on his phone: the reader thread
+     * loops on a flag only `stop()` clears, so a `PcmTake` nobody holds keeps an `AudioRecord` open
+     * on `VOICE_RECOGNITION` and writes a WAV at 32 kB/s for the life of the process — about
+     * 115 MB an hour, with the app looking idle. «Μίλα» followed inside a few tens of milliseconds
+     * by «Επόμενο» or a back press is all it would take, because all four of those cancel the
+     * listening job.
+     *
+     * `AndroidSpeechToText` starts the take under `NonCancellable` and holds the handle before its
+     * first suspension point, so the cancellation lands with something that can be closed. That
+     * wiring only runs on an engine this emulator does not have; what is proved here is the property
+     * underneath it — a take built inside a job that is cancelled is still closable, and once closed
+     * it stops recording and leaves nothing behind.
+     */
+    @Test fun aTakeBuiltInACancelledJobIsStillClosable() = runBlocking {
+        val file = newFile()
+        lateinit var take: PcmTake
+        val started = java.util.concurrent.CountDownLatch(1)
+        val job = launch(Dispatchers.IO) {
+            take = withContext(NonCancellable) { PcmTake.start(file) }
+            started.countDown()
+            try {
+                delay(60_000)
+            } finally {
+                withContext(NonCancellable) { take.cancel() }
+            }
+        }
+        assertTrue(started.await(TIMEOUT_MS, java.util.concurrent.TimeUnit.MILLISECONDS))
+        // Long enough for the file to have grown, so "stopped growing" below means something.
+        delay(TAKE_MS)
+        assertTrue("the microphone is open", take.isRecording)
+        job.cancelAndJoin()
+
+        assertFalse("the microphone was released", take.isRecording)
+        assertFalse("and the take of a word he left behind is gone", file.exists())
+        // Nothing is still writing: a file that is gone cannot come back.
+        delay(500)
+        assertFalse(file.exists())
+    }
+
     /** A take for a word he has left behind: closed and gone, not left open over the next screen. */
     @Test fun cancelClosesTheMicrophoneAndDeletesTheFile() {
         val file = newFile()
@@ -242,6 +331,12 @@ class PcmTakeTest {
         /** «Στοπ» is under his thumb: [PcmTake.stop] answers inside this whatever the engine is doing. */
         const val STOP_BOUND_MS = 200L
 
+        /** And the engine has to see the end of the stream inside this, wedged or not. */
+        const val EOF_BOUND_MS = 3_000L
+
+        /** For the cancellation case: long enough for a `PcmTake.start` and a first block. */
+        const val TIMEOUT_MS = 5_000L
+
         /**
          * The quietest a real voice at normal distance is expected to read on the 16-bit scale. The
          * silence line has to sit under it, or a word he really said is deleted.
@@ -249,9 +344,9 @@ class PcmTakeTest {
         const val QUIET_SPEECH_PEAK = 1_500
 
         /**
-         * The silent emulator's own noise floor, with room to spare. Raw PCM from a dead microphone
-         * reads close to zero — the old AAC recorder measured about 8 — and the line the app actually
-         * uses sits at [Recorded.SILENCE_PEAK], two orders of magnitude above this.
+         * The silent emulator's own noise floor, with room to spare: it measures 8, the same as the
+         * AAC recorder does. The line the app uses on *this* path is [Recorded.SILENCE_PEAK_PCM],
+         * which sits nearly two orders of magnitude above it.
          */
         const val QUIET_PEAK = 100
     }

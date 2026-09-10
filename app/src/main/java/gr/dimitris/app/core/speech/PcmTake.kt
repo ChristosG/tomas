@@ -6,6 +6,7 @@ import android.media.AudioRecord
 import android.media.MediaRecorder
 import android.os.ParcelFileDescriptor
 import android.os.SystemClock
+import android.util.Log
 import gr.dimitris.app.core.audio.Recorded
 import gr.dimitris.app.core.audio.Wav
 import java.io.File
@@ -94,8 +95,23 @@ class PcmTake private constructor(
      */
     private val queue = ArrayBlockingQueue<ByteArray>(QUEUE_BLOCKS)
 
-    /** Handed to the pipe thread to say "no more blocks are coming; drain and close". */
-    private val endOfStream = ByteArray(0)
+    /**
+     * "No more blocks are coming; drain what is queued and close."
+     *
+     * A flag and not a marker in the queue, because the queue drops its oldest entry when it is full
+     * — so a marker put in behind three seconds of audio nobody is reading would be thrown away as
+     * "the oldest block" and «Στοπ» would never reach the engine at all. That is the exact failure
+     * closing the pipe exists to prevent, and a flag cannot be dropped.
+     */
+    @Volatile private var endRequested = false
+
+    /**
+     * True while the pipe thread is inside a `write` that has not come back. A recogniser holding
+     * the read end and not draining it blocks that write for ever, and a thread inside a blocking
+     * write will never look at [endRequested] — so [closePipe] reads this to know it has to close
+     * the descriptor itself. Racy by nature and harmless either way: see [closePipe].
+     */
+    @Volatile private var writing = false
 
     /** Counted down by the pipe thread once it has closed the pipe. [stop] waits on it, briefly. */
     private val pipeClosed = CountDownLatch(1)
@@ -140,12 +156,18 @@ class PcmTake private constructor(
     fun closePipe() {
         // Behind whatever is still queued, not in front of it: the last thing he said is in those
         // blocks, and an engine given end-of-stream before them would decide on a truncated word.
-        // With a recogniser reading normally the queue is empty and this is immediate; with one that
-        // has stopped reading nothing could be immediate anyway. A full queue drops its oldest block
-        // to make room, which is the same trade the microphone thread makes.
-        while (!queue.offer(endOfStream)) {
-            if (queue.poll() == null) break
-        }
+        // With a recogniser reading normally the queue is empty and the pipe thread closes on its
+        // next turn round the loop, which is within [POLL_MS].
+        endRequested = true
+        // Unless it is wedged. A pipe thread inside a blocked write will never come round that loop,
+        // so the flag alone would leave «Στοπ» waiting on a recogniser that has stopped reading —
+        // which is the twenty-second dead button this whole method exists to prevent. Closing the
+        // descriptor here is what frees it: Android's `FileOutputStream.close` signals threads
+        // blocked on that descriptor, so the write throws and the pipe thread carries on to its own
+        // close. Reading [writing] is racy, and both ways round are harmless: a false positive
+        // closes a pipe that was about to finish one block, a false negative leaves the flag to do
+        // it a moment later.
+        if (writing) synchronized(pipeLock) { closePipeLocked() }
     }
 
     /**
@@ -158,22 +180,31 @@ class PcmTake private constructor(
      * never be able to make «Στοπ» a button that does nothing.
      *
      * Ordering, which matters: `AudioRecord.stop()` comes first so a pending `read` returns at once
-     * and the join below is instant; `release()` comes only after that thread is gone, because
-     * releasing a recorder another thread is inside is a native-level hazard. On the recogniser's
-     * side the ordering is [AndroidSpeechToText]'s: the session's `destroy()` closes the service's
-     * copy of the read end, and *that* — not anything here — is what frees a pipe write blocked
-     * against a service that walked away.
+     * and the join below is instant; `release()` waits for that thread to be *observed* gone,
+     * because releasing a recorder another thread is inside is a native-level hazard. The join is
+     * still bounded — a take that cannot be closed is a take he loses — so if the thread is somehow
+     * still alive when the bound runs out the recorder is released anyway and the fact is written
+     * down once, which is the honest order of those two risks. On the recogniser's side the ordering
+     * is [AndroidSpeechToText]'s: the session's `destroy()` closes the service's copy of the read
+     * end, and *that* — not anything here — is what frees a pipe write blocked against a service
+     * that walked away.
      */
     fun stop(): Recorded {
         running = false
         val duration = SystemClock.elapsedRealtime() - startedAt
         runCatching { recorder.stop() }
-        runCatching { microphone?.join(MICROPHONE_JOIN_MS) }
+        val reader = microphone
         microphone = null
+        runCatching { reader?.join(MICROPHONE_JOIN_MS) }
+        if (reader != null && reader.isAlive) {
+            // Once, and to the log rather than to anyone's screen: it is a diagnostic about a
+            // scheduler, and there is nothing a caregiver could do about it.
+            Log.w(TAG, "microphone thread outlived its ${MICROPHONE_JOIN_MS}ms join; releasing anyway")
+        }
         runCatching { recorder.release() }
         // What is queued is the tail of what he said: the recogniser gets a moment to take it, and
         // then the pipe closes whether it did or not.
-        queue.offer(endOfStream)
+        closePipe()
         runCatching { pipeClosed.await(PIPE_GRACE_MS, TimeUnit.MILLISECONDS) }
         synchronized(pipeLock) { closePipeLocked() }
         toPipe = null
@@ -226,8 +257,9 @@ class PcmTake private constructor(
             if (read == 0) continue
             keep(buffer, read)
         }
-        // Whatever ended the loop, the engine is owed an end-of-stream rather than a hang.
-        queue.offer(endOfStream)
+        // Whatever ended the loop, the engine is owed an end-of-stream rather than a hang. The flag,
+        // not a hard close: what is already queued is still his voice and should still reach it.
+        endRequested = true
     }
 
     private fun keep(buffer: ByteArray, read: Int) {
@@ -265,20 +297,29 @@ class PcmTake private constructor(
     private fun toPipe() {
         try {
             while (true) {
+                // Drain first, end second: the last blocks are the end of what he said, and an engine
+                // given end-of-stream in front of them would decide on a truncated word.
+                if (endRequested && queue.isEmpty()) break
                 val block = try {
                     queue.poll(POLL_MS, TimeUnit.MILLISECONDS)
                 } catch (e: InterruptedException) {
                     break
                 }
-                if (block === endOfStream) break
                 if (block == null) {
-                    if (running) continue else break
+                    if (endRequested || !running) break else continue
                 }
                 val stream = synchronized(pipeLock) { sink } ?: continue
+                writing = true
                 try {
                     stream.write(block)
                 } catch (e: IOException) {
-                    synchronized(pipeLock) { closePipeLocked() }
+                    // Only the pipe this write was for. By the time a write fails the session that
+                    // owned it has usually been destroyed and the *next* one may already have opened
+                    // its pipe — closing whatever is current would then feed the new session nothing
+                    // and it would come back having heard him say nothing at all.
+                    synchronized(pipeLock) { if (sink === stream) closePipeLocked() }
+                } finally {
+                    writing = false
                 }
             }
         } finally {
@@ -375,5 +416,7 @@ class PcmTake private constructor(
 
         /** Said when the microphone could not be opened at all. Not shown to him: the caller decides. */
         const val NO_MICROPHONE = "Δεν άνοιξε το μικρόφωνο"
+
+        private const val TAG = "PcmTake"
     }
 }
