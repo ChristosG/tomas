@@ -521,6 +521,14 @@ class Settings(private val store: DataStore<Preferences>) {
                 val extras = p[ENABLED_EXTRAS].orEmpty().toMutableSet()
                 if (on) extras.add(id.name) else extras.remove(id.name)
                 p[ENABLED_EXTRAS] = extras
+                // A module that *became* default-off may still be named in the disabled set, from a
+                // day when switching it off was the only way to say so. [enabledModules] reads that
+                // set first, so leaving the name there would make this switch dead: on, and still
+                // not on the grid. Turning it on clears it; see [grandfatherNewlyDefaultOff].
+                if (on) {
+                    val off = p[DISABLED_MODULES].orEmpty()
+                    if (id.name in off) p[DISABLED_MODULES] = off - id.name
+                }
             } else {
                 val off = p[DISABLED_MODULES].orEmpty().toMutableSet()
                 if (on) off.remove(id.name) else off.add(id.name)
@@ -529,9 +537,69 @@ class Settings(private val store: DataStore<Preferences>) {
         }
     }
 
+    /**
+     * A module that has just **become** [DEFAULT_OFF] is off for new installs and stays on for the
+     * phones that already had it. Written once per install, the first time this build runs.
+     *
+     * «Τραγούδα και πες το» joined [DEFAULT_OFF] in phase 12: it is for the long phrases that will
+     * not come out yet, and Dimitris — who told us the app was too easy — should not have to meet a
+     * singing exercise on the grid to find out he does not want it. But it has been on his phone
+     * since phase 4, and a build that quietly took a tile off his Today screen because the default
+     * moved would be the app deciding something for him that nobody asked it to decide. Hence
+     * [NEWLY_DEFAULT_OFF]: on an install that already exists, those modules are written into
+     * [ENABLED_EXTRAS] as though somebody had switched them on, which is exactly what having had
+     * them means.
+     *
+     * A caregiver who had already switched one *off* keeps it off, and her switch keeps working. Her
+     * "off" used to live in [DISABLED_MODULES], which [enabledModules] reads *first*; from today it
+     * lives in the absence from [ENABLED_EXTRAS], which says the same thing. So the module is not
+     * added to the extras — and its name is taken **out** of the disabled set, because a name left
+     * there would make the switch dead: on, and still not on the grid.
+     *
+     * **"Already exists" is "this store has anything in it at all"**, so this must run before
+     * anything else writes a preference: [gr.dimitris.app.DimitrisApp] calls it first, ahead of the
+     * seed importers. There is no other honest signal — every key that says "this app has been used"
+     * is written by something that also runs on a first launch.
+     */
+    suspend fun grandfatherNewlyDefaultOff() {
+        store.edit { p ->
+            if (p[DEFAULT_OFF_GENERATION] == MODULES_GENERATION) return@edit
+            // Nothing written yet: a phone that met this app a moment ago, which gets the defaults
+            // as they are today. Anything at all in the store is a phone that was here before.
+            if (p.asMap().isNotEmpty()) {
+                val names = NEWLY_DEFAULT_OFF.map { it.name }.toSet()
+                // The ones a caregiver had already switched off are not switched back on — but the
+                // name comes out of the disabled set, because from today that set is not where their
+                // "off" lives. Absence from [ENABLED_EXTRAS] is, and it says the same thing.
+                val off = p[DISABLED_MODULES].orEmpty()
+                val extras = p[ENABLED_EXTRAS].orEmpty() + (names - off)
+                p[ENABLED_EXTRAS] = extras
+                if (off.any { it in names }) p[DISABLED_MODULES] = off - names
+            }
+            p[DEFAULT_OFF_GENERATION] = MODULES_GENERATION
+        }
+    }
+
     companion object {
-        /** Off until asked for: the arcade is a reward, not part of the daily work. */
-        val DEFAULT_OFF = setOf(ModuleId.ARCADE)
+        /**
+         * Off until asked for: the arcade is a reward and not part of the daily work, and
+         * sing-then-say is the answer to a phrase that will not come out at all — «για μεγάλες
+         * φράσεις που δεν βγαίνουν ακόμα» (spec §13). A man who says most everyday words meets it
+         * only when somebody decides he needs it.
+         */
+        val DEFAULT_OFF = setOf(ModuleId.ARCADE, ModuleId.SINGSAY)
+
+        /**
+         * The ones that joined [DEFAULT_OFF] after phones were already using them: what
+         * [grandfatherNewlyDefaultOff] switches back on for an install that already existed. Paired
+         * with [MODULES_GENERATION] so that a later phase adding another one runs its own pass
+         * rather than this one's a second time — and so that a module listed here may safely be
+         * removed from the list once every phone in the family has had the pass.
+         */
+        val NEWLY_DEFAULT_OFF = setOf(ModuleId.SINGSAY)
+
+        /** Bumped whenever [NEWLY_DEFAULT_OFF] changes. 12 is the phase that first needed it. */
+        const val MODULES_GENERATION = 12
 
         const val HAND_LEFT = "LEFT"
         const val HAND_RIGHT = "RIGHT"
@@ -598,5 +666,8 @@ class Settings(private val store: DataStore<Preferences>) {
 
         /** The [DEFAULT_OFF] ones someone has switched on. Meaningless for every other module. */
         private val ENABLED_EXTRAS = stringSetPreferencesKey("enabled_extras")
+
+        /** Which [NEWLY_DEFAULT_OFF] pass this install has had. See [grandfatherNewlyDefaultOff]. */
+        private val DEFAULT_OFF_GENERATION = intPreferencesKey("default_off_generation")
     }
 }

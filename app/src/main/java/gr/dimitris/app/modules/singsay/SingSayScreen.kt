@@ -122,23 +122,15 @@ fun SingSayScreen(items: List<Item>, sessionId: String?, onDone: () -> Unit, onL
                 )
                 Spacer(Modifier.height(Sizes.gapSmall))
                 // «Άκου» is here rather than up with the syllables: it is the one control that must
-                // not be hunted for, and it belongs where his thumb already is. It shares the row
-                // with «Το έκανα» so the pad above keeps its full height — nothing shrinks for it.
+                // not be hunted for, and it belongs where his thumb already is.
+                //
+                // Three actions down here and never four, on every stage (spec §13, `docs/UX.md`).
+                // «Το έκανα» used to share this row with «Άκου» — the tap pad, «Άκου», «Το έκανα»
+                // and «Παράλειψη» were four things under one working thumb, and two of them were
+                // loud. It has moved up under the syllables it is about, which is the move
+                // «Βοήθεια» already made in `ScriptsScreen` and «Το έγραψα» in `SentencesScreen`.
                 val canListen = !s.playing && !s.isRecording
-                if (s.stage != SingStage.SPEAK) {
-                    Row {
-                        ListenButton(onClick = vm::listenModel, enabled = canListen, modifier = Modifier.weight(1f))
-                        Spacer(Modifier.width(Sizes.gapSmall))
-                        // Not while the microphone is open: a phrase finished mid-take ends with a
-                        // recording that spans stages, and the «Στοπ» that would have closed it is
-                        // a screen away.
-                        BigButton("Το έκανα", onClick = vm::didIt, tone = ButtonTone.Success, enabled = canListen, modifier = Modifier.weight(1f))
-                    }
-                } else {
-                    // The last stage says it with nothing left under it, and «Άκου» is still there:
-                    // that is the whole of spec §12 in one button.
-                    ListenButton(onClick = vm::listenModel, enabled = canListen)
-                }
+                ListenButton(onClick = vm::listenModel, enabled = canListen)
                 Spacer(Modifier.height(Sizes.gapSmall))
                 // Not while the phrase is still loading: a skip landing then would finish a phrase
                 // whose own sung model has not even been looked up yet.
@@ -186,6 +178,21 @@ fun SingSayScreen(items: List<Item>, sessionId: String?, onDone: () -> Unit, onL
                 }
             }
             Spacer(Modifier.height(Sizes.gap))
+            // «Το έκανα»: he has produced the phrase before the tapping ran out, and the stage he
+            // did it at is the score. It is his to take and never asked of him, so it lives here,
+            // under the syllables it is about, rather than as a fourth button in the bottom row —
+            // the same move «Βοήθεια» made in the dialogues. Not on the last stage: there the green
+            // button below *is* «Το είπα!», and two ways of saying the same thing is worse than one.
+            //
+            // Not while the microphone is open either: a phrase finished mid-take ends with a
+            // recording that spans stages, and the «Στοπ» that would have closed it is a screen away.
+            if (s.stage != SingStage.SPEAK) {
+                QuietButton(
+                    "Το έκανα", onClick = vm::didIt, icon = Icons.Rounded.CheckCircle,
+                    enabled = !s.playing && !s.isRecording && !s.listening,
+                )
+                Spacer(Modifier.height(Sizes.gapSmall))
+            }
             // Listening moved to the bottom row, where his thumb is and where it is on every screen
             // of every module: there is exactly one «Άκου» here now, and it plays his own take after
             // the phrase once he has made one — which is what «Σύγκριση» used to be.

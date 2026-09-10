@@ -4,6 +4,7 @@ import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
+import androidx.datastore.preferences.core.stringSetPreferencesKey
 import gr.dimitris.app.core.data.ModuleId
 import gr.dimitris.app.core.difficulty.Difficulty
 import gr.dimitris.app.modules.arcade.Adaptive
@@ -17,6 +18,8 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
 import kotlin.io.path.createTempDirectory
@@ -72,15 +75,72 @@ class SettingsTest {
     @Test fun `every module but the default-off ones is enabled to begin with`() = runBlocking {
         val s = newSettings()
         assertEquals(ModuleId.entries.toSet() - Settings.DEFAULT_OFF, s.enabledModules.first())
-        assertEquals(setOf(ModuleId.ARCADE), Settings.DEFAULT_OFF)
+        // Two since phase 12: the arcade is a reward, and sing-then-say is for the long phrases that
+        // will not come out yet — not something a man who says most everyday words meets by default.
+        assertEquals(setOf(ModuleId.ARCADE, ModuleId.SINGSAY), Settings.DEFAULT_OFF)
     }
 
     @Test fun `a default-off module stays on once someone asks for it`() = runBlocking {
         val s = newSettings()
         s.setModuleEnabled(ModuleId.ARCADE, true)
+        s.setModuleEnabled(ModuleId.SINGSAY, true)
         assertEquals(ModuleId.entries.toSet(), s.enabledModules.first())
         s.setModuleEnabled(ModuleId.ARCADE, false)
         assertEquals(ModuleId.entries.toSet() - ModuleId.ARCADE, s.enabledModules.first())
+    }
+
+    // ---- «Τραγούδα και πες το» became default-off with phones already using it -------------------
+
+    /** A phone installed today gets the defaults as they are today: no singing tile on the grid. */
+    @Test fun `a new install keeps the newly default-off modules off`() = runBlocking {
+        val s = newSettings()
+        s.grandfatherNewlyDefaultOff()
+        assertEquals(ModuleId.entries.toSet() - Settings.DEFAULT_OFF, s.enabledModules.first())
+    }
+
+    /**
+     * His own phone, which has had «Τραγούδα και πες το» since phase 4. A build that took a tile off
+     * his Today screen because a default moved would be the app deciding something nobody asked it
+     * to decide, so the module he already had is written on as though somebody had switched it on.
+     */
+    @Test fun `an existing install keeps the modules it already had`() = runBlocking {
+        val s = newSettings()
+        s.setSeedVersion(3)               // anything at all in the store: this phone was here before
+        s.grandfatherNewlyDefaultOff()
+        assertTrue(ModuleId.SINGSAY in s.enabledModules.first())
+        assertEquals(ModuleId.entries.toSet() - ModuleId.ARCADE, s.enabledModules.first())
+    }
+
+    /**
+     * A caregiver who had already switched it off keeps it off — and the switch still works
+     * afterwards. Before phase 12 "off" for this module meant its name in `disabled_modules`, which
+     * [gr.dimitris.app.core.settings.Settings.enabledModules] reads first; a migration that left the
+     * name there would have handed her a toggle she could turn on with nothing happening.
+     */
+    @Test fun `an existing install that had switched it off keeps it off, and can switch it on`() = runBlocking {
+        val dir = createTempDirectory("settings").toFile()
+        val store = PreferenceDataStoreFactory.create(
+            scope = CoroutineScope(Dispatchers.IO + SupervisorJob()),
+            produceFile = { File(dir, "settings.preferences_pb") },
+        )
+        store.edit { it[stringSetPreferencesKey("disabled_modules")] = setOf(ModuleId.SINGSAY.name) }
+        val s = Settings(store)
+
+        s.grandfatherNewlyDefaultOff()
+        assertFalse(ModuleId.SINGSAY in s.enabledModules.first())
+
+        s.setModuleEnabled(ModuleId.SINGSAY, true)
+        assertTrue(ModuleId.SINGSAY in s.enabledModules.first())
+    }
+
+    /** Once per install: a later switch-off is not undone by the next launch. */
+    @Test fun `the grandfathering runs once and never again`() = runBlocking {
+        val s = newSettings()
+        s.setSeedVersion(3)
+        s.grandfatherNewlyDefaultOff()
+        s.setModuleEnabled(ModuleId.SINGSAY, false)
+        s.grandfatherNewlyDefaultOff()
+        assertFalse(ModuleId.SINGSAY in s.enabledModules.first())
     }
 
     @Test fun `an ordinary module can be switched off and back on`() = runBlocking {

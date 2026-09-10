@@ -27,8 +27,10 @@ import gr.dimitris.app.core.speech.FakeSpeechToText
 import gr.dimitris.app.core.speech.OnDeviceSupport
 import gr.dimitris.app.core.speech.SpeechToText
 import gr.dimitris.app.ui.components.LISTEN_TAG
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.After
+import org.junit.Before
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -52,8 +54,22 @@ class SingSayFlowTest {
     private val fake = FakeSpeechToText()
     private var realStt: SpeechToText? = null
 
+    /**
+     * «Τραγούδα και πες το» is off until somebody asks for it (phase 12,
+     * [gr.dimitris.app.core.settings.Settings.DEFAULT_OFF]): it is the answer to a phrase that will
+     * not come out at all, and that is not where Dimitris is on most days any more. A test that
+     * opens it from the grid has to switch it on first, and puts it back afterwards.
+     */
+    @Before fun switchTheSingingOn() = runBlocking<Unit> {
+        wasEnabled = ModuleId.SINGSAY in graph.settings.enabledModules.first()
+        graph.settings.setModuleEnabled(ModuleId.SINGSAY, true)
+    }
+
+    private var wasEnabled = false
+
     /** The phrase and the fake recogniser were ours, not his: take them both back out. */
     @After fun putBackWhatWasBorrowed() = runBlocking<Unit> {
+        graph.settings.setModuleEnabled(ModuleId.SINGSAY, wasEnabled)
         phrase?.let { graph.items.delete(it.id) }
         realStt?.let { graph.stt = it }
         graph.settings.setSttEnabled(false)
@@ -176,6 +192,27 @@ class SingSayFlowTest {
         compose.onNodeWithText(SKIP).assertIsEnabled()
         compose.onNodeWithText(RECORD).assertDoesNotExist()
         compose.onNodeWithText(COMPARE).assertDoesNotExist()
+    }
+
+    /**
+     * The tapping stages' bottom area, counted: the pad, «Άκου», «Παράλειψη» and nothing else.
+     *
+     * «Το έκανα» used to share the row under the pad with «Άκου», which made four things under one
+     * working thumb and two of them loud — one more than spec §13 allows. It is still there and
+     * still his to take; it has moved up under the syllables it is about, the move «Βοήθεια» already
+     * made in the dialogues. The test asserts the position rather than the existence, because "it
+     * exists somewhere" is exactly what was true before and was still wrong.
+     */
+    @Test fun theTapStagesBottomAreaIsPadListenSkipAndNothingElse() {
+        openModule()
+        compose.waitUntil(TIMEOUT_MS) { enabled(TAP) }
+
+        compose.onNodeWithTag(LISTEN_TAG).assertIsEnabled()
+        compose.onNodeWithText(SKIP).assertIsEnabled()
+        // Above the pad, which is the top of the bottom block: it is in the content now.
+        val didIt = compose.onNodeWithText(DID_IT).fetchSemanticsNode().positionInRoot.y
+        val pad = compose.onNodeWithText(TAP).fetchSemanticsNode().positionInRoot.y
+        assertTrue("«$DID_IT» is at $didIt, the pad at $pad", didIt < pad)
     }
 
     /** Without the engine that keeps his take, the old take button stays where it was. */

@@ -97,23 +97,32 @@ class TraceFlowTest {
 
     /**
      * Level 5 is the recall exercise, and it is not begun until he has taken the letter away: until
-     * then «Έτοιμο» is dead, so the cheap route — trace what is on the screen and be marked as
-     * though it had not been — does not exist. Once he passes, the word comes back to compare.
+     * then there is no «Έτοιμο» at all, so the cheap route — trace what is on the screen and be
+     * marked as though it had not been — does not exist. Once he passes, the word comes back to
+     * compare.
      *
      * «Το είδα» takes the paper with the letter, so tracing it first and hiding it afterwards is not
      * a way through either: what is marked is only what he wrote once the word was gone.
+     *
+     * Since phase 12's UX audit the two share one slot rather than standing one above the other: the
+     * bottom area holds three actions on every level, and the primary is whichever of «Το είδα» and
+     * «Έτοιμο» is the actual next step. So "«Έτοιμο» is dead" is now "«Έτοιμο» is not there yet",
+     * which is the stronger statement of the same rule.
      */
     @Test fun levelFiveIsNotBegunUntilHeHasTakenTheLetterAway() {
         val word = openPractice(level = 5)
-        // Nothing drawn: «Έτοιμο» would be a nudge and a spent try, so it is not offered.
-        compose.onNodeWithText("Έτοιμο").assertIsNotEnabled()
+        // The letter is still on the paper, so the slot holds «Το είδα» and there is no «Έτοιμο» to
+        // press — not even a dead one, and never a fourth button in the row.
+        compose.onNodeWithText("Έτοιμο").assertDoesNotExist()
+        compose.onNodeWithText("Το είδα").assertIsEnabled()
         write(word)
-        compose.onNodeWithText("Έτοιμο").assertIsNotEnabled()
+        compose.onNodeWithText("Έτοιμο").assertDoesNotExist()
 
         compose.onNodeWithText("Το είδα").performClick()
         compose.waitUntil(TIMEOUT_MS) { compose.onAllNodesWithTag(TRACE_TEXT_HIDDEN_TAG).fetchSemanticsNodes().isNotEmpty() }
         // The word he traced while it was still on the screen went with it: there is nothing on the
-        // paper to hand in, so «Έτοιμο» is still dead.
+        // paper to hand in, so the «Έτοιμο» that has taken the slot is dead.
+        compose.onNodeWithText("Το είδα").assertDoesNotExist()
         compose.onNodeWithText("Έτοιμο").assertIsNotEnabled()
 
         // Now he writes it, with nothing to follow. This is the exercise.

@@ -8,6 +8,7 @@ A personal Android app for Dimitris: daily speech, number and writing practice a
 - [Handover notes](docs/HANDOVER.md) — what is built, what only a human can verify, the decisions made on Chris's behalf, known limitations.
 - [Sync server](server/README.md) — how to run the family's own sync server (English, with a Greek summary: «Περίληψη στα ελληνικά»).
 - [Adaptation data](docs/ADAPTATION.md) — what every exercise records that nothing adapts from yet, and the first rule to try with it.
+- [Screens and what is under his thumb](docs/UX.md) — every screen on both sides of the app, its bottom-area actions and its one primary, and the audit rule they are held to.
 
 ## Implementation plans (one per phase, each ending with its execution record)
 
@@ -25,6 +26,7 @@ A personal Android app for Dimitris: daily speech, number and writing practice a
 | 9 | [Progress, insights and the Claude advisor](docs/superpowers/plans/2026-09-05-phase9-progress.md) |
 | 10 | [Sync between the family's phones](docs/superpowers/plans/2026-09-05-phase10-sync.md) |
 | 11 | [Polish after the first field test](docs/superpowers/plans/2026-09-06-phase11-polish.md) |
+| 12 | [Harder, and about sentences](docs/superpowers/plans/2026-09-10-phase12-sentences-and-difficulty.md) |
 
 Feedback on the medical reasoning is as welcome as feedback on the code: the therapy assumptions are spelled out in the specification and in each plan's execution record, and they are guesses by a programmer until a clinician says otherwise.
 

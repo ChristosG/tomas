@@ -112,24 +112,27 @@ fun TraceScreen(count: Int, sessionId: String?, onDone: () -> Unit, onLeave: () 
             // Written: the only way on is «Επόμενο», and it is green because he got there himself.
             if (passed) BigButton("Επόμενο", onClick = vm::next, tone = ButtonTone.Success)
             else {
-                if (recall && s.templateVisible) {
-                    BigButton("Το είδα", onClick = vm::hide)
-                    Spacer(Modifier.height(Sizes.gapSmall))
-                }
+                // Three actions and one primary, on every level (spec §13, `docs/UX.md`). At level 5
+                // «Το είδα» used to stand *above* this row, which made four buttons and two loud
+                // ones — and the «Έτοιμο» beside it was dead anyway, because there is nothing to
+                // hand in until he has taken the letter away. So the two share one slot: the primary
+                // is whichever of them is the actual next step, and it changes only on his own tap.
+                val hiding = recall && s.templateVisible
                 Row {
                     // Dead until there is ink to wipe, so it cannot be the button he learns to press.
                     QuietButton("Καθάρισε", onClick = vm::clear, enabled = s.strokes.isNotEmpty(), modifier = Modifier.weight(1f))
                     Spacer(Modifier.width(Sizes.gapSmall))
-                    // Dead until there is something to judge, and at level 5 until he has taken the
-                    // letter away: an «Έτοιμο» pressed over an empty canvas would nudge him, spend
-                    // his first try, and hand back the word he was about to write from memory.
-                    BigButton(
-                        "Έτοιμο", onClick = vm::check, tone = ButtonTone.Success,
-                        // The ink of the try he is on, not everything on the paper: after a nudge
-                        // the faded strokes are there to look at, not to hand in again.
-                        enabled = s.fresh.isNotEmpty() && !(recall && s.templateVisible),
-                        modifier = Modifier.weight(1f),
-                    )
+                    if (hiding) {
+                        BigButton("Το είδα", onClick = vm::hide, modifier = Modifier.weight(1f))
+                    } else {
+                        BigButton(
+                            "Έτοιμο", onClick = vm::check, tone = ButtonTone.Success,
+                            // The ink of the try he is on, not everything on the paper: after a nudge
+                            // the faded strokes are there to look at, not to hand in again.
+                            enabled = s.fresh.isNotEmpty(),
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
                 }
                 Spacer(Modifier.height(Sizes.gapSmall))
                 QuietButton("Παράλειψη", onClick = vm::skip)

@@ -206,8 +206,9 @@ class AppGraph(context: Context) {
         get() = ItemSpeaker(voice::speak, recordingFor = { items.modelRecording(it) }, play = { voice.play(it) }, rate = { settings.speechRate.first() }, resolve = { files.resolve(it) })
 
     /**
-     * Therapy modules in Today-screen order. Empty in phase 0; each later phase adds one. The
-     * arcade is last and, unlike the rest, is off until a caregiver switches it on — see
+     * Therapy modules in Today-screen order. Empty in phase 0; each later phase adds one. Two of
+     * them — the arcade and, since phase 12, sing-then-say — are off until a caregiver switches them
+     * on, so the grid is normally five tiles: see
      * [gr.dimitris.app.core.settings.Settings.DEFAULT_OFF].
      */
     val modules: List<Module> =

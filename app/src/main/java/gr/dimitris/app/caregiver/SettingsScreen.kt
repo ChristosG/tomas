@@ -263,11 +263,18 @@ fun SettingsScreen(onBack: () -> Unit) {
                     Text(m.titleGreek, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
                     Switch(checked = moduleOn, onCheckedChange = { on -> scope.launch { graph.settings.setModuleEnabled(m.id, on) } })
                 }
-                // The one module that is off until someone says so. The hand it exercises is the one
-                // the stroke took, and how hard to push it is not an app's decision.
-                if (m.id == ModuleId.ARCADE) {
+                // The two modules that are off until someone says so ([Settings.DEFAULT_OFF]). The
+                // hand the arcade exercises is the one the stroke took, and how hard to push it is
+                // not an app's decision; sing-then-say is for a phrase that will not come out at
+                // all, which is not where he is on most days any more (spec §13).
+                val note = when (m.id) {
+                    ModuleId.ARCADE -> "Ενεργοποίησέ το αφού μιλήσεις με τον φυσιοθεραπευτή."
+                    ModuleId.SINGSAY -> "Για μεγάλες φράσεις που δεν βγαίνουν ακόμα."
+                    else -> null
+                }
+                if (note != null) {
                     Text(
-                        "Ενεργοποίησέ το αφού μιλήσεις με τον φυσιοθεραπευτή.",
+                        note,
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )

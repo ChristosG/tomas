@@ -23,6 +23,12 @@ class DimitrisApp : Application() {
         // One coroutine, in order: the dialogues are imported after the vocabulary, never beside it,
         // so two importers are never writing items at the same moment on a first run.
         graph.scope.launch {
+            // **First, before anything writes a preference.** A module that has just become
+            // default-off stays on for a phone that already had it, and the only honest way to tell
+            // an install that already existed from one made a minute ago is that its settings store
+            // is not empty yet. See [Settings.grandfatherNewlyDefaultOff].
+            runCatching { graph.settings.grandfatherNewlyDefaultOff() }
+                .onFailure { graph.errors.record("modules grandfather", it) }
             SeedImporter(graph).importIfNeeded()
             ScriptSeedImporter(graph).importIfNeeded()
             // Where his five dots start, on a phone that was already being practised with before

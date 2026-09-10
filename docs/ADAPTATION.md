@@ -55,9 +55,19 @@ the JSON so that a query about timing does not have to join two shapes of data.
 
 ### Διάλογοι — dialogues (`module = 'SCRIPTS'`, `itemId` = the line)
 
-Same keys as the word coach, plus `scriptId` and `position` (which dialogue, and which turn of it).
+Same keys as the word coach, plus `scriptId` and `position` (which dialogue, and which turn of it),
+and three since phase 12:
+
+| Key | What it is |
+|---|---|
+| `tier` | how hard this dialogue says it is, 1–5 — what the five dots select on (`ScriptLine.tier`) |
+| `intent` | what a good answer to this turn has to convey, as the caregiver or the seed wrote it |
+| `judge` | what the turn judge decided about his answer — see [The judge's verdict](#the-judges-verdict-judge) |
 
 - Same two rules as above — the ladder and the recognition wait — because it is the same ladder.
+- **Which intents he can already do.** An `intent` accepted first time across several dialogues is
+  one he has; the dialogues worth writing next are the ones whose intents he never lands. That is a
+  caregiver's writing job, and `intent` is what tells her which to write.
 - **Which turns to re-record or re-word.** A `position` whose `hintMsFirst` is always short across
   several dialogues is a line that is too long or too unlike how he speaks, not a line he needs more
   practice at. That is a caregiver's edit, not a knob.
@@ -89,7 +99,7 @@ Same keys as the word coach, plus `scriptId` and `position` (which dialogue, and
 
 | Key | What it is |
 |---|---|
-| `type` | which exercise: `compare`, `line`, `count`, `word`, `coin`, `price`, `pay` |
+| `type` | which exercise: `compare`, `line`, `count`, `word`, `coin`, `price`, `pay`, and since phase 12 `add`, `sub`, `mul`, `div`, `missing`, `change`, `clock`, `day`, `problem` |
 | `exercise` | the question itself, whole, as it was generated |
 | `answer` | the right option |
 | `given` | the option he tapped; absent when he passed on it |
@@ -119,6 +129,12 @@ Same keys as the word coach, plus `scriptId` and `position` (which dialogue, and
 | `retries` | wrong orders before the row was written |
 | `undo` | how many cards he took back off the strip |
 | `level`, `ms` | the level, and how long the sentence took |
+| `variant` | since phase 12: how this board asked — `BUILD` (cards), `GAP` (one small word missing), `TYPED` (he wrote the whole sentence). Absent on rows written before it, which are all `BUILD` |
+| `judge` | on a `TYPED` board only: what the judge made of the sentence he wrote — see [The judge's verdict](#the-judges-verdict-judge) |
+
+On a `GAP` board `chosen` is the one small word he picked; on a `TYPED` board it is the single
+sentence he wrote. Same column, same question — "what did he put down?" — and `variant` says which of
+the three to read it as.
 
 **Knobs, and the first rules to try:**
 
@@ -194,8 +210,84 @@ Same keys as the word coach, plus `scriptId` and `position` (which dialogue, and
 Nothing here is marked and nothing ever will be: a tap on the board is him speaking, and the app is
 a voice, not an examiner. Rows without `strip` are still written as `{}`, exactly as before.
 
+One row on this board *is* graded, and it is not a tap: **«Ολόκληρη»**, the expansion
+(`itemId = 'talkboard:expand'`, `cueLevel = 3`, at most one per expansion).
+
+| Key | What it is |
+|---|---|
+| `kind` | always `expand`, so the row can be told from a tap without parsing the id |
+| `words` | the words he had put on the strip |
+| `expanded` | the whole sentence the judge gave back |
+| `judge` | see [The judge's verdict](#the-judges-verdict-judge) |
+| `stripLen`, `sttOn`, `sttHeard`, `sttMatched`, `sttTries`, `ms` | as everywhere else |
+
+**Knobs, and the first rules to try:**
+
 - **The strip's length** (`SentenceStrip`'s cap). Raise it when `stripLen` reaches the cap on more
   than a fifth of the sentences he says: he is running out of room in sentences he wants to make.
+- **When «Ολόκληρη» is offered.** It appears at two words. `stripLen` on the expansion rows says how
+  many he actually had when he tapped it: if that is nearly always four or more, two is too eager a
+  threshold and the button is in his way well before it is useful to him.
+- **Whether the expansions are worth repeating.** An expansion row's `outcome` is `CORRECT` when he
+  said the sentence back and the phone agreed, `ASSISTED` when he confirmed it himself, `SKIPPED`
+  when he closed it. A month of `SKIPPED` is a feature he is being shown and does not want; a month
+  of `CORRECT` is the therapy working, and the talk board is where to add more of it.
+
+### The judge's verdict (`judge`)
+
+Three modules write it — «Διάλογοι», «Προτάσεις» and the talk board's «Ολόκληρη» — and all three
+write **the same shape**, built in one place (`Verdict.detail`) rather than in three view models that
+would drift:
+
+```json
+"judge": {"source": "JUDGE", "accept": true, "ms": 1840, "expanded": "Πρέπει να πάρω τα φάρμακα."}
+```
+
+| Key | What it is |
+|---|---|
+| `source` | `JUDGE` when Claude decided it, `LOCAL` when the phone did — the toggle off, no key, or a call that failed |
+| `accept` | whether the answer counted |
+| `ms` | how long the verdict took to arrive, measured by the caller around its own call |
+| `expanded` | the whole grammatical sentence handed back for him to repeat. **Absent** when there was none |
+
+It is the only nested object any module writes, and the only one any new module may
+(`Adapt.Detail.put(String, Map)`); everything else in a detail is a plain number, boolean or short
+word. `expanded` is capped at 200 characters like every other string, because an attempt row leaves
+the phone twice — it syncs to the father's server, and it goes to Claude inside the journey report.
+
+**Knobs, and the first rules to try:**
+
+- **Whether the judge is worth its latency.** `ms` with `source: "JUDGE"` is the whole cost of the
+  feature. A median above about three seconds is a green button greyed for three seconds on every
+  turn, and at that point the local fallback is the better experience even with a working key.
+- **Whether it is actually running.** A month of `source: "LOCAL"` on a phone whose caregiver
+  believes «Έλεγχος με Claude» is on is an expired key nobody was told about. The journey report now
+  says so per module («χωρίς Claude N»); an insight rule could say it on the dashboard too.
+- **Where the difficulty should go.** Accept rate per module, over `source: "JUDGE"` rows only, is
+  the cleanest four-in-five signal the app has — the cue ladder's is muddied by «Άκου» on purpose.
+  Above 90% for a fortnight is a dot that should go up.
+
+### The five dots (`difficulty`)
+
+**The dots are not on the attempt row**, and this is the one entry in this file that documents an
+absence. They live in DataStore, one key per module — `difficulty_NUMBERS` and its seven siblings,
+plus `difficulty_floor_*` / `difficulty_ceiling_*` for the caregiver's bounds — because a dot is a
+*setting in force*, not a fact about one exercise, and it does not change between two rows of the
+same sitting.
+
+What is on the row is `level`, which the three levelled modules already wrote (phase 11) and which
+moves *with* the dot: a dot picks a band of levels and the level is held inside it, so
+`Difficulty.numbersDot(level)` and its two siblings read a row's dot back exactly. «Διάλογοι» and
+«Δεξί χέρι» carry the thing the dot selects on instead — `tier` and `sizeDp` — which is the same
+information one step closer to the exercise. «Λέξεις» and «Τραγούδα» carry neither: what the dot
+selects there is a property of the *item* (its `kind`, its syllable count), so a row's dot is
+recoverable only by looking the item up, and for a word a caregiver has since deleted, not at all.
+
+The current dot per module is in the journey report's «Ανά άσκηση» section as `δυσκολία n/5`, so the
+advisor can be asked which one to move next. If a later phase wants the dot *on the row* — to ask
+"was this sitting run at 3 or at 4?" without joining against a preference that has since moved — one
+`put("difficulty", …)` in each module's detail builder is the whole change, and this file is where to
+say so.
 
 ### The sitting itself (`itemId = 'session:summary'`)
 
