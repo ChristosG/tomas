@@ -2,6 +2,7 @@ package gr.dimitris.app.core.settings
 
 import android.content.Context
 import androidx.datastore.core.DataStore
+import androidx.datastore.preferences.core.MutablePreferences
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
@@ -12,6 +13,7 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import gr.dimitris.app.core.data.ModuleId
+import gr.dimitris.app.core.difficulty.Difficulty
 import gr.dimitris.app.modules.arcade.Adaptive
 import gr.dimitris.app.modules.arcade.ArcadeGame
 import gr.dimitris.app.modules.singsay.Key
@@ -129,6 +131,121 @@ class Settings(private val store: DataStore<Preferences>) {
 
     suspend fun setArcadeTargetDp(game: ArcadeGame, dp: Float) {
         store.edit { it[arcadeKey(game)] = Adaptive.clamp(dp) }
+    }
+
+    /**
+     * How hard one module is, 1..5, as **he** set it on that module's first screen (spec §13).
+     *
+     * [Difficulty.DEFAULT] until he touches it, and always inside the caregiver's bounds — read as
+     * well as written, because a floor raised while he was in a module must not leave the dots saying
+     * one thing and the exercises doing another.
+     *
+     * One key per module ([difficultyKey]), like [arcadeTargetDp], because the six modules ask him
+     * for six different things: a man who can build a four-word sentence may still be on single
+     * letters in «Γράψε», and one shared number would drag each module to the level of whichever he
+     * last adjusted.
+     */
+    fun difficulty(module: ModuleId): Flow<Int> = store.data.map { p -> readDifficulty(p, module) }
+
+    /**
+     * One tap on a dot. Clamped to the caregiver's bounds — a refused tap changes nothing, and the
+     * row says why — and then the module's own level **jumps to the bottom of the new band**: a man
+     * who has just asked for harder work meets the easiest of the harder work first.
+     *
+     * All of it in one [edit], so the difficulty and the level it implies can never be read apart.
+     */
+    suspend fun setDifficulty(module: ModuleId, n: Int) {
+        store.edit { p ->
+            val before = readDifficulty(p, module)
+            val (floor, ceiling) = bounds(p, module)
+            val wanted = Difficulty.clamp(n, floor, ceiling)
+            p[difficultyKey(module)] = wanted
+            // Tapping the dot he is already on changes nothing — not even the level. He re-reads the
+            // row more than once; a re-read must not cost him the level he has climbed to inside it.
+            if (wanted != before) jumpToBandFloor(p, module, wanted)
+        }
+    }
+
+    /**
+     * The bounds the caregiver puts around the dots: he may set anything from [difficultyFloor] to
+     * [difficultyCeiling], and the dots outside them are dimmed and refuse the tap.
+     *
+     * Wide open by default — 1 to 5 — because the point of the dots is that nobody has to ask
+     * permission to try something harder. The bounds exist for the cases where that is not true: a
+     * physiotherapist who does not want the arcade's targets under a certain size yet, a speech
+     * therapist who wants this month's work to stay on two-word sentences.
+     */
+    fun difficultyFloor(module: ModuleId): Flow<Int> = store.data.map { p -> bounds(p, module).first }
+
+    fun difficultyCeiling(module: ModuleId): Flow<Int> = store.data.map { p -> bounds(p, module).second }
+
+    /**
+     * Moves the lower bound, never above the upper one, and brings the stored value up with it if it
+     * was below: a bound that is set and then silently disagrees with the dots he is looking at is
+     * the one thing worse than no bound at all.
+     */
+    suspend fun setDifficultyFloor(module: ModuleId, n: Int) {
+        store.edit { p ->
+            val before = readDifficulty(p, module)
+            val (_, ceiling) = bounds(p, module)
+            p[floorKey(module)] = Difficulty.clamp(n).coerceAtMost(ceiling)
+            reclamp(p, module, before)
+        }
+    }
+
+    /** Moves the upper bound, never below the lower one, and brings the stored value down with it. */
+    suspend fun setDifficultyCeiling(module: ModuleId, n: Int) {
+        store.edit { p ->
+            val before = readDifficulty(p, module)
+            val (floor, _) = bounds(p, module)
+            p[ceilingKey(module)] = Difficulty.clamp(n).coerceAtLeast(floor)
+            reclamp(p, module, before)
+        }
+    }
+
+    /** The pair, held to 1..5 and to each other, whatever is actually in the store. */
+    private fun bounds(p: Preferences, module: ModuleId): Pair<Int, Int> {
+        val floor = Difficulty.clamp(p[floorKey(module)] ?: Difficulty.MIN)
+        val ceiling = Difficulty.clamp(p[ceilingKey(module)] ?: Difficulty.MAX).coerceAtLeast(floor)
+        return floor to ceiling
+    }
+
+    private fun readDifficulty(p: Preferences, module: ModuleId): Int {
+        val (floor, ceiling) = bounds(p, module)
+        return Difficulty.clamp(p[difficultyKey(module)] ?: Difficulty.DEFAULT, floor, ceiling)
+    }
+
+    /**
+     * A bound has moved. Where that moves the effective difficulty too, the module's level follows it
+     * into the new band — the same jump a tap on a dot makes, because from his side of the screen the
+     * dots have moved either way.
+     *
+     * [before] is the effective value read *before* the bound was written, which is the only honest
+     * comparison: a module he has never set reads as [Difficulty.DEFAULT], and a bound that leaves
+     * that default where it was must not write a level he never asked to be moved to.
+     */
+    private fun reclamp(p: MutablePreferences, module: ModuleId, before: Int) {
+        val after = readDifficulty(p, module)
+        if (before == after) return
+        p[difficultyKey(module)] = after
+        jumpToBandFloor(p, module, after)
+    }
+
+    /**
+     * The module's own level, set to the easiest level of the band the dots now ask for. The three
+     * modules that keep a level keep it here; «Δεξί χέρι» keeps four target sizes instead, one per
+     * game, and they all go back to the band's biggest — its easiest — together. «Λέξεις»,
+     * «Τραγούδα και πες το» and «Διάλογοι» have no level to move: their difficulty is which items
+     * the plan admits, and the next plan admits them.
+     */
+    private fun jumpToBandFloor(p: MutablePreferences, module: ModuleId, difficulty: Int) {
+        when (module) {
+            ModuleId.NUMBERS -> p[NUMBERS_LEVEL] = Difficulty.numbers(difficulty).first
+            ModuleId.SENTENCES -> p[SENTENCES_LEVEL] = Difficulty.sentences(difficulty).first
+            ModuleId.TRACE -> p[TRACE_LEVEL] = Difficulty.trace(difficulty).first
+            ModuleId.ARCADE -> ArcadeGame.entries.forEach { p[arcadeKey(it)] = Difficulty.arcadeStart(difficulty) }
+            else -> Unit
+        }
     }
 
     /**
@@ -280,6 +397,15 @@ class Settings(private val store: DataStore<Preferences>) {
 
         /** One target size per game: `arcade_target_dp_tap` and its three siblings. */
         private fun arcadeKey(game: ArcadeGame) = floatPreferencesKey("arcade_target_dp_${game.id}")
+
+        /**
+         * One difficulty per module — `difficulty_NUMBERS` and its siblings — and one pair of bounds
+         * around it. Keyed by the enum *name* rather than by its ordinal, so reordering [ModuleId]
+         * can never hand «Γράψε» the setting a caregiver chose for «Δεξί χέρι».
+         */
+        private fun difficultyKey(module: ModuleId) = intPreferencesKey("difficulty_${module.name}")
+        private fun floorKey(module: ModuleId) = intPreferencesKey("difficulty_floor_${module.name}")
+        private fun ceilingKey(module: ModuleId) = intPreferencesKey("difficulty_ceiling_${module.name}")
 
         /**
          * The one size the arcade had before each game kept its own. Read as the starting point for

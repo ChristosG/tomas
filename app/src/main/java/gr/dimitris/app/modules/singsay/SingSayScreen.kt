@@ -47,6 +47,8 @@ import gr.dimitris.app.ui.components.ListeningIndicator
 import gr.dimitris.app.ui.components.QuietButton
 import gr.dimitris.app.ui.components.SuccessMark
 import gr.dimitris.app.ui.theme.Sizes
+import gr.dimitris.app.core.data.ModuleId
+import gr.dimitris.app.ui.components.ModuleDifficultyRow
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -144,6 +146,9 @@ fun SingSayScreen(items: List<Item>, sessionId: String?, onDone: () -> Unit, onL
             }
         },
     ) {
+        // The five dots, on the first screen of the module and nowhere else (spec §13): how hard
+        // this is, is his to set — and the middle of a mixed session is no place to be asked.
+        if (sessionId == null && s.index == 0) ModuleDifficultyRow(ModuleId.SINGSAY)
         // Five stages, a row of syllables and up to three buttons do not always fit a small screen
         // at his text size: scrolling is better than a button he cannot reach.
         Column(Modifier.verticalScroll(rememberScrollState())) {

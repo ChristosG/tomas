@@ -34,6 +34,8 @@ import gr.dimitris.app.ui.components.DimitrisScreen
 import gr.dimitris.app.ui.components.QuietButton
 import gr.dimitris.app.ui.components.SuccessMark
 import gr.dimitris.app.ui.theme.Sizes
+import gr.dimitris.app.core.data.ModuleId
+import gr.dimitris.app.ui.components.ModuleDifficultyRow
 
 /** The paper. Tagged so a test can measure it and drag along the letter it is showing. */
 const val TRACE_CANVAS_TAG = "trace-canvas"
@@ -134,6 +136,9 @@ fun TraceScreen(count: Int, sessionId: String?, onDone: () -> Unit, onLeave: () 
             }
         },
     ) {
+        // The five dots, on the first screen of the module and nowhere else (spec §13): how hard
+        // this is, is his to set — and the middle of a mixed session is no place to be asked.
+        if (sessionId == null && s.index == 0) ModuleDifficultyRow(ModuleId.TRACE, onChanged = vm::reload)
         if (s.text.isEmpty()) { Text("Ετοιμάζω...", style = MaterialTheme.typography.headlineMedium); return@DimitrisScreen }
 
         // Everything but the title, measured before a word of it is laid out, so the one thing that

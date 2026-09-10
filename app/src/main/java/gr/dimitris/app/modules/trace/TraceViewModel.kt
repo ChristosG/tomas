@@ -10,6 +10,7 @@ import gr.dimitris.app.core.data.ItemKind
 import gr.dimitris.app.core.data.ModuleId
 import gr.dimitris.app.core.data.Outcome
 import gr.dimitris.app.core.data.now
+import gr.dimitris.app.core.difficulty.Difficulty
 import gr.dimitris.app.core.scheduler.LevelProgression
 import gr.dimitris.app.core.settings.Settings
 import kotlinx.coroutines.Dispatchers
@@ -81,6 +82,11 @@ data class TraceTarget(val text: String, val itemId: String? = null)
 
 data class TraceState(
     val level: Int = TraceViewModel.MIN_LEVEL,
+    /**
+     * The 1..5 he set on the first screen, which in «Γράψε» *is* the level: the five levels were
+     * already five difficulties. See [gr.dimitris.app.core.difficulty.Difficulty.trace].
+     */
+    val difficulty: Int = Difficulty.DEFAULT,
     val hand: String = Settings.HAND_LEFT,
     val index: Int = 0,
     val total: Int = TraceModule.TARGETS_PER_SESSION,
@@ -188,10 +194,21 @@ class TraceViewModel(
 
     init { load() }
 
+    /** He moved the dots. «Γράψε» starts again on what the new level asks him to write. */
+    fun reload() {
+        if (ending || finishing || judging) return
+        loadJob?.cancel()
+        judgeJob?.cancel()
+        graph.voice.quiet()
+        load()
+    }
+
     private fun load() {
         loadJob = viewModelScope.launch {
             val level = runCatching { graph.settings.traceLevel.first() }
                 .getOrElse { graph.errors.record("trace level read", it); MIN_LEVEL }
+            val difficulty = runCatching { graph.settings.difficulty(ModuleId.TRACE).first() }
+                .getOrElse { graph.errors.record("trace difficulty read", it); Difficulty.DEFAULT }
             val hand = runCatching { graph.settings.traceHand.first() }
                 .getOrElse { graph.errors.record("trace hand read", it); Settings.HAND_LEFT }
             val strictness = runCatching { graph.settings.traceStrictness.first() }
@@ -204,8 +221,9 @@ class TraceViewModel(
             // Not before the settings read: their wait is not his writing time.
             startedAt = now()
             val first = targets.first()
+            results.clear()
             _state.value = TraceState(
-                level = level, hand = hand, strictness = strictness,
+                level = level, difficulty = difficulty, hand = hand, strictness = strictness,
                 total = targets.size, text = first.text, itemId = first.itemId,
             )
             // The canvas is usually laid out before this read comes back, so the template it asked
@@ -431,7 +449,11 @@ class TraceViewModel(
         viewModelScope.launch {
             write?.join()
             val level = _state.value.level
-            val newLevel = LevelProgression.next(level, results, MIN_LEVEL, MAX_LEVEL)
+            // Inside the band the dots ask for, which in «Γράψε» is the one level they name: from
+            // phase 12 on, what he writes is his own choice and a good morning no longer moves him
+            // off it. See [gr.dimitris.app.core.difficulty.Difficulty.trace].
+            val band = Difficulty.trace(_state.value.difficulty)
+            val newLevel = LevelProgression.next(level, results, band.first, band.last)
             // A settings write that fails must not strand him on a screen that never says "done".
             val moved = newLevel != level && runCatching { graph.settings.setTraceLevel(newLevel) }
                 .onFailure { graph.errors.record("trace level write", it) }.isSuccess

@@ -149,4 +149,53 @@ class ScriptsModuleTest {
         assertEquals(0, passed.streak)
         assertEquals(now, passed.lastSeenAt)
     }
+
+    // ---- the difficulty he sets himself (spec §13) --------------------------------------------
+
+    /** A dialogue with [turns] of his own and one of the other person's before each. */
+    private suspend fun longDialogue(title: String, turns: Int): String {
+        val script = Script(title = title)
+        scripts.upsertScript(script)
+        scripts.upsertLines(
+            (0 until turns).flatMap { i ->
+                listOf(
+                    ScriptLine(scriptId = script.id, position = i * 2, speaker = Speaker.OTHER, itemId = "${script.id}-${i * 2}"),
+                    ScriptLine(scriptId = script.id, position = i * 2 + 1, speaker = Speaker.DIMITRIS, itemId = "${script.id}-${i * 2 + 1}"),
+                )
+            },
+        )
+        return script.id
+    }
+
+    /**
+     * Until Task 6 gives `scripts` a `tier` column, the only thing a dialogue carries that is honestly
+     * about effort is how many times he has to speak. A crude mapping, and a real one: a two-turn
+     * exchange at the bakery and a ten-turn phone call are not the same afternoon.
+     */
+    @Test fun `the difficulty he set decides how many turns the dialogue asks of him`() = runTest {
+        val short = longDialogue("Σύντομος", turns = 2)
+        val long = longDialogue("Μεγάλος", turns = 10)
+        assertEquals(listOf(short), ScriptsModule.practisable(scripts, difficulty = 1))
+        assertEquals(listOf(long), ScriptsModule.practisable(scripts, difficulty = 5))
+        assertEquals(short, ScriptsModule.choose(scripts, schedules, now, difficulty = 1))
+        assertEquals(long, ScriptsModule.choose(scripts, schedules, now, difficulty = 5))
+    }
+
+    /**
+     * A conversation *is* this module, so a band no dialogue falls in widens back to all of them:
+     * "nothing for you today" for having asked for harder work is not an answer. Every dialogue the
+     * app ships gives him four turns, which is why this is the common case and not the edge one.
+     */
+    @Test fun `a band no dialogue falls in widens back to all of them`() = runTest {
+        val only = longDialogue("Τέσσερις σειρές", turns = 4)
+        assertEquals(listOf(only), ScriptsModule.practisable(scripts, difficulty = 5))
+        assertEquals(listOf(only), ScriptsModule.practisable(scripts, difficulty = 1))
+        assertEquals(only, ScriptsModule.choose(scripts, schedules, now, difficulty = 5))
+    }
+
+    /** A dialogue of nothing but the other person's lines stays out, whatever the dots say. */
+    @Test fun `the difficulty never admits a dialogue with no turn of his`() = runTest {
+        dialogue("Μόνο ο άλλος", forHim = false)
+        (1..5).forEach { d -> assertTrue(ScriptsModule.practisable(scripts, difficulty = d).isEmpty()) }
+    }
 }

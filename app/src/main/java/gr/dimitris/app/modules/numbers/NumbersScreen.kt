@@ -24,6 +24,8 @@ import gr.dimitris.app.ui.components.LISTEN
 import gr.dimitris.app.ui.components.QuietButton
 import gr.dimitris.app.ui.components.SuccessMark
 import gr.dimitris.app.ui.theme.Sizes
+import gr.dimitris.app.core.data.ModuleId
+import gr.dimitris.app.ui.components.ModuleDifficultyRow
 
 /** [count] exercises, one per item the session budgeted for this module. */
 @Composable
@@ -73,6 +75,11 @@ fun NumbersScreen(count: Int, sessionId: String?, onDone: () -> Unit, onLeave: (
             else QuietButton("Παράλειψη", onClick = vm::skip)
         },
     ) {
+        // The five dots, on the first screen of the module and nowhere else (spec §13): how hard
+        // this is, is his to set — and the middle of a mixed session is no place to be asked.
+        // Rebuilt on the spot: «Αριθμοί» generates its exercises from the level, and the level has
+        // just moved to the bottom of the new band.
+        if (sessionId == null && s.index == 0) ModuleDifficultyRow(ModuleId.NUMBERS, onChanged = vm::reload)
         if (e == null) { Text("Ετοιμάζω...", style = MaterialTheme.typography.headlineMedium); return@DimitrisScreen }
         Column(Modifier.verticalScroll(rememberScrollState())) {
             Text(e.prompt, style = MaterialTheme.typography.headlineMedium)

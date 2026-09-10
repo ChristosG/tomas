@@ -39,6 +39,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import gr.dimitris.app.LocalAppGraph
 import gr.dimitris.app.core.data.ModuleId
+import gr.dimitris.app.core.difficulty.Difficulty
 import gr.dimitris.app.core.secrets.SecretStore
 import gr.dimitris.app.core.settings.DeviceRole
 import gr.dimitris.app.core.settings.Settings
@@ -274,6 +275,9 @@ fun SettingsScreen(onBack: () -> Unit) {
             }
             Spacer(Modifier.height(Sizes.gapSmall))
 
+            DifficultyBoundsSection()
+            Spacer(Modifier.height(Sizes.gapSmall))
+
             // Which hand «Γράψε» tells him to use. It is the one thing on the writing screen he
             // cannot work out for himself, and the wrong answer sends a hemiplegic hand at the glass.
             Text("Χέρι για γράψιμο", style = MaterialTheme.typography.bodyLarge)
@@ -399,6 +403,68 @@ fun SettingsScreen(onBack: () -> Unit) {
                 style = MaterialTheme.typography.bodyMedium,
             )
         }
+    }
+}
+
+/**
+ * «Όρια δυσκολίας»: the fence the caregivers put around the five dots he sets himself (spec §13).
+ *
+ * Wide open by default — 1 to 5 for every module — because the dots exist so that nobody has to be
+ * asked. The fence is for the cases where that is not true, and there are real ones: the arcade
+ * exercises the hand the stroke took, and how small its targets may get is a physiotherapist's call
+ * rather than his on a good morning; a speech therapist working through two-word sentences this month
+ * does not want that month skipped.
+ *
+ * A bound that would cross the other one is impossible rather than refused — the buttons go dead at
+ * the meeting point — and moving a bound past where he has set himself brings his own setting with
+ * it, so the dots he is looking at and the exercises he gets can never disagree.
+ */
+@Composable
+private fun DifficultyBoundsSection() {
+    val graph = LocalAppGraph.current
+    Text("Όρια δυσκολίας", style = MaterialTheme.typography.titleLarge)
+    Text(
+        "Ο Δημήτρης ρυθμίζει μόνος του τη δυσκολία στην πρώτη οθόνη κάθε άσκησης. Εδώ μπαίνουν τα όρια.",
+        style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+    graph.modules.forEach { m -> BoundsRow(m.id, m.titleGreek) }
+}
+
+/** One module's pair of bounds, under its Greek name: a row of numbers alone names nothing. */
+@Composable
+private fun BoundsRow(module: ModuleId, titleGreek: String) {
+    val graph = LocalAppGraph.current
+    val scope = rememberCoroutineScope()
+    val floor by graph.settings.difficultyFloor(module).collectAsStateWithLifecycle(initialValue = Difficulty.MIN)
+    val ceiling by graph.settings.difficultyCeiling(module).collectAsStateWithLifecycle(initialValue = Difficulty.MAX)
+    Spacer(Modifier.height(Sizes.gapSmall))
+    Text(titleGreek, style = MaterialTheme.typography.bodyLarge)
+    Stepper("Κάτω όριο", floor, canDown = floor > Difficulty.MIN, canUp = floor < ceiling) { n ->
+        scope.launch { graph.settings.setDifficultyFloor(module, n) }
+    }
+    Stepper("Πάνω όριο", ceiling, canDown = ceiling > floor, canUp = ceiling < Difficulty.MAX) { n ->
+        scope.launch { graph.settings.setDifficultyCeiling(module, n) }
+    }
+}
+
+/**
+ * One bound, as a word, a number and two 72 dp buttons. A stepper and not a slider: a caregiver
+ * setting a limit on somebody else's practice should have to mean each step of it, and five values
+ * do not need a drag.
+ */
+@Composable
+private fun Stepper(label: String, value: Int, canDown: Boolean, canUp: Boolean, onPick: (Int) -> Unit) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.fillMaxWidth().heightIn(min = Sizes.touchMin),
+    ) {
+        Text(label, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+        QuietButton("−", onClick = { onPick(value - 1) }, enabled = canDown, iconOnly = true, modifier = Modifier.width(Sizes.touchMin))
+        Text(
+            value.toString(), style = MaterialTheme.typography.titleLarge, textAlign = TextAlign.Center,
+            modifier = Modifier.width(Sizes.touchMin),
+        )
+        QuietButton("+", onClick = { onPick(value + 1) }, enabled = canUp, iconOnly = true, modifier = Modifier.width(Sizes.touchMin))
     }
 }
 

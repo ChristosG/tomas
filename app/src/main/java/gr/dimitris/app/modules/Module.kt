@@ -43,6 +43,23 @@ interface Module {
     /** Items for free practice from the Today grid. Defaults to the session plan; modules may fall back to random items. */
     suspend fun practiceFor(graph: AppGraph): List<Item> = planFor(graph)
 
+    /**
+     * The same plan, at the 1..5 difficulty he set on this module's first screen (spec §13). The
+     * default ignores it, which is the honest answer for a module whose difficulty is not a matter of
+     * *which items* it asks for: «Αριθμοί», «Προτάσεις», «Γράψε» and «Δεξί χέρι» all generate their
+     * own content from a level or a target size, so the dots reach them through
+     * [gr.dimitris.app.core.settings.Settings] and their plan stays a list of placeholders.
+     *
+     * Both callers — [gr.dimitris.app.today.SessionViewModel] and
+     * [gr.dimitris.app.today.PracticeViewModel] — read [gr.dimitris.app.core.settings.Settings.difficulty]
+     * and pass it here, so a module never has to read the setting itself to know what it was asked
+     * for. See [gr.dimitris.app.core.difficulty.Difficulty] for what each number means per module.
+     */
+    suspend fun planFor(graph: AppGraph, difficulty: Int): List<Item> = planFor(graph)
+
+    /** Free practice at [difficulty]. Defaults to the difficulty-blind [practiceFor]. */
+    suspend fun practiceFor(graph: AppGraph, difficulty: Int): List<Item> = practiceFor(graph)
+
     /** The exercise over [items] (never empty). Calls [onDone] when all are finished, [onLeave] on back. */
     @Composable
     fun Screen(items: List<Item>, sessionId: String?, onDone: () -> Unit, onLeave: () -> Unit)

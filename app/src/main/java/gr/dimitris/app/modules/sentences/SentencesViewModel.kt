@@ -10,6 +10,7 @@ import gr.dimitris.app.core.data.ItemKind
 import gr.dimitris.app.core.data.ModuleId
 import gr.dimitris.app.core.data.Outcome
 import gr.dimitris.app.core.data.now
+import gr.dimitris.app.core.difficulty.Difficulty
 import gr.dimitris.app.core.scheduler.LevelProgression
 import gr.dimitris.app.modules.wordcoach.CueLadder
 import kotlinx.coroutines.Job
@@ -52,6 +53,8 @@ internal fun sentencesDetail(
 
 data class SentencesState(
     val level: Int = SentenceTemplates.MIN_LEVEL,
+    /** The 1..5 he set on the first screen. It bounds which levels the progression may reach. */
+    val difficulty: Int = Difficulty.DEFAULT,
     val index: Int = 0,
     val total: Int = SentenceTemplates.SENTENCES_PER_SESSION,
     /** Null while the vocabulary loads, and after that the sentence he is building. */
@@ -139,18 +142,30 @@ class SentencesViewModel(
 
     init { load() }
 
+    /** He moved the dots. The sitting is rebuilt at the level the new band starts from. */
+    fun reload() {
+        if (ending || finishing) return
+        loadJob?.cancel()
+        graph.voice.quiet()
+        load()
+    }
+
     private fun load() {
         loadJob = viewModelScope.launch {
             val level = runCatching { graph.settings.sentencesLevel.first() }
                 .getOrElse { graph.errors.record("sentences level read", it); SentenceTemplates.MIN_LEVEL }
+            val difficulty = runCatching { graph.settings.difficulty(ModuleId.SENTENCES).first() }
+                .getOrElse { graph.errors.record("sentences difficulty read", it); Difficulty.DEFAULT }
             val pool = runCatching { graph.db.items().activeOfKinds(listOf(ItemKind.WORD)) }
                 .getOrElse { graph.errors.record("sentences pool", it); emptyList() }
+            results.clear()
             sentences = plan(level, pool)
             // Not before the settings read and the vocabulary query: their wait is not his thinking time.
             startedAt = now()
             val first = sentences.firstOrNull()
             _state.value = SentencesState(
                 level = level,
+                difficulty = difficulty,
                 // What was really built, not what was asked for: the title counts sentences he will
                 // actually be shown, and the session's own count comes from the rows he leaves.
                 total = sentences.size,
@@ -339,7 +354,10 @@ class SentencesViewModel(
             // a vocabulary too thin for level 3, a perfect sitting of level-1 sentences is evidence
             // about level 1. Promoting him off it would pin him at a level nothing can build.
             val played = sentences.minOfOrNull { it.level } ?: level
-            val newLevel = LevelProgression.next(played, results, SentenceTemplates.MIN_LEVEL, SentenceTemplates.MAX_LEVEL)
+            // Inside the band the dots ask for (spec §13): the sitting still decides *when* he moves,
+            // the dots decide how far it may take him.
+            val band = Difficulty.sentences(_state.value.difficulty)
+            val newLevel = LevelProgression.next(played, results, band.first, band.last)
             // A settings write that fails must not strand him on a screen that never says "done".
             val moved = newLevel != level && runCatching { graph.settings.setSentencesLevel(newLevel) }
                 .onFailure { graph.errors.record("sentences level write", it) }.isSuccess

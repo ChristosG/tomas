@@ -10,6 +10,7 @@ import gr.dimitris.app.core.data.ModuleId
 import gr.dimitris.app.core.data.Outcome
 import gr.dimitris.app.core.data.Session
 import gr.dimitris.app.core.data.now
+import gr.dimitris.app.core.difficulty.Difficulty
 import gr.dimitris.app.core.scheduler.ModuleRotation
 import gr.dimitris.app.modules.Module
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -122,8 +123,16 @@ class SessionViewModel(private val graph: AppGraph) : ViewModel() {
             val enabled = graph.settings.enabledModules.first()
             // Switched everything off is a settings mistake, not a finished day: say which it is.
             val allOff = graph.modules.none { it.id in enabled }
+            // Each module at the difficulty he set for it (spec §13). Read here and handed down,
+            // rather than read inside each module, so the sitting and the free practice of the same
+            // module can never disagree about what he asked for — and so a module stays testable
+            // without a DataStore.
             val wanted = graph.modules.filter { it.id in enabled }
-                .mapNotNull { m -> runCatching { m.planFor(graph) }.getOrElse { graph.errors.record("plan ${m.id}", it); emptyList() }.takeIf { it.isNotEmpty() }?.let { m to it } }
+                .mapNotNull { m ->
+                    val difficulty = runCatching { graph.settings.difficulty(m.id).first() }
+                        .getOrElse { graph.errors.record("difficulty ${m.id}", it); Difficulty.DEFAULT }
+                    runCatching { m.planFor(graph, difficulty) }.getOrElse { graph.errors.record("plan ${m.id}", it); emptyList() }.takeIf { it.isNotEmpty() }?.let { m to it }
+                }
             if (wanted.isEmpty()) {
                 _state.value = SessionStep.Empty(allOff)
                 say(if (allOff) ALL_MODULES_OFF else NOTHING_TODAY)

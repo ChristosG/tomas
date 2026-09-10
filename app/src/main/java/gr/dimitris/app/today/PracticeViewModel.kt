@@ -10,6 +10,7 @@ import gr.dimitris.app.modules.scripts.ScriptsModule
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 
 /**
@@ -40,26 +41,46 @@ class PracticeViewModel(
     private val _items = MutableStateFlow<List<Item>?>(null)
     val items: StateFlow<List<Item>?> = _items.asStateFlow()
 
+    /**
+     * The plan, and then the plan again every time he moves the dots (spec §13).
+     *
+     * Watching the flow rather than reading it once is what makes the difficulty row answer him. He
+     * taps a harder dot on the first screen of «Λέξεις»; the setting changes; a new plan arrives here;
+     * the items change, so the module screen's ViewModel key changes with them and the exercise he is
+     * looking at is rebuilt at the difficulty he just asked for. Without it the dots would be a
+     * promise about tomorrow, and a man who cannot read the release notes would tap them again.
+     *
+     * A *named* item or dialogue is exempt: «Δοκίμασέ το» is about that one word, and re-planning it
+     * out from under the caregiver who tapped it would answer a question nobody asked.
+     */
     init {
         viewModelScope.launch {
-            _items.value = module?.let { m ->
-                runCatching { plan(m) }.getOrElse { graph.errors.record("practice ${m.id}", it); emptyList() }
-            } ?: emptyList()
+            val m = module
+            if (m == null) { _items.value = emptyList(); return@launch }
+            if (itemId != null || scriptId != null) {
+                _items.value = runCatching { named() }.getOrElse { graph.errors.record("practice ${m.id}", it); emptyList() }
+                return@launch
+            }
+            graph.settings.difficulty(m.id).distinctUntilChanged().collect { difficulty ->
+                _items.value = runCatching { m.practiceFor(graph, difficulty) }
+                    .getOrElse { graph.errors.record("practice ${m.id}", it); emptyList() }
+            }
         }
     }
 
     /**
-     * What this sitting runs. Named on the route, or the module's own free-practice plan.
+     * The one thing the route named, when it named one.
      *
      * Chris added a word in caregiver mode and had no way to see it in use — "I would have to use
      * the app for hours until it randomly appears". A named item is therefore never a hint to the
      * module's chooser: it is the whole list, so the word she just wrote is the word that opens.
      * A word or a dialogue that has been deleted between the tap and here comes back empty, and the
-     * screen already knows how to say so.
+     * screen already knows how to say so. The difficulty has no say over it either — «Δοκίμασέ το»
+     * is about that word whatever the dots are set to.
      */
-    private suspend fun plan(m: Module): List<Item> = when {
+    private suspend fun named(): List<Item> = when {
         itemId != null -> listOfNotNull(graph.items.get(itemId))
         scriptId != null -> ScriptsModule.turnsOf(graph, scriptId)
-        else -> m.practiceFor(graph)
+        else -> emptyList()
     }
 }

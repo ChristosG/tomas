@@ -48,6 +48,8 @@ import gr.dimitris.app.ui.components.QuietButton
 import gr.dimitris.app.ui.components.SuccessMark
 import gr.dimitris.app.ui.theme.Sizes
 import java.io.File
+import gr.dimitris.app.core.data.ModuleId
+import gr.dimitris.app.ui.components.ModuleDifficultyRow
 
 /** Every card on the sentence board carries it, so a test can read what is on offer and tap it. */
 const val SENTENCE_TILE_TAG = "sentence-tile"
@@ -125,6 +127,9 @@ fun SentencesScreen(count: Int, sessionId: String?, onDone: () -> Unit, onLeave:
             }
         },
     ) {
+        // The five dots, on the first screen of the module and nowhere else (spec §13): how hard
+        // this is, is his to set — and the middle of a mixed session is no place to be asked.
+        if (sessionId == null && s.index == 0) ModuleDifficultyRow(ModuleId.SENTENCES, onChanged = vm::reload)
         val sentence = s.sentence
         if (sentence == null) { Text("Ετοιμάζω...", style = MaterialTheme.typography.headlineMedium); return@DimitrisScreen }
 

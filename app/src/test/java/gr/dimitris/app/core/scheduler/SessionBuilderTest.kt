@@ -7,6 +7,7 @@ import gr.dimitris.app.core.data.Item
 import gr.dimitris.app.core.data.ItemKind
 import gr.dimitris.app.core.data.ModuleId
 import gr.dimitris.app.core.data.Schedule
+import gr.dimitris.app.core.difficulty.Difficulty
 import gr.dimitris.app.core.data.Source
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
@@ -343,6 +344,34 @@ class SessionBuilderTest {
         val box = mapOf(a.id to 5, b.id to 4, c.id to 3, d.id to 2, e.id to 0)
         val out = builder.sandwich(listOf(e, d, c, b, a)) { box.getValue(it.id) }
         assertEquals(listOf("a", "c", "e", "d", "b"), out.map { it.text })
+    }
+
+    /**
+     * The difficulty he set reaches a plan as a narrower pool and nothing else: what is due is still
+     * what is due, in the order the sandwich puts it in. This is the whole of spec §13 as far as the
+     * scheduler is concerned — the dots never overrule the Leitner boxes, they only decide which words
+     * the boxes are allowed to offer.
+     */
+    @Test fun `a difficulty filter narrows the pool and changes nothing else`() = runTest {
+        val short = word("νερό"); val long = word("ψυγείο")
+        listOf(short, long).forEach { w ->
+            schedules.upsert(Schedule(w.id, m, box = 1, nextDueAt = noon - 1, createdAt = noon - 10 * LeitnerPolicy.DAY_MS))
+        }
+        val narrowed = SessionBuilder(items, schedules, { noon }, newPerDay = 3, maxItems = 5, filter = { it.text.length <= 4 })
+        assertEquals(listOf(short.id), narrowed.plan(m, listOf(ItemKind.WORD)).map { it.id })
+        // And with no filter, both of them, so the narrowing is the filter's doing and not the cap's.
+        assertEquals(setOf(short.id, long.id), builder.plan(m, listOf(ItemKind.WORD)).map { it.id }.toSet())
+    }
+
+    /**
+     * The word coach's own mapping, end to end: its tier is a list of [ItemKind], so dot 1 asks for a
+     * plan of single words and dot 2 for the words-and-phrases plan it always had.
+     */
+    @Test fun `the word coach's tier one leaves the phrases out`() = runTest {
+        val w = word("νερό")
+        val phrase = Item(text = "θέλω νερό", kind = ItemKind.PHRASE, source = Source.SEED, createdAt = 2).also { items.upsert(it) }
+        assertEquals(listOf(w.id), builder.plan(m, Difficulty.wordCoachKinds(1)).map { it.id })
+        assertEquals(setOf(w.id, phrase.id), builder.plan(m, Difficulty.wordCoachKinds(2)).map { it.id }.toSet())
     }
 
     @Test fun `startOfDay is midnight local time`() {

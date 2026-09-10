@@ -11,6 +11,7 @@ import gr.dimitris.app.core.data.ScheduleDao
 import gr.dimitris.app.core.data.ScriptDao
 import gr.dimitris.app.core.data.Speaker
 import gr.dimitris.app.core.data.now
+import gr.dimitris.app.core.difficulty.Difficulty
 import gr.dimitris.app.modules.Module
 
 /**
@@ -36,12 +37,16 @@ object ScriptsModule : Module {
     override val atomic = true
 
     /** The dialogue that is due, else the one he has gone longest without. */
-    override suspend fun planFor(graph: AppGraph): List<Item> =
-        choose(graph.db.scripts(), graph.db.schedules(), now())?.let { turnsOf(graph, it) } ?: emptyList()
+    override suspend fun planFor(graph: AppGraph): List<Item> = planFor(graph, Difficulty.DEFAULT)
 
     /** Free practice is his own choice of sitting: any dialogue, not the one the boxes picked. */
-    override suspend fun practiceFor(graph: AppGraph): List<Item> =
-        practisable(graph.db.scripts()).randomOrNull()?.let { turnsOf(graph, it) } ?: emptyList()
+    override suspend fun practiceFor(graph: AppGraph): List<Item> = practiceFor(graph, Difficulty.DEFAULT)
+
+    override suspend fun planFor(graph: AppGraph, difficulty: Int): List<Item> =
+        choose(graph.db.scripts(), graph.db.schedules(), now(), difficulty)?.let { turnsOf(graph, it) } ?: emptyList()
+
+    override suspend fun practiceFor(graph: AppGraph, difficulty: Int): List<Item> =
+        practisable(graph.db.scripts(), difficulty).randomOrNull()?.let { turnsOf(graph, it) } ?: emptyList()
 
     /**
      * Today's dialogue, or null when there is none worth opening.
@@ -55,8 +60,8 @@ object ScriptsModule : Module {
      *
      * The DAOs rather than the graph, so a test can watch the choice over fakes.
      */
-    internal suspend fun choose(scripts: ScriptDao, schedules: ScheduleDao, now: Long): String? {
-        val ready = practisable(scripts)
+    internal suspend fun choose(scripts: ScriptDao, schedules: ScheduleDao, now: Long, difficulty: Int = Difficulty.DEFAULT): String? {
+        val ready = practisable(scripts, difficulty)
         if (ready.isEmpty()) return null
         val readySet = ready.toSet()
         val overdue = schedules.due(id, now).filter { it.itemId in readySet }.minByOrNull { it.lastSeenAt ?: NEVER }
@@ -70,11 +75,24 @@ object ScriptsModule : Module {
      *
      * Reads the lines rather than the whole [gr.dimitris.app.core.data.ScriptRepository.load], so
      * planning a session costs one query per script instead of one per line.
+     *
+     * [difficulty] narrows that to the dialogues that ask him to speak as often as he said he wanted
+     * to ([Difficulty.turns]) — a stand-in until Task 6 gives `scripts` a real `tier` column, and a
+     * crude one: the six dialogues the app ships all give him four turns, so they all sit in band 2
+     * and the dots change nothing until a caregiver writes a longer or a shorter conversation. A band
+     * no dialogue falls in widens back to all of them, because a conversation *is* this module:
+     * "nothing for you today" for having asked for harder work is not an answer.
      */
-    internal suspend fun practisable(scripts: ScriptDao): List<String> =
-        scripts.activeScripts()
-            .filter { script -> scripts.linesFor(script.id).any { it.speaker == Speaker.DIMITRIS } }
-            .map { it.id }
+    internal suspend fun practisable(scripts: ScriptDao, difficulty: Int = Difficulty.DEFAULT): List<String> {
+        val turns = scripts.activeScripts().associate { script ->
+            script.id to scripts.linesFor(script.id).count { it.speaker == Speaker.DIMITRIS }
+        }
+        val ready = turns.filterValues { it > 0 }
+        val band = Difficulty.turns(difficulty)
+        val wanted = ready.filterValues { it in band }
+        // The map keeps `activeScripts()`'s order — soonest-due ties are broken by it downstream.
+        return (if (wanted.isEmpty()) ready else wanted).keys.toList()
+    }
 
     /** A dialogue nobody has ever opened has no schedule row at all, and goes first. */
     private suspend fun leastRecentlyPractised(schedules: ScheduleDao, ids: List<String>): String {

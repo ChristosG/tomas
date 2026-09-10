@@ -8,6 +8,7 @@ import gr.dimitris.app.core.data.Attempt
 import gr.dimitris.app.core.data.ModuleId
 import gr.dimitris.app.core.data.Outcome
 import gr.dimitris.app.core.data.now
+import gr.dimitris.app.core.difficulty.Difficulty
 import gr.dimitris.app.core.greek.Euro
 import gr.dimitris.app.core.greek.GreekNumbers
 import kotlinx.coroutines.Job
@@ -43,6 +44,8 @@ internal fun numbersDetail(e: NumberExercise, given: Int?, retries: Int, ms: Lon
 
 data class NumbersState(
     val level: Int = 1,
+    /** The 1..5 he set on the first screen. It bounds which levels the progression may reach. */
+    val difficulty: Int = Difficulty.DEFAULT,
     val index: Int = 0,
     val total: Int = NumbersModule.EXERCISES_PER_SESSION,
     val exercise: NumberExercise? = null,
@@ -80,6 +83,9 @@ class NumbersViewModel(
      */
     private var lastWrite: Job? = null
 
+    /** The settings read and the exercise build. Cancelled by [reload], which starts another. */
+    private var loadJob: Job? = null
+
     /** Set the moment the session starts winding down, so two taps cannot end it twice. */
     private var ending = false
 
@@ -89,19 +95,40 @@ class NumbersViewModel(
      */
     private var finishing = false
 
-    init {
-        viewModelScope.launch {
+    init { load() }
+
+    /**
+     * One sitting of exercises, at the level he is on.
+     *
+     * Re-entered by [reload] when he moves the dots on the first screen: the difficulty he has just
+     * asked for has already moved the stored level to the bottom of its band, so the sitting is built
+     * again from there. Nothing is lost by that — the row is only on the screen before the first
+     * answer — and it is the whole reason the dots feel like a control rather than a preference.
+     */
+    private fun load() {
+        loadJob = viewModelScope.launch {
             val level = runCatching { graph.settings.numbersLevel.first() }
                 .getOrElse { graph.errors.record("numbers level read", it); NumberProgression.MIN_LEVEL }
+            val difficulty = runCatching { graph.settings.difficulty(ModuleId.NUMBERS).first() }
+                .getOrElse { graph.errors.record("numbers difficulty read", it); Difficulty.DEFAULT }
             val prices = runCatching { graph.db.items().withPrices().map { Price(it.text, it.priceCents!!) } }
                 .getOrElse { graph.errors.record("numbers prices", it); emptyList() }
             // Through the same rule the module used, so the list is never empty whatever it was handed.
             exercises = ExerciseGenerator().session(level, prices, exercisesFor(count))
+            results.clear()
             // Not before the settings read and the price query: their wait is not his thinking time.
             startedAt = now()
-            _state.value = NumbersState(level = level, exercise = exercises.first(), total = exercises.size)
+            _state.value = NumbersState(level = level, difficulty = difficulty, exercise = exercises.first(), total = exercises.size)
             speakPrompt()
         }
+    }
+
+    /** He moved the dots. The sitting is rebuilt at the level the new band starts from. */
+    fun reload() {
+        if (ending || finishing) return
+        loadJob?.cancel()
+        graph.voice.quiet()
+        load()
     }
 
     fun speakPrompt() {
@@ -197,7 +224,10 @@ class NumbersViewModel(
         viewModelScope.launch {
             write?.join()
             val level = _state.value.level
-            val newLevel = NumberProgression.next(level, results)
+            // The step the sitting earned, held inside the band the dots ask for (spec §13): the
+            // progression still decides *when* he moves, the dots decide how far it may take him.
+            val band = Difficulty.numbers(_state.value.difficulty)
+            val newLevel = NumberProgression.next(level, results).coerceIn(band)
             // A settings write that fails must not strand him on a screen that never says "done".
             val moved = newLevel != level && runCatching { graph.settings.setNumbersLevel(newLevel) }
                 .onFailure { graph.errors.record("numbers level write", it) }.isSuccess

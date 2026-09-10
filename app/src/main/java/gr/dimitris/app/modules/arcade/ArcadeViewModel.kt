@@ -9,6 +9,7 @@ import gr.dimitris.app.core.data.ModuleId
 import gr.dimitris.app.core.data.Outcome
 import gr.dimitris.app.core.data.Source
 import gr.dimitris.app.core.data.now
+import gr.dimitris.app.core.difficulty.Difficulty
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -83,6 +84,14 @@ class ArcadeViewModel(
      */
     private val sizes = mutableMapOf<ArcadeGame, Float>()
 
+    /**
+     * The 1..5 he set on the first screen, as a band of target sizes
+     * ([gr.dimitris.app.core.difficulty.Difficulty.arcade]). The arcade was the one module whose
+     * difficulty already moved by itself — eight per cent off a hit, fifteen back on a miss — so here
+     * the dots are what that number is held inside from one sitting to the next.
+     */
+    private var difficulty = Difficulty.DEFAULT
+
     /** The settings and photo read. Cancelled on the way out, so nothing lands on the next screen. */
     private var loadJob: Job? = null
 
@@ -101,11 +110,28 @@ class ArcadeViewModel(
 
     init { load() }
 
+    /**
+     * He moved the dots. Every game's size has already jumped to the easiest of the new band
+     * ([gr.dimitris.app.core.settings.Settings.setDifficulty]); this reads them back, so the round
+     * under his hand is the one he just asked for.
+     */
+    fun reload() {
+        if (ending || finishing) return
+        loadJob?.cancel()
+        graph.voice.quiet()
+        load()
+    }
+
     private fun load() {
         loadJob = viewModelScope.launch {
+            difficulty = runCatching { graph.settings.difficulty(ModuleId.ARCADE).first() }
+                .getOrElse { graph.errors.record("arcade difficulty read", it); Difficulty.DEFAULT }
             for (game in games) {
-                sizes[game] = runCatching { graph.settings.arcadeTargetDp(game).first() }
+                val stored = runCatching { graph.settings.arcadeTargetDp(game).first() }
                     .getOrElse { graph.errors.record("arcade size read", it); Adaptive.START }
+                // Held inside the band on the way in as well as out: a hand that worked its way down
+                // to 50 dp and is then asked for an easier sitting starts the easier sitting.
+                sizes[game] = Difficulty.arcadeClamp(stored, difficulty)
             }
             val photos = photos()
             // Not before the reads: their wait is not his playing time.
@@ -138,7 +164,10 @@ class ArcadeViewModel(
     fun onResult(hits: Int, misses: Int, newSizeDp: Float, play: ArcadePlay = ArcadePlay()) {
         if (finishing || ending) return
         finishing = true
-        val size = Adaptive.clamp(newSizeDp)
+        // What the round ended on, held inside the band the dots ask for: the shrink and the grow
+        // live inside the four games, so this is where a target that wandered out of the band comes
+        // back to it. Within one round it may dip below; across sittings it never does.
+        val size = Difficulty.arcadeClamp(newSizeDp, difficulty)
         graph.feedback.success()
         sizes[_state.value.game] = size
         _state.update { it.copy(sizeDp = size) }

@@ -5,6 +5,7 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import gr.dimitris.app.core.data.ModuleId
+import gr.dimitris.app.core.difficulty.Difficulty
 import gr.dimitris.app.modules.arcade.Adaptive
 import gr.dimitris.app.modules.arcade.ArcadeGame
 import gr.dimitris.app.modules.singsay.Key
@@ -302,6 +303,124 @@ class SettingsTest {
         assertEquals(42L, s.syncCursor.first())
         assertEquals(1_757_000_000_000L, s.syncPushedUpTo.first())
         assertEquals(1_757_000_000_500L, s.lastSyncAt.first())
+    }
+
+    // --------------------------------------------------- the difficulty he sets himself (spec §13)
+
+    @Test fun `difficulty defaults to two per module and persists`() = runBlocking {
+        val s = newSettings()
+        ModuleId.entries.forEach { assertEquals("default for $it", Difficulty.DEFAULT, s.difficulty(it).first()) }
+        s.setDifficulty(ModuleId.NUMBERS, 4)
+        assertEquals(4, s.difficulty(ModuleId.NUMBERS).first())
+        // One key per module: a man on single letters in «Γράψε» may still build four-word sentences.
+        assertEquals(Difficulty.DEFAULT, s.difficulty(ModuleId.TRACE).first())
+    }
+
+    @Test fun `difficulty is clamped to one to five`() = runBlocking {
+        val s = newSettings()
+        s.setDifficulty(ModuleId.WORDCOACH, 99)
+        assertEquals(5, s.difficulty(ModuleId.WORDCOACH).first())
+        s.setDifficulty(ModuleId.WORDCOACH, -3)
+        assertEquals(1, s.difficulty(ModuleId.WORDCOACH).first())
+    }
+
+    @Test fun `difficulty bounds default wide open and persist`() = runBlocking {
+        val s = newSettings()
+        assertEquals(Difficulty.MIN, s.difficultyFloor(ModuleId.ARCADE).first())
+        assertEquals(Difficulty.MAX, s.difficultyCeiling(ModuleId.ARCADE).first())
+        s.setDifficultyFloor(ModuleId.ARCADE, 2)
+        s.setDifficultyCeiling(ModuleId.ARCADE, 3)
+        assertEquals(2, s.difficultyFloor(ModuleId.ARCADE).first())
+        assertEquals(3, s.difficultyCeiling(ModuleId.ARCADE).first())
+    }
+
+    /** A tap outside the fence changes nothing. The row says why; the store says nothing new. */
+    @Test fun `a tap outside the caregiver's bounds is refused`() = runBlocking {
+        val s = newSettings()
+        s.setDifficultyCeiling(ModuleId.SENTENCES, 3)
+        s.setDifficulty(ModuleId.SENTENCES, 5)
+        assertEquals(3, s.difficulty(ModuleId.SENTENCES).first())
+        s.setDifficultyFloor(ModuleId.SENTENCES, 2)
+        s.setDifficulty(ModuleId.SENTENCES, 1)
+        assertEquals(2, s.difficulty(ModuleId.SENTENCES).first())
+    }
+
+    /** Neither bound may cross the other, whichever is moved. */
+    @Test fun `the bounds never cross`() = runBlocking {
+        val s = newSettings()
+        s.setDifficultyCeiling(ModuleId.NUMBERS, 2)
+        s.setDifficultyFloor(ModuleId.NUMBERS, 5)
+        assertEquals(2, s.difficultyFloor(ModuleId.NUMBERS).first())
+        s.setDifficultyFloor(ModuleId.NUMBERS, 2)
+        s.setDifficultyCeiling(ModuleId.NUMBERS, 1)
+        assertEquals(2, s.difficultyCeiling(ModuleId.NUMBERS).first())
+    }
+
+    /**
+     * A bound set after he has chosen brings his own setting with it. A fence that silently disagrees
+     * with the dots he is looking at is worse than no fence: the dots would promise work the module
+     * would then refuse to give him.
+     */
+    @Test fun `a new bound clamps the value he had already set`() = runBlocking {
+        val s = newSettings()
+        s.setDifficulty(ModuleId.WORDCOACH, 5)
+        s.setDifficultyCeiling(ModuleId.WORDCOACH, 2)
+        assertEquals(2, s.difficulty(ModuleId.WORDCOACH).first())
+
+        s.setDifficulty(ModuleId.SINGSAY, 1)
+        s.setDifficultyFloor(ModuleId.SINGSAY, 4)
+        assertEquals(4, s.difficulty(ModuleId.SINGSAY).first())
+    }
+
+    /**
+     * The dots move, and the module's level goes to the *bottom* of the new band: a man who has just
+     * asked for harder work meets the easiest of the harder work first, and the progression climbs
+     * from there. See [Difficulty].
+     */
+    @Test fun `moving the dots jumps each module's level to the bottom of the band`() = runBlocking {
+        val s = newSettings()
+        s.setDifficulty(ModuleId.NUMBERS, 3)
+        assertEquals(Difficulty.numbers(3).first, s.numbersLevel.first())
+        s.setDifficulty(ModuleId.SENTENCES, 4)
+        assertEquals(Difficulty.sentences(4).first, s.sentencesLevel.first())
+        s.setDifficulty(ModuleId.TRACE, 4)
+        assertEquals(4, s.traceLevel.first())
+    }
+
+    /** «Δεξί χέρι» has four sizes instead of a level, and all four go back to the band's easiest. */
+    @Test fun `moving the arcade dots resets every game to the easiest size of the band`() = runBlocking {
+        val s = newSettings()
+        s.setArcadeTargetDp(ArcadeGame.TAP, Adaptive.MIN)
+        s.setDifficulty(ModuleId.ARCADE, 3)
+        ArcadeGame.entries.forEach {
+            assertEquals("size for $it", Difficulty.arcadeStart(3), s.arcadeTargetDp(it).first(), 0.01f)
+        }
+    }
+
+    /** A bound that moves his setting moves the level with it: from his side the dots have moved. */
+    @Test fun `a bound that moves his setting moves the level too`() = runBlocking {
+        val s = newSettings()
+        s.setDifficulty(ModuleId.NUMBERS, 3)
+        s.setDifficultyCeiling(ModuleId.NUMBERS, 1)
+        assertEquals(1, s.difficulty(ModuleId.NUMBERS).first())
+        assertEquals(Difficulty.numbers(1).first, s.numbersLevel.first())
+    }
+
+    /**
+     * A tap or a bound that changes nothing changes nothing — not even the level. He re-reads the row
+     * more than once, and tapping the dot he is already on must not cost him the level he has climbed
+     * to inside the band.
+     */
+    @Test fun `a tap or a bound that changes nothing leaves the level alone`() = runBlocking {
+        val s = newSettings()
+        s.setNumbersLevel(6)
+        s.setDifficultyCeiling(ModuleId.NUMBERS, 5)
+        s.setDifficultyFloor(ModuleId.NUMBERS, 1)
+        assertEquals(6, s.numbersLevel.first())
+        s.setDifficulty(ModuleId.NUMBERS, Difficulty.DEFAULT)
+        assertEquals(6, s.numbersLevel.first())
+        s.setDifficulty(ModuleId.NUMBERS, Difficulty.DEFAULT)
+        assertEquals(6, s.numbersLevel.first())
     }
 
     /**

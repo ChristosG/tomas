@@ -39,10 +39,21 @@ class SessionBuilder(
     private val maxItems: Int = 12,
     /** The live advice's focus, or null — which is the app as it was before phase 11. */
     private val focus: Focus? = null,
+    /**
+     * What the 1..5 difficulty he set admits into the pool, where a module grades its items by
+     * something the [ItemKind] cannot say — «Τραγούδα και πες το» by how many syllables a phrase is
+     * (see [gr.dimitris.app.core.difficulty.Difficulty.syllables]). Everything before this line still
+     * decides *which* of the admitted items he meets today: the filter narrows the vocabulary, it
+     * never reorders the sitting or overrules a due word.
+     *
+     * A filter that admits nothing is the caller's problem, not this class's: it returns an empty
+     * plan, and the module decides whether to widen or to say there is nothing to do.
+     */
+    private val filter: (Item) -> Boolean = { true },
 ) {
     suspend fun plan(module: ModuleId, kinds: List<ItemKind>): List<Item> {
         val t = clock()
-        val pool = items.activeOfKinds(kinds)
+        val pool = items.activeOfKinds(kinds).filter(filter)
         val byId = pool.associateBy { it.id }
         val rows = schedules.all(module).filter { it.itemId in byId }
         val boxOf = rows.associate { it.itemId to it.box }
