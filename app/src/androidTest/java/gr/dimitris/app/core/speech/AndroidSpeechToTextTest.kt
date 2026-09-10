@@ -58,6 +58,11 @@ class AndroidSpeechToTextTest {
      *
      * The order the flag is cleared in is code, not timing, and is not reachable from here: see the
      * report's fix-round-2 notes.
+     *
+     * Independent of what this particular image can hear, too. A phone whose engine resolves to
+     * [OnDeviceSupport.Engine.NONE] — no network, no on-device model — used to answer the stopped
+     * window with «Χρειάζεται σύνδεση» instead, because the engine's verdict was read before his:
+     * that check now comes second, so a window he ended is his answer on every image.
      */
     @Test fun aStoppedWindowComesBackAsHisStopAndNotAsAFailure() = runBlocking {
         val stt = recogniser()

@@ -254,32 +254,45 @@ class PcmTakeTest {
      * by «Επόμενο» or a back press is all it would take, because all four of those cancel the
      * listening job.
      *
-     * `AndroidSpeechToText` starts the take under `NonCancellable` and holds the handle before its
-     * first suspension point, so the cancellation lands with something that can be closed. That
-     * wiring only runs on an engine this emulator does not have; what is proved here is the property
-     * underneath it — a take built inside a job that is cancelled is still closable, and once closed
-     * it stops recording and leaves nothing behind.
+     * `AndroidSpeechToText` starts the take under `NonCancellable` and — the whole of it — assigns the
+     * handle *inside* that block, so the cancellation lands with something that can be closed. This
+     * runs the same shape against a real microphone: the caller is on one dispatcher and the block on
+     * another, which is what makes the resume cancellable, and the cancellation arrives while the
+     * `AudioRecord` is being built. Written the other way round — `take = withContext(…) { start() }`
+     * — the assignment never happens and the take is unreachable for the life of the process;
+     * `CancelledHandoffTest` pins that rule on its own, without a device.
      */
     @Test fun aTakeBuiltInACancelledJobIsStillClosable() = runBlocking {
         val file = newFile()
-        lateinit var take: PcmTake
-        val started = java.util.concurrent.CountDownLatch(1)
-        val job = launch(Dispatchers.IO) {
-            take = withContext(NonCancellable) { PcmTake.start(file) }
-            started.countDown()
+        // A one-slot holder rather than a local: written on one thread and read on another.
+        val held = java.util.concurrent.atomic.AtomicReference<PcmTake?>(null)
+        val opening = java.util.concurrent.CountDownLatch(1)
+        val cancelled = java.util.concurrent.CountDownLatch(1)
+        // Default, not IO: a `withContext` that changes dispatcher is what takes the cancellable
+        // resume path. The first version of this case used IO on both sides, which resumes
+        // undispatched — the one shape that was never at risk.
+        val job = launch(Dispatchers.Default) {
             try {
+                withContext(NonCancellable + Dispatchers.IO) {
+                    opening.countDown()
+                    // Cancelled before the microphone is even open, which is «Μίλα» followed inside a
+                    // few tens of milliseconds by «Επόμενο» or a back press.
+                    cancelled.await(TIMEOUT_MS, java.util.concurrent.TimeUnit.MILLISECONDS)
+                    held.set(PcmTake.start(file))
+                }
                 delay(60_000)
             } finally {
-                withContext(NonCancellable) { take.cancel() }
+                withContext(NonCancellable + Dispatchers.IO) { held.get()?.cancel() }
             }
         }
-        assertTrue(started.await(TIMEOUT_MS, java.util.concurrent.TimeUnit.MILLISECONDS))
-        // Long enough for the file to have grown, so "stopped growing" below means something.
-        delay(TAKE_MS)
-        assertTrue("the microphone is open", take.isRecording)
-        job.cancelAndJoin()
+        assertTrue(opening.await(TIMEOUT_MS, java.util.concurrent.TimeUnit.MILLISECONDS))
+        job.cancel()
+        cancelled.countDown()
+        job.join()
 
-        assertFalse("the microphone was released", take.isRecording)
+        val orphan = held.get()
+        assertNotNull("the take was never handed back, so nothing could close it", orphan)
+        assertFalse("the microphone was released", orphan!!.isRecording)
         assertFalse("and the take of a word he left behind is gone", file.exists())
         // Nothing is still writing: a file that is gone cannot come back.
         delay(500)

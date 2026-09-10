@@ -122,6 +122,13 @@ class AndroidSpeechToText(
         var pcm: PcmTake? = null
         try {
             val engine = engine()
+            // He said he was finished while the engine was being asked — that call is a service bind
+            // and can take seconds on a cold engine, and «Στοπ» is under his thumb the whole time.
+            // The microphone never opens: there is nothing to record and nothing to recognise, and
+            // the window comes back the way every stopped window does — with nothing heard, which
+            // costs him no try. Checked before the engine's verdict, so a phone that could not have
+            // listened anyway still answers his «Στοπ» rather than a sentence about itself.
+            if (stopped) return Result.success(Transcript("", 0f))
             // There is a recognition service, and it still cannot hear him: the only way
             // [OnDeviceSupport.decide] says this is a cloud-only engine with no connection, which is
             // Chris' code 2 — said as «Χρειάζεται σύνδεση» rather than as «δεν λειτούργησε».
@@ -129,23 +136,25 @@ class AndroidSpeechToText(
                 return Result.failure(SpeechFailure.NotWorking(SpeechRecognizer.ERROR_NETWORK))
             }
             val onDevice = engine == OnDeviceSupport.Engine.ON_DEVICE
-            // He said he was finished while the engine was being asked. The microphone never opens:
-            // there is nothing to record and nothing to recognise, and the window comes back the way
-            // every stopped window does — with nothing heard, which costs him no try.
-            if (stopped) return Result.success(Transcript("", 0f))
             if (onDevice) {
                 // The microphone is the app's own on this path, and opening one is not something the
                 // screen may wait on: an `AudioRecord` and a file, off the drawing thread.
                 //
-                // `NonCancellable` around it, and the handle stored the moment it comes back: a
-                // cancellation landing between building the recorder and storing it would leave an
-                // open microphone on `VOICE_RECOGNITION` that nothing could ever reach — its reader
-                // loops on a flag only [PcmTake.stop] clears — writing a WAV at 32 kB/s for the life
-                // of the process. «Μίλα» followed inside a few tens of milliseconds by «Επόμενο» or
-                // a back press is all that would take. A take that cannot be started is not a
-                // failure: the session simply runs with the engine's own microphone, as it always
-                // did.
-                pcm = withContext(NonCancellable + Dispatchers.IO) { startTake() }
+                // The handle is assigned **inside** the block, and that is the whole of it.
+                // `NonCancellable` keeps `startTake()` from being cancelled; it does *not* make the
+                // hand-back uncancellable — a `withContext` that changed dispatcher resumes its
+                // caller cancellably, so a job cancelled meanwhile takes the exception and throws the
+                // returned value away. Written as `pcm = withContext(…) { startTake() }` the
+                // assignment therefore never happened, and the take was left holding an open
+                // microphone on `VOICE_RECOGNITION` that nothing could ever reach: its reader loops
+                // on a flag only [PcmTake.stop] clears, writing a WAV at 32 kB/s for the life of the
+                // process with the app looking idle. «Μίλα» followed inside a few tens of
+                // milliseconds by «Επόμενο» or a back press is all it took. A field written inside
+                // the block is written before any of that can happen.
+                //
+                // A take that cannot be started at all is not a failure: the session simply runs with
+                // the engine's own microphone, as it always did.
+                withContext(NonCancellable + Dispatchers.IO) { pcm = startTake() }
             }
             // Now that the take is held — so the `finally` below can close it — whatever happened
             // while the microphone was opening is answered: a cancelled wait goes no further, and a
