@@ -11,12 +11,14 @@ import gr.dimitris.app.core.data.Outcome
 import gr.dimitris.app.core.data.now
 import gr.dimitris.app.core.difficulty.Difficulty
 import gr.dimitris.app.core.scheduler.LevelProgression
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlin.random.Random
 
@@ -158,6 +160,9 @@ class SqlViewModel(
     /** The tables read and the database built. Cancelled on the way out and by [reload]. */
     private var loadJob: Job? = null
 
+    /** The run of the current board's *target*, so a typed answer can wait for it. See [targetResult]. */
+    private var showJob: Job? = null
+
     /** Whatever this screen is saying. One utterance at a time, like every other module. */
     private var speakJob: Job? = null
     private var speakToken = 0
@@ -205,15 +210,17 @@ class SqlViewModel(
                 runCatching { graph.settings.setSqlLevel(level) }
                     .onFailure { graph.errors.record("sql level clamp", it) }
             }
-            val read = runCatching {
+            val read = try {
                 SqlTables.load(
                     items = graph.db.items(),
                     attempts = graph.db.attempts(),
                     sessions = graph.db.sessions(),
                     names = AdviceSummary.MODULE_NAMES,
                 )
-            }.getOrElse {
-                graph.errors.record("sql tables", it)
+            } catch (ce: CancellationException) {
+                throw ce
+            } catch (e: Throwable) {
+                graph.errors.record("sql tables", e)
                 // The textbook alone is still a whole sitting: his own two tables are the half of
                 // this module that needs a database read, and a Room failure must not be a dead tile.
                 SqlTables(SqlTables.textbook())
@@ -221,7 +228,17 @@ class SqlViewModel(
             tables = read
             runner?.close()
             val open = SqlRunner(read)
-            val ready = runCatching { open.open() }.onFailure { graph.errors.record("sql open", it) }.isSuccess
+            // Not `runCatching`: it would swallow the cancellation of a `load()` that [reload] has
+            // just replaced, and the database built for the sitting nobody is going to see would be
+            // left open with nothing holding it.
+            val ready = try {
+                open.open(); true
+            } catch (ce: CancellationException) {
+                open.close(); throw ce
+            } catch (e: Throwable) {
+                graph.errors.record("sql open", e); false
+            }
+            if (!isActive) { open.close(); return@launch }
             runner = open.takeIf { ready }
             results.clear()
             tries = 0
@@ -238,7 +255,10 @@ class SqlViewModel(
                 done = first == null,
                 error = if (ready) null else TABLES_FAILED,
             )
-            first?.let { show(it) }
+            // Held rather than awaited: the board is on the screen now, and the grid arrives on it a
+            // moment later. What must not happen is judging his answer before it does — see
+            // [targetResult], which is what joins this.
+            showJob = first?.let { p -> viewModelScope.launch { show(p) } }
         }
     }
 
@@ -261,6 +281,30 @@ class SqlViewModel(
             return
         }
         _state.update { if (it.puzzle === puzzle) it.copy(wanted = rows) else it }
+    }
+
+    /**
+     * The result his own query is about to be judged against — **waited for**, and asked for again if
+     * the wait produced nothing.
+     *
+     * A typed answer is right when it returns what the target returns, so a target that has not
+     * arrived is not a reason to call his query wrong. It used to be exactly that: `show()` is
+     * launched asynchronously when the board opens, and a man who reads the question and starts
+     * typing straight away could hand in a perfectly correct query while it was still in flight —
+     * and be told «Ξανά.», and then be shown the answer he had already written.
+     *
+     * Null only when the database itself could not answer, which is the app's fault and is said as
+     * one ([SqlRunner.NOT_READY]) rather than charged to him.
+     */
+    private suspend fun targetResult(puzzle: SqlPuzzle): SqlResult? {
+        if (!puzzle.showResult) return null
+        _state.value.wanted?.let { return it }
+        showJob?.join()
+        _state.value.wanted?.let { return it }
+        // Still nothing: ask once more ourselves. The first attempt may have been cancelled by a
+        // reload, or lost the race with a board that has since settled.
+        show(puzzle)
+        return _state.value.takeIf { it.puzzle === puzzle }?.wanted
     }
 
     /** One tile laid down, in the order he taps them. */
@@ -327,11 +371,33 @@ class SqlViewModel(
         }
     }
 
+    /**
+     * His query, read by SQLite and compared with what the board asked for.
+     *
+     * Two guards, and both of them are about a query outliving the board it was written on. The
+     * target is **waited for** before anything is judged ([targetResult]), so a correct query handed
+     * in before the board had finished drawing is not called wrong. And the board is checked again
+     * when SQLite comes back: he can press «Έτοιμο» and then «Παράλειψη» in the same second, and
+     * without the check the answer to the board he skipped would settle onto the board that replaced
+     * it — a second attempt row for the first puzzle, a second entry in [results], and a verdict
+     * painted on a question he has not answered.
+     */
     private fun runTyped(puzzle: SqlPuzzle, typed: String) {
         _state.update { it.copy(running = true, refusal = null, refusalDetail = null) }
         viewModelScope.launch {
+            val target = targetResult(puzzle)
+            if (_state.value.puzzle !== puzzle) return@launch
+            if (puzzle.showResult && target == null) {
+                // The app cannot say what the answer is, so it cannot say his is wrong. It costs him
+                // neither the mark nor a go: `tries` is not touched and nothing is recorded.
+                graph.feedback.nudge()
+                _state.update { it.copy(running = false, got = null, refusal = SqlRunner.NOT_READY) }
+                return@launch
+            }
             tries++
             val outcome = runner?.run(typed) ?: SqlOutcome.Refused(SqlRunner.NOT_READY)
+            // The board may have moved on while SQLite was reading — see the KDoc above.
+            if (_state.value.puzzle !== puzzle) return@launch
             when (outcome) {
                 is SqlOutcome.Refused -> {
                     // Not a wrong answer: the keyboard stays, nothing is spent, and the mark is
@@ -342,7 +408,6 @@ class SqlViewModel(
                     }
                 }
                 is SqlOutcome.Rows -> {
-                    val target = _state.value.wanted
                     val ok = sqlAccepts(puzzle, typed, outcome.result, target)
                     _state.update { it.copy(running = false, got = outcome.result, refusal = null, refusalDetail = null) }
                     settle(puzzle, typed, ok)
@@ -426,7 +491,11 @@ class SqlViewModel(
         val puzzle = s.puzzle ?: return
         // One skip per puzzle: the button is still there for a frame, and a second tap would pass on
         // the puzzle that has not been shown yet.
-        if (finishing || ending) return
+        //
+        // And never while a query of his is inside SQLite: [runTyped] refuses to settle onto a board
+        // that has changed under it, so skipping here would simply throw his answer away — better to
+        // make him wait the two seconds the runner is allowed and let the answer land.
+        if (finishing || ending || s.running) return
         finishing = true
         graph.feedback.nudge()
         // Whatever he had put down when he passed on it: the tiles on an ordering board, half a
@@ -466,7 +535,7 @@ class SqlViewModel(
                 wrongTries = 0, revealed = false, running = false, refusal = null, refusalDetail = null,
             )
         }
-        viewModelScope.launch { show(puzzle) }
+        showJob = viewModelScope.launch { show(puzzle) }
     }
 
     private fun finishSitting() {

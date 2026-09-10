@@ -12,6 +12,7 @@ import gr.dimitris.app.core.data.ItemKind
 import gr.dimitris.app.core.data.ModuleId
 import gr.dimitris.app.core.data.Outcome
 import gr.dimitris.app.core.data.Session
+import gr.dimitris.app.today.SessionViewModel
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -201,6 +202,12 @@ class SqlViewModelTest {
         attempts.insert(attempt("n1", ModuleId.NUMBERS, at(9, 20), session = "s1", ms = 30_000))
         // A row from a sitting that is not one of the recent ones, and one from no sitting at all.
         attempts.insert(attempt("x", ModuleId.SQL, at(8, 0), session = null))
+        // And the sitting's own summary row, which is what the fix is about: it is written against
+        // whichever module was planned *last*, at the session's start and for the whole session's
+        // length. Counted, it gave «Αριθμοί» the wrong hour and the whole morning's minutes.
+        attempts.insert(
+            attempt(SessionViewModel.SESSION_SUMMARY, ModuleId.NUMBERS, at(9, 10), session = "s1", ms = 660_000)
+        )
 
         val day = SqlTables.day(sessions, attempts, names, zone)
 
@@ -214,6 +221,39 @@ class SqlViewModelTest {
             ),
             day.rows,
         )
+    }
+
+    /**
+     * The same rule, said on its own: a sitting whose only row is the summary is a sitting with
+     * nothing in this table. Without the exclusion it would have been one row of eleven minutes
+     * against a module he did not do.
+     */
+    @Test fun `a sitting that left only a summary row leaves no morning behind`() = runTest {
+        val sessions = FakeSessionDao()
+        val attempts = FakeAttemptDao()
+        sessions.upsert(Session(id = "s", startedAt = at(9, 0), plannedModules = "TRACE", plannedItemCount = 3))
+        attempts.insert(
+            attempt(SessionViewModel.SESSION_SUMMARY, ModuleId.WORDCOACH, at(9, 0), session = "s", ms = 660_000)
+        )
+
+        assertEquals(emptyList<List<Any>>(), SqlTables.day(sessions, attempts, names, zone).rows)
+    }
+
+    /**
+     * And the same id is what `λέξεις` keeps out of its counts. It used to pass the talk board's
+     * expansion, which cannot appear in a query already filtered to `module = WORDCOACH` — while the
+     * summary row, which is written against whichever module was planned last, perfectly well can.
+     */
+    @Test fun `the sitting's summary row is not a word he has practised`() = runTest {
+        val items = FakeItemDao()
+        val attempts = FakeAttemptDao()
+        val coffee = Item(text = "καφές", kind = ItemKind.WORD, category = Category.FOOD)
+        items.upsert(coffee)
+        attempts.insert(attempt(coffee.id, ModuleId.WORDCOACH, at(9, 0)))
+        repeat(5) { attempts.insert(attempt(SessionViewModel.SESSION_SUMMARY, ModuleId.WORDCOACH, at(9, it))) }
+
+        val words = SqlTables.words(items, attempts)
+        assertEquals(listOf(listOf<Any>("καφές", "Φαγητό & ποτό", 1)), words.rows)
     }
 
     @Test fun `a phone nobody has practised on has no tables of his own, and the textbook is the module`() = runTest {

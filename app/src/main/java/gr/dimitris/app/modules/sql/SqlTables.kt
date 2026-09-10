@@ -5,7 +5,7 @@ import gr.dimitris.app.core.data.ItemDao
 import gr.dimitris.app.core.data.ItemKind
 import gr.dimitris.app.core.data.ModuleId
 import gr.dimitris.app.core.data.SessionDao
-import gr.dimitris.app.modules.talkboard.EXPAND_ITEM
+import gr.dimitris.app.today.SessionViewModel
 import kotlinx.coroutines.flow.first
 import java.time.Instant
 import java.time.ZoneId
@@ -145,7 +145,11 @@ class SqlTables(val tables: List<SqlTable>) {
          * writes about it, and a row that carried a UUID would be a row he had to read out.
          */
         suspend fun words(items: ItemDao, attempts: AttemptDao): SqlTable {
-            val counts = attempts.mostUsed(ModuleId.WORDCOACH, WORD_ROWS * 8, EXPAND_ITEM).first()
+            // The synthetic id to keep out is the sitting's summary row, not the talk board's
+            // expansion: this query is already filtered to `module = WORDCOACH`, and the expansion is
+            // only ever written against TALKBOARD, while the summary is written against whichever
+            // module was planned last — which can perfectly well be «Λέξεις».
+            val counts = attempts.mostUsed(ModuleId.WORDCOACH, WORD_ROWS * 8, SessionViewModel.SESSION_SUMMARY).first()
                 .associate { it.itemId to it.n }
             val rows = items.activeOfKinds(listOf(ItemKind.WORD, ItemKind.PHRASE))
                 .mapNotNull { item ->
@@ -178,6 +182,15 @@ class SqlTables(val tables: List<SqlTable>) {
          * planned list: the plan is what the app *meant* to give him, and this table is a fact about
          * his morning. A module he opened and left after ten seconds is a minute here, because a
          * minute is the smallest thing this column can honestly say.
+         *
+         * The sitting's own summary row is left out, the way
+         * [gr.dimitris.app.core.data.AttemptDao.lastUsePerModule] and
+         * [gr.dimitris.app.caregiver.progress.ProgressStats] already leave it out. It is written
+         * against whichever module happened to be planned *last*, at the **session's** start time and
+         * for the **whole session's** length — so counting it gave that one module the wrong hour and
+         * the whole morning's minutes: a ten-minute sitting ending in «Γράψε» read as
+         * `("09:10", "Γράψε", 11)` instead of `("09:25", "Γράψε", 2)`. This is the one table whose
+         * justification is that it is true.
          */
         suspend fun day(
             sessions: SessionDao,
@@ -190,7 +203,7 @@ class SqlTables(val tables: List<SqlTable>) {
                 val ids = recent.map { it.id }.toSet()
                 val clock = DateTimeFormatter.ofPattern("HH:mm")
                 attempts.since(recent.minOf { it.startedAt })
-                    .filter { it.sessionId in ids }
+                    .filter { it.sessionId in ids && it.itemId != SessionViewModel.SESSION_SUMMARY }
                     .groupBy { it.sessionId to it.module }
                     .entries
                     .mapNotNull { (key, rows) ->

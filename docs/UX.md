@@ -164,11 +164,18 @@ question is Greek prose («Από τον πίνακα users, δείξε τη σ�
 answer is SQL, so hearing the question again gives away nothing at all. It costs him nothing, and the
 attempt row carries no cue level: there is no ladder here to be on.
 
-**The strip he lays the words into does not grow.** It is one 72 dp row that scrolls sideways. While
-it grew with what he had put down, every tile he laid pushed the board below it further down — so on
-a four-word query the last word was off the bottom of the screen by the time he needed it, on the one
-board whose whole exercise is reaching each word in turn. The instrumented `SqlFlowTest` is what
-found it and what keeps it found.
+**The strip he lays the words into does not grow.** It is one 96 dp row — a 72 dp tile and its
+padding — that scrolls sideways. While it grew with what he had put down, every tile he laid pushed
+the board below it further down, so on a four-word query the last word was off the bottom of the
+screen by the time he needed it: on the one board whose whole exercise is reaching each word in turn.
+The instrumented `SqlFlowTest` is what found it and what keeps it found.
+
+**The board comes back after two seconds, whatever he wrote.** A query that cannot finish is stopped
+by a watchdog that pulls SQLite's own `CancellationSignal` — a `withTimeout` cannot, because the
+coroutine doing the reading is blocked inside `rawQuery` with no suspension point to resume at — and
+the screen says «Η ερώτηση άργησε πολύ.» with «Έτοιμο» live again. It costs him nothing: a query that
+never answered is not a wrong answer, and no row is written for it. Neither is a typo, and neither is
+a statement the guard refuses by name.
 
 **On by default, for everybody.** «SQL» is not in [`Settings.DEFAULT_OFF`], so it needs no
 grandfathering pass: it is on the grid the day this build lands, on a phone that has been in use for

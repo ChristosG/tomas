@@ -149,7 +149,7 @@ object SqlPuzzles {
         val query = when (random.nextInt(3)) {
             0 -> filtered(source, tables, random)
             1 -> counted(source, tables, random)
-            else -> sorted(source, random)
+            else -> sorted(source, tables, random)
         } ?: return null
         if (!worthAsking(query, tables, source)) return null
         val slot = slots(query).randomOrNull(random) ?: return null
@@ -171,7 +171,7 @@ object SqlPuzzles {
         val query = when (random.nextInt(3)) {
             0 -> filtered(source, tables, random)
             1 -> counted(source, tables, random)
-            else -> sorted(source, random)
+            else -> sorted(source, tables, random)
         } ?: return null
         if (!worthAsking(query, tables, source)) return null
         return SqlPuzzle(
@@ -282,13 +282,33 @@ object SqlPuzzles {
         return SqlQuery(SqlSelect.Count, source.table, where = where)
     }
 
-    /** `SELECT <col> FROM <t> ORDER BY <n>` — the one shape where the order of the rows is the answer. */
-    private fun sorted(source: Source, random: Random): SqlQuery =
-        SqlQuery(
-            SqlSelect.Columns(listOf(source.picks.random(random))),
+    /**
+     * `SELECT <col> FROM <t> ORDER BY <n>` — the one shape where the order of the rows *is* the
+     * answer, and therefore the one shape that has to be careful about ties.
+     *
+     * It sorts only on a column whose values are all different in this table, and returns null when
+     * there is no such column (the generator then draws another shape). SQLite makes no promise about
+     * the order of rows with equal keys, so `ORDER BY price` over `(2, 2, 3, 3, 3, …)` would be judged
+     * order-sensitively against an order that is not contractual — and an equivalent query of his
+     * could be called wrong for a reason nobody could explain to him. The device cross-check agreeing
+     * over three hundred draws is evidence, not a guarantee; this is the guarantee.
+     */
+    private fun sorted(source: Source, tables: SqlTables, random: Random): SqlQuery? {
+        val table = tables.table(source.table) ?: return null
+        val by = table.columns.filter { it.type == SqlType.INTEGER }
+            .map { it.name }
+            .filter { name ->
+                val values = table.rows.mapNotNull { it.getOrNull(table.indexOf(name)) }
+                values.size == table.rows.size && values.distinct().size == values.size
+            }
+            .randomOrNull(random) ?: return null
+        val pick = (source.picks.filter { it != by }.ifEmpty { source.picks }).random(random)
+        return SqlQuery(
+            SqlSelect.Columns(listOf(pick)),
             source.table,
-            orderBy = SqlOrder(source.number, desc = random.nextBoolean()),
+            orderBy = SqlOrder(by, desc = random.nextBoolean()),
         )
+    }
 
     /** One condition over the table as it really is, so its answer is neither nothing nor everything. */
     private fun condition(source: Source, table: SqlTable, random: Random): SqlWhere.Compare? =

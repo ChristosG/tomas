@@ -217,7 +217,19 @@ class SqlPuzzlesTest {
         assertEquals("$where: three options", 3, puzzle.options.size)
         assertEquals("$where: two options the same", 3, puzzle.options.distinct().size)
         assertEquals("$where: exactly one of them is right", 1, puzzle.options.count { it == puzzle.answer })
-        if (!queries) return
+        if (!queries) {
+            // A keyword board's distractors are words, not queries, so "a different result" is not
+            // the thing to check — "a different *query*" is. Filling the blank with either of the
+            // other two must never rebuild the query the board is asking for, whether what comes out
+            // is valid SQL (it usually is not) or not.
+            for (option in puzzle.options.filter { it != puzzle.answer }) {
+                assertTrue(
+                    "$where: the keyword «$option» rebuilds the answer",
+                    puzzle.blanked.replaceFirst(SqlPuzzles.BLANK, option) != puzzle.target.text,
+                )
+            }
+            return
+        }
         assertEquals("$where: the right option is not the query", puzzle.target.text, puzzle.answer)
         val mine = puzzle.target.run(tables)!!
         val seen = mutableListOf(mine)

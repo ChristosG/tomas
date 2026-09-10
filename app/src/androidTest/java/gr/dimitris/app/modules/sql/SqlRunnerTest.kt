@@ -150,23 +150,63 @@ class SqlRunnerTest {
     }
 
     /**
-     * A query that cannot finish comes back as a Greek line too. Eight tables joined with a condition
-     * nothing can index is 430 million rows of string work, which is not two seconds anywhere.
+     * **A query that cannot finish is stopped at two seconds**, and the board is usable straight
+     * after.
      *
-     * The assertion is deliberately the weaker of the two honest ones — *either* it answered or it
-     * said it was too slow — because a machine fast enough to finish it would otherwise fail a test
-     * about not hanging. What is really being pinned is that nothing throws and the screen always
-     * gets an answer.
+     * [BOMB] is seven copies of `users` joined with a condition nothing can index — 35,831,808 rows
+     * of string concatenation, twelve times the six-copy version, which is measured at 1.7 s on this
+     * emulator and finishes. That six-copy one is what [aQueryThatIsMerelySlowStillAnswers] pins on
+     * the other side: the watchdog is a limit, not a hair trigger. Measured here: refused at
+     * 2005 ms and again at 2002 ms.
+     *
+     * The first cut of the timeout could not stop anything — it hung the `CancellationSignal` off
+     * `invokeOnCompletion` on the job that was itself blocked inside `rawQuery`, so the signal was
+     * pulled after the query had already finished. This test is written the way it is because the
+     * *old* test could not see that: it accepted `Rows` **or** `TOO_SLOW`, so a query that hung for
+     * ten minutes and then answered passed it. The wall clock is the assertion.
      */
-    @Test fun aQueryThatCannotFinishIsRefusedRatherThanHanging() {
+    @Test fun aQueryThatCannotFinishIsStoppedAtTwoSeconds() {
+        val began = System.currentTimeMillis()
+        val outcome = run(BOMB)
+        val took = System.currentTimeMillis() - began
+
+        assertEquals(SqlRunner.TOO_SLOW, (outcome as SqlOutcome.Refused).greek)
+        assertTrue("stopped after $took ms, which is not a two-second limit", took < SqlRunner.TIMEOUT_MS + 3_000)
+        assertTrue("stopped after only $took ms, which is a hair trigger", took >= SqlRunner.TIMEOUT_MS - 250)
+        // And the connection is still his: a cancelled query must not take the board with it.
+        assertEquals(12, count(SqlTables.USERS))
+        assertEquals(listOf(listOf("Κώστας")), rows("SELECT name FROM users WHERE city = 'Βόλος'").rows)
+    }
+
+    /** The other side of the same limit: something slow but finishable still answers. */
+    @Test fun aQueryThatIsMerelySlowStillAnswers() {
         val outcome = run(
-            "SELECT COUNT(*) FROM orders a, orders b, orders c, orders d, orders e, orders f, orders g, orders h " +
-                "WHERE a.item || b.item || c.item || d.item || e.item || f.item || g.item || h.item LIKE '%ζ%'"
+            "SELECT COUNT(*) FROM users a, users b, users c, users d, users e, users f " +
+                "WHERE a.name || b.name || c.name || d.name || e.name || f.name LIKE '%ζζζ%'"
         )
-        when (outcome) {
-            is SqlOutcome.Refused -> assertEquals(SqlRunner.TOO_SLOW, outcome.greek)
-            is SqlOutcome.Rows -> assertTrue("it finished, which is allowed", outcome.ms >= 0)
-        }
+        assertTrue("a query well inside the limit was refused: $outcome", outcome is SqlOutcome.Rows)
+    }
+
+    /**
+     * A `WITH RECURSIVE` bomb never reaches the database at all — not even through the apostrophe
+     * that used to blind the guard.
+     *
+     * The stronger of the two answers, and the reason [BOMB] is a cross join rather than a recursive
+     * CTE: `WITH` is refused by name ([SqlGuard.FORBIDDEN]), so the classic infinite-CTE bomb is
+     * turned away before SQLite is asked to compile it, and the two seconds never have to be spent.
+     */
+    @Test fun aRecursiveBombNeverReachesTheDatabase() {
+        val cte = "WITH RECURSIVE c(x) AS (SELECT 1 UNION ALL SELECT x+1 FROM c) SELECT x FROM c"
+        val began = System.currentTimeMillis()
+        assertEquals(SqlGuard.ONLY_SELECT, (run(cte) as SqlOutcome.Refused).greek)
+        // And hidden behind an unmatched quote inside a double-quoted token, which SQLite compiles
+        // happily and which used to make every rule after it invisible.
+        assertEquals(
+            SqlGuard.ONLY_SELECT,
+            (run("SELECT 1 WHERE \"q'\" AND 1 IN ($cte)") as SqlOutcome.Refused).greek,
+        )
+        val took = System.currentTimeMillis() - began
+        assertTrue("it went to SQLite: $took ms", took < 500)
     }
 
     // -------------------------------------------------- the evaluator and SQLite agree
@@ -212,5 +252,15 @@ class SqlRunnerTest {
     private companion object {
         /** Enough draws to cover every shape of every level, few enough to keep the run short. */
         const val DRAWS = 60
+
+        /**
+         * Seven copies of `users` and a condition nothing can index: 35,831,808 rows of string
+         * concatenation. `COUNT(*)` over a plain cross join is **not** a bomb — SQLite multiplies the
+         * row counts and answers in a quarter of a second — so the `WHERE` is what makes it real
+         * work, and the query has to be one [SqlGuard] allows or the timeout is never reached.
+         */
+        const val BOMB =
+            "SELECT COUNT(*) FROM users a, users b, users c, users d, users e, users f, users g " +
+                "WHERE a.name || b.name || c.name || d.name || e.name || f.name || g.name LIKE '%ζ%'"
     }
 }

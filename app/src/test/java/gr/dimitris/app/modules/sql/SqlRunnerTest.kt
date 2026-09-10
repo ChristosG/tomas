@@ -99,7 +99,48 @@ class SqlRunnerTest {
     @Test fun `half a comment and half a string are still refused where they should be`() {
         assertEquals(SqlGuard.ONLY_SELECT, SqlGuard.problem("DELETE FROM users /* ώπα"))
         assertEquals(SqlGuard.EMPTY, SqlGuard.problem("/* ποτέ δεν κλείνει"))
-        assertNull(SqlGuard.problem("SELECT * FROM λέξεις WHERE λέξη = 'ανοιχτό"))
+    }
+
+    /**
+     * **The apostrophe that used to blind every rule.**
+     *
+     * `withoutStrings` truncated at a `'` with no partner, so everything after it was invisible to
+     * `problem()` while `statement()` still handed the whole string to SQLite. One quote inside a
+     * double-quoted token — which SQLite is perfectly happy to compile — was the whole of the bypass,
+     * and it let both a chained statement and a recursive-CTE bomb through the one invariant this
+     * module states about itself.
+     *
+     * The two cases are the reviewer's own, verbatim.
+     */
+    @Test fun `an unmatched quote does not hide what comes after it`() {
+        assertEquals(
+            "a chained statement behind a stray apostrophe",
+            SqlGuard.ONE_AT_A_TIME,
+            SqlGuard.problem("SELECT 1 WHERE \"x'\" ; DROP TABLE users"),
+        )
+        assertEquals(
+            "a recursive CTE behind a stray apostrophe",
+            SqlGuard.ONLY_SELECT,
+            SqlGuard.problem(
+                "SELECT 1 WHERE \"q'\" AND 1 IN " +
+                    "(WITH RECURSIVE c(x) AS (SELECT 1 UNION ALL SELECT x+1 FROM c) SELECT x FROM c)"
+            ),
+        )
+    }
+
+    /**
+     * And an unterminated literal is refused in its own right, last of all the rules.
+     *
+     * Last, because a statement that is *also* two statements should be told the more serious thing
+     * first — and named at all, because «Λείπει ένα εισαγωγικό.» is the one mistake this module can
+     * put better in Greek than SQLite puts it in English («unrecognized token»).
+     */
+    @Test fun `a quote that was never closed is its own Greek line`() {
+        assertEquals(SqlGuard.OPEN_QUOTE, SqlGuard.problem("SELECT * FROM λέξεις WHERE λέξη = 'ανοιχτό"))
+        assertEquals(SqlGuard.OPEN_QUOTE, SqlGuard.problem("SELECT 'α' , 'β"))
+        // A doubled quote inside a literal is not an unclosed one: «it''s» opens and closes twice.
+        assertNull(SqlGuard.problem("SELECT * FROM λέξεις WHERE λέξη = 'it''s'"))
+        assertNull(SqlGuard.problem("SELECT 'α', 'β' FROM λέξεις"))
     }
 
     // --------------------------------------------------------- when two answers agree

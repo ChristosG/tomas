@@ -2,13 +2,15 @@ package gr.dimitris.app.modules.sql
 
 import android.database.sqlite.SQLiteDatabase
 import android.os.CancellationSignal
+import android.os.OperationCanceledException
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import kotlinx.coroutines.withTimeout
 import kotlin.coroutines.coroutineContext
 
 /**
@@ -39,7 +41,14 @@ data class SqlResult(
          *
          * [ordered] is true only when the query he was being asked for had an `ORDER BY` in it. Then
          * the order *is* the answer and two results that hold the same rows in a different order are
-         * two different answers — which is the whole point of having written the `ORDER BY`.
+         * two different answers — which is the whole point of having written the `ORDER BY`. The
+         * generator only ever sorts on a column with no ties in it ([SqlPuzzles]), so that order is a
+         * fact about the data and not about SQLite's mood.
+         *
+         * Only the *number* of columns is compared, so `SELECT 6` satisfies a `COUNT(*)` target that
+         * happens to answer 6. That is knowingly left open: this is a rehab app and the only person
+         * it could deceive is the one typing, who would be cheating himself out of an exercise. It is
+         * worth knowing before anybody reads an accuracy line for this module.
          */
         fun same(a: SqlResult, b: SqlResult, ordered: Boolean): Boolean {
             if (a.columns.size != b.columns.size) return false
@@ -62,7 +71,11 @@ data class SqlResult(
 
 /** What came of running one query. */
 sealed interface SqlOutcome {
-    /** It ran. [ms] is how long SQLite took, which goes into the attempt row. */
+    /**
+     * It ran. [ms] is how long **SQLite** took, which is not what the attempt row's own `ms` is: that
+     * one is his thinking time, from the moment the board was drawn (`SqlViewModel.record`). This one
+     * is for a screen that ever wants to say "the database took no time at all, you did".
+     */
     data class Rows(val result: SqlResult, val ms: Long) : SqlOutcome
 
     /**
@@ -87,6 +100,14 @@ sealed interface SqlOutcome {
  * language he half remembers gets one clear Greek sentence back instead of a stack trace, and so
  * that the one thing this module must never do — teach him that `DELETE` is a thing that works here
  * — cannot happen by accident.
+ *
+ * Two things it knowingly does not do. It understands only `'...'` quoting, not double quotes,
+ * brackets or backticks, so a legitimate `SELECT "kappa" FROM ...` whose quoted name contained a `;`
+ * or a forbidden word would be refused — an over-refusal, which is the safe direction and rare enough
+ * to be worth the simplicity. And `sqlite_master` and the `pragma_*` table-valued functions read as
+ * ordinary words, so `SELECT * FROM sqlite_master` runs: what it shows is the four in-memory tables'
+ * own `CREATE TABLE` lines and `:memory:` as the file name. No user data, no path, nothing that is
+ * not already on his screen.
  */
 object SqlGuard {
     /** Nothing typed at all. */
@@ -97,6 +118,15 @@ object SqlGuard {
 
     /** Two statements, or one and a half. */
     const val ONE_AT_A_TIME = "Μία ερώτηση κάθε φορά."
+
+    /**
+     * A `'` that was opened and never closed.
+     *
+     * Its own line, and not SQLite's «unrecognized token after …», because it is the one mistake this
+     * module can name in Greek better than the database can name it in English — and because an
+     * unterminated literal is what every rule below it has to read *through*. See [openLiteral].
+     */
+    const val OPEN_QUOTE = "Λείπει ένα εισαγωγικό."
 
     /**
      * Words that are never run here, whole-word. `REPLACE` is in the list as a statement and not as
@@ -146,16 +176,23 @@ object SqlGuard {
     /**
      * The Greek refusal, or null when the statement may run.
      *
-     * Order matters: "you wrote nothing" before "that is not a SELECT", and "one at a time" before
-     * the word list, so `SELECT 1; DROP TABLE users` is answered with the honest reason.
+     * Order matters, and it is the order of *honesty*: "you wrote nothing", then "there are two
+     * statements here", then "that is not a SELECT", and only then "a quote is missing". So
+     * `SELECT 1; DROP TABLE users` is answered with the reason that is actually about it, and a stray
+     * apostrophe in front of a chained `DROP` does not get to rename the problem.
      */
     fun problem(sql: String): String? {
         val clean = strip(sql).trim().trimEnd(';', ' ', '\t', '\n', '\r')
         if (clean.isBlank()) return EMPTY
-        if (';' in withoutStrings(clean)) return ONE_AT_A_TIME
-        val words = WORD.findAll(withoutStrings(clean)).map { it.value.uppercase() }.toList()
+        val bare = withoutStrings(clean)
+        if (';' in bare) return ONE_AT_A_TIME
+        val words = WORD.findAll(bare).map { it.value.uppercase() }.toList()
         if (words.firstOrNull() != "SELECT") return ONLY_SELECT
         if (words.any { it in FORBIDDEN }) return ONLY_SELECT
+        // Last, because it is the mildest thing that can be wrong with a statement — and because a
+        // statement that is *also* two statements should be told so first. An unterminated literal is
+        // not valid SQL in any case; saying it in Greek is better than SQLite's «unrecognized token».
+        if (openLiteral(clean)) return OPEN_QUOTE
         return null
     }
 
@@ -174,13 +211,37 @@ object SqlGuard {
             if (sql[at] == '\'') {
                 val end = sql.indexOf('\'', at + 1)
                 out.append("''")
-                if (end < 0) return out.toString()
+                if (end < 0) {
+                    // **Never truncated.** A quote with no partner used to end the scan here, and
+                    // everything after it — a `;`, a `DROP`, a `WITH RECURSIVE` — became invisible to
+                    // the rules while [statement] still handed the whole string to SQLite. One
+                    // apostrophe inside a double-quoted token was the whole of the bypass. What is
+                    // left of the statement is a *value* as far as this scan is concerned, but the
+                    // rules must still be allowed to read it.
+                    out.append(sql, at + 1, sql.length)
+                    return out.toString()
+                }
                 at = end + 1
             } else {
                 out.append(sql[at]); at++
             }
         }
         return out.toString()
+    }
+
+    /** True when a `'` was opened and never closed. `'it''s'` is closed twice over and is not one. */
+    private fun openLiteral(sql: String): Boolean {
+        var at = 0
+        while (at < sql.length) {
+            if (sql[at] == '\'') {
+                val end = sql.indexOf('\'', at + 1)
+                if (end < 0) return true
+                at = end + 1
+            } else {
+                at++
+            }
+        }
+        return false
     }
 
     /** A word, in any alphabet: Greek identifiers are identifiers. */
@@ -200,9 +261,12 @@ object SqlGuard {
  * * **It never crashes the screen.** Everything comes back as an [SqlOutcome]; a syntax error is a
  *   Greek line with SQLite's English underneath it, and so is a query that takes too long.
  * * **It never runs anything but a SELECT** ([SqlGuard]).
- * * **It never hangs.** Two seconds, enforced with a [CancellationSignal] rather than with a hopeful
- *   `withTimeout` alone — a cancelled coroutine does not stop a blocked `rawQuery`, and the signal
- *   is the only thing SQLite itself listens to.
+ * * **It never hangs.** Two seconds, enforced by a watchdog coroutine that cancels a
+ *   [CancellationSignal] — see [run]. A `withTimeout` around the read would have been theatre: the
+ *   coroutine doing the reading is blocked inside `rawQuery` with no suspension point to resume at,
+ *   so it cannot be interrupted and the timeout cannot fire until the query has finished anyway. The
+ *   signal is the only thing SQLite itself listens to, and it has to be pulled by a coroutine that is
+ *   not the one waiting.
  */
 class SqlRunner(
     private val tables: SqlTables,
@@ -213,7 +277,7 @@ class SqlRunner(
     /** Builds the database. Called once, off the main thread, before the first puzzle is shown. */
     suspend fun open() {
         if (db != null) return
-        db = withContext(io) {
+        val built = withContext(io) {
             // `create(null)` is SQLite's own in-memory database. Nothing is written anywhere.
             SQLiteDatabase.create(null).apply {
                 for (table in tables.tables) {
@@ -222,36 +286,61 @@ class SqlRunner(
                 }
             }
         }
+        // A cancel that landed while it was being built — he moved the dots, and `load()` started
+        // again — must not leave a database behind with nobody holding it. It is only memory, and
+        // only until the next collection, but a leak nobody closes is a leak.
+        try {
+            coroutineContext.ensureActive()
+        } catch (ce: CancellationException) {
+            built.close()
+            throw ce
+        }
+        if (db != null) { built.close(); return }
+        db = built
     }
 
-    /** Runs one statement of his, or says in Greek why it will not. */
+    /**
+     * Runs one statement of his, or says in Greek why it will not.
+     *
+     * The two seconds are kept by a **watchdog**: a coroutine that does nothing but sleep and then
+     * pull the [CancellationSignal]. It has to be a second coroutine, because the first one is inside
+     * `rawQuery` and is not going to come back to check the time.
+     *
+     * The first cut of this hung the signal off `invokeOnCompletion` on the reading job, which was
+     * the right instrument on the wrong event: that callback fires when the job reaches a *final*
+     * state, and a job blocked in `fillWindow` cannot reach one — so the signal was pulled after the
+     * query had finished, which is no timeout at all. A sloppy `FROM users a, users b, …` at level 5
+     * enumerates three million rows with `countAllRows`, and the board sat on «Τρέχω...» with
+     * «Έτοιμο» dead for as long as SQLite took.
+     *
+     * SQLite answers a cancelled signal by throwing `OperationCanceledException` out of the cursor,
+     * which is why it has a branch of its own below: it is a `RuntimeException`, so without one it
+     * would arrive as «Η ερώτηση δεν τρέχει.» — a lie about a query that was fine and merely slow.
+     */
     suspend fun run(sql: String): SqlOutcome {
         SqlGuard.problem(sql)?.let { return SqlOutcome.Refused(it) }
         val database = db ?: return SqlOutcome.Refused(NOT_READY)
         val statement = SqlGuard.statement(sql)
         val signal = CancellationSignal()
         return try {
-            withTimeout(TIMEOUT_MS) {
-                withContext(io) {
-                    // The timeout cancels this coroutine; only the signal can cancel the query that
-                    // is already inside SQLite, so the two are tied together here.
-                    val handle = coroutineContext[Job]?.invokeOnCompletion { if (it != null) signal.cancel() }
-                    try {
-                        read(database, statement, signal)
-                    } finally {
-                        handle?.dispose()
-                    }
+            coroutineScope {
+                val watchdog = launch { delay(TIMEOUT_MS); signal.cancel() }
+                try {
+                    withContext(io) { read(database, statement, signal) }
+                } finally {
+                    watchdog.cancel()
                 }
             }
-        } catch (timeout: TimeoutCancellationException) {
-            signal.cancel()
+        } catch (cancelled: OperationCanceledException) {
+            // The watchdog got there first — or the screen went away and pulled the signal itself.
             SqlOutcome.Refused(TOO_SLOW)
         } catch (ce: CancellationException) {
+            // The screen is going: stop the query on its way out rather than leaving a thread on it.
             signal.cancel()
             throw ce
         } catch (e: Throwable) {
-            // Everything SQLite can say about a statement a person wrote: a syntax error, a column
-            // that is not there, a cancelled query. None of them is allowed past this line.
+            // Everything else SQLite can say about a statement a person wrote: a syntax error, a
+            // column that is not there. None of it is allowed past this line.
             SqlOutcome.Refused(BROKEN, e.message?.trim()?.takeIf { it.isNotEmpty() }?.take(MAX_MESSAGE))
         }
     }

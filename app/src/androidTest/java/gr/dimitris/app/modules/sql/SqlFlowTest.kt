@@ -3,6 +3,7 @@ package gr.dimitris.app.modules.sql
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
@@ -26,6 +27,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
@@ -144,6 +146,92 @@ class SqlFlowTest {
         assertTrue("the row does not say which kind: ${row.detail}", row.detail.contains("\"kind\":\"WRITE\""))
         assertTrue("nor how many goes he had: ${row.detail}", row.detail.contains("\"tries\":3"))
         compose.onNodeWithText(NEXT).assertIsDisplayed()
+    }
+
+    /**
+     * A query that runs away gives the board back: «Η ερώτηση άργησε πολύ.», «Έτοιμο» live again, and
+     * nothing written down.
+     *
+     * Two seconds is what the runner is allowed ([SqlRunner.TIMEOUT_MS]), and until the watchdog
+     * landed there was no way to stop a runaway at all: he could type a sloppy multi-table `FROM`,
+     * press «Έτοιμο», and sit on «Τρέχω...» with the button dead for as long as SQLite took.
+     */
+    @Test fun aRunawayQueryGivesTheBoardBack() {
+        openAt(4)
+        compose.waitUntil(TIMEOUT_MS) { compose.onAllNodesWithTag(SQL_TYPED_TAG).fetchSemanticsNodes().isNotEmpty() }
+
+        val began = System.currentTimeMillis()
+        type(BOMB)
+        compose.onNodeWithText(READY).performClick()
+        compose.waitUntil(TIMEOUT_MS) {
+            compose.onAllNodes(hasText(SqlRunner.TOO_SLOW)).fetchSemanticsNodes().isNotEmpty()
+        }
+        val took = System.currentTimeMillis() - began
+        assertTrue("the board waited $took ms for a two-second limit", took < SqlRunner.TIMEOUT_MS + 8_000)
+
+        // The board is his again: «Έτοιμο» is live, and a query that ran away is not an answer.
+        compose.onNodeWithText(READY).assertIsEnabled()
+        assertTrue("a query that never finished was written down", attempts().isEmpty())
+
+        type(queryFor(question()))
+        compose.onNodeWithText(READY).performClick()
+        compose.waitUntil(TIMEOUT_MS) { attempts().isNotEmpty() }
+        assertEquals("and the answer after it still counts", Outcome.CORRECT, attempts().single().outcome)
+    }
+
+    /**
+     * «Παράλειψη» is refused while a query of his is still inside SQLite, and one submission leaves
+     * exactly one row.
+     *
+     * Both halves of the same defect. `runTyped`'s coroutine used to settle onto whatever board was
+     * on the screen when SQLite came back — so «Έτοιμο» and then «Παράλειψη» in the same second wrote
+     * *two* rows for the first puzzle, added a second entry to the list the promotion is decided from,
+     * and painted a verdict on a question he had not answered. The board is checked again on the way
+     * out now, and the skip is refused while it could happen at all.
+     *
+     * Driven through the ViewModel: the race is a frame wide on a screen, and a click-and-wait test
+     * could never land inside it.
+     */
+    @Test fun aSkipIsRefusedWhileHisQueryIsStillRunning() {
+        runBlocking { graph.settings.setSqlLevel(4) }
+        lateinit var vm: SqlViewModel
+        compose.runOnUiThread { vm = SqlViewModel(graph, sessionId = null) }
+        compose.waitUntil(TIMEOUT_MS) { vm.state.value.puzzle != null }
+
+        compose.runOnUiThread { vm.onTypedChange(BOMB); vm.submit() }
+        compose.waitUntil(TIMEOUT_MS) { vm.state.value.running }
+        compose.runOnUiThread { vm.skip() }
+        assertEquals("«Παράλειψη» passed on a board with an answer in flight", 0, vm.state.value.index)
+
+        compose.waitUntil(TIMEOUT_MS) { !vm.state.value.running }
+        assertEquals(SqlRunner.TOO_SLOW, vm.state.value.refusal)
+        assertTrue("a query that never finished was written down", attempts().isEmpty())
+        compose.runOnUiThread { vm.leave {} }
+    }
+
+    /**
+     * A right query handed in before the target grid has arrived is still right.
+     *
+     * `sqlAccepts` needs the target's own result to compare against, and it used to be read straight
+     * out of state — so a man who reads the question and starts typing at once could hand in a
+     * perfectly correct query while the target was still being run, be told «Ξανά.», and then be
+     * shown the answer he had already written. The target is waited for now, so a verdict can never
+     * exist without one.
+     */
+    @Test fun aRightQueryIsNotJudgedBeforeTheTargetHasArrived() {
+        runBlocking { graph.settings.setSqlLevel(4) }
+        lateinit var vm: SqlViewModel
+        compose.runOnUiThread { vm = SqlViewModel(graph, sessionId = null) }
+        compose.waitUntil(TIMEOUT_MS) { vm.state.value.puzzle != null }
+
+        // Straight in, without waiting for «Θέλουμε αυτό:» to be drawn.
+        val asked = vm.state.value.puzzle!!.question
+        compose.runOnUiThread { vm.onTypedChange(queryFor(asked)); vm.submit() }
+
+        compose.waitUntil(TIMEOUT_MS) { vm.state.value.correct != null }
+        assertNotNull("judged with no target to judge against", vm.state.value.wanted)
+        assertEquals("a right query was called wrong: $asked", true, vm.state.value.correct)
+        compose.runOnUiThread { vm.leave {} }
     }
 
     /** «Άκου» reads the question and nothing else, so it is live from the first frame and costs nothing. */
@@ -273,6 +361,11 @@ class SqlFlowTest {
         const val HERE_IT_IS = "Να το σωστό."
         const val WANTED = "Θέλουμε αυτό:"
         const val TIMEOUT_MS = 20_000L
+
+        /** See `androidTest/SqlRunnerTest.BOMB`: 35 million rows of string work, and guard-legal. */
+        const val BOMB =
+            "SELECT COUNT(*) FROM users a, users b, users c, users d, users e, users f, users g " +
+                "WHERE a.name || b.name || c.name || d.name || e.name || f.name || g.name LIKE '%ζ%'"
 
         val TABLES = setOf(SqlTables.WORDS, SqlTables.DAY, SqlTables.USERS, SqlTables.ORDERS)
 

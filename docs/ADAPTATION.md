@@ -200,6 +200,44 @@ the three to read it as.
   tiring. Shorten the round (`TAP_TARGETS`, `DRAG_ROUNDS`) instead of growing the target, which is
   what the size rule would do and would be the wrong answer to the wrong question.
 
+### SQL — beginner's queries (`module = 'SQL'`, `itemId = 'sql:level:N'`)
+
+| Key | What it is |
+|---|---|
+| `kind` | how the board asked: `ORDER` (tiles into a query), `PICK` (three queries, one result), `KEYWORD` (one word missing), `WRITE` (he typed it) |
+| `level` | 1–5, and the level *is* the kind: 1 order, 2 pick, 3 keyword, 4 write, 5 two tables (`ORDER` or `WRITE`) |
+| `query` | what he put down — the tiles in the order he laid them, the option he tapped, or the query he wrote |
+| `ok` | whether it was right |
+| `tries` | how many goes he had, a refused statement included |
+| `ms` | his thinking time, from the board being drawn |
+| `tables` | which world the question was about: `HIS_LIFE` (`λέξεις`, `μέρα` — his own words and his own mornings) or `TEXTBOOK` (`users`, `orders`) |
+
+`tries` counts every hand-in, including the ones that never became answers: a typo, or a statement
+the guard refused by name. Those cost him nothing else — no mark, no step towards the reveal, no row
+of their own. So on an `ok = true` row, `tries` above 1 is the column that says he was fighting the
+keyboard rather than the question, and it is the only place that fight is visible: `outcome` is still
+`CORRECT`, because getting the spelling right on the second go is not being helped. A query that ran
+away and was stopped at two seconds is not even a try.
+
+**Knobs, and the first rules to try:**
+
+- **`tables`, first of all.** It is the one column nothing else in the app can give: whether he does
+  better on questions about his own words than on the textbook's. Today the generator takes a table
+  at random from the ones it can ask about (`SqlPuzzles.sources`), so the two worlds come up about as
+  often as each other; if `HIS_LIFE` accuracy is consistently the higher, weight it — and that is a
+  finding about motivation, not about SQL.
+- **Which kind to drill.** The level *is* the kind, so `kind` and `level` say the same thing on every
+  row but the level-5 ones, where both an `ORDER` and a `WRITE` board exist. Those two are the pair
+  worth watching: `WRITE` far below `ORDER` at level 5 is a man who knows the shape and cannot
+  produce it, which is what «Προτάσεις» measures about sentences — and it has the same answer, which
+  is more ordering rather than an easier question.
+- **`query` on a wrong `WRITE` row.** It is the query as he typed it. The first token that differs
+  from the target is the thing he actually lost: `FORM` for `FROM` is a keyboard, a missing `WHERE`
+  is the idea.
+- **Whether six a sitting is right.** `ms` at level 4 is a man typing SQL on a phone with one hand.
+  If the median doubles over the last two puzzles of a sitting, the sitting is too long
+  (`SqlModule.PUZZLES_PER_SESSION`), not the level too hard.
+
 ### Μίλα — talk board (`module = 'TALKBOARD'`, `itemId` = the word)
 
 | Key | What it is |

@@ -119,7 +119,11 @@ fun SqlScreen(count: Int, sessionId: String?, onDone: () -> Unit, onLeave: () ->
                         "Έτοιμο", onClick = vm::submit, enabled = ready(s, puzzle) && !s.running,
                     )
                     Spacer(Modifier.height(Sizes.gapSmall))
-                    QuietButton("Παράλειψη", onClick = vm::skip)
+                    // Off while a query of his is inside SQLite, because the ViewModel refuses the
+                    // skip then anyway ([SqlViewModel.skip]) — and a button that does nothing when
+                    // tapped teaches him the button is broken. It is at most the two seconds the
+                    // runner is allowed.
+                    QuietButton("Παράλειψη", onClick = vm::skip, enabled = !s.running)
                 }
                 // A board he taps: one tap is the whole answer, so there is nothing to hand in.
                 else -> QuietButton("Παράλειψη", onClick = vm::skip)
