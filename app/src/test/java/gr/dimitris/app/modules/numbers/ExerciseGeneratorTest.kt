@@ -1,5 +1,7 @@
 package gr.dimitris.app.modules.numbers
 
+import gr.dimitris.app.core.greek.GreekNumbers
+import gr.dimitris.app.core.greek.GreekTime
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -149,7 +151,7 @@ class ExerciseGeneratorTest {
 
     /** The same question twice in a row reads as a bug, and the second answer is not his own. */
     @Test fun `a run never asks the same question twice in a row`() {
-        (1..7).forEach { level ->
+        (NumberProgression.MIN_LEVEL..NumberProgression.MAX_LEVEL).forEach { level ->
             repeat(20) { seed ->
                 val run = ExerciseGenerator(Random(seed)).session(level, prices, 10)
                 run.zipWithNext().forEach { (a, b) -> assertTrue("level $level repeated $a", sameQuestion(a, b).not()) }
@@ -157,12 +159,12 @@ class ExerciseGeneratorTest {
         }
     }
 
-    /** Whatever the caller passes, the exercise is one of the seven levels. */
-    @Test fun `a level outside one to seven is clamped`() {
+    /** Whatever the caller passes, the exercise is one of the fifteen levels. */
+    @Test fun `a level outside one to fifteen is clamped`() {
         assertEquals(1, gen.generate(0, prices).level)
         assertEquals(1, gen.generate(-5, prices).level)
-        assertEquals(7, gen.generate(8, prices).level)
-        assertEquals(7, gen.generate(Int.MAX_VALUE, prices).level)
+        assertEquals(15, gen.generate(16, prices).level)
+        assertEquals(15, gen.generate(Int.MAX_VALUE, prices).level)
     }
 
     /** A caregiver who priced everything the same still gets euro questions, just not comparisons. */
@@ -195,7 +197,9 @@ class ExerciseGeneratorTest {
     }
 
     @Test fun `every exercise has a Greek prompt`() {
-        (1..7).forEach { level -> assertTrue(gen.generate(level, prices).prompt.isNotBlank()) }
+        (NumberProgression.MIN_LEVEL..NumberProgression.MAX_LEVEL).forEach { level ->
+            assertTrue(gen.generate(level, prices).prompt.isNotBlank())
+        }
     }
 
     private fun assertGapsAreWideEnough(e: NumberExercise.NumberLine) {
@@ -215,6 +219,206 @@ class ExerciseGeneratorTest {
         a is NumberExercise.CoinPick && b is NumberExercise.CoinPick -> a.targetCents == b.targetCents
         a is NumberExercise.PriceCompare && b is NumberExercise.PriceCompare -> setOf(a.a.name, a.b.name) == setOf(b.a.name, b.b.name)
         a is NumberExercise.Pay && b is NumberExercise.Pay -> a.priceCents == b.priceCents
+        a is NumberExercise.Arithmetic && b is NumberExercise.Arithmetic -> a.a == b.a && a.op == b.op && a.b == b.b
+        a is NumberExercise.Missing && b is NumberExercise.Missing ->
+            a.known == b.known && a.op == b.op && a.result == b.result && a.missingFirst == b.missingFirst
+        a is NumberExercise.Change && b is NumberExercise.Change -> a.paidCents == b.paidCents && a.priceCents == b.priceCents
+        a is NumberExercise.Clock && b is NumberExercise.Clock -> a.answer == b.answer
+        a is NumberExercise.DayAfter && b is NumberExercise.DayAfter -> a.from == b.from && a.plus == b.plus
+        a is NumberExercise.WordProblem && b is NumberExercise.WordProblem -> a.prompt == b.prompt
         else -> false
+    }
+
+    // ------------------------------------------------------- levels 8–15: phase 12
+
+    /**
+     * The one promise every level owes him, at every level, five hundred draws deep: four buttons,
+     * none of them the same, exactly one of them right, and nothing thrown on the way there.
+     *
+     * Five hundred and not fifty because the levels below are built digit by digit out of several
+     * random draws each, and an impossible combination that happens one time in three hundred is a
+     * crash on a phone in a kitchen in Thessaloniki rather than a red line here.
+     */
+    @Test fun `every level draws five hundred questions with exactly one right answer`() {
+        (NumberProgression.MIN_LEVEL..NumberProgression.MAX_LEVEL).forEach { level ->
+            val generator = ExerciseGenerator(Random(level * 1_000))
+            repeat(DRAWS) { draw ->
+                val e = generator.generate(level, prices)
+                val where = "level $level draw $draw: $e"
+                assertEquals("$where repeats an option", e.options.size, e.options.toSet().size)
+                assertEquals("$where has not exactly one right answer", 1, e.options.count { it == e.answer })
+                assertEquals("$where is not at the level it was asked for", level, e.level)
+                assertTrue("$where has no prompt", e.prompt.isNotBlank())
+                assertTrue("$where says nothing", e.spokenPrompt.isNotBlank())
+            }
+        }
+    }
+
+    /** From level 8 up it is always four buttons: the levels below settled on two and three. */
+    @Test fun `the harder levels all offer four options`() {
+        (8..NumberProgression.MAX_LEVEL).forEach { level ->
+            many(level, 100).forEach { e -> assertEquals("level $level: ${e.options}", ExerciseGenerator.OPTIONS, e.options.size) }
+        }
+    }
+
+    @Test fun `level 8 adds and subtracts under a hundred, and never carries`() {
+        val all = many(8, 400).map { it as NumberExercise.Arithmetic }
+        assertTrue("both operations", all.any { it.op == Op.ADD } && all.any { it.op == Op.SUB })
+        all.forEach { e ->
+            assertTrue("two-digit numbers only: $e", e.a in 10..99 && e.b in 10..99)
+            assertTrue("under a hundred: $e", e.answer in 10..99)
+            assertEquals(e.op.apply(e.a, e.b), e.answer)
+            if (e.op == Op.ADD) {
+                assertTrue("the units carry in $e", e.a % 10 + e.b % 10 <= 9)
+                assertTrue("the tens carry in $e", e.a / 10 + e.b / 10 <= 9)
+            } else {
+                assertTrue("the units borrow in $e", e.a % 10 >= e.b % 10)
+                assertTrue("the tens borrow in $e", e.a / 10 > e.b / 10)
+            }
+            assertTrue("an option off the level: ${e.options}", e.options.all { it in 0..99 })
+        }
+    }
+
+    @Test fun `level 9 always carries or borrows, and stops at a thousand`() {
+        val all = many(9, 400).map { it as NumberExercise.Arithmetic }
+        assertTrue("both operations", all.any { it.op == Op.ADD } && all.any { it.op == Op.SUB })
+        all.forEach { e ->
+            assertEquals(e.op.apply(e.a, e.b), e.answer)
+            assertTrue("past a thousand: $e", e.answer in 1..1000)
+            assertTrue("operands sayable: $e", e.a in 10..999 && e.b in 10..999)
+            if (e.op == Op.ADD) assertTrue("nothing carried in $e", e.a % 10 + e.b % 10 >= 10)
+            else assertTrue("nothing borrowed in $e", e.a % 10 < e.b % 10)
+            assertTrue("an option off the level: ${e.options}", e.options.all { it in 0..1000 })
+        }
+        // The point of the level: sums that cross a hundred, not eighty-plus-eleven over and over.
+        assertTrue("no sum ever crosses a hundred", all.any { it.op == Op.ADD && it.answer > 100 })
+    }
+
+    @Test fun `level 10 is the tables from two to ten`() {
+        many(10, 400).map { it as NumberExercise.Arithmetic }.forEach { e ->
+            assertEquals(Op.MUL, e.op)
+            assertTrue("off the tables: $e", e.a in 2..10 && e.b in 2..10)
+            assertEquals(e.a * e.b, e.answer)
+            assertTrue("an option off the level: ${e.options}", e.options.all { it in 1..120 })
+        }
+    }
+
+    @Test fun `level 11 divides exactly and asks which operand is missing`() {
+        val all = many(11, 400)
+        val divisions = all.filterIsInstance<NumberExercise.Arithmetic>()
+        val blanks = all.filterIsInstance<NumberExercise.Missing>()
+        assertTrue("both kinds", divisions.isNotEmpty() && blanks.isNotEmpty())
+        assertEquals("nothing else at this level", all.size, divisions.size + blanks.size)
+        divisions.forEach { e ->
+            assertEquals(Op.DIV, e.op)
+            // Never a remainder: «τριάντα δύο διά πέντε» is not a question he can answer with a tap.
+            assertEquals("$e does not come out exactly", 0, e.a % e.b)
+            assertEquals(e.a / e.b, e.answer)
+            assertTrue("off the tables: $e", e.answer in 2..10 && e.b in 2..10)
+        }
+        blanks.forEach { e ->
+            assertEquals(Op.MUL, e.op)
+            // Whatever the blank is, filling it in has to make the line true.
+            assertEquals("$e does not add up", e.result, e.op.apply(e.known, e.missing))
+            assertEquals(e.missing, e.answer)
+            assertTrue("no blank in ${e.equation}", e.equation.contains(NumberExercise.BLANK))
+            assertTrue("${e.equation} keeps the result", e.equation.endsWith("= ${e.result}"))
+        }
+        assertTrue("the blank goes on both sides", blanks.any { it.missingFirst } && blanks.any { !it.missingFirst })
+    }
+
+    @Test fun `level 12 asks for change from a note that covers the price`() {
+        val all = many(12, 400).map { it as NumberExercise.Change }
+        all.forEach { e ->
+            assertTrue("${e.paidCents} is not a note", e.paidCents in ExerciseGenerator.NOTES)
+            assertTrue("the note does not cover ${e.priceCents}", e.priceCents < e.paidCents)
+            assertEquals(e.paidCents - e.priceCents, e.answer)
+            // Solvable with real money, to the cent: the coins that make the change add up to it.
+            assertTrue("no coins make ${e.answer}", e.pieces.isNotEmpty())
+            assertEquals("the coins do not add up: ${e.pieces}", e.answer, e.pieces.sum())
+            assertTrue("change bigger than the note: ${e.options}", e.options.all { it in 1..e.paidCents })
+            // Round tens only, so the phone never has to say «ένα λεπτά».
+            assertEquals("${e.answer} is not a round ten", 0, e.answer % 10)
+        }
+    }
+
+    /** His own shopping, where a caregiver priced it in the range a note gives change on. */
+    @Test fun `a caregiver's price becomes a change question, and a fifty-cent one does not`() {
+        val all = List(300) { ExerciseGenerator(Random(it)).generate(12, prices) }.map { it as NumberExercise.Change }
+        assertTrue("none of his prices were ever used", all.any { it.priceCents == 250 || it.priceCents == 380 })
+        // 0,50 € is under CHANGE_MIN_PRICE: the change would be almost the whole note back.
+        assertTrue("a fifty-cent price has no change question in it", all.none { it.priceCents == 50 })
+        assertTrue("a price that is not a round ten", all.all { it.priceCents % 10 == 0 })
+    }
+
+    @Test fun `level 12 without prices still asks for change`() {
+        val all = List(100) { ExerciseGenerator(Random(it)).generate(12, emptyList()) }.map { it as NumberExercise.Change }
+        all.forEach { e ->
+            assertTrue(e.priceCents in ExerciseGenerator.CHANGE_MIN_PRICE..ExerciseGenerator.CHANGE_MAX_PRICE)
+            assertEquals(e.answer, e.pieces.sum())
+        }
+    }
+
+    @Test fun `level 13 draws a clock on a five-minute face and counts days forward`() {
+        val all = many(13, 400)
+        val clocks = all.filterIsInstance<NumberExercise.Clock>()
+        val days = all.filterIsInstance<NumberExercise.DayAfter>()
+        assertTrue("both kinds", clocks.isNotEmpty() && days.isNotEmpty())
+        assertEquals("nothing else at this level", all.size, clocks.size + days.size)
+        clocks.forEach { e ->
+            assertTrue("off the face: ${e.minutes}", e.minutes in 0 until GreekTime.MINUTES)
+            assertEquals("not on a five-minute mark: ${e.minutes}", 0, e.minutes % 5)
+            assertEquals(GreekTime.normalise(e.minutes), e.answer)
+            e.options.forEach { v ->
+                assertTrue("an option off the face: $v", v in 0 until GreekTime.MINUTES)
+                assertEquals("an option a face cannot show: $v", 0, v % 5)
+            }
+        }
+        days.forEach { e ->
+            assertTrue("$e", e.from in GreekTime.days.indices && e.plus in 2..6)
+            assertEquals(GreekTime.dayAfter(e.from, e.plus), e.answer)
+            assertTrue("an option that is not a day: ${e.options}", e.options.all { it in GreekTime.days.indices })
+        }
+        // The quarters are what a conversation uses, so they are what he mostly meets.
+        assertTrue("the quarters never come up", clocks.count { it.minutes % 15 == 0 } > clocks.size / 3)
+    }
+
+    @Test fun `level 14 matches words and digits up to 9999, both ways round`() {
+        val all = many(14, 400).map { it as NumberExercise.WordMatch }
+        all.forEach { e ->
+            assertTrue("out of range: ${e.number}", e.number in 100..GreekNumbers.MAX)
+            assertTrue(e.number in e.options)
+            assertTrue("an unsayable option: ${e.options}", e.options.all { it in 0..GreekNumbers.MAX })
+        }
+        assertTrue("one direction only", all.any { it.showWord } && all.any { !it.showWord })
+        assertTrue("four digits are the point of this level", all.count { it.number >= 1000 } > all.size / 2)
+        assertTrue("never a three-digit one", all.any { it.number < 1000 })
+    }
+
+    @Test fun `level 15 asks a two-step problem, shown in digits and said in words`() {
+        val all = many(15, 400).map { it as NumberExercise.WordProblem }
+        all.forEach { e ->
+            assertTrue("an answer he could not reach: $e", e.answer > 0)
+            assertTrue(e.answer in e.options)
+            assertTrue("digits for the eye: ${e.prompt}", e.prompt.any { c -> c.isDigit() })
+            // The ear gets words: Greek TTS handed "3" in the middle of a sentence is a coin toss.
+            assertTrue("digits in the spoken form: ${e.spoken}", e.spoken.none { c -> c.isDigit() })
+            assertTrue("not a question: ${e.prompt}", e.prompt.endsWith(";"))
+            assertTrue("an option off the level: ${e.options}", e.options.all { it in 0..150 })
+        }
+        // Five situations, not five wordings of one: four different first words is the floor.
+        assertTrue("one story over and over", all.map { it.prompt.substringBefore(' ') }.distinct().size >= 4)
+    }
+
+    /** A run at the hardest level is still ten questions, and a mixed session still gets its four. */
+    @Test fun `a session at the top of the ladder is a full session`() {
+        assertEquals(10, gen.session(15, prices, 10).size)
+        assertEquals(4, gen.session(13, prices, exercisesFor(4)).size)
+        assertTrue(gen.session(12, emptyList(), 10).all { it.level == 12 })
+    }
+
+    private companion object {
+        /** Draws per level in the sweep above. Enough for a one-in-three-hundred combination. */
+        const val DRAWS = 500
     }
 }

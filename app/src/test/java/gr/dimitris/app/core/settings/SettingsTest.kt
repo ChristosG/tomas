@@ -92,14 +92,16 @@ class SettingsTest {
         assertEquals(defaults, s.enabledModules.first())
     }
 
-    @Test fun `numbers level starts at 1 and is clamped to 1__7`() = runBlocking {
+    /** Fifteen since phase 12: the ladder runs past the tables, the clock and change from a note. */
+    @Test fun `numbers level starts at 1 and is clamped to 1__15`() = runBlocking {
         val s = newSettings()
         assertEquals(1, s.numbersLevel.first())
-        s.setNumbersLevel(9); assertEquals(7, s.numbersLevel.first())
+        s.setNumbersLevel(9); assertEquals(9, s.numbersLevel.first())
+        s.setNumbersLevel(99); assertEquals(15, s.numbersLevel.first())
         s.setNumbersLevel(0); assertEquals(1, s.numbersLevel.first())
     }
 
-    /** Its own counter with its own ceiling: four sentence levels, not the numbers module's seven. */
+    /** Its own counter with its own ceiling: four sentence levels, not the numbers module's fifteen. */
     @Test fun `sentences level starts at 1 and is clamped to 1__4`() = runBlocking {
         val s = newSettings()
         assertEquals(1, s.sentencesLevel.first())

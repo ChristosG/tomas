@@ -90,7 +90,7 @@ class AdviceSummaryTest {
         assertTrue(text, text.contains("- Μίλα: 2 ασκήσεις (πίνακας επικοινωνίας, χωρίς σωστό και λάθος)"))
         assertTrue(text, text.contains("- ψωμί: 1 φορά"))
         assertTrue(text, text.contains("- νερό: 2 φορές"))
-        assertTrue(text, text.contains("- Αριθμοί (1–7): 3"))
+        assertTrue(text, text.contains("- Αριθμοί (1–15): 3"))
         assertTrue(text, text.contains("- Σερί 3 ημερών. Συνέχισε έτσι!"))
     }
 
@@ -146,7 +146,7 @@ class AdviceSummaryTest {
 
         // Five sections have nothing to show; the levels always do, so they are the sixth and say a number.
         assertEquals(5, text.split("Τίποτα ακόμα.").size - 1)
-        assertTrue(text, text.contains("- Αριθμοί (1–7): 3"))
+        assertTrue(text, text.contains("- Αριθμοί (1–15): 3"))
         assertTrue(text, text.contains("Χωρίς σερί αυτή τη στιγμή."))
     }
 

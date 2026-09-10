@@ -16,6 +16,7 @@ import gr.dimitris.app.core.data.ModuleId
 import gr.dimitris.app.core.difficulty.Difficulty
 import gr.dimitris.app.modules.arcade.Adaptive
 import gr.dimitris.app.modules.arcade.ArcadeGame
+import gr.dimitris.app.modules.numbers.NumberProgression
 import gr.dimitris.app.modules.singsay.Key
 import gr.dimitris.app.modules.singsay.Tempo
 import gr.dimitris.app.modules.trace.TraceStrictness
@@ -60,9 +61,9 @@ class Settings(private val store: DataStore<Preferences>) {
     val sttEnabled: Flow<Boolean> = store.data.map { it[STT_ENABLED] ?: false }
     suspend fun setSttEnabled(on: Boolean) { store.edit { it[STT_ENABLED] = on } }
 
-    /** Where he is in the seven number-sense levels. The numbers module moves it; nothing else does. */
+    /** Where he is in the number-sense levels. The numbers module moves it; nothing else does. */
     val numbersLevel: Flow<Int> = store.data.map { it[NUMBERS_LEVEL] ?: 1 }
-    suspend fun setNumbersLevel(level: Int) { store.edit { it[NUMBERS_LEVEL] = level.coerceIn(1, 7) } }
+    suspend fun setNumbersLevel(level: Int) { store.edit { it[NUMBERS_LEVEL] = level.coerceIn(NumberProgression.MIN_LEVEL, NumberProgression.MAX_LEVEL) } }
 
     /** How long a sentence he is building, 1..4. The sentence builder moves it; nothing else does. */
     val sentencesLevel: Flow<Int> = store.data.map { it[SENTENCES_LEVEL] ?: 1 }

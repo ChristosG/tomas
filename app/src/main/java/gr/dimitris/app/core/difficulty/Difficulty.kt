@@ -60,10 +60,8 @@ object Difficulty {
      * steps get smaller: levels 12 to 15 are four variations on paying for something, where 1 and 2
      * are two whole different ideas.
      *
-     * **Levels above 7 do not exist yet.** Task 5 adds 8–15; until it lands, bands 4 and 5 both
-     * clamp to level 7, which is the hardest thing the module can currently generate. So the two
-     * hardest dots do the same as the third-hardest today, and the KDoc rather than the UI says so:
-     * a row of dots that told him "this one is not built yet" would be a row of dots he has to read.
+     * All fifteen exist since Task 5 ([NumberProgression.MAX_LEVEL]), so every dot now means something
+     * different and nothing below clamps.
      */
     fun numbers(d: Int): IntRange = band(NUMBERS_BANDS, d, NumberProgression.MAX_LEVEL)
 
@@ -209,8 +207,8 @@ object Difficulty {
     /**
      * One band out of [bands], with everything above [max] folded onto [max] — which is how a band
      * over levels that have not been built yet still names a level that exists. A band entirely
-     * above [max] collapses to `max..max`, so the two hardest dots of «Αριθμοί» both mean "level 7"
-     * until Task 5 widens the ladder.
+     * above [max] collapses to `max..max`, which is what the top three dots of «Προτάσεις» do until
+     * Task 7 widens that ladder the way Task 5 widened «Αριθμοί».
      */
     private fun band(bands: List<IntRange>, d: Int, max: Int): IntRange {
         val b = bands[clamp(d) - 1]

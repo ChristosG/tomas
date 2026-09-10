@@ -15,7 +15,28 @@ class NumberProgressionTest {
     @Test fun `eight of ten moves up`() = assertEquals(4, NumberProgression.next(3, results(8)))
     @Test fun `four of ten moves down`() = assertEquals(2, NumberProgression.next(3, results(4)))
     @Test fun `in between stays`() = assertEquals(3, NumberProgression.next(3, results(6)))
-    @Test fun `clamped to 1 and 7`() { assertEquals(1, NumberProgression.next(1, results(0))); assertEquals(7, NumberProgression.next(7, results(10))) }
+    @Test fun `clamped to 1 and 15`() {
+        assertEquals(1, NumberProgression.next(1, results(0)))
+        assertEquals(15, NumberProgression.next(15, results(10)))
+        assertEquals(15, NumberProgression.MAX_LEVEL)
+    }
+
+    /**
+     * The ladder has no gap in it where the old ceiling used to be: a good sitting at 7 — the hardest
+     * thing the app could do before phase 12 — now leads to 8 and not back to 7.
+     */
+    @Test fun `the old ceiling is a step like any other`() {
+        assertEquals(8, NumberProgression.next(7, results(10)))
+        assertEquals(12, NumberProgression.next(11, results(8)))
+        assertEquals(14, NumberProgression.next(15, results(4)))
+    }
+
+    /** One step at a time, all the way up: nothing about the longer ladder takes him two at once. */
+    @Test fun `a perfect run moves him exactly one level, wherever he is`() {
+        (NumberProgression.MIN_LEVEL until NumberProgression.MAX_LEVEL).forEach { level ->
+            assertEquals("from $level", level + 1, NumberProgression.next(level, results(10)))
+        }
+    }
 
     /** A short mixed session counts: five answers is a session, not a warm-up. */
     @Test fun `five answers are enough to move`() {

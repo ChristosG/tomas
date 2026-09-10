@@ -10,7 +10,14 @@ package gr.dimitris.app.modules.numbers
  */
 object NumberProgression {
     const val MIN_LEVEL = 1
-    const val MAX_LEVEL = 7
+
+    /**
+     * Fifteen, since phase 12. Dimitris said the puzzles up to ten were far too easy, so the ladder
+     * now runs past arithmetic with a carry, the tables, change from a note, the clock and the week,
+     * four-digit number words and two-step problems. One step at a time is still one step at a time:
+     * a man at level 7 meets level 8 next, not level 15, unless he moves the dots himself.
+     */
+    const val MAX_LEVEL = 15
 
     /** Under this many answers a sitting is too short to mean anything, so the level stands. */
     const val MIN_RESULTS = 5

@@ -5,6 +5,7 @@ import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onFirst
@@ -73,6 +74,58 @@ class NumbersFlowTest {
         }
     }
 
+    /**
+     * Level 12 on a real screen: the question names the note and the price, four amounts are offered,
+     * and two taps at most always leave him somewhere to go. The generator's own tests prove the
+     * arithmetic; what only a device can say is that the money reaches the screen as money.
+     */
+    @Test fun changeFromANoteIsAskedAndAnswered() {
+        openPracticeAt(12)
+        compose.waitUntil(TIMEOUT_MS) { compose.onAllNodes(hasText(CHANGE_PROMPT, substring = true)).fetchSemanticsNodes().isNotEmpty() }
+        val amounts = moneyOptions()
+        assertEquals("four amounts to choose from", ExerciseGenerator.OPTIONS, amounts.size)
+
+        answerUntilItMovesOn(amounts)
+        compose.waitUntil(TIMEOUT_MS) {
+            runBlocking { graph.db.attempts().since(0).any { it.itemId == "numbers:level:12" } }
+        }
+    }
+
+    /** Level 15: the story is on the screen, four answers are under it, and one of them ends the turn. */
+    @Test fun aTwoStepProblemIsAskedAndAnswered() {
+        openPracticeAt(15)
+        compose.waitUntil(TIMEOUT_MS) { compose.onAllNodes(hasText(PROBLEM_PROMPT, substring = true)).fetchSemanticsNodes().isNotEmpty() }
+        val answers = numericOptions()
+        assertEquals("four answers to choose from", ExerciseGenerator.OPTIONS, answers.size)
+
+        answerUntilItMovesOn(answers.map { it.toString() })
+        compose.waitUntil(TIMEOUT_MS) {
+            runBlocking { graph.db.attempts().since(0).any { it.itemId == "numbers:level:15" } }
+        }
+    }
+
+    /**
+     * Taps options until the question is over. One right tap ends it; two wrong ones end it too,
+     * because the second miss shows him the answer — so two taps always land on «Επόμενο», which is
+     * the phase-3 rule the whole module is built on and the thing worth proving on a device.
+     */
+    private fun answerUntilItMovesOn(labels: List<String>) {
+        labels.take(2).forEach { label ->
+            if (compose.onAllNodesWithText(NEXT).fetchSemanticsNodes().isNotEmpty()) return@forEach
+            compose.onAllNodesWithText(label).onFirst().performClick()
+            compose.waitUntil(TIMEOUT_MS) {
+                compose.onAllNodesWithText("Ξανά.").fetchSemanticsNodes().isNotEmpty() ||
+                    compose.onAllNodesWithText(NEXT).fetchSemanticsNodes().isNotEmpty()
+            }
+        }
+        compose.waitUntil(TIMEOUT_MS) { compose.onAllNodesWithText(NEXT).fetchSemanticsNodes().isNotEmpty() }
+    }
+
+    /** The amount buttons: everything tappable whose whole label is an amount of euro. */
+    private fun moneyOptions(): List<String> = compose.onAllNodes(hasClickAction()).fetchSemanticsNodes()
+        .mapNotNull { n -> n.config.getOrNull(SemanticsProperties.Text)?.joinToString("") { it.text }?.trim() }
+        .filter { MONEY.matches(it) }
+
     private fun openPracticeAt(level: Int) {
         runBlocking { graph.settings.setNumbersLevel(level) }
         compose.onNodeWithText("Αριθμοί").performClick()
@@ -90,7 +143,13 @@ class NumbersFlowTest {
 
     private companion object {
         const val COMPARE_PROMPT = "Ποιο είναι περισσότερο;"
+        const val CHANGE_PROMPT = "Πληρώνεις"
+        const val PROBLEM_PROMPT = "Πόσα"
         const val PLACE_PREFIX = "Θέση"
+        const val NEXT = "Επόμενο"
         const val TIMEOUT_MS = 15_000L
+
+        /** "6,60 €" and nothing else: the euro buttons, told apart from «Άκου» and «Παράλειψη». */
+        val MONEY = Regex("""\d+,\d{2}\s€""")
     }
 }

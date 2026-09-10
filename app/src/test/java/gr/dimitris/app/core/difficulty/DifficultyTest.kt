@@ -61,16 +61,17 @@ class DifficultyTest {
     }
 
     /**
-     * Levels 8 to 15 do not exist until Task 5, so the two hardest dots both mean level 7. It is the
-     * one place where two dots really do mean the same thing, and it is deliberate and dated.
+     * Since Task 5 all fifteen levels exist, so no band clamps any more and every dot means something
+     * the one beside it does not: the two hardest used to be the third-hardest twice over.
      */
-    @Test fun `the top number bands clamp to the hardest level that exists`() {
-        assertEquals(7, NumberProgression.MAX_LEVEL)
+    @Test fun `every number dot now means a band of its own`() {
+        assertEquals(15, NumberProgression.MAX_LEVEL)
         assertEquals(1..2, Difficulty.numbers(1))
         assertEquals(3..4, Difficulty.numbers(2))
         assertEquals(5..7, Difficulty.numbers(3))
-        assertEquals(7..7, Difficulty.numbers(4))
-        assertEquals(7..7, Difficulty.numbers(5))
+        assertEquals(8..11, Difficulty.numbers(4))
+        assertEquals(12..15, Difficulty.numbers(5))
+        assertEquals("a dot that means the same as its neighbour", 5, (1..5).map { Difficulty.numbers(it) }.distinct().size)
     }
 
     /** The level he is moved to when the dots move: the easiest of the harder work, never the hardest. */
@@ -78,6 +79,8 @@ class DifficultyTest {
         assertEquals(1, Difficulty.numbers(1).first)
         assertEquals(3, Difficulty.numbers(2).first)
         assertEquals(5, Difficulty.numbers(3).first)
+        assertEquals(8, Difficulty.numbers(4).first)
+        assertEquals(12, Difficulty.numbers(5).first)
     }
 
     // -------------------------------------------------------------- «Προτάσεις»

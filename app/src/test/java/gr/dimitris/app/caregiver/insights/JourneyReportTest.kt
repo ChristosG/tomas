@@ -183,7 +183,7 @@ class JourneyReportTest {
 
     @Test fun `the levels and what the app itself sees are both said`() {
         val text = report()
-        assertTrue(text, text.contains("Αριθμοί (1–7): 3"))
+        assertTrue(text, text.contains("Αριθμοί (1–15): 3"))
         assertTrue(text, text.contains("Σερί 2 ημερών."))
     }
 

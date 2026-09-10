@@ -11,6 +11,7 @@ import gr.dimitris.app.core.data.now
 import gr.dimitris.app.core.difficulty.Difficulty
 import gr.dimitris.app.core.greek.Euro
 import gr.dimitris.app.core.greek.GreekNumbers
+import gr.dimitris.app.core.greek.GreekTime
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -270,10 +271,15 @@ class NumbersViewModel(
     }
 
     private fun sayAnswer(e: NumberExercise): String = when (e) {
-        is NumberExercise.Compare, is NumberExercise.NumberLine, is NumberExercise.Count, is NumberExercise.WordMatch -> GreekNumbers.words(e.answer)
+        is NumberExercise.Compare, is NumberExercise.NumberLine, is NumberExercise.Count, is NumberExercise.WordMatch,
+        is NumberExercise.Arithmetic, is NumberExercise.Missing, is NumberExercise.WordProblem,
+        -> GreekNumbers.words(e.answer)
         // Spoken, not written: Greek TTS reads "10,00 €" as punctuation.
-        is NumberExercise.CoinPick, is NumberExercise.Pay -> Euro.spoken(e.answer)
+        is NumberExercise.CoinPick, is NumberExercise.Pay, is NumberExercise.Change -> Euro.spoken(e.answer)
         is NumberExercise.PriceCompare -> if (e.a.cents >= e.b.cents) e.a.name else e.b.name
+        // The words and not the digits: «τρεις και μισή» is what the answer to a clock face sounds like.
+        is NumberExercise.Clock -> GreekTime.words(e.answer)
+        is NumberExercise.DayAfter -> GreekTime.day(e.answer)
     }
 
     companion object {

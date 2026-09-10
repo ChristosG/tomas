@@ -113,6 +113,12 @@ fun NumbersScreen(count: Int, sessionId: String?, onDone: () -> Unit, onLeave: (
                 is NumberExercise.CoinPick -> CoinPickView(e, s, vm::choose)
                 is NumberExercise.PriceCompare -> PriceCompareView(e, s, vm::choose)
                 is NumberExercise.Pay -> PayView(e, s, vm::choose)
+                is NumberExercise.Arithmetic -> ArithmeticView(e, s, vm::choose)
+                is NumberExercise.Missing -> MissingView(e, s, vm::choose)
+                is NumberExercise.Change -> ChangeView(e, s, vm::choose)
+                is NumberExercise.Clock -> ClockView(e, s, vm::choose)
+                is NumberExercise.DayAfter -> DayAfterView(e, s, vm::choose)
+                is NumberExercise.WordProblem -> WordProblemView(e, s, vm::choose)
             }
             Spacer(Modifier.height(Sizes.gap))
         }
