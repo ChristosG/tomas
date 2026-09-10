@@ -194,6 +194,46 @@ class ClaudeAdvisorParseTest {
         assertTrue("and which level keys exist", p.contains("μόνο numbers, sentences και"))
     }
 
+    /**
+     * Phase 12's profile, which is spec §13: he tried the app and said it was too easy, and the
+     * advice has to be given to the man who said that rather than to the one §1 alone describes.
+     */
+    @Test fun `the prompt describes him as he is since he told us`() {
+        val p = flowing(ClaudeAdvisor.SYSTEM_PROMPT)
+        assertTrue("says most everyday words", p.contains("Λέει τις περισσότερες καθημερινές λέξεις") ||
+            p.contains("λέει τις περισσότερες καθημερινές λέξεις"))
+        assertTrue("reads Greek slowly", p.contains("διαβάζει ελληνικά αργά"))
+        assertTrue("telegraphic", p.contains("τηλεγραφικός"))
+        assertTrue("full sentences and multi-step tasks are the goal",
+            p.contains("ολόκληρες προτάσεις και οι εργασίες με πολλά βήματα"))
+    }
+
+    /**
+     * Spec §13's privacy rule, written into the one text that decides what a language model believes
+     * about him: §1 and §13 and nothing else, and no inferring the rest from the numbers or from a
+     * caregiver's note.
+     */
+    @Test fun `the prompt forbids saying anything else about his health`() {
+        val p = flowing(ClaudeAdvisor.SYSTEM_PROMPT)
+        assertTrue(p, p.contains("Αυτά είναι όλα όσα ξέρεις για την υγεία του"))
+        assertTrue(p, p.contains("Μη συμπεράνεις"))
+        assertTrue("no diagnosis", p.contains("Καμία ιατρική διάγνωση"))
+    }
+
+    /** The dots are the phase's whole point, so the advisor has to know what one means. */
+    @Test fun `the prompt explains the five dots and asks which one to set next`() {
+        val p = flowing(ClaudeAdvisor.SYSTEM_PROMPT)
+        assertTrue("the row of five", p.contains("πέντε κουκκίδες, 1 έως 5"))
+        assertTrue("he sets them", p.contains("Τις πατάει ο ίδιος ο Δημήτρης"))
+        assertTrue("the caregiver bounds them", p.contains("κάτω και πάνω όριο"))
+        assertTrue("a dot picks a band", p.contains("Η κουκκίδα διαλέγει ζώνη"))
+        // What a dot means in each module, at least by naming every module in the list.
+        listOf("Λέξεις:", "Αριθμοί:", "Προτάσεις:", "Γράψε:", "Διάλογοι:", "Δεξί χέρι:")
+            .forEach { assertTrue(it, p.contains(it)) }
+        assertTrue("and it is asked for", p.contains("πες σε ποια κουκκίδα να πάει κάθε άσκηση"))
+        assertTrue("aiming at four in five", p.contains("τέσσερα στα πέντε"))
+    }
+
     /** The scales the numbers are on, so «μέση βοήθεια 2,4» is read as what it is. */
     @Test fun `the prompt explains the help scale and the boxes`() {
         val p = flowing(ClaudeAdvisor.SYSTEM_PROMPT)
@@ -260,6 +300,35 @@ class ClaudeAdvisorParseTest {
     @Test fun `a fenced or wrapped object is still found, on one line`() {
         val fenced = ClaudeAdvisor.parse(answer3("- Ένα.", "Μπράβο.", "```json\n{\n  \"items\": [\"καφές\"]\n}\n```"))
         assertEquals("""{ "items": ["καφές"] }""", fenced.focusJson)
+    }
+
+    /**
+     * The scan is depth-matched, exactly as `JudgeContract.jsonObject` is and for the same reason:
+     * first-brace-to-**last**-brace was too greedy in the other direction. One `}` in a sentence
+     * after the object, or a second object under the heading, and the substring stopped being JSON —
+     * Gson refuses trailing content — so a perfectly good focus became no focus at all, and his next
+     * session was planned as though the advisor had said nothing about it.
+     */
+    @Test fun `a brace in the prose after the object does not swallow it`() {
+        val advice = ClaudeAdvisor.parse(answer3("- Ένα.", "Μπράβο.", "$json\nΤο } εδώ είναι τυπογραφικό."))
+        assertEquals(json, advice.focusJson)
+    }
+
+    @Test fun `a second object after the first is not read as part of it`() {
+        val advice = ClaudeAdvisor.parse(answer3("- Ένα.", "Μπράβο.", """$json {"items":["ψωμί"]}"""))
+        assertEquals(json, advice.focusJson)
+    }
+
+    /** A brace inside a string is text, not structure. */
+    @Test fun `a brace inside a value does not close the object`() {
+        val braced = """{"why":"το } δεν μετράει","items":["καφές"]}"""
+        assertEquals(braced, ClaudeAdvisor.parse(answer3("- Ένα.", "Μπράβο.", braced)).focusJson)
+    }
+
+    /** Cut off by max_tokens mid-object: not a focus, and never half of one. */
+    @Test fun `an object that was never closed is no focus at all`() {
+        val advice = ClaudeAdvisor.parse(answer3("- Ένα.", "Μπράβο.", """{"items":["καφές","""))
+        assertEquals("", advice.focusJson)
     }
 
     /** An answer whose two headings are mangled still gives a focus, and still says nothing to him. */

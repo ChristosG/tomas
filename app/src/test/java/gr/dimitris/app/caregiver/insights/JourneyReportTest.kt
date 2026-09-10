@@ -3,6 +3,7 @@ package gr.dimitris.app.caregiver.insights
 import gr.dimitris.app.caregiver.progress.DayItemStat
 import gr.dimitris.app.caregiver.progress.DayStat
 import gr.dimitris.app.caregiver.progress.ItemHistory
+import gr.dimitris.app.caregiver.progress.JudgeUse
 import gr.dimitris.app.caregiver.progress.ModuleHistory
 import gr.dimitris.app.caregiver.progress.ProgressStats
 import gr.dimitris.app.core.data.Attempt
@@ -90,6 +91,8 @@ class JourneyReportTest {
             DayStat(at("2026-09-05", 0), minutes = 3, attempts = 2),
         ),
         insights: List<String> = listOf("Σερί 2 ημερών. Συνέχισε έτσι!"),
+        difficulty: Map<ModuleId, Int> = emptyMap(),
+        judge: Map<ModuleId, JudgeUse> = emptyMap(),
     ): String = JourneyReport.build(
         profile = JourneyReport.PROFILE,
         notes = notes,
@@ -101,6 +104,8 @@ class JourneyReportTest {
         previous = previous,
         levels = levels,
         insights = insights,
+        difficulty = difficulty,
+        judge = judge,
         zone = zone,
     )
 
@@ -254,6 +259,53 @@ class JourneyReportTest {
         assertTrue(text, text.lines().first { it.startsWith("- Δεξί χέρι (ARCADE)") }.contains("χωρίς επίπεδο"))
         // And the board is named as what it is rather than scored.
         assertTrue(text, text.lines().first { it.startsWith("- Μίλα (TALKBOARD)") }.contains("χωρίς σωστό και λάθος"))
+    }
+
+    // ---- phase 12: the dot, and what the judge did ----------------------------------------------
+
+    /**
+     * The advice is asked to name the dot each module should go to next, and it cannot do that
+     * without being told where the dot is now. A module with no dots — the talk board — has no
+     * segment at all rather than a «δυσκολία 2» that is a fact about nothing.
+     */
+    @Test fun `each module line says which dot it is set to`() {
+        val text = report(difficulty = mapOf(ModuleId.WORDCOACH to 3, ModuleId.NUMBERS to 5))
+        val words = text.lines().first { it.startsWith("- Λέξεις (WORDCOACH)") }
+
+        assertTrue(words, words.contains("δυσκολία 3/5"))
+        assertFalse(text, text.lines().first { it.startsWith("- Μίλα (TALKBOARD)") }.contains("δυσκολία"))
+        assertTrue("and the heading explains it", text.contains("«δυσκολία» είναι η κουκκίδα 1–5"))
+    }
+
+    /**
+     * «Έλεγχος με Claude» is opt-in, so without these numbers a month of open dialogues where the
+     * key had expired reads exactly like a month where it worked. The rate is over what Claude
+     * decided, never over the fallback's rows.
+     */
+    @Test fun `a module line says what the judge did in the period`() {
+        val use = JudgeUse(ModuleId.WORDCOACH, judged = 12, local = 3, accepted = 9, expanded = 5, typed = 0)
+        val line = report(judge = mapOf(ModuleId.WORDCOACH to use))
+            .lines().first { it.startsWith("- Λέξεις (WORDCOACH)") }
+
+        assertTrue(line, line.contains("Claude: έκρινε 12, δέχτηκε 9 (75%), ολόκληρη πρόταση 5, χωρίς Claude 3"))
+    }
+
+    /** «Προτάσεις» is the only module that types, and the count is printed only where there is one. */
+    @Test fun `typed boards are counted, and only where there are any`() {
+        val typed = JudgeUse(ModuleId.WORDCOACH, judged = 0, local = 0, accepted = 0, expanded = 0, typed = 4)
+        val line = report(judge = mapOf(ModuleId.WORDCOACH to typed))
+            .lines().first { it.startsWith("- Λέξεις (WORDCOACH)") }
+
+        assertTrue(line, line.contains("Claude: γραπτές προτάσεις 4"))
+        assertFalse("no accept rate over nothing", line.contains("δέχτηκε"))
+    }
+
+    /** A module the judge never touched says nothing about it rather than a row of zeroes. */
+    @Test fun `a module the judge never saw carries no judge segment`() {
+        val empty = JudgeUse(ModuleId.WORDCOACH, judged = 0, local = 0, accepted = 0, expanded = 0, typed = 0)
+        val text = report(judge = mapOf(ModuleId.WORDCOACH to empty))
+
+        assertFalse(text, text.lines().first { it.startsWith("- Λέξεις (WORDCOACH)") }.contains("Claude:"))
     }
 
     /**

@@ -4,6 +4,7 @@ import gr.dimitris.app.AppGraph
 import gr.dimitris.app.caregiver.progress.DayItemStat
 import gr.dimitris.app.caregiver.progress.DayStat
 import gr.dimitris.app.caregiver.progress.ItemHistory
+import gr.dimitris.app.caregiver.progress.JudgeUse
 import gr.dimitris.app.caregiver.progress.ModuleHistory
 import gr.dimitris.app.caregiver.progress.ProgressStats
 import gr.dimitris.app.caregiver.progress.attemptsLine
@@ -13,6 +14,7 @@ import gr.dimitris.app.core.data.ItemKind
 import gr.dimitris.app.core.data.ModuleId
 import gr.dimitris.app.core.data.Note
 import gr.dimitris.app.core.data.Who
+import gr.dimitris.app.core.difficulty.Difficulty
 import gr.dimitris.app.core.scheduler.LeitnerPolicy
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
@@ -20,6 +22,7 @@ import kotlinx.coroutines.withContext
 import java.time.Instant
 import java.time.ZoneId
 import java.util.Locale
+import kotlin.math.roundToInt
 import gr.dimitris.app.core.data.Advice as AdviceRow
 import gr.dimitris.app.core.data.now as systemNow
 
@@ -97,17 +100,33 @@ object JourneyReport {
         δυσκολεύεται να βγάλει τις λέξεις) και ακαλκουλία. Η μνήμη, το χιούμορ και το τραγούδι του
         είναι ακέραια — τραγουδάει λέξεις που δεν μπορεί να πει.
 
+        Τον Σεπτέμβριο του 2026 δοκίμασε ο ίδιος την εφαρμογή και είπε ότι είναι πολύ εύκολη. Λέει
+        τις περισσότερες καθημερινές λέξεις (όχι πάντα καθαρά), διαβάζει ελληνικά αργά αλλά
+        καταλαβαίνει και αφηρημένες λέξεις, και σκέφτεται καλά. Ο λόγος του είναι τηλεγραφικός —
+        λέει «φάρμακα πρέπει πάρω». Αυτό που του λείπει είναι οι ολόκληρες προτάσεις και οι εργασίες
+        με πολλά βήματα, και εκεί είναι τώρα το κέντρο της εφαρμογής.
+
         Εξασκείται μόνος του στο τηλέφωνό του, στα ελληνικά. Οι ασκήσεις, με τα ονόματα που βλέπει
         και τους κωδικούς που χρησιμοποιεί η εφαρμογή:
         - Λέξεις = WORDCOACH (βρίσκει τη λέξη για μια εικόνα)
-        - Αριθμοί = NUMBERS (ποσά, ευρώ, ώρα)
+        - Αριθμοί = NUMBERS (ποσά, πράξεις, ευρώ και ρέστα, ώρα, μέρες, προβλήματα)
         - Τραγούδα και πες το = SINGSAY (τραγουδάει τη φράση και μετά τη λέει)
-        - Διάλογοι = SCRIPTS (έτοιμοι διάλογοι, π.χ. στην καφετέρια)
-        - Προτάσεις = SENTENCES (φτιάχνει πρόταση από λέξεις)
+        - Διάλογοι = SCRIPTS (ανοιχτοί διάλογοι· απαντάει με δικά του λόγια)
+        - Προτάσεις = SENTENCES (φτιάχνει, συμπληρώνει ή γράφει ολόκληρη πρόταση)
         - Γράψε = TRACE (γράφει γράμματα και λέξεις με το δάχτυλο)
         - Δεξί χέρι = ARCADE (ασκήσεις για το δεξί του χέρι, όχι λόγος)
         - Μίλα = TALKBOARD, ο πίνακας επικοινωνίας. Δεν είναι άσκηση: κάθε πάτημα καταγράφεται ως
           σωστό επειδή είναι ο ίδιος που μιλάει, οπότε μετράει στις ασκήσεις αλλά ποτέ στα σωστά.
+
+        Η «δυσκολία» σε κάθε άσκηση είναι μια σειρά από πέντε κουκκίδες, 1 έως 5, στην πρώτη της
+        οθόνη. Τις πατάει ο ίδιος· ο φροντιστής βάζει μόνο κάτω και πάνω όριο. Η κουκκίδα διαλέγει
+        ζώνη επιπέδων και μέσα στη ζώνη το επίπεδο ανεβοκατεβαίνει μόνο του, όπως πάντα. Το «Μίλα»
+        δεν έχει κουκκίδες.
+
+        Ο «Claude» σε μια γραμμή άσκησης είναι ο έλεγχος της απάντησής του από το μοντέλο («Έλεγχος
+        με Claude», προαιρετικός, τον ανοίγει ο φροντιστής). Κρίνει αν μια ανοιχτή απάντηση μετράει
+        και του δίνει ολόκληρη τη σωστή πρόταση για να την επαναλάβει. Το «χωρίς Claude» είναι οι
+        φορές που αποφάσισε μόνο του το τηλέφωνο — κλειστός διακόπτης, χωρίς κλειδί, ή αποτυχία.
 
         Η βοήθεια μετριέται 0–4 σε κάθε λέξη, σε αυτή τη σειρά:
         0 = το είπε μόνος του, με μόνη βοήθεια την εικόνα
@@ -151,10 +170,19 @@ object JourneyReport {
         previous: List<AdviceRow>,
         levels: Map<String, Int>,
         insights: List<String>,
+        /**
+         * The dot each module is set to right now, 1–5 (spec §13). A module missing from the map
+         * gets **no segment** rather than a «δυσκολία —»: the talk board has no dots at all, and a
+         * setting that could not be read is not a dot of 2 that nobody chose. Either way the line
+         * stays true, and the reader is told nothing false about a number he set himself.
+         */
+        difficulty: Map<ModuleId, Int> = emptyMap(),
+        /** What the turn judge did in the window, per module. See [ProgressStats.judgeUse]. */
+        judge: Map<ModuleId, JudgeUse> = emptyMap(),
         names: Map<ModuleId, String> = AdviceSummary.MODULE_NAMES,
         zone: ZoneId = ZoneId.systemDefault(),
     ): String {
-        val all = Sections(profile, notes, modules, lifetime, recent, wordless, days, previous, levels, insights, names, zone)
+        val all = Sections(profile, notes, modules, lifetime, recent, wordless, days, previous, levels, insights, difficulty, judge, names, zone)
         var lines = MAX_LIFETIME_LINES
         var text = render(all, lines, Int.MAX_VALUE)
         // The order the ceiling is paid for, cheapest loss first: the tail of the word history is
@@ -189,6 +217,8 @@ object JourneyReport {
         val previous: List<AdviceRow>,
         val levels: Map<String, Int>,
         val insights: List<String>,
+        val difficulty: Map<ModuleId, Int>,
+        val judge: Map<ModuleId, JudgeUse>,
         val names: Map<ModuleId, String>,
         val zone: ZoneId,
     )
@@ -217,8 +247,12 @@ object JourneyReport {
 
         appendLine(MODULES_HEADING)
         appendLine("(όλη η πορεία, και οι ασκήσεις χωρίς λέξη — Αριθμοί, Προτάσεις, Γράψε, Δεξί χέρι)")
+        appendLine(
+            "(«δυσκολία» είναι η κουκκίδα 1–5 που είναι βαλμένη τώρα· ο «Claude» μετράει μόνο τις " +
+                "τελευταίες 4 εβδομάδες)"
+        )
         if (all.modules.isEmpty()) appendLine("- $NOTHING")
-        all.modules.forEach { appendLine("- ${moduleLine(it, all.names, zone)}") }
+        all.modules.forEach { appendLine("- ${moduleLine(it, all.names, zone, all.difficulty, all.judge)}") }
         appendLine()
 
         appendLine(LIFETIME_HEADING)
@@ -311,12 +345,25 @@ object JourneyReport {
     /**
      * One module's whole life on one line:
      * `Λέξεις (WORDCOACH) · ασκήσεις N · σ/β/π · μέση βοήθεια x,x · μέσος χρόνος N δευτ. ·
-     * πρώτη/τελευταία φορά · επίπεδο ανά εβδομάδα: 3/8 2,0 · 10/8 3,0`.
+     * πρώτη/τελευταία φορά · δυσκολία 3/5 · επίπεδο ανά εβδομάδα: 3/8 2,0 · 10/8 3,0 ·
+     * Claude: έκρινε 12, δέχτηκε 9 (75%), ολόκληρη πρόταση 5`.
      *
      * The enum name is printed beside the Greek one on purpose: the focus JSON asks for module ids,
      * and a model that has only ever been shown «Γράψε» has to guess that it means `TRACE`.
+     *
+     * The last two segments are phase 12. The dot is what he has actually set — the advice is asked
+     * to name the dot each module should go to next, and it cannot do that without knowing where the
+     * dot is now — and the judge segment is there because «Έλεγχος με Claude» is opt-in: without it
+     * a month of open dialogues where the key had expired reads exactly like a month where it
+     * worked. Both are left off a module that has nothing to say rather than printed as zeroes.
      */
-    internal fun moduleLine(m: ModuleHistory, names: Map<ModuleId, String>, zone: ZoneId): String {
+    internal fun moduleLine(
+        m: ModuleHistory,
+        names: Map<ModuleId, String>,
+        zone: ZoneId,
+        difficulty: Map<ModuleId, Int> = emptyMap(),
+        judge: Map<ModuleId, JudgeUse> = emptyMap(),
+    ): String {
         val scored = if (m.module in ProgressStats.GRADED_MODULES) {
             "σωστά ${m.correct}/με βοήθεια ${m.assisted}/παράλειψη ${m.skipped}"
         } else {
@@ -324,16 +371,43 @@ object JourneyReport {
         }
         val levels = if (m.levels.isEmpty()) "χωρίς επίπεδο" else
             "επίπεδο ανά εβδομάδα: " + m.levels.joinToString(" · ") { "${shortDate(it.weekStart, zone)} ${decimal(it.level)}" }
-        return listOf(
+        return listOfNotNull(
             "${names[m.module] ?: m.module.name} (${m.module.name})",
             "ασκήσεις ${m.attempts}",
             scored,
             "μέση βοήθεια ${m.meanCue?.let { decimal(it) } ?: "—"}",
             "μέσος χρόνος ${seconds(m.meanMs)}",
             "${date(m.firstAt, zone)}–${date(m.lastAt, zone)}",
+            difficulty[m.module]?.let { "δυσκολία $it/${Difficulty.MAX}" },
             levels,
+            judge[m.module]?.takeIf { !it.isEmpty }?.let { judgeLine(it) },
         ).joinToString(" · ")
     }
+
+    /**
+     * What the judge did in this module over the window, in the order a caregiver would ask it: how
+     * many Claude decided, how many of those it accepted, how many whole sentences it handed him to
+     * repeat, and — only when there were any — how many turns the phone had to decide by itself.
+     *
+     * The percentage is over what Claude decided, never over the fallback's rows: see [JudgeUse].
+     * «γραπτές προτάσεις» is «Προτάσεις» alone and is printed only where there are some.
+     */
+    internal fun judgeLine(u: JudgeUse): String = buildString {
+        append("Claude: ")
+        val parts = buildList {
+            if (u.judged > 0) {
+                add("έκρινε ${u.judged}")
+                add("δέχτηκε ${u.accepted} (${percent(u.acceptRate)})")
+                add("ολόκληρη πρόταση ${u.expanded}")
+            }
+            if (u.local > 0) add("χωρίς Claude ${u.local}")
+            if (u.typed > 0) add("γραπτές προτάσεις ${u.typed}")
+        }
+        append(parts.joinToString(", "))
+    }
+
+    /** A rate as a whole percent, the way a caregiver reads one. Null is «—». */
+    private fun percent(rate: Float?): String = if (rate == null) "—" else "${(rate * 100).roundToInt()}%"
 
     /** Milliseconds as the seconds a person would say. */
     private fun seconds(ms: Long): String = "${decimal(ms / 1000f)} δευτ."
@@ -422,6 +496,13 @@ suspend fun journeyReport(
         graph.settings.sentencesLevel.first(),
         graph.settings.traceLevel.first(),
     )
+    // The dot each module is set to right now (spec §13). Only the modules that have one: the talk
+    // board is not graded and has no row of dots, and a «δυσκολία 2» beside it would be a fact about
+    // nothing. A read that fails leaves that module without the segment rather than reporting a
+    // default nobody set.
+    val difficulty = graph.modules.mapNotNull { m ->
+        runCatching { m.id to graph.settings.difficulty(m.id).first() }.getOrNull()
+    }.toMap()
     // The names the modules themselves carry, so a renamed module renames its line here too.
     val names = graph.modules.associate { it.id to it.titleGreek } + (ModuleId.TALKBOARD to "Μίλα")
 
@@ -439,6 +520,11 @@ suspend fun journeyReport(
             previous = previous,
             levels = levels,
             insights = InsightRules.generate(p, window, items),
+            difficulty = difficulty,
+            // The same four weeks the day-by-day section covers, not the lifetime and not the eight
+            // weeks `window` holds for the insight rules: «δέχτηκε 9 στα 12» has to be a statement
+            // about the period the rest of the report is about, or nobody can act on it.
+            judge = ProgressStats.judgeUse(everything.filter { it.startedAt >= from }),
             names = names,
             zone = zone,
         )

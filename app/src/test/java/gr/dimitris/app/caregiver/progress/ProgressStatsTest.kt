@@ -1,11 +1,14 @@
 package gr.dimitris.app.caregiver.progress
 
+import gr.dimitris.app.core.data.Adapt
 import gr.dimitris.app.core.data.Attempt
 import gr.dimitris.app.core.data.Item
 import gr.dimitris.app.core.data.ModuleId
 import gr.dimitris.app.core.data.Outcome
 import gr.dimitris.app.core.data.Schedule
 import gr.dimitris.app.core.data.Session
+import gr.dimitris.app.core.judge.Source
+import gr.dimitris.app.core.judge.Verdict
 import gr.dimitris.app.modules.talkboard.EXPAND_CUE_LEVEL
 import gr.dimitris.app.modules.talkboard.EXPAND_ITEM
 import org.junit.Assert.assertEquals
@@ -648,5 +651,109 @@ class ProgressStatsTest {
         val rows = listOf(attempt("2026-08-01"), attempt("2026-09-03"))
         val out = ProgressStats.recentByDay(rows, items, startOf("2026-09-01"), at("2026-09-05", 23, 59), zone)
         assertEquals(listOf(startOf("2026-09-03")), out.map { it.day })
+    }
+
+    // ---- what the turn judge did (phase 12) -----------------------------------------------------
+
+    private fun judged(
+        date: String,
+        module: ModuleId = ModuleId.SCRIPTS,
+        source: String = "JUDGE",
+        accept: Boolean = true,
+        expanded: String? = null,
+        variant: String? = null,
+    ): Attempt {
+        val judge = listOfNotNull(
+            """"source":"$source"""", """"accept":$accept""", expanded?.let { """"expanded":"$it"""" },
+        ).joinToString(",")
+        val v = variant?.let { ""","variant":"$it"""" }.orEmpty()
+        return attempt(date, module = module).copy(detail = """{"judge":{$judge}$v}""")
+    }
+
+    /** The rate is over what Claude decided; the fallback's rows are counted, never folded in. */
+    @Test fun `the judge's work is counted per module, and the local fallback apart`() {
+        val rows = listOf(
+            judged("2026-09-01", accept = true, expanded = "Πρέπει να πάρω τα φάρμακα."),
+            judged("2026-09-01", accept = true),
+            judged("2026-09-02", accept = false),
+            judged("2026-09-02", source = "LOCAL", accept = true),
+        )
+        val use = ProgressStats.judgeUse(rows).getValue(ModuleId.SCRIPTS)
+
+        assertEquals(3, use.judged)
+        assertEquals(1, use.local)
+        assertEquals(4, use.asked)
+        assertEquals(2, use.accepted)
+        assertEquals(1, use.expanded)
+        assertEquals(2f / 3f, use.acceptRate!!, 0.001f)
+    }
+
+    /** «Προτάσεις» is the only module that writes a variant, and only TYPED is counted. */
+    @Test fun `typed boards are counted from the variant`() {
+        val rows = listOf(
+            judged("2026-09-01", module = ModuleId.SENTENCES, variant = "TYPED"),
+            judged("2026-09-01", module = ModuleId.SENTENCES, variant = "GAP"),
+            attempt("2026-09-01", module = ModuleId.SENTENCES).copy(detail = """{"variant":"TYPED"}"""),
+        )
+        val use = ProgressStats.judgeUse(rows).getValue(ModuleId.SENTENCES)
+
+        assertEquals(2, use.typed)
+        assertEquals(2, use.judged)
+    }
+
+    /**
+     * A module the judge never touched is absent rather than a row of zeroes: "this exercise has
+     * nothing to do with the judge" and "the judge was never asked this month" are different things.
+     */
+    @Test fun `a module with no judge rows is absent, not empty`() {
+        val out = ProgressStats.judgeUse(listOf(attempt("2026-09-01"), attempt("2026-09-02")))
+        assertTrue(out.toString(), out.isEmpty())
+    }
+
+    /** A detail that is not JSON, or has no judge in it, is not a reason to lose the rest. */
+    @Test fun `a broken detail is skipped rather than thrown`() {
+        val rows = listOf(
+            attempt("2026-09-01", module = ModuleId.SCRIPTS).copy(detail = "όχι JSON"),
+            judged("2026-09-02"),
+        )
+        assertEquals(1, ProgressStats.judgeUse(rows).getValue(ModuleId.SCRIPTS).judged)
+    }
+
+    /** The sitting's own summary row is not an exercise, here as everywhere else. */
+    @Test fun `the session summary row is never counted`() {
+        val rows = listOf(judged("2026-09-01").copy(itemId = ProgressStats.SUMMARY_ITEM))
+        assertTrue(ProgressStats.judgeUse(rows).isEmpty())
+    }
+
+    /**
+     * The reader against the real writer, not against JSON typed out by hand. Everything above pins
+     * what `judgeUse` makes of a shape; this pins that the shape is the one the three modules
+     * actually write — `Verdict.detail` through `Adapt.detail`, booleans and all.
+     */
+    @Test fun `a detail written by the judge itself reads back`() {
+        val verdict = Verdict(
+            accept = true, expanded = "Πρέπει να πάρω τα φάρμακα.", feedback = "Μπράβο",
+            score = 0.9f, source = Source.JUDGE,
+        )
+        val detail = Adapt.detail { put("judge", verdict.detail(ms = 1_840)) }
+        val row = attempt("2026-09-01", module = ModuleId.SCRIPTS).copy(detail = detail)
+
+        val use = ProgressStats.judgeUse(listOf(row)).getValue(ModuleId.SCRIPTS)
+        assertEquals(1, use.judged)
+        assertEquals(1, use.accepted)
+        assertEquals(1, use.expanded)
+        assertEquals(0, use.local)
+    }
+
+    /** And the fallback's, which has no expansion to give. */
+    @Test fun `a local verdict reads back as the fallback answering`() {
+        val detail = Adapt.detail { put("judge", Verdict(accept = true, source = Source.LOCAL).detail(ms = 2)) }
+        val row = attempt("2026-09-01", module = ModuleId.SCRIPTS).copy(detail = detail)
+
+        val use = ProgressStats.judgeUse(listOf(row)).getValue(ModuleId.SCRIPTS)
+        assertEquals(0, use.judged)
+        assertEquals(1, use.local)
+        assertEquals(0, use.expanded)
+        assertNull("no rate over nothing Claude decided", use.acceptRate)
     }
 }

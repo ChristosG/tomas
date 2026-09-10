@@ -1,5 +1,6 @@
 package gr.dimitris.app.caregiver.progress
 
+import com.google.gson.JsonObject
 import com.google.gson.JsonParser
 import gr.dimitris.app.core.data.Attempt
 import gr.dimitris.app.core.data.Category
@@ -110,6 +111,45 @@ data class ModuleHistory(
 
 /** The level a module was worked at in one ISO week, averaged over that week's rows. */
 data class WeekLevel(val weekStart: Long, val level: Float)
+
+/**
+ * What the turn judge did in one module over one window, read back off `detail.judge` and
+ * `detail.variant` (phase 12; `docs/ADAPTATION.md`).
+ *
+ * It is the one part of his practice nobody can see from the outside. «Έλεγχος με Claude» is
+ * opt-in, and when it is on it is the thing deciding whether an open answer counted, and the thing
+ * handing him the whole sentence to repeat — so a caregiver reading a month of «Διάλογοι» without
+ * these numbers cannot tell a good month from a month where the key expired and the phone quietly
+ * fell back to matching words.
+ *
+ * [judged] and [local] are the two halves of that: [local] rows are the fallback answering, whether
+ * because the toggle is off, because there is no key, or because the call failed. [accepted] and
+ * [expanded] are counted over [judged] alone — [LocalJudge][gr.dimitris.app.core.judge.LocalJudge]
+ * accepts almost anything said to an open question and never expands, so folding it in would report
+ * an accept rate that says nothing.
+ */
+data class JudgeUse(
+    val module: ModuleId,
+    /** Rows Claude decided (`detail.judge.source` = `JUDGE`). */
+    val judged: Int,
+    /** Rows the phone decided instead (`LOCAL`): the toggle off, no key, or a call that failed. */
+    val local: Int,
+    /** Of [judged], how many it accepted. */
+    val accepted: Int,
+    /** Of [judged], how many came back with a whole sentence for him to hear and repeat. */
+    val expanded: Int,
+    /** «Προτάσεις» only: boards he had to type rather than tap (`detail.variant` = `TYPED`). */
+    val typed: Int,
+) {
+    /** Everything this module put in front of the judge, however it was answered. */
+    val asked: Int get() = judged + local
+
+    /** 0f..1f over [judged], and null when Claude never answered for this module in the window. */
+    val acceptRate: Float? get() = if (judged <= 0) null else accepted.toFloat() / judged
+
+    /** Whether this module has anything to say at all. An empty row is better left off the line. */
+    val isEmpty: Boolean get() = judged == 0 && local == 0 && typed == 0
+}
 
 data class Progress(
     val from: Long,
@@ -413,6 +453,54 @@ object ProgressStats {
     }
 
     /**
+     * What the turn judge did, per module, over exactly the rows handed in — so the caller decides
+     * the period and this decides nothing.
+     *
+     * Only three modules ever write a `judge` object («Διάλογοι», «Προτάσεις», «Μίλα»), and only
+     * «Προτάσεις» writes a `variant`; every other module comes back absent rather than as a row of
+     * zeroes, because "this exercise has nothing to do with the judge" and "the judge was never
+     * asked this month" are different things and a caregiver should not have to tell them apart by
+     * remembering which module is which.
+     */
+    fun judgeUse(attempts: List<Attempt>): Map<ModuleId, JudgeUse> {
+        val rows = exercises(attempts)
+        if (rows.isEmpty()) return emptyMap()
+        return rows.groupBy { it.module }.mapNotNull { (id, mine) ->
+            val details = mine.map { detailOf(it) }
+            val judges = details.mapNotNull { d ->
+                d?.get("judge")?.takeIf { it.isJsonObject }?.asJsonObject
+            }
+            val byClaude = judges.filter { string(it, "source") == JUDGE_SOURCE }
+            val use = JudgeUse(
+                module = id,
+                judged = byClaude.size,
+                local = judges.size - byClaude.size,
+                accepted = byClaude.count { bool(it, "accept") == true },
+                expanded = byClaude.count { !string(it, "expanded").isNullOrBlank() },
+                typed = details.count { d -> d != null && string(d, "variant") == TYPED_VARIANT },
+            )
+            if (use.isEmpty) null else id to use
+        }.toMap()
+    }
+
+    /** [gr.dimitris.app.core.judge.Source.JUDGE], by name: this file must not depend on the judge. */
+    private const val JUDGE_SOURCE = "JUDGE"
+
+    /** [gr.dimitris.app.modules.sentences.Variant.TYPED], by name, for the same reason. */
+    private const val TYPED_VARIANT = "TYPED"
+
+    /** One row's `detail` as an object, or null when it is `"{}"`, absent or not JSON at all. */
+    private fun detailOf(row: Attempt) = runCatching {
+        JsonParser.parseString(row.detail).takeIf { it.isJsonObject }?.asJsonObject
+    }.getOrNull()
+
+    private fun string(o: JsonObject, key: String): String? =
+        o.get(key)?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isString }?.asString
+
+    private fun bool(o: JsonObject, key: String): Boolean? =
+        o.get(key)?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isBoolean }?.asBoolean
+
+    /**
      * How many of a day's exercises had no word behind them, and which modules they were.
      *
      * Without this the day header does not add up to the lines under it — «12 ασκήσεις» over five
@@ -448,10 +536,8 @@ object ProgressStats {
         itemId !in known || SYNTHETIC_PREFIXES.any { itemId.startsWith(it) }
 
     /** `detail.level` as a number, or null when this module does not write one. */
-    private fun levelOf(row: Attempt): Int? = runCatching {
-        JsonParser.parseString(row.detail).takeIf { it.isJsonObject }?.asJsonObject
-            ?.get("level")?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isNumber }?.asInt
-    }.getOrNull()
+    private fun levelOf(row: Attempt): Int? =
+        detailOf(row)?.get("level")?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isNumber }?.asInt
 
     /**
      * Minutes he practised without a session row, per day.
