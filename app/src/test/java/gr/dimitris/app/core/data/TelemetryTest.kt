@@ -11,6 +11,7 @@ import gr.dimitris.app.modules.sentences.sentencesDetail
 import gr.dimitris.app.modules.singsay.Key
 import gr.dimitris.app.modules.singsay.Tempo
 import gr.dimitris.app.modules.singsay.singSayDetail
+import gr.dimitris.app.modules.talkboard.expandDetail
 import gr.dimitris.app.modules.talkboard.talkBoardDetail
 import gr.dimitris.app.modules.trace.LetterScore
 import gr.dimitris.app.modules.trace.Pt
@@ -126,6 +127,43 @@ class TelemetryTest {
 
     /** A shape like the numbers module's exercise: an object with numbers in its fields. */
     private data class Reading(val name: String, val value: Float, val parts: List<Float>)
+
+    /**
+     * The one nested object a new caller may write: what the turn judge decided about a turn. It goes
+     * in whole and in order, under its own key, so that the caregiver's reader has one shape to read
+     * for all three modules that write it.
+     */
+    @Test fun `the judge's verdict goes in as one object under one key`() {
+        assertEquals(
+            """{"judge":{"source":"JUDGE","accept":true,"ms":640,"expanded":"Πρέπει να πάρω τα φάρμακα."}}""",
+            Adapt.detail {
+                put(
+                    "judge",
+                    linkedMapOf<String, Any?>(
+                        "source" to "JUDGE", "accept" to true, "ms" to 640L,
+                        "expanded" to "Πρέπει να πάρω τα φάρμακα.",
+                    ),
+                )
+            },
+        )
+    }
+
+    /** The absence rule, one level down and one level up: no nulls inside, and no empty object at all. */
+    @Test fun `an object with nothing left to say is absent rather than empty`() {
+        assertEquals("{}", Adapt.detail { put("judge", emptyMap<String, Any?>()) })
+        assertEquals("{}", Adapt.detail { put("judge", null as Map<String, Any?>?) })
+        assertEquals("{}", Adapt.detail { put("judge", mapOf("expanded" to null)) })
+        assertEquals(
+            """{"judge":{"accept":false}}""",
+            Adapt.detail { put("judge", linkedMapOf("accept" to false, "expanded" to null)) },
+        )
+    }
+
+    /** And it goes through [Adapt.Detail.kept], so the finite guard covers it like everything else. */
+    @Test fun `an object hiding a number that is not a number is dropped whole`() {
+        assertEquals("{}", Adapt.detail { put("judge", mapOf("accept" to true, "score" to Float.NaN)) })
+        assertEquals("{}", Adapt.detail { put("judge", mapOf("inside" to listOf(Double.POSITIVE_INFINITY))) })
+    }
 
     @Test fun `text is cut to a length nobody can keep notes in`() {
         val long = "α".repeat(Adapt.MAX_TEXT * 2)
@@ -312,6 +350,50 @@ class TelemetryTest {
 
     @Test fun `a word said off the strip writes what it always wrote, which is nothing`() {
         assertEquals("{}", talkBoardDetail(inStrip = false, stripLen = 5))
+    }
+
+    /**
+     * An expansion says what it was made of, what came back, where that came from, and what he then
+     * made of saying it. The recognition keys carry the word coach's names so that one reader does
+     * both.
+     */
+    @Test fun `an expansion says the words, the sentence and who wrote it`() {
+        val o = parse(
+            expandDetail(
+                words = "φάρμακα πρέπει πάρω",
+                expanded = "Πρέπει να πάρω τα φάρμακα.",
+                stripLen = 3,
+                sttOn = true,
+                heard = "πρέπει να πάρω τα φάρμακα",
+                matched = true,
+                sttTries = 0,
+                ms = 9_000,
+                judge = linkedMapOf<String, Any?>("source" to "JUDGE", "accept" to true, "ms" to 640L),
+            )
+        )
+        assertEquals("expand", o["kind"].asString)
+        assertEquals("φάρμακα πρέπει πάρω", o["words"].asString)
+        assertEquals("Πρέπει να πάρω τα φάρμακα.", o["expanded"].asString)
+        assertEquals("JUDGE", o["judge"].asJsonObject["source"].asString)
+        assertEquals(640L, o["judge"].asJsonObject["ms"].asLong)
+        assertEquals(3, o["stripLen"].asInt)
+        assertEquals("πρέπει να πάρω τα φάρμακα", o["sttHeard"].asString)
+        assertBool(o, "sttMatched")
+        listOf("sttTries", "ms").forEach { assertNumber(o, it) }
+    }
+
+    @Test fun `an expansion with no recogniser behind it says nothing about one`() {
+        val o = parse(
+            expandDetail(
+                words = "καφές θέλω", expanded = "Θέλω έναν καφέ.", stripLen = 2, sttOn = false,
+                heard = null, matched = false, sttTries = 0, ms = 4_000, judge = emptyMap(),
+            )
+        )
+        assertFalse("nothing heard, nothing to say about hearing: $o", o.has("sttHeard"))
+        assertFalse(o.has("sttTries"))
+        // A verdict that was never recorded is absent, not an empty object nobody can read.
+        assertFalse("an empty object says less than no key at all: $o", o.has("judge"))
+        assertEquals("Θέλω έναν καφέ.", o["expanded"].asString)
     }
 
     // ---------------------------------------------------------------- The sitting

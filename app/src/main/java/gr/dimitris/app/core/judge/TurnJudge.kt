@@ -203,7 +203,7 @@ class TurnJudge(
          * from the encrypted store each time, so a caregiver who deletes it has deleted it, and no
          * long-lived object is left holding it.
          *
-         * No thinking config at all — not even adaptive, which the advisor uses. This is a 300-token
+         * No thinking config at all — not even adaptive, which the advisor uses. This is a 400-token
          * yes-or-no about one Greek sentence and a man is waiting for it; thinking would spend the
          * budget and the seconds on a question that does not need either. `refused` and `textOf` are
          * the advisor's own, so "a thinking block is not an answer" stays decided in one place.

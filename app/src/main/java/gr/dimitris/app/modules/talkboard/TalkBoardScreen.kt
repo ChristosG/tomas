@@ -1,5 +1,8 @@
 package gr.dimitris.app.modules.talkboard
 
+import android.Manifest
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -20,8 +23,10 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.Backspace
+import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.Clear
 import androidx.compose.material.icons.rounded.Image
+import androidx.compose.material.icons.rounded.Mic
 import androidx.compose.material.icons.rounded.VolumeUp
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -46,9 +51,11 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import coil3.compose.AsyncImage
 import gr.dimitris.app.LocalAppGraph
 import gr.dimitris.app.core.data.Item
+import gr.dimitris.app.core.speech.GentleCheck
 import gr.dimitris.app.ui.components.BigButton
 import gr.dimitris.app.ui.components.ButtonTone
 import gr.dimitris.app.ui.components.DimitrisScreen
+import gr.dimitris.app.ui.components.ListeningIndicator
 import gr.dimitris.app.ui.components.PictureCard
 import gr.dimitris.app.ui.components.QuietButton
 import gr.dimitris.app.ui.components.SuccessMark
@@ -58,6 +65,23 @@ import java.io.File
 
 /** The scrolling grid of pictures. Tagged so a test can scroll to a word that starts below the fold. */
 const val BOARD_GRID_TAG = "board-grid"
+
+/** «Ολόκληρη», and the two controls the expansion puts in its place. Tagged because «Πες το» is a word
+ * the board already uses at the bottom for the other thing a sentence can do: be read out to him. */
+const val EXPAND_TAG = "expand-whole"
+const val EXPAND_SAY_TAG = "expand-say"
+const val EXPAND_SENTENCE_TAG = "expand-sentence"
+
+/** The one new button: the content words he tapped, as one whole Greek sentence. */
+const val WHOLE = "Ολόκληρη"
+
+/** «Πες το» here is him saying it, not the phone — hence the microphone on it. */
+const val SAY_IT_BACK = "Πες το"
+const val CLOSE_EXPANSION = "Κλείσε"
+const val SAID_IT = "Το είπα!"
+
+/** While the judge is being asked. A fact, not a countdown — there is no timer anywhere near him. */
+const val MAKING_SENTENCE = "Φτιάχνω την πρόταση…"
 
 @Composable
 fun TalkBoardScreen(onBack: () -> Unit) {
@@ -73,6 +97,14 @@ fun TalkBoardScreen(onBack: () -> Unit) {
     val shown by vm.shown.collectAsStateWithLifecycle()
     val speechError by vm.speechError.collectAsStateWithLifecycle()
     val spoken by vm.spoken.collectAsStateWithLifecycle()
+    val judgeReady by vm.judgeReady.collectAsStateWithLifecycle()
+    val expansion by vm.expansion.collectAsStateWithLifecycle()
+    val listenLevel by vm.listenLevel.collectAsStateWithLifecycle()
+
+    // Recognition opens the microphone, so it asks for the same permission the modules ask for.
+    val askListen = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) vm.sayExpansion() else vm.micDenied()
+    }
 
     val picture: (Item) -> File? = { item -> item.imagePath?.let { graph.files.resolve(it) } }
 
@@ -93,7 +125,20 @@ fun TalkBoardScreen(onBack: () -> Unit) {
             }
         },
     ) {
-        StripRow(strip, stripFull, spoken, picture)
+        StripRow(
+            items = strip,
+            full = stripFull,
+            spoken = spoken,
+            showsExpand = showsExpand(strip.size, judgeReady),
+            expansion = expansion,
+            listenLevel = listenLevel,
+            onExpand = vm::expand,
+            onSay = { askListen.launch(Manifest.permission.RECORD_AUDIO) },
+            onConfirm = vm::confirmExpansion,
+            onStop = vm::stopListening,
+            onClose = vm::closeExpansion,
+            picture = picture,
+        )
         speechError?.let {
             Spacer(Modifier.height(Sizes.gapSmall))
             Text(it, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.error)
@@ -138,33 +183,126 @@ fun TalkBoardScreen(onBack: () -> Unit) {
 /**
  * The sentence so far, as pictures over words — the same way it was built, so a boy who reads
  * pictures can check his own sentence before he says it. The check mark stays until he changes it.
+ *
+ * With a judge behind it, the same area holds the whole of «Ολόκληρη»: the button while the words are
+ * only words, and then the sentence they make — above the chips, which stay exactly where they were
+ * so that he can see what it was built out of — with one primary and «Κλείσε» under it. Nothing else
+ * on the board moves: the quick row, the tabs, the grid and the bottom three are where they were.
  */
 @Composable
-private fun StripRow(items: List<Item>, full: Boolean, spoken: Boolean, picture: (Item) -> File?) {
+private fun StripRow(
+    items: List<Item>,
+    full: Boolean,
+    spoken: Boolean,
+    showsExpand: Boolean,
+    expansion: Expansion?,
+    listenLevel: Float,
+    onExpand: () -> Unit,
+    onSay: () -> Unit,
+    onConfirm: () -> Unit,
+    onStop: () -> Unit,
+    onClose: () -> Unit,
+    picture: (Item) -> File?,
+) {
     // The newest word is the one being chosen, so it is the one that has to be on screen.
     val stripState = rememberLazyListState()
     LaunchedEffect(items.size) { stripState.animateScrollToItem(items.lastIndex.coerceAtLeast(0)) }
     Surface(shape = RoundedCornerShape(Sizes.corner), color = MaterialTheme.colorScheme.surfaceVariant, modifier = Modifier.fillMaxWidth().heightIn(min = Sizes.touchMin)) {
-        Row(Modifier.padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) {
-                if (items.isEmpty()) {
-                    Text("Πάτα εικόνες για να φτιάξεις πρόταση.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                } else {
-                    // No key: the same word may be chosen twice, and position is what identifies it here.
-                    LazyRow(state = stripState, horizontalArrangement = Arrangement.spacedBy(Sizes.gapSmall)) {
-                        items(items) { item ->
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Pictogram(picture(item), Sizes.stripPicture)
-                                Text(item.text, style = MaterialTheme.typography.titleLarge, textAlign = TextAlign.Center, maxLines = 1)
+        Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+            if (expansion != null) {
+                // The sentence is the thing on the screen while this is open: he reads it, hears it,
+                // and says it back. Never an empty line — while the judge is being asked it says so.
+                Text(
+                    expansion.sentence ?: MAKING_SENTENCE,
+                    style = MaterialTheme.typography.titleLarge,
+                    modifier = Modifier.fillMaxWidth().testTag(EXPAND_SENTENCE_TAG),
+                )
+                Spacer(Modifier.height(Sizes.gapSmall))
+            }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    if (items.isEmpty()) {
+                        Text("Πάτα εικόνες για να φτιάξεις πρόταση.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    } else {
+                        // No key: the same word may be chosen twice, and position is what identifies it here.
+                        LazyRow(state = stripState, horizontalArrangement = Arrangement.spacedBy(Sizes.gapSmall)) {
+                            items(items) { item ->
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Pictogram(picture(item), Sizes.stripPicture)
+                                    Text(item.text, style = MaterialTheme.typography.titleLarge, textAlign = TextAlign.Center, maxLines = 1)
+                                }
                             }
                         }
+                        if (full) Text("Γεμάτο. Πες το ή σβήσε.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
                     }
-                    if (full) Text("Γεμάτο. Πες το ή σβήσε.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
                 }
+                SuccessMark(visible = (expansion?.done ?: (spoken && items.isNotEmpty())), size = Sizes.stripPicture)
             }
-            SuccessMark(visible = spoken && items.isNotEmpty(), size = Sizes.stripPicture)
+            if (expansion != null) {
+                ExpansionControls(expansion, listenLevel, onSay, onConfirm, onStop, onClose)
+            } else if (showsExpand) {
+                Spacer(Modifier.height(Sizes.gapSmall))
+                BigButton(WHOLE, onClick = onExpand, icon = Icons.Rounded.AutoAwesome, tone = ButtonTone.Secondary,
+                    modifier = Modifier.testTag(EXPAND_TAG))
+            }
         }
     }
+}
+
+/**
+ * What is under the sentence: one primary and «Κλείσε», and while the window is open neither of them.
+ *
+ * The primary is the gentle check of spec §12, exactly as the three speech modules run it: «Πες το»
+ * until the phone has agreed with him or has asked him twice, and then «Το είπα!», which is his word
+ * against the phone's and has never been withheld. A miss in between buys one «Δοκίμασε ξανά» with
+ * the sentence untouched.
+ */
+@Composable
+private fun ExpansionControls(
+    expansion: Expansion,
+    listenLevel: Float,
+    onSay: () -> Unit,
+    onConfirm: () -> Unit,
+    onStop: () -> Unit,
+    onClose: () -> Unit,
+) {
+    if (expansion.nudge) {
+        Spacer(Modifier.height(Sizes.gapSmall))
+        Text(
+            GentleCheck.TRY_AGAIN, style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.secondary,
+        )
+    }
+    if (expansion.heard != null) {
+        Spacer(Modifier.height(Sizes.gapSmall))
+        Text(
+            // A miss is the phone's uncertainty, never a verdict on how he said it.
+            if (expansion.matched) "Άκουσα «${expansion.heard}». Μπράβο!" else "Άκουσα «${expansion.heard}». Το τηλέφωνο δεν είναι σίγουρο.",
+            style = MaterialTheme.typography.bodyMedium,
+        )
+    }
+    expansion.error?.let {
+        Spacer(Modifier.height(Sizes.gapSmall))
+        Text(it, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.error)
+    }
+    Spacer(Modifier.height(Sizes.gapSmall))
+    if (expansion.listening) {
+        // The window is open: one thing to do, which is to speak, and one button, which closes it
+        // when he decides he is finished.
+        ListeningIndicator(level = listenLevel, onStop = onStop)
+        return
+    }
+    // Nothing to repeat yet, or it is done: «Κλείσε» alone, so there is one thing to press.
+    if (!expansion.thinking && !expansion.done) {
+        if (expansion.canConfirm) {
+            BigButton(SAID_IT, onClick = onConfirm, tone = ButtonTone.Success, modifier = Modifier.testTag(EXPAND_SAY_TAG))
+        } else {
+            BigButton(SAY_IT_BACK, onClick = onSay, icon = Icons.Rounded.Mic, tone = ButtonTone.Primary,
+                modifier = Modifier.testTag(EXPAND_SAY_TAG))
+        }
+        Spacer(Modifier.height(Sizes.gapSmall))
+    }
+    QuietButton(CLOSE_EXPANSION, onClick = onClose)
 }
 
 /** A quick phrase: picture first, then the word, on one 72dp tall card. */

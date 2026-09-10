@@ -100,8 +100,13 @@ class AppGraph(context: Context) {
      * Held for the life of the app rather than built per turn because it remembers which failures it
      * has already written down: a phone that lost its connection fails on every word of a session,
      * and the error log a caregiver reads must not fill up with three hundred copies of one fact.
+     *
+     * A `var` for the same single reason [stt] is one: the emulator can reach neither a recognition
+     * service nor the Anthropic API, so putting a judge with a canned answer in front of a module is
+     * the only way to drive a judged flow anywhere but on a phone with a key in it. Nothing in the
+     * app ever assigns it.
      */
-    val judge = TurnJudge(
+    var judge = TurnJudge(
         secrets = secrets,
         // Read per turn, not captured: a caregiver switching it off mid-session stops the next word.
         enabled = { settings.claudeJudging.first() },

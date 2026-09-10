@@ -109,6 +109,28 @@ object Adapt {
         fun times(key: String, v: Map<String, Long>?) { if (!v.isNullOrEmpty()) values[key] = LinkedHashMap(v) }
 
         /**
+         * One small object under one key: the shape
+         * [gr.dimitris.app.core.judge.Verdict.detail] hands over, and the only nested value a *new*
+         * caller may write.
+         *
+         * [kept] is the door for the keys that were on these rows before this file existed, and it
+         * says that nothing new goes through it. Phase 12 needs exactly one new nested value, and it
+         * needs it in three modules: what the turn judge decided about a turn, as
+         * `{source, accept, ms, expanded?}`. Giving it a name of its own is what keeps [kept]'s
+         * promise true — a reviewer reading `kept` still sees only the old keys — and it is written
+         * *through* [kept] so that the finite guard which protects every other number protects these
+         * too: a NaN anywhere inside drops the whole object rather than throwing out of the builder
+         * and taking the attempt row with it.
+         *
+         * The same absence rule as [put], one level down and one level up: a key inside with nothing
+         * to say is dropped, and an object with nothing left in it is absent rather than `{}`.
+         */
+        fun put(key: String, v: Map<String, Any?>?) {
+            val said = v?.filterValues { it != null }
+            if (!said.isNullOrEmpty()) kept(key, LinkedHashMap(said))
+        }
+
+        /**
          * A key a module already wrote before this file existed, put back exactly as it was.
          *
          * This is the only way anything that is not a plain number, boolean or short word reaches a
