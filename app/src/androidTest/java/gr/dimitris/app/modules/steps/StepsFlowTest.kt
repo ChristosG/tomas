@@ -121,7 +121,7 @@ class StepsFlowTest {
         assertThreeActionsInTheBottom(READY)
 
         tapInOrder(task.order)
-        assertStrip(task.order)
+        assertStrip("the strip is not what he tapped", task.order)
         compose.onNodeWithText(READY).performClick()
 
         // Stage 2, on the same screen, with the strip he built still on it.
@@ -147,27 +147,39 @@ class StepsFlowTest {
     }
 
     /**
-     * A wrong order costs him the mark and nothing else: «Σχεδόν.», the strip left exactly as he built
-     * it — he has one tile to move, not six to lay again — and as many goes as he likes.
+     * A wrong order costs him the mark and nothing else — and the mark is **one tile to move**, not the
+     * tail to lay again.
+     *
+     * The two taps this drives are the whole of that promise: he takes the misplaced step out of the
+     * strip, the hole stays open where the mark is, and the next tile he taps drops into it. Before the
+     * slot existed, taking a tile out shifted everything up and the only way to put a step back in the
+     * middle was to dismantle the rest of the strip — five tiles, on a six-step task.
      */
-    @Test fun aWrongOrderIsANudgeAndTheStripStays() {
+    @Test fun aWrongOrderIsOneTileToMove() {
         val task = openTask()
-        val wrong = task.order.reversed()
+        // Right first step, last two swapped: the mark lands on slot 2, and the step that belongs
+        // there is the one he put last.
+        val wrong = listOf(task.order[0], task.order[2], task.order[1])
 
         tapInOrder(wrong)
         compose.onNodeWithText(READY).performClick()
         compose.waitUntil(TIMEOUT_MS) { onScreen(StepsViewModel.ALMOST) }
         assertTrue("a miss was written down as an attempt", rows().isEmpty())
-        assertStrip(wrong)
+        assertStrip("the strip was taken away from him", wrong)
         // Still stage 1: nothing has moved on.
         compose.onNodeWithText(StepsViewModel.PUT_IN_ORDER).assertIsDisplayed()
 
-        // Tapping a step in the strip takes it back, which is the undo this screen has.
-        wrong.forEach { tapChosen(it) }
-        assertTrue("the strip did not empty", textsOf(STEP_CHOSEN_TAG).isEmpty())
-        tapInOrder(task.order)
-        compose.onNodeWithText(READY).performClick()
+        // One tile out — the step that belongs in the marked slot — and the hole stays open there.
+        tapChosen(task.order[1])
+        compose.waitUntil(TIMEOUT_MS) { compose.onAllNodesWithTag(STEP_SLOT_TAG).fetchSemanticsNodes().isNotEmpty() }
+        assertStrip("the rest of the strip was disturbed", listOf(task.order[0], task.order[2]), slotAt = 1)
 
+        // And one tile in: it lands in the slot, not at the end.
+        tapBoard(task.order[1])
+        assertStrip("the tile did not land in the marked slot", task.order)
+        assertTrue("the slot outlived the tile that filled it", compose.onAllNodesWithTag(STEP_SLOT_TAG).fetchSemanticsNodes().isEmpty())
+
+        compose.onNodeWithText(READY).performClick()
         compose.waitUntil(TIMEOUT_MS) { rows().isNotEmpty() }
         val ordering = rows().single()
         assertEquals("an order he found after a miss is assisted work", Outcome.ASSISTED, ordering.outcome)
@@ -223,7 +235,10 @@ class StepsFlowTest {
      * tile can be below the fold — and a `performClick` on a node whose centre is off the window lands
      * nowhere and is silently lost, which reads here as "the right order was refused".
      */
-    private fun tapInOrder(steps: List<String>) = steps.forEach { step ->
+    private fun tapInOrder(steps: List<String>) = steps.forEach(::tapBoard)
+
+    /** One tile on the board, scrolled to first — see [tapInOrder]. */
+    private fun tapBoard(step: String) {
         compose.onNode(hasTestTag(STEP_TILE_TAG) and hasText(step)).performScrollTo().performClick()
     }
 
@@ -235,13 +250,19 @@ class StepsFlowTest {
      * The strip holds exactly [steps], numbered from one, in that order.
      *
      * Read off each line's own text, which is «1.» and the step together: the numbers are half of what
-     * the strip is for — a sequence he can read back — so they are part of what is asserted.
+     * the strip is for — a sequence he can read back — so they are part of what is asserted. The empty
+     * slot has a tag of its own ([STEP_SLOT_TAG]) and is deliberately not one of these lines: it is a
+     * hole, not a step he put down.
      */
-    private fun assertStrip(steps: List<String>) {
+    private fun assertStrip(why: String, steps: List<String>, slotAt: Int? = null) {
         val lines = textsOf(STEP_CHOSEN_TAG)
-        assertEquals("the strip holds $lines", steps.size, lines.size)
+        assertEquals("$why — the strip holds $lines", steps.size, lines.size)
         steps.forEachIndexed { at, step ->
-            assertEquals("line ${at + 1} of the strip is «${lines[at]}»", "${at + 1}.$step", lines[at])
+            // The empty slot takes a number of its own, so the steps below it are numbered one higher:
+            // the strip he reads is «1., 2., 3.» top to bottom whether the second line is a step or a
+            // hole waiting for one.
+            val number = at + 1 + if (slotAt != null && at >= slotAt) 1 else 0
+            assertEquals("$why — line ${at + 1} of the strip is «${lines[at]}»", "$number.$step", lines[at])
         }
     }
 

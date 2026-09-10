@@ -103,9 +103,10 @@ not a loophole, and a list that is only *mostly* complete is how the loophole ge
   the question, not an action.
 - **Βήματα**: the steps he has already put in the strip — tapping one takes it back. The undo lives
   next to the sequence he is building, because the bottom block is already «Έτοιμο» / «Άκου» /
-  «Παράλειψη» and because the thing being undone is *that step in that place*. The whole telling, left
-  on the screen after one that did not land, is content too: it is there to be read and repeated, not
-  pressed.
+  «Παράλειψη» and because the thing being undone is *that step in that place*. The empty slot the mark
+  leaves behind is content and **not** a control: nothing happens when it is touched, it only says
+  where the next tile he taps will land. The whole telling, left on the screen after one that did not
+  land, is content too: it is there to be read and repeated, not pressed.
 - **Μίλα**: the whole of «Ολόκληρη», inside the sentence strip. «Ολόκληρη» while the strip is only
   words; then, over the chips, the sentence with «Μίλα» / «Το είπα!» and «Κλείσε» under it, and
   «Στοπ» alone while the microphone is open. The board's own three at the bottom («Πες το», σβήσε,
@@ -220,18 +221,31 @@ reads slowly checks his own work without being handed the answer — so it is fr
 [`CueLadder.LISTENED`] and the exercise comes out as assisted work. Same button, same place, never
 withheld (spec §12); what changes is what the row says.
 
-**One step is marked, never four.** A wrong order marks the **first** step that is out of place and
-nothing else, and the strip is left exactly as he built it. Marking every step after the first one as
-well would be true and useless: a man who put step 3 where step 2 goes has one tile to move, and a
-strip of four marks reads as "you got it all wrong", which is both untrue and the one thing this app may
-never say. The tiles are not handed back either — «Προτάσεις» hands its cards back because a sentence
-of three words is quick to rebuild, and six steps is not.
+**One step is marked, never four — and it is one tile to move.** A wrong order marks the **first** step
+that is out of place and nothing else, and the strip is left exactly as he built it. Marking every step
+after the first one as well would be true and useless: a man who put step 3 where step 2 goes has one
+tile to move, and a strip of four marks reads as "you got it all wrong", which is both untrue and the
+one thing this app may never say.
 
-**Two attempt rows per task.** `steps:order:<task>` for the sequencing and `steps:tell:<task>` for the
-telling, because they are two exercises and a reader who cannot tell them apart cannot see the thing
-worth seeing — he orders well and tells badly, or the other way about. It means a sitting of four tasks
-leaves eight rows where the session's `plannedItemCount` says four; the number he is shown at the end
-counts the rows, which is the honest one.
+The mark is also where the *next* tile goes. He taps the misplaced step out of the strip, the hole stays
+open in its place — drawn as an outlined line with the number it will have, «Βάλε εδώ το σωστό βήμα.» —
+and the next tile he taps on the board drops into it rather than onto the end. Without that the mark
+cost him the tail: taking a tile out shifted everything up, so putting a step back into the middle meant
+dismantling the rest of the strip, five tiles on a six-step task. The marked line also brings itself
+into view, because on a six-step task the step that is out of place can be line 6 with the screen
+sitting at line 1, and a mark he cannot see is a correction he cannot make.
+
+**More than one order is right, and the app knows which.** Thirteen of the twenty tasks contain steps
+whose order is his to choose — the four things that go into a suitcase, the water and the coffee into
+the briki — so those steps share a *group* in the seed and the check compares the sequence of groups.
+«Φτιάχνω τη βαλίτσα» accepts all twenty-four of its right answers. The seven tasks whose order is
+causally forced end to end still have exactly one.
+
+**Two attempt rows per task, and two of the session's items.** `steps:order:<task>` for the sequencing
+and `steps:tell:<task>` for the telling, because they are two exercises and a reader who cannot tell
+them apart cannot see the thing worth seeing — he orders well and tells badly, or the other way about.
+The module's plan is therefore two placeholders per task, so what the session promised and what it
+counts are the same number; the screen runs one task per pair it is handed.
 
 [`Icons.Rounded.FormatListNumbered`]: ../app/src/main/java/gr/dimitris/app/modules/steps/StepsModule.kt
 [`CueLadder.LISTENED`]: ../app/src/main/java/gr/dimitris/app/modules/wordcoach/CueLadder.kt

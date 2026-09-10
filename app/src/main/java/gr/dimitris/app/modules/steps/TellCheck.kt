@@ -50,13 +50,19 @@ internal data class Told(
  * [Kind.DIALOGUE] — there is exactly one order, and accepting «καφέ, νερό, φωτιά» as one sensible
  * answer among many would throw away the whole exercise.
  *
- * With the judge off — no key, «Έλεγχος με Claude» off — the comparison is
- * [SpeechMatch.phraseMatches] over the steps' own words ([StepTasks.localTarget]) and **not** over
- * the telling: the connectors are what the judge is asked about, and a local matcher that insisted on
- * «πρώτα» and «τέλος» would refuse every telling on a phone with no key. A judge that was on and
- * could not be reached lands in the same place, by the [Source.LOCAL] test in [weigh] — the rule
+ * With the judge off — no key, «Έλεγχος με Claude» off, which is a fresh install — the check is
+ * [StepTasks.toldInOrder]: every step named, in group order, and **not** the telling as a string. The
+ * connectors are what the judge is asked about, and a local matcher that insisted on «πρώτα» and
+ * «τέλος» would refuse every telling on a phone with no key. A judge that was on and could not be
+ * reached lands in the same place, by the [Source.LOCAL] test in [weigh] — the rule
  * [gr.dimitris.app.modules.scripts.TurnCheck] already states: a phone on a bus with no signal must
  * not answer «Μπράβο» to every sound he makes and write a CORRECT row for each of them.
+ *
+ * One field of the judge's answer is deliberately dropped: [gr.dimitris.app.core.judge.Verdict.expanded].
+ * The SENTENCE contract has the model return a whole correct sentence on every refusal, and here we
+ * already have one that is *right* — the task's own [StepTask.telling], built from the steps he can
+ * see on the screen. Taking the model's instead would hand him a second wording of the same thing, and
+ * a different one on a phone with no key. It is read for nothing; that is on purpose.
  *
  * Everything it needs is a function value, so that these rules can be argued with in a test that runs
  * in a second rather than only on a phone: an [gr.dimitris.app.AppGraph] needs a `Context`.
@@ -103,11 +109,7 @@ internal class TellCheck(
             check.record(null, false)
             return told(null, accepted = false, task = task)
         }
-        if (!judged()) {
-            val matched = SpeechMatch.phraseMatches(heard, StepTasks.localTarget(task))
-            check.record(heard, matched)
-            return told(heard, accepted = matched, task = task)
-        }
+        if (!judged()) return weighLocally(heard, task)
         val ask = Ask(
             kind = Kind.SENTENCE,
             prompt = task.title,
@@ -143,9 +145,17 @@ internal class TellCheck(
         )
     }
 
-    /** The phase-11 comparison, against the steps' own words. Used whenever no judge really answered. */
+    /**
+     * The comparison a phone with no judge makes: every step named, and the groups in the order the
+     * task has them ([StepTasks.toldInOrder]).
+     *
+     * This is the common path and not the rare one — «Έλεγχος με Claude» is off until a caregiver
+     * saves a key — which is why it may not be a bag of words. It was one, and it passed a telling
+     * with a step missing and a telling said backwards, in the module whose whole subject is «με τη
+     * σειρά».
+     */
     private fun weighLocally(heard: String, task: StepTask): Told {
-        val matched = SpeechMatch.phraseMatches(heard, StepTasks.localTarget(task))
+        val matched = StepTasks.toldInOrder(task, heard)
         check.record(heard, matched)
         return told(heard, accepted = matched, task = task)
     }

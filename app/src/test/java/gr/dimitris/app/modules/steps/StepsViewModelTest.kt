@@ -41,12 +41,20 @@ class StepsViewModelTest {
         distractor = Step("Βγάζω εισιτήριο", en = "ticket", image = "steps/4.png"),
     )
     private val order = task.order
+
+    /** The same task, with its first two steps a group: either of them may go down first. */
+    private val grouped = task.copy(
+        steps = task.steps.mapIndexed { i, step -> step.copy(group = if (i < 2) 1 else 2) },
+    )
+
+    private fun wrongIn(task: StepTask, chosen: List<String>): Int? =
+        firstWrongStep(chosen, task.groups, task::groupOfTile)
     private val gson = Gson()
 
     // ------------------------------------------------------------- is that the order
 
     @Test fun `the order he was asked for is the order, and nothing is marked`() {
-        assertNull(firstWrongStep(order, order))
+        assertNull(wrongIn(task, order))
     }
 
     /**
@@ -55,25 +63,119 @@ class StepsViewModelTest {
      * wrong", which is both untrue and the one thing this app may never tell him.
      */
     @Test fun `a wrong order marks the first step that is out of place and no other`() {
-        assertEquals(0, firstWrongStep(order.reversed(), order))
+        assertEquals(0, wrongIn(task, order.reversed()))
         // The first step right, the last two swapped: the mark is on position 2, not on 2 and 3.
-        assertEquals(1, firstWrongStep(listOf(order[0], order[2], order[1]), order))
+        assertEquals(1, wrongIn(task, listOf(order[0], order[2], order[1])))
         // And the one that is right stays unmarked, which is what makes the mark readable.
-        assertEquals(2, firstWrongStep(listOf(order[0], order[1], "κάτι άλλο"), order))
+        assertEquals(2, wrongIn(task, listOf(order[0], order[1], "κάτι άλλο")))
     }
 
     /** The distractor is wrong wherever he puts it: it is not a step of this task at all. */
     @Test fun `a step from another task is wrong wherever it goes`() {
         val wrong = task.distractor!!.text
-        assertEquals(0, firstWrongStep(listOf(wrong, order[0], order[1]), order))
-        assertEquals(2, firstWrongStep(listOf(order[0], order[1], wrong), order))
+        assertEquals(0, wrongIn(task, listOf(wrong, order[0], order[1])))
+        assertEquals(2, wrongIn(task, listOf(order[0], order[1], wrong)))
     }
 
     /** A strip he has not finished is not wrong for being unfinished: only what he laid is compared. */
     @Test fun `half an order is not a wrong order`() {
-        assertNull(firstWrongStep(emptyList(), order))
-        assertNull(firstWrongStep(order.take(2), order))
-        assertEquals(1, firstWrongStep(listOf(order[0], order[2]), order))
+        assertNull(wrongIn(task, emptyList()))
+        assertNull(wrongIn(task, order.take(2)))
+        assertEquals(1, wrongIn(task, listOf(order[0], order[2])))
+    }
+
+    /**
+     * A group is a run of steps whose internal order is his to choose. Thirteen of the twenty tasks
+     * have one, because thirteen of them have more than one right answer — and the first cut of this
+     * check accepted exactly one permutation and ringed a correct step in all the others.
+     */
+    @Test fun `steps that share a group may go down either way round`() {
+        assertEquals(listOf(1, 1, 2), grouped.groups)
+        assertNull(wrongIn(grouped, grouped.order))
+        assertNull(
+            "the group's own two, the other way round",
+            wrongIn(grouped, listOf(order[1], order[0], order[2])),
+        )
+        // The group after them still comes after them, and the group before still comes before.
+        assertEquals(0, wrongIn(grouped, listOf(order[2], order[0], order[1])))
+        assertEquals(1, wrongIn(grouped, listOf(order[0], order[2], order[1])))
+        // And a tile in no group at all is wrong wherever it goes, group or no group.
+        assertEquals(0, wrongIn(grouped, listOf(grouped.distractor!!.text, order[0], order[1])))
+    }
+
+    /** A step with no group of its own is its own place, and two of them are never interchangeable. */
+    @Test fun `an ungrouped step matches only its own position`() {
+        assertEquals(listOf(-1, -2, -3), task.groups)
+        assertNull(task.groupOfTile("κάτι άλλο"))
+        assertEquals(-2, task.groupOfTile(order[1]))
+    }
+
+    // --------------------------------------------------------------- moving one tile
+
+    /**
+     * What the mark promises: one tile moved, not the tail re-laid.
+     *
+     * Correct A B C D, he lays A C D B. The mark lands on C. Taking C out used to give him A D B with
+     * everything shifted up, so the only way to get B into position 2 was to take D and B out as well
+     * and lay three tiles again — five, on a six-step task. Now the slot stays open where the mark is
+     * and the next tile he taps drops into it.
+     */
+    @Test fun `the marked slot stays open and the next tile drops into it`() {
+        val a = Step("Α"); val b = Step("Β"); val c = Step("Γ"); val d = Step("Δ")
+        val his = listOf(a, c, d, b)
+        val slot = 1
+
+        val (afterC, markC) = removedFrom(his, c, slot)
+        assertEquals(listOf(a, d, b), afterC)
+        assertEquals("the mark is the slot he is filling", 1, markC)
+
+        val (afterB, markB) = removedFrom(afterC, b, markC)
+        assertEquals(listOf(a, d), afterB)
+        assertEquals("taking a tile from below the slot leaves the slot where it was", 1, markB)
+
+        assertEquals(listOf(a, b, d), insertedAt(afterB, b, markB))
+        // And the tile after that goes at the end, because filling the slot answers the mark.
+        assertEquals(listOf(a, b, d, c), insertedAt(insertedAt(afterB, b, markB), c, null))
+    }
+
+    /** A tile taken out from *above* the slot takes the slot up with it: it is a place, not an index. */
+    @Test fun `the slot moves up with the tiles above it`() {
+        val a = Step("Α"); val b = Step("Β"); val c = Step("Γ")
+        val (left, mark) = removedFrom(listOf(a, b, c), a, 2)
+        assertEquals(listOf(b, c), left)
+        assertEquals(1, mark)
+        assertEquals(listOf(b, a, c), insertedAt(left, a, mark))
+    }
+
+    /** With nothing marked a tile goes at the end, which is every tap of an untouched board. */
+    @Test fun `with no mark a tile goes at the end`() {
+        val a = Step("Α"); val b = Step("Β")
+        assertEquals(listOf(a, b), insertedAt(listOf(a), b, null))
+        assertEquals(listOf(a, b), insertedAt(listOf(a), b, 7))
+        val (left, mark) = removedFrom(listOf(a, b), a, null)
+        assertEquals(listOf(b), left)
+        assertNull(mark)
+        // A tile that is not in the strip at all changes nothing.
+        assertEquals(listOf(a, b) to null, removedFrom(listOf(a, b), Step("Γ"), null))
+    }
+
+    // ----------------------------------------------------------- what a sitting is worth
+
+    /**
+     * A task is two exercises and leaves two rows, so it costs the session two items. The first cut
+     * planned one, and every sitting with «Βήματα» in it closed with `completedItemCount` at twice
+     * `plannedItemCount`.
+     */
+    @Test fun `a task is worth two of the session's items`() {
+        assertEquals(2, StepsModule.ITEMS_PER_TASK)
+        assertEquals(4, StepsModule.tasksFor(StepsModule.TASKS_PER_SESSION * StepsModule.ITEMS_PER_TASK))
+        assertEquals(2, StepsModule.tasksFor(4))
+        // An odd budget — `SessionBudget.MIN_PER_MODULE` is three — rounds down rather than promising
+        // an exercise it will not run.
+        assertEquals(1, StepsModule.tasksFor(3))
+        // And a module the session opened at all owes it one task, whatever it was handed.
+        assertEquals(1, StepsModule.tasksFor(1))
+        assertEquals(1, StepsModule.tasksFor(0))
     }
 
     // ------------------------------------------------------------ what counts as what
@@ -247,6 +349,22 @@ class StepsViewModelTest {
     }
 
     /**
+     * And with the judge off the **order** is what is checked, which is the whole subject of the
+     * module. The bag-of-words check this replaced passed a telling with a step missing (8 of 12
+     * words) and the same telling said backwards (12 of 12).
+     */
+    @Test fun `with the judge off a telling out of order is refused`() = runTest {
+        judged = false
+        val backwards = check().weigh("το βάζω στη φωτιά, ρίχνω καφέ και ζάχαρη, βάζω νερό στο μπρίκι", task)
+        assertFalse("the same words, in the wrong sequence", backwards.accepted)
+        assertEquals(task.telling, backwards.whole)
+
+        judged = false
+        val missing = check().weigh("βάζω νερό στο μπρίκι, ρίχνω καφέ και ζάχαρη", task)
+        assertFalse("a step he never said", missing.accepted)
+    }
+
+    /**
      * A judge that was on and could not be reached lands in exactly that same place. Without this, a
      * phone on a bus with no signal answered «Μπράβο» to every sound he made and wrote a CORRECT row
      * for each of them — worse for him than having the judge switched off.
@@ -263,8 +381,8 @@ class StepsViewModelTest {
     /** And so does a judge that threw, which its own contract says can never happen. */
     @Test fun `a judge that threw does not take the task down with it`() = runTest {
         judgeThrows = true
-        val told = check().weigh("βάζω νερό ρίχνω καφέ το βάζω στη φωτιά", task)
-        assertTrue("the steps were said, so the telling counts", told.accepted)
+        val told = check().weigh("νερό στο μπρίκι, καφέ και ζάχαρη, στη φωτιά", task)
+        assertTrue("the steps were said in order, so the telling counts", told.accepted)
         assertTrue(told.judge.isEmpty())
     }
 }

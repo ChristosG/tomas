@@ -121,7 +121,13 @@ for (const name of await fs.readdir(outDir)) {
  */
 function dump(seed) {
   const q = (s) => JSON.stringify(s);
-  const step = (s) => `{ "text": ${q(s.text)}, "en": ${q(s.en ?? null)}, "image": ${q(s.image ?? null)} }`;
+  // `group` is written only where a task has them: it is the one field a person sets by hand for
+  // therapy reasons (which steps may be done in any order), and a `"group": null` on every line of
+  // the seven tasks whose order is causally forced would bury the ones that mean something.
+  const step = (s) =>
+    `{ "text": ${q(s.text)}, "en": ${q(s.en ?? null)}, "image": ${q(s.image ?? null)}` +
+    (s.group == null ? '' : `, "group": ${s.group}`) +
+    ' }';
   const lines = [];
   lines.push('{');
   lines.push(` "version": ${seed.version},`);

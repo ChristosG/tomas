@@ -39,25 +39,42 @@ object StepsModule : Module {
     const val TASKS_PER_SESSION = 4
 
     /**
+     * How many of the session's items one task is worth: **two**, because a task is two exercises and
+     * leaves two attempt rows — `steps:order:<task>` and `steps:tell:<task>`.
+     *
+     * The first cut planned one item per task, and then the session promised four exercises and
+     * counted eight: `completedItemCount` came out at twice `plannedItemCount` on every sitting with
+     * «Βήματα» in it. Nothing he saw was wrong — the end screen counts rows, and he really had done
+     * eight things — but a session row that disagrees with itself is a row nobody can read a year
+     * from now.
+     */
+    const val ITEMS_PER_TASK = 2
+
+    /**
      * The tasks are content, not items ([StepTasks]), so the returned list only *sizes* the session:
-     * four transient placeholders, and the screen runs one task per item it is handed.
+     * two transient placeholders per task, and the screen runs one task per pair it is handed.
      *
      * It asks the database nothing. Which words happen to be on the phone has nothing to do with how
      * many tasks he can sequence in one sitting, and the seed is read when the screen opens.
-     *
-     * One thing a reader of `sessions` should know: a task writes **two** attempt rows — the ordering
-     * and the telling — so a sitting of four tasks leaves eight rows where `plannedItemCount` says
-     * four. The planned count is tasks, the rows are exercises, and the summary he is shown counts
-     * the rows, which is the honest number: he really did do eight things.
      */
     override suspend fun planFor(graph: AppGraph): List<Item> =
-        List(TASKS_PER_SESSION) { Item(text = titleGreek, kind = ItemKind.WORD, category = Category.CUSTOM) }
+        List(TASKS_PER_SESSION * ITEMS_PER_TASK) { Item(text = titleGreek, kind = ItemKind.WORD, category = Category.CUSTOM) }
+
+    /**
+     * How many tasks a budget of [items] buys: two items each, and never fewer than one task — a
+     * module the session opens at all owes it an exercise, and [gr.dimitris.app.today.SessionBudget]
+     * can hand out an odd number ([gr.dimitris.app.today.SessionBudget.MIN_PER_MODULE] is three).
+     *
+     * An odd budget costs the session one item of honesty — three planned, two rows written — which is
+     * the smallest disagreement available, and far better than the factor of two it replaces.
+     */
+    fun tasksFor(items: Int): Int = (items / ITEMS_PER_TASK).coerceAtLeast(1)
 
     /**
      * [items] are placeholders, but their number is the session's budget for this module: it runs one
-     * task per item it was given, which is the contract every module owes the session runner.
+     * task per **two** of them, which is the contract every module owes the session runner.
      */
     @Composable
     override fun Screen(items: List<Item>, sessionId: String?, onDone: () -> Unit, onLeave: () -> Unit) =
-        StepsScreen(items.size, sessionId, onDone, onLeave)
+        StepsScreen(tasksFor(items.size), sessionId, onDone, onLeave)
 }

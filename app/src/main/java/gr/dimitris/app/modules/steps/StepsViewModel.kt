@@ -78,17 +78,55 @@ internal fun stepsOutcome(firstTry: Boolean, skipped: Boolean): Outcome = when {
  * The first place his order parts company with the task's, or null when what he has put down so far is
  * right.
  *
- * The *first*, and only the first. A man who has put step 4 where step 2 goes has everything after it
- * wrong as a consequence, and a board with four red tiles on it says nothing about what to do next —
- * it says he got it all wrong, which is both untrue and the one thing this app may never tell him. One
- * highlight is one correction.
+ * It compares **groups**, not steps ([StepTask.groups]). Thirteen of the twenty tasks have more than
+ * one right answer — a suitcase's four things go in in any order — and the first cut of this compared
+ * the literal step list, so twenty-three of «βαλίτσα»'s twenty-four correct orders were answered with
+ * «Σχεδόν.» and one of his correct steps ringed. He cannot deduce the seed's order from the task, so
+ * the only way out was trial and error, in the one module built for the thing he says he is worst at.
+ *
+ * The *first* place, and only the first. A man who has put step 4 where step 2 goes has everything
+ * after it wrong as a consequence, and a strip of four marks says nothing about what to do next — it
+ * says he got it all wrong, which is both untrue and the one thing this app may never tell him.
  *
  * A strip shorter than the order is not wrong for being unfinished: only the tiles he has laid are
- * compared. A tile that is not in the order at all — the difficulty-5 distractor — is wrong wherever
- * it is, which falls out of comparing by text.
+ * compared. A tile in no group at all — the difficulty-5 distractor, for which [groupOf] answers null
+ * — is wrong wherever it is, because null is never a group the task wanted.
  */
-internal fun firstWrongStep(chosen: List<String>, order: List<String>): Int? =
-    chosen.indices.firstOrNull { i -> chosen[i] != order.getOrNull(i) }
+internal fun firstWrongStep(chosen: List<String>, wanted: List<Int>, groupOf: (String) -> Int?): Int? =
+    chosen.indices.firstOrNull { i -> groupOf(chosen[i]) != wanted.getOrNull(i) }
+
+/**
+ * Where the next tile he taps goes: into the slot the mark is on, or at the end when nothing is
+ * marked.
+ *
+ * This is the whole of the promise «Σχεδόν.» makes. Without it the mark cost him the tail: correct
+ * A B C D, he lays A C D B, the mark lands on C — and taking C out gave him A D B, so the only way to
+ * get B into position 2 was to take D and B out as well and lay three tiles again. On a six-step task
+ * one misplacement meant re-laying five. With it: tap B out of the strip, tap B on the board, done.
+ */
+internal fun insertedAt(chosen: List<Step>, step: Step, slot: Int?): List<Step> {
+    val at = (slot ?: chosen.size).coerceIn(0, chosen.size)
+    return chosen.subList(0, at) + step + chosen.subList(at, chosen.size)
+}
+
+/**
+ * The strip with one tile taken out of it, and where the marked slot has got to.
+ *
+ * The mark survives the tap that answers it — that is what makes the insert above reachable — and it
+ * moves up with the tiles when he takes one out from *above* it, so it goes on meaning the same place
+ * in the sequence rather than the same index into a list that has changed under it.
+ */
+internal fun removedFrom(chosen: List<Step>, step: Step, slot: Int?): Pair<List<Step>, Int?> {
+    val at = chosen.indexOfFirst { it.text == step.text }
+    if (at < 0) return chosen to slot
+    val left = chosen.filterIndexed { i, _ -> i != at }
+    val mark = when {
+        slot == null -> null
+        at < slot -> slot - 1
+        else -> slot
+    }
+    return left to mark?.coerceIn(0, left.size)
+}
 
 data class StepsState(
     /** The 1..5 he set on the first screen. It decides which tasks the sitting draws from. */
@@ -102,7 +140,14 @@ data class StepsState(
     /** What he has put in the strip, in the order he put it. */
     val chosen: List<Step> = emptyList(),
     val stage: StepStage = StepStage.ORDER,
-    /** The one tile in the strip to mark: the first that is not where it belongs. Null when none is. */
+    /**
+     * The one slot in the strip that is marked: the first that is not where it belongs, and — once he
+     * has taken that tile out — the hole the next tile he taps goes into. Null when nothing is marked.
+     *
+     * Two things at once on purpose. It is the correction («this is the place that is wrong») and the
+     * insertion point («and this is where the next one lands»), which together are what make moving a
+     * single tile two taps instead of re-laying the tail. See [insertedAt] and [removedFrom].
+     */
     val wrongAt: Int? = null,
     /** «Σχεδόν.» is on the screen: his last order was not the order. */
     val missed: Boolean = false,
@@ -275,7 +320,13 @@ class StepsViewModel(
 
     // ------------------------------------------------------------------ stage 1: the order
 
-    /** One tile into the strip. The last place it can be wrong is «Έτοιμο», so nothing is judged here. */
+    /**
+     * One tile into the strip — at the marked slot when there is one, and at the end when there is
+     * not. The last place it can be wrong is «Έτοιμο», so nothing is judged here.
+     *
+     * Filling the marked slot answers the mark, so the mark goes: the next tile after it is another
+     * tile at the end, not a second insert into the same place.
+     */
     fun tap(step: Step) {
         val s = _state.value
         if (finishing || ending) return
@@ -286,18 +337,26 @@ class StepsViewModel(
         // Never more tiles than the task has steps: the strip is what is checked, and a seventh tile
         // in it could only ever be the distractor with every real step already down.
         if (s.chosen.size >= task.steps.size) return
-        _state.update { it.copy(chosen = it.chosen + step, wrongAt = null, missed = false) }
+        _state.update {
+            it.copy(chosen = insertedAt(it.chosen, step, it.wrongAt), wrongAt = null, missed = false)
+        }
     }
 
     /**
      * One tile back out of the strip. Tapping it in the strip is how, rather than a fourth button
      * under his thumb: the control sits next to the thing it is about — the move «SQL» made for its
      * own strip and «Προτάσεις» for «Το έγραψα».
+     *
+     * The mark stays through this, which is the point of it: taking the wrong tile out is the first
+     * half of moving one tile, and [tap] is the second. See [removedFrom].
      */
     fun untap(step: Step) {
         if (finishing || ending) return
         if (_state.value.stage != StepStage.ORDER) return
-        _state.update { it.copy(chosen = it.chosen.filterNot { c -> c.text == step.text }, wrongAt = null, missed = false) }
+        _state.update {
+            val (left, mark) = removedFrom(it.chosen, step, it.wrongAt)
+            it.copy(chosen = left, wrongAt = mark, missed = mark != null)
+        }
     }
 
     /**
@@ -314,7 +373,7 @@ class StepsViewModel(
         if (finishing || ending) return
         if (s.stage != StepStage.ORDER) return
         if (s.chosen.size != task.steps.size) return
-        val wrong = firstWrongStep(s.chosen.map { it.text }, task.order)
+        val wrong = firstWrongStep(s.chosen.map { it.text }, task.groups, task::groupOfTile)
         if (wrong == null) {
             graph.feedback.success()
             record(task, stage = StepStage.ORDER, steps = s.chosen.map { it.text }, firstTry = s.misses == 0)

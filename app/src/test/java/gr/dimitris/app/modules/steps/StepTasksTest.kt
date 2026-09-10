@@ -1,7 +1,9 @@
 package gr.dimitris.app.modules.steps
 
 import gr.dimitris.app.core.difficulty.Difficulty
+import gr.dimitris.app.core.speech.SpeechMatch
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -48,6 +50,20 @@ class StepTasksTest {
         }
     }
 
+    /**
+     * Every step names the English term its drawing was searched with. Nothing crashes without one —
+     * `en` is read by the fetch script and by nothing on the phone — but a hand edit that drops one
+     * makes that step ship text-led at the next fetch, silently.
+     */
+    @Test fun `every step keeps the term its drawing was found with`() {
+        for (task in tasks) {
+            for (step in task.steps + listOfNotNull(task.distractor)) {
+                assertTrue("«${step.text}» has no en term", step.en?.isNotBlank() == true)
+                assertEquals("«${step.en}» is not stored trimmed", step.en!!.trim(), step.en)
+            }
+        }
+    }
+
     /** Two steps of one task worded the same would be a strip that cannot be checked. */
     @Test fun `the steps of a task are all different`() {
         for (task in tasks) {
@@ -73,6 +89,11 @@ class StepTasksTest {
         for (task in tasks) {
             val expected = if (task.distractor != null) 5 else task.steps.size - 2
             assertEquals("«${task.id}» has ${task.steps.size} steps and a distractor? ${task.distractor != null}", expected, task.difficulty)
+            // A distractor is what dot 5 adds *on top of* the longest task, never a way to grade a
+            // short one as hard: five steps and a distractor would be an easier board called harder.
+            if (task.distractor != null) {
+                assertEquals("«${task.id}» is a distractor task of ${task.steps.size} steps", StepTasks.MAX_STEPS, task.steps.size)
+            }
         }
         // All five exist, four of each, so every dot is a different sitting and nothing clamps.
         assertEquals((1..5).associateWith { 4 }, tasks.groupingBy { it.difficulty }.eachCount())
@@ -91,6 +112,28 @@ class StepTasksTest {
             val owner = tasks.filter { other -> other.steps.any { it.text == text } }
             assertEquals("«$text» is a step of ${owner.size} tasks", 1, owner.size)
             assertTrue("«$text» is «${task.id}»'s own step", owner.single().id != task.id)
+            // The pairing is decided by a person, once, and written down here: a later edit that moves
+            // a distractor onto a task it could belong to is the defect this test exists for.
+            assertEquals("«${task.id}»'s distractor is borrowed from somewhere new", BORROWED[task.id], owner.single().id)
+        }
+    }
+
+    /**
+     * A distractor must be **foreign** to the task it is dropped into, not merely absent from its step
+     * list. The first cut had «Ρίχνω απορρυπαντικό» on the washing-up board — whose own step 4 is
+     * «Πλένω με σφουγγάρι και υγρό» — so a man who left it out by every real-world standard was right
+     * and a man who put it in was told he was wrong for a reason nobody could explain. Also «Παίρνω το
+     * πορτοφόλι» at the cash machine and «Σκουπίζομαι με την πετσέτα» at bedtime.
+     *
+     * The heuristic that catches it: a distractor may share **no** content word with the host's title
+     * or with any of its steps. Crude, and it is exactly what those three failed — «παίρνω» at the ATM,
+     * «πλένω» at the sink, «πετσέτα» at bedtime — while every honest pairing passes it untouched.
+     */
+    @Test fun `no distractor could belong to the task it is dropped into`() {
+        for (task in tasks.filter { it.distractor != null }) {
+            val host = (task.order + task.title).flatMap(::contentWords).toSet()
+            val shared = contentWords(task.distractor!!.text).filter { it in host }
+            assertTrue("«${task.distractor!!.text}» shares $shared with «${task.title}»", shared.isEmpty())
         }
     }
 
@@ -147,15 +190,154 @@ class StepTasksTest {
         assertEquals("blank steps are not steps", "", StepTask.tellingOf(listOf("  ", "")))
     }
 
+    // ------------------------------------------------------------------- the groups
+
     /**
-     * What a phone with no judge compares him against: the steps' own words, with no connectors in
-     * them. A local matcher that insisted on «πρώτα» would refuse every telling on a phone with no key.
+     * A group is a **run** of consecutive steps: the seed may say "these three go in any order", never
+     * "step 2 and step 5 are interchangeable but step 3 is not". A scattered group would be a rule
+     * nobody could read off the screen, and the check — which compares the group at each position —
+     * would then accept orders nobody intended.
      */
-    @Test fun `the local target is the steps and not the telling`() {
+    @Test fun `groups are runs of consecutive steps, numbered from the front`() {
+        for (task in tasks) {
+            val stated = task.steps.mapNotNull { it.group }
+            assertTrue(
+                "«${task.id}» grades some of its steps and not others",
+                stated.isEmpty() || stated.size == task.steps.size,
+            )
+            if (stated.isEmpty()) continue
+            assertTrue("«${task.id}» has a group below 1: $stated", stated.all { it >= 1 })
+            for ((group, positions) in stated.withIndex().groupBy({ it.value }, { it.index })) {
+                assertEquals(
+                    "«${task.id}» scatters group $group over $positions",
+                    (positions.first()..positions.last()).toList(), positions,
+                )
+            }
+            assertEquals("«${task.id}» does not number its groups front to back", stated.sorted(), stated)
+            assertEquals("«${task.id}» skips a group number", (1..stated.max()).toList(), stated.distinct())
+            assertTrue("«${task.id}» is one group and no sequence at all", stated.distinct().size > 1)
+        }
+    }
+
+    /** The distractor is in no group, which is why it is wrong wherever he puts it. */
+    @Test fun `the distractor belongs to no group`() {
+        for (task in tasks.filter { it.distractor != null }) {
+            assertNull(task.distractor!!.group)
+            assertNull(task.groupOfTile(task.distractor!!.text))
+        }
+    }
+
+    /**
+     * «Φτιάχνω τη βαλίτσα» is the task this was found on: open the case, put four things in in any
+     * order, shut it. All **24** of those orders are his own work, and the first cut answered 23 of
+     * them with «Σχεδόν.» and a ring round a step he had got right.
+     */
+    @Test fun `the suitcase accepts all twenty-four of its right orders`() {
+        val task = tasks.single { it.id == "suitcase" }
+        assertEquals(listOf(1, 2, 2, 2, 2, 3), task.groups)
+        val orders = permutations(task.order.subList(1, 5))
+        assertEquals(24, orders.size)
+        for (order in orders) {
+            val his = listOf(task.order.first()) + order + task.order.last()
+            assertNull("«${his.joinToString(" → ")}» was refused", firstWrongStep(his, task.groups, task::groupOfTile))
+        }
+        // And the two ends are still fixed: nothing is packed before the case is open.
+        val packFirst = listOf(task.order[1], task.order[0]) + task.order.drop(2)
+        assertEquals(0, firstWrongStep(packFirst, task.groups, task::groupOfTile))
+        val shutFirst = listOf(task.order.first(), task.order.last()) + task.order.subList(1, 5)
+        assertEquals(1, firstWrongStep(shutFirst, task.groups, task::groupOfTile))
+    }
+
+    /** «Φτιάχνω καφέ»: the water and the coffee into the briki either way round, then the flame. */
+    @Test fun `the coffee accepts both of its right orders`() {
+        val task = tasks.single { it.id == "coffee" }
+        assertEquals(listOf(1, 1, 2), task.groups)
+        assertNull(firstWrongStep(task.order, task.groups, task::groupOfTile))
+        val swapped = listOf(task.order[1], task.order[0], task.order[2])
+        assertNull("the other order of the first two was refused", firstWrongStep(swapped, task.groups, task::groupOfTile))
+        // The flame is still last: it is a group of its own.
+        val flameFirst = listOf(task.order[2], task.order[0], task.order[1])
+        assertEquals(0, firstWrongStep(flameFirst, task.groups, task::groupOfTile))
+    }
+
+    /** The seven tasks whose order is causally forced keep exactly one right answer. */
+    @Test fun `a task with no groups still has one order`() {
+        val task = tasks.single { it.id == "teeth" }
+        assertTrue(task.steps.all { it.group == null })
+        assertNull(firstWrongStep(task.order, task.groups, task::groupOfTile))
+        assertEquals(0, firstWrongStep(task.order.reversed(), task.groups, task::groupOfTile))
+    }
+
+    /** A tile in no group at all — the distractor — is wrong wherever in the strip it lands. */
+    @Test fun `the distractor is wrong in every slot`() {
+        val task = tasks.single { it.id == "atm" }
+        val foreign = task.distractor!!.text
+        for (at in task.order.indices) {
+            val his = task.order.toMutableList().also { it[at] = foreign }
+            assertEquals("«$foreign» passed at ${at + 1}", at, firstWrongStep(his, task.groups, task::groupOfTile))
+        }
+    }
+
+    // ------------------------------------------------------ the telling, with no judge
+
+    /**
+     * What a phone with no judge accepts — which is every phone until a caregiver saves a key.
+     *
+     * The old check was a bag of words: a telling with a whole step missing scored 8 of 12 and passed,
+     * and the same words spoken backwards scored 12 of 12. Both are refused now, and the leniency his
+     * telegraphic speech needs is untouched — the connectors, the small words and the exact wording are
+     * all still free.
+     */
+    @Test fun `a telling has to name every step, in group order`() {
         val coffee = tasks.single { it.id == "coffee" }
-        assertEquals(coffee.joined, StepTasks.localTarget(coffee))
-        assertTrue(StepTask.FIRST !in StepTasks.localTarget(coffee))
-        for (step in coffee.steps) assertTrue(step.text in StepTasks.localTarget(coffee))
+        assertTrue("the telling itself", StepTasks.toldInOrder(coffee, coffee.telling))
+        assertTrue(
+            "the words he would really say",
+            StepTasks.toldInOrder(coffee, "πρώτα νερό στο μπρίκι, μετά καφέ και ζάχαρη, τέλος φωτιά"),
+        )
+        assertFalse(
+            "a step he never said",
+            StepTasks.toldInOrder(coffee, "βάζω νερό στο μπρίκι, ρίχνω καφέ και ζάχαρη"),
+        )
+        assertFalse("nothing said at all", StepTasks.toldInOrder(coffee, ""))
+        assertFalse("another sentence altogether", StepTasks.toldInOrder(coffee, "θέλω έναν καφέ"))
+    }
+
+    /** Backwards is the case a bag of words could never see: the same words, in the wrong sequence. */
+    @Test fun `a telling said backwards is refused`() {
+        val teeth = tasks.single { it.id == "teeth" }
+        assertTrue(StepTasks.toldInOrder(teeth, teeth.telling))
+        assertFalse(StepTasks.toldInOrder(teeth, StepTask.tellingOf(teeth.order.reversed())))
+    }
+
+    /** Inside a group there is no order to get wrong — that is what a group is. */
+    @Test fun `a telling may say a group's own steps either way round`() {
+        val coffee = tasks.single { it.id == "coffee" }
+        val swapped = listOf(coffee.order[1], coffee.order[0], coffee.order[2])
+        assertTrue(StepTasks.toldInOrder(coffee, StepTask.tellingOf(swapped)))
+        // But the group after them still has to come after them.
+        val flameFirst = listOf(coffee.order[2], coffee.order[0], coffee.order[1])
+        assertFalse(StepTasks.toldInOrder(coffee, StepTask.tellingOf(flameFirst)))
+    }
+
+    /** Every task's own telling passes its own check. A seed that fails this is unanswerable. */
+    @Test fun `every task accepts the telling the app reads out`() {
+        for (task in tasks) {
+            assertTrue("«${task.id}» refuses its own telling", StepTasks.toldInOrder(task, task.telling))
+        }
+    }
+
+    /**
+     * And every task can be told in *its* other right orders too: the groups mean the same thing on
+     * both stages, or a man who ordered the suitcase his own way would be refused for telling it that
+     * way.
+     */
+    @Test fun `a task that accepts an order accepts the telling of it`() {
+        val suitcase = tasks.single { it.id == "suitcase" }
+        for (order in permutations(suitcase.order.subList(1, 5))) {
+            val his = listOf(suitcase.order.first()) + order + suitcase.order.last()
+            assertTrue("«${his.joinToString(" → ")}» was refused", StepTasks.toldInOrder(suitcase, StepTask.tellingOf(his)))
+        }
     }
 
     // --------------------------------------------------------------- what a dot asks for
@@ -223,9 +405,39 @@ class StepTasksTest {
         assertEquals(listOf("Ένα", "Δύο", "Τρία"), kept.order)
     }
 
+    /** Every permutation of [xs]. Only ever asked for four things: 24 orders. */
+    private fun permutations(xs: List<String>): List<List<String>> =
+        if (xs.size <= 1) listOf(xs)
+        else xs.flatMap { head -> permutations(xs - head).map { listOf(head) + it } }
+
+    /** The words of a phrase that carry its meaning, as [SpeechMatch] keys. */
+    private fun contentWords(text: String): List<String> =
+        SpeechMatch.key(text).split(' ').filter { it.isNotBlank() && it !in SMALL_WORDS }
+
     private companion object {
         /** Six words: three tiles sit side by side on a phone, and a tile is one look. */
         const val MAX_WORDS = 6
+
+        /**
+         * Which task each dot-5 distractor is borrowed from — decided by a person, checked here.
+         *
+         * The heuristic above says a pairing is not *obviously* wrong; this says it is the one somebody
+         * chose. Together they stop a later edit from quietly putting a plausible step back on a board
+         * where he cannot reason his way to the answer.
+         */
+        val BORROWED = mapOf(
+            "atm" to "teeth",
+            "dishes" to "laundry",
+            "bed" to "pasta",
+            "cafe" to "bus",
+        )
+
+        /** Articles, prepositions and the possessive: shared by everything, so they say nothing. */
+        val SMALL_WORDS = setOf(
+            "ο", "η", "το", "τον", "την", "τη", "οι", "τα", "τους", "τις", "των", "του", "της",
+            "ενα", "εναν", "μια", "και", "με", "σε", "στο", "στον", "στην", "στη", "στα", "στις",
+            "απο", "για", "να", "θα", "μου", "τι", "που",
+        )
 
         /** Assets are not on the unit-test classpath: found by walking up from wherever Gradle started us. */
         fun assetFile(name: String): File {

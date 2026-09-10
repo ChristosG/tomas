@@ -4,6 +4,8 @@ import android.Manifest
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -27,8 +29,11 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.rememberVectorPainter
@@ -60,7 +65,10 @@ const val STEP_TILE_TAG = "step-tile"
 /** Every step he has put in the strip, in the order he put it. Tapping one takes it back. */
 const val STEP_CHOSEN_TAG = "step-chosen"
 
-/** [count] tasks, one per item the session budgeted for this module. */
+/** The empty line the mark leaves in the strip: where the next tile he taps will go. */
+const val STEP_SLOT_TAG = "step-slot"
+
+/** [count] tasks — one per **two** items the session budgeted for this module ([StepsModule.tasksFor]). */
 @Composable
 fun StepsScreen(count: Int, sessionId: String?, onDone: () -> Unit, onLeave: () -> Unit) {
     val graph = LocalAppGraph.current
@@ -155,10 +163,6 @@ fun StepsScreen(count: Int, sessionId: String?, onDone: () -> Unit, onLeave: () 
             return@DimitrisScreen
         }
         val scroll = rememberScrollState()
-        // A miss puts the whole strip back at the top of the screen. On a six-step task the strip is
-        // taller than the phone, so a man who has just been told «Σχεδόν.» could otherwise be looking
-        // at steps 3 to 6 with the nudge, and the marked step, both off the top.
-        LaunchedEffect(s.misses) { if (s.misses > 0) runCatching { scroll.animateScrollTo(0) } }
         Column(Modifier.fillMaxWidth().verticalScroll(scroll)) {
             Text(task.title, style = MaterialTheme.typography.headlineMedium)
             Spacer(Modifier.height(Sizes.gapSmall))
@@ -229,13 +233,26 @@ private fun Strip(s: StepsState, onRemove: (Step) -> Unit) {
                 )
                 return@Column
             }
-            s.chosen.forEachIndexed { at, step ->
-                if (at > 0) Spacer(Modifier.height(Sizes.gapSmall))
+            // The marked slot is drawn as an empty line of its own once he has taken the wrong tile
+            // out of it: the strip then shows the hole he is filling, in the place the numbering says,
+            // and the next tile he taps goes exactly there ([insertedAt]). While the strip is still
+            // full there is no hole to draw and the mark is a ring round the tile that is out of place.
+            val waiting = s.wrongAt?.takeIf { s.chosen.size < (s.task?.steps?.size ?: 0) }
+            var number = 0
+            for (at in 0..s.chosen.size) {
+                if (at == waiting) {
+                    if (at > 0) Spacer(Modifier.height(Sizes.gapSmall))
+                    number++
+                    Slot(number)
+                }
+                val step = s.chosen.getOrNull(at) ?: continue
+                if (at > 0 || waiting == 0) Spacer(Modifier.height(Sizes.gapSmall))
+                number++
                 Chosen(
                     step = step,
-                    number = at + 1,
+                    number = number,
                     // One tile marked and only one: the first that is out of place. See [firstWrongStep].
-                    marked = s.wrongAt == at,
+                    marked = waiting == null && s.wrongAt == at,
                     enabled = s.stage == StepStage.ORDER,
                     onClick = { onRemove(step) },
                 )
@@ -243,6 +260,31 @@ private fun Strip(s: StepsState, onRemove: (Step) -> Unit) {
             // The mark for the whole task, on the strip he built rather than on a screen of its own.
             SuccessMark(visible = s.stage == StepStage.TELL, size = Sizes.stripPicture)
         }
+    }
+}
+
+/**
+ * The hole in the strip: the slot the mark is on, waiting for the tile that belongs there.
+ *
+ * Not a control — nothing happens when it is touched — so it does not have to be 72 dp, and it is
+ * drawn dashed-quiet rather than as a card so it reads as *missing* rather than as one more thing to
+ * tap. It carries the number it will have, because the numbering is what the strip is for.
+ */
+@Composable
+private fun Slot(number: Int) {
+    Row(
+        Modifier.fillMaxWidth().heightIn(min = Sizes.touchMin)
+            .border(3.dp, MaterialTheme.colorScheme.secondary, RoundedCornerShape(Sizes.corner))
+            .padding(horizontal = 12.dp, vertical = 8.dp)
+            .testTag(STEP_SLOT_TAG),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text("$number.", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.secondary)
+        Spacer(Modifier.size(Sizes.gapSmall))
+        Text(
+            SLOT_WAITING, style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.secondary,
+        )
     }
 }
 
@@ -264,7 +306,12 @@ private fun Chosen(step: Step, number: Int, marked: Boolean, enabled: Boolean, o
             disabledContainerColor = MaterialTheme.colorScheme.surface,
             disabledContentColor = MaterialTheme.colorScheme.onSurface,
         ),
-        modifier = Modifier.fillMaxWidth().heightIn(min = Sizes.touchMin).testTag(STEP_CHOSEN_TAG),
+        modifier = Modifier.fillMaxWidth().heightIn(min = Sizes.touchMin)
+            // A marked line asks the column to show it. On a six-step task the strip is taller than
+            // the phone, so the step that is out of place can be line 6 with the screen sitting at
+            // line 1 — and a mark he cannot see is a correction he cannot make.
+            .showWhenMarked(marked)
+            .testTag(STEP_CHOSEN_TAG),
     ) {
         Row(
             Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
@@ -395,6 +442,9 @@ private fun Pictogram(asset: String?, size: Dp) {
 /** What the strip says while it is empty. The instruction above it is what asks him to fill it. */
 private const val EMPTY_STRIP = "Εδώ μπαίνουν τα βήματα."
 
+/** What the hole in the strip says. Four words, and they name the one thing to do next. */
+private const val SLOT_WAITING = "Βάλε εδώ το σωστό βήμα."
+
 /** «Το είπα!»: the same word as in the three speech modules, because it does the same thing. */
 private const val SAID_IT = "Το είπα!"
 
@@ -409,3 +459,17 @@ private const val TILES_PER_ROW = 3
  * and being cut across. The drawing is the second thing he reads here anyway — the phrase is the step.
  */
 private val TILE_PICTURE = 56.dp
+
+/**
+ * Asks the scrolling column to show this line while [marked] is true.
+ *
+ * A `BringIntoViewRequester` and not a `scrollTo` on the column: a strip line is as tall as its words
+ * wrap, so nobody — least of all this file — knows the offset of line four.
+ */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun Modifier.showWhenMarked(marked: Boolean): Modifier {
+    val requester = remember { BringIntoViewRequester() }
+    LaunchedEffect(marked) { if (marked) runCatching { requester.bringIntoView() } }
+    return this.bringIntoViewRequester(requester)
+}
