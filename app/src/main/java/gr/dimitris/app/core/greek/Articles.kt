@@ -118,8 +118,16 @@ fun Greek.nounForm(noun: String): NounForm? {
  * A blank or unreadable column is exactly the old behaviour — see [Gender.of].
  */
 fun Greek.nounForm(noun: String, gender: String?): NounForm? {
+    if (noun.isBlank()) return null
     val stated = Gender.of(gender) ?: return Greek.nounForm(noun)
-    return NounForm(stated, plural = Greek.plural(noun))
+    // A gender says what the word is, never how many of it there are — and an article that gets the
+    // *number* wrong is the same mistake as one that gets the gender wrong. So a word whose number
+    // this file cannot read stays silent even when a caregiver has said what it is: «παιδιά» and
+    // «λουλούδια» are her ordinary words, the editor asks her for a gender and offers her nowhere
+    // to say "plural", and «το παιδιά» on the screen as the sentence to copy is exactly what rule 3
+    // at the top of this file exists to prevent. See [number].
+    val plural = Greek.number(noun) ?: return null
+    return NounForm(stated, plural = plural)
 }
 
 /**
@@ -164,18 +172,49 @@ fun Greek.contracted(noun: String, before: String = noun, gender: String? = null
 fun Greek.contracted(form: NounForm): String = "σ" + articleFor(form, Case.ACCUSATIVE, before = "")
 
 /**
- * Whether [noun] is written in the plural. The list first, then the one ending that says so on its
- * own: -ες and -εις without the accent on that ending — «πατάτες», «πόλεις», never «καφές».
+ * How many of it there are: true plural, false singular, **null when this file cannot say**.
+ *
+ * Four sources, in this order:
+ *
+ *  1. [FORMS], which carries a number as well as a gender — that is what it is for: «τα ρούχα» and
+ *     «η πόρτα» end the same way and only the list separates them;
+ *  2. -ες and -εις without the accent on that ending — «πατάτες», «πόλεις», never «καφές»;
+ *  3. -οι **without the accent on that ο**: «οι φίλοι», «οι δρόμοι». The accent is what separates
+ *     them from the singulars whose ι is a syllable of its own — «το ρολόι», «το κομπολόι» — the
+ *     same reading [pluralEnding] does for «πατάτες» against «καφές»;
+ *  4. -ια, which is the one ending that genuinely cannot be read — «η καρδιά», «η γειτονιά» are
+ *     feminine singulars and «τα παιδιά», «τα λουλούδια» are neuter plurals, written the same way
+ *     and stressed the same way. That is the null.
+ *
+ * Everything else is a singular. The ending -α is the one place that judgement is generous — «τα
+ * ρούχα» and «τα φάρμακα» are plurals — and it is [FORMS] that catches those, one by one, as it has
+ * since the file was written.
+ *
+ * Only the stated-gender path ([nounForm] with a gender) reads the null: a word this file cannot
+ * count is a word it will not put an article in front of, however sure the caregiver is of its
+ * gender. [plural] keeps the old two-valued answer for everyone else.
+ */
+fun Greek.number(noun: String): Boolean? {
+    val word = noun.trim().substringAfterLast(' ')
+    FORMS[Greek.stripAccents(Greek.normalize(noun))]?.let { return it.plural }
+    FORMS[Greek.stripAccents(Greek.normalize(word))]?.let { return it.plural }
+    if (pluralEnding(word)) return true
+    val bare = Greek.stripAccents(Greek.normalize(word))
+    // «φίλοι» keeps a plain «ο» before the iota; «ρολόι» carries the tone there and is one clock.
+    if (bare.endsWith("οι") && word.trim().dropLast(1).last().lowercaseChar() == 'ο') return true
+    if (bare.endsWith("ια")) return null
+    return false
+}
+
+/**
+ * Whether [noun] is written in the plural, with "cannot say" read as a singular — which is what
+ * every caller but the stated-gender path wants: [accusative] has to decide whether to take a final
+ * sigma off, and there is no third answer to that question.
  *
  * Shared with [accusative], which has to make the same call for the same reason and used to make it
  * with its own copy of this rule.
  */
-fun Greek.plural(noun: String): Boolean {
-    val word = noun.trim().substringAfterLast(' ')
-    FORMS[Greek.stripAccents(Greek.normalize(noun))]?.let { return it.plural }
-    FORMS[Greek.stripAccents(Greek.normalize(word))]?.let { return it.plural }
-    return pluralEnding(word)
-}
+fun Greek.plural(noun: String): Boolean = Greek.number(noun) ?: false
 
 /** The article itself, once the noun has been read. [before] decides the feminine's final «ν». */
 private fun articleFor(form: NounForm, case: Case, before: String): String = when {
@@ -285,6 +324,16 @@ private val FORMS: Map<String, NounForm> = buildMap {
     nPl("δοντια")
     // PLACES
     f("καφετερια", "θαλασσα", "εκκλησια", "τραπεζα", "ταβερνα", "κουζινα", "δουλεια", "πλατεια", "αγορα", "παραλια")
+    // The phase 13 vocabulary's own singulars in -ια. The ending cannot be read at all ([number]
+    // returns null for it, because «παιδιά» is written the same way), so these three would have gone
+    // silent at levels 5–8 the moment the number check landed — and they are exactly the words the
+    // gender column was added for. Named here, they are a singular by the list, like «πόρτα».
+    //
+    // Twelve more of the seed end this way — «ελευθερία», «ευκαιρία», «υγεία», «καρδιά» — and are
+    // *not* here, because every one of them is a FEELINGS or BODY card and no template draws on
+    // those. This is where they go if one is ever moved into a category that a sentence is built
+    // from.
+    f("παραγγελια", "φωτογραφια", "γειτονια")
     n("σουπερ μαρκετ", "μαρκετ")
     // The -μα neuters, by hand rather than by rule. «-μα is neuter» would be a new bug of its own:
     // «η κρέμα», «η φόρμα», «η πιτζάμα» end the same way and are feminine, and they are above.

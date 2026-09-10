@@ -88,7 +88,8 @@ data class Item(
      */
     @ColumnInfo(defaultValue = "1") val tier: Int = DEFAULT_TIER,
     /**
-     * What gender this noun is — `"M"`, `"F"`, `"N"` — or null when nobody has said.
+     * What gender this noun is — `"M"`, `"F"`, `"N"` — or null when nobody has said. The three codes
+     * are written down once, in [gr.dimitris.app.core.greek.Gender], and read with `Gender.of`.
      *
      * The sentence builder needs it for every noun it puts an article in front of, and until now it
      * had to *guess* from the ending ([gr.dimitris.app.core.greek.nounForm]): «-ο» and «-ι» neuter,
@@ -108,11 +109,6 @@ data class Item(
     companion object {
         /** The easiest tier, and what every word written before phase 13 is. */
         const val DEFAULT_TIER = 1
-
-        /** The three values [gender] may carry. Read them with [gr.dimitris.app.core.greek.Gender.of]. */
-        const val MASCULINE = "M"
-        const val FEMININE = "F"
-        const val NEUTER = "N"
     }
 }
 

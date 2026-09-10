@@ -1374,19 +1374,19 @@
  {
   "text": "παραγγελία",
   "category": "THINGS",
-  "en": "order",
   "tier": 3,
-  "gender": "F"
+  "gender": "F",
+  "noPicture": true
  },
  {
   "text": "λογαριασμός",
   "category": "THINGS",
-  "en": "bill",
+  "en": "invoice",
   "tier": 3,
   "gender": "M"
  },
  {
-  "text": "φυσικοθεραπεία",
+  "text": "φυσιοθεραπεία",
   "category": "BODY",
   "en": "physiotherapy",
   "tier": 3,
@@ -1423,7 +1423,7 @@
  {
   "text": "κάρτα",
   "category": "THINGS",
-  "en": "card",
+  "en": "credit card",
   "tier": 3,
   "gender": "F"
  },
@@ -1661,7 +1661,7 @@
  {
   "text": "κουλούρι",
   "category": "FOOD",
-  "en": "bread ring",
+  "en": "bagel",
   "tier": 3,
   "gender": "N"
  },
@@ -1757,12 +1757,6 @@
   "gender": "M"
  },
  {
-  "text": "περιμένω",
-  "category": "VERBS",
-  "en": "wait",
-  "tier": 3
- },
- {
   "text": "ρωτάω",
   "category": "VERBS",
   "en": "ask",
@@ -1807,8 +1801,8 @@
  {
   "text": "δουλεύω",
   "category": "VERBS",
-  "en": "work",
-  "tier": 3
+  "tier": 3,
+  "noPicture": true
  },
  {
   "text": "ξυπνάω",
@@ -2006,8 +2000,8 @@
  {
   "text": "ελπίζω",
   "category": "VERBS",
-  "en": "hope",
-  "tier": 4
+  "tier": 4,
+  "noPicture": true
  },
  {
   "text": "ανησυχώ",
@@ -2030,8 +2024,8 @@
  {
   "text": "προτιμώ",
   "category": "VERBS",
-  "en": "prefer",
-  "tier": 4
+  "tier": 4,
+  "noPicture": true
  },
  {
   "text": "αλλάζω",
@@ -2078,8 +2072,8 @@
  {
   "text": "χρειάζομαι",
   "category": "VERBS",
-  "en": "need",
-  "tier": 4
+  "tier": 4,
+  "noPicture": true
  },
  {
   "text": "καταφέρνω",
@@ -2174,8 +2168,8 @@
  {
   "text": "τυχερός",
   "category": "FEELINGS",
-  "en": "lucky",
-  "tier": 4
+  "tier": 4,
+  "noPicture": true
  },
  {
   "text": "δυνατός",
@@ -2253,7 +2247,7 @@
  {
   "text": "λύση",
   "category": "FEELINGS",
-  "en": "solution",
+  "en": "solve",
   "tier": 5,
   "gender": "F"
  },
@@ -2400,9 +2394,9 @@
  {
   "text": "μνήμη",
   "category": "FEELINGS",
-  "en": "memory",
   "tier": 5,
-  "gender": "F"
+  "gender": "F",
+  "noPicture": true
  },
  {
   "text": "σκέψη",
@@ -2416,7 +2410,8 @@
   "category": "FEELINGS",
   "en": "progress",
   "tier": 5,
-  "gender": "F"
+  "gender": "F",
+  "noPicture": true
  },
  {
   "text": "συνήθεια",

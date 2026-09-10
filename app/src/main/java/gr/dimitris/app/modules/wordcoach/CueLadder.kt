@@ -1,15 +1,18 @@
 package gr.dimitris.app.modules.wordcoach
 
 import gr.dimitris.app.core.data.Item
+import gr.dimitris.app.core.data.ItemKind
 import gr.dimitris.app.core.data.Outcome
 import gr.dimitris.app.core.greek.Greek
 
 /**
- * The five cue levels for one item. Level 2 disappears when the first syllable is no help of its own.
+ * The five cue levels for one item. A level disappears when it is no help of its own: 2 when the
+ * first syllable only repeats the first sound, **0 when a card has no picture to show** (see
+ * [hasPicture] — a dialogue turn keeps it, because there rung 0 is the conversation so far).
  * 0 picture · 1 first sound · 2 first syllable · 3 word spoken · 4 word spoken and written.
  */
 class CueLadder(private val item: Item) {
-    val levels: List<Int> = listOfNotNull(0, 1, if (ownRung(item)) 2 else null, 3, 4)
+    val levels: List<Int> = listOfNotNull(if (hasPicture(item)) 0 else null, 1, if (ownRung(item)) 2 else null, 3, 4)
     private var index = 0
 
     /** Set by [listened] and never cleared while the item lasts: he heard the word, and that is that. */
@@ -91,6 +94,31 @@ class CueLadder(private val item: Item) {
             val syllable = key(item.firstSyllable) ?: return false
             return syllable != key(item.firstSound)
         }
+
+        /**
+         * Whether rung 0 has anything on it.
+         *
+         * On a **card** — the word coach, which is what levels 0–4 were written for — level 0 is the
+         * picture and nothing else: no sound, no syllable, the word itself withheld. For a word with
+         * no picture that is an empty card and the question "what is this?" asked about nothing at
+         * all. Some words have none: ARASAAC draws things, and phase 13's «ελπίδα», «σκέψη»,
+         * «κατάσταση» are not things; some others ship text-led on purpose, because the only drawing
+         * ARASAAC has for them already belongs to another word, and one picture scored against two
+         * targets is an error he cannot avoid. The rung is left out exactly as a missing syllable is,
+         * so such a word opens on the first sound — the first thing about it there is to show — and
+         * «Βοήθεια» walks the rest one honest step at a time. The card is still there, with the
+         * placeholder [gr.dimitris.app.ui.components.PictureCard] draws, and «Άκου» is still on it:
+         * what is dropped is the rung that would have been *only* that.
+         *
+         * A **dialogue turn** keeps its rung 0 whether or not it has a picture, because there it
+         * never meant the picture. «Διάλογοι» shows no card at all: what is on the screen at level 0
+         * is the conversation so far and the line the other person has just said, which is the whole
+         * cue — that is the rung where he answers with nothing given away, and it is the one the
+         * attempt row records as unaided work. Dropping it would start every turn of every dialogue
+         * one rung of help in.
+         */
+        private fun hasPicture(item: Item): Boolean =
+            item.kind == ItemKind.SCRIPT_LINE || !item.imagePath.isNullOrBlank()
 
         /** The cue as it is shown and said. Null when there was nothing left of it. */
         private fun trimmed(cue: String): String? =

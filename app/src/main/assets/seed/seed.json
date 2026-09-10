@@ -9,7 +9,8 @@
    "gender": null,
    "image": "2296.png",
    "arasaacId": 2296,
-   "via": "el"
+   "via": "el",
+   "term": "καφές|coffee"
   },
   {
    "text": "πάμε σπίτι",
@@ -19,7 +20,8 @@
    "gender": null,
    "image": "2317.png",
    "arasaacId": 2317,
-   "via": "el"
+   "via": "el",
+   "term": "σπίτι|house"
   },
   {
    "text": "καλημέρα σας",
@@ -29,7 +31,8 @@
    "gender": null,
    "image": "6944.png",
    "arasaacId": 6944,
-   "via": "en"
+   "via": "en",
+   "term": "καλημέρα|good morning"
   },
   {
    "text": "τι κάνεις",
@@ -39,7 +42,8 @@
    "gender": null,
    "image": "39109.png",
    "arasaacId": 39109,
-   "via": "en"
+   "via": "en",
+   "term": "χαιρετισμός|how are you"
   },
   {
    "text": "πεινάω πολύ",
@@ -49,7 +53,8 @@
    "gender": null,
    "image": "4962.png",
    "arasaacId": 4962,
-   "via": "en"
+   "via": "en",
+   "term": "πεινάω|hungry"
   },
   {
    "text": "δώσε μου νερό",
@@ -59,7 +64,8 @@
    "gender": null,
    "image": "2248.png",
    "arasaacId": 2248,
-   "via": "el"
+   "via": "el",
+   "term": "νερό|water"
   },
   {
    "text": "πάμε βόλτα",
@@ -69,7 +75,8 @@
    "gender": null,
    "image": "3251.png",
    "arasaacId": 3251,
-   "via": "en"
+   "via": "en",
+   "term": "βόλτα|walk"
   },
   {
    "text": "είμαι καλά",
@@ -79,7 +86,8 @@
    "gender": null,
    "image": "5397.png",
    "arasaacId": 5397,
-   "via": "en"
+   "via": "en",
+   "term": "καλά|well"
   },
   {
    "text": "ευχαριστώ πολύ",
@@ -89,7 +97,8 @@
    "gender": null,
    "image": "8129.png",
    "arasaacId": 8129,
-   "via": "en"
+   "via": "en",
+   "term": "ευχαριστώ|thank you"
   },
   {
    "text": "τα λέμε αύριο",
@@ -99,7 +108,8 @@
    "gender": null,
    "image": "7152.png",
    "arasaacId": 7152,
-   "via": "en"
+   "via": "en",
+   "term": "αύριο|tomorrow"
   },
   {
    "text": "θέλω ύπνο",
@@ -109,7 +119,8 @@
    "gender": null,
    "image": "2369.png",
    "arasaacId": 2369,
-   "via": "en"
+   "via": "en",
+   "term": "ύπνος|sleep"
   },
   {
    "text": "πονάει το χέρι",
@@ -119,7 +130,8 @@
    "gender": null,
    "image": "2669.png",
    "arasaacId": 2669,
-   "via": "en"
+   "via": "en",
+   "term": "χέρι|arm"
   },
   {
    "text": "άνοιξε την πόρτα",
@@ -129,7 +141,8 @@
    "gender": null,
    "image": "6875.png",
    "arasaacId": 6875,
-   "via": "en"
+   "via": "en",
+   "term": "πόρτα|open the door"
   },
   {
    "text": "κλείσε το φως",
@@ -139,7 +152,8 @@
    "gender": null,
    "image": "8027.png",
    "arasaacId": 8027,
-   "via": "en"
+   "via": "en",
+   "term": "φως|turn off the light"
   },
   {
    "text": "πάμε για φαγητό",
@@ -149,7 +163,8 @@
    "gender": null,
    "image": "4610.png",
    "arasaacId": 4610,
-   "via": "en"
+   "via": "en",
+   "term": "φαγητό|food"
   },
   {
    "text": "θέλω μπάνιο",
@@ -159,7 +174,8 @@
    "gender": null,
    "image": "5921.png",
    "arasaacId": 5921,
-   "via": "en"
+   "via": "en",
+   "term": "μπάνιο|bathroom"
   },
   {
    "text": "καλή όρεξη",
@@ -169,7 +185,8 @@
    "gender": null,
    "image": "35917.png",
    "arasaacId": 35917,
-   "via": "en"
+   "via": "en",
+   "term": "καλή όρεξη|enjoy your meal"
   },
   {
    "text": "καληνύχτα",
@@ -179,7 +196,8 @@
    "gender": null,
    "image": "6942.png",
    "arasaacId": 6942,
-   "via": "en"
+   "via": "en",
+   "term": "καληνύχτα|good night"
   },
   {
    "text": "πού είναι το κινητό",
@@ -189,7 +207,8 @@
    "gender": null,
    "image": "2586.png",
    "arasaacId": 2586,
-   "via": "en"
+   "via": "en",
+   "term": "κινητό|mobile phone"
   },
   {
    "text": "έλα εδώ",
@@ -199,7 +218,8 @@
    "gender": null,
    "image": "11708.png",
    "arasaacId": 11708,
-   "via": "en"
+   "via": "en",
+   "term": "έλα|come"
   },
   {
    "text": "Ναι",
@@ -209,7 +229,8 @@
    "gender": null,
    "image": "5583.png",
    "arasaacId": 5583,
-   "via": "en"
+   "via": "en",
+   "term": "ναι|yes"
   },
   {
    "text": "Όχι",
@@ -219,7 +240,8 @@
    "gender": null,
    "image": "5525.png",
    "arasaacId": 5525,
-   "via": "en"
+   "via": "en",
+   "term": "όχι|no"
   },
   {
    "text": "Περίμενε",
@@ -229,7 +251,8 @@
    "gender": null,
    "image": "8109.png",
    "arasaacId": 8109,
-   "via": "en"
+   "via": "en",
+   "term": "περιμένω|wait"
   },
   {
    "text": "Βοήθεια",
@@ -239,7 +262,8 @@
    "gender": null,
    "image": "4570.png",
    "arasaacId": 4570,
-   "via": "en"
+   "via": "en",
+   "term": "βοήθεια|help"
   },
   {
    "text": "Πονάω",
@@ -249,7 +273,8 @@
    "gender": null,
    "image": "2367.png",
    "arasaacId": 2367,
-   "via": "el"
+   "via": "el",
+   "term": "πόνος|pain"
   },
   {
    "text": "Τουαλέτα",
@@ -259,7 +284,8 @@
    "gender": null,
    "image": "2430.png",
    "arasaacId": 2430,
-   "via": "en"
+   "via": "en",
+   "term": "τουαλέτα|toilet"
   },
   {
    "text": "Ευχαριστώ",
@@ -269,7 +295,8 @@
    "gender": null,
    "image": "8129.png",
    "arasaacId": 8129,
-   "via": "en"
+   "via": "en",
+   "term": "ευχαριστώ|thank you"
   },
   {
    "text": "Παρακαλώ",
@@ -279,7 +306,8 @@
    "gender": null,
    "image": "8194.png",
    "arasaacId": 8194,
-   "via": "en"
+   "via": "en",
+   "term": "παρακαλώ|please"
   },
   {
    "text": "Δεν ξέρω",
@@ -289,7 +317,8 @@
    "gender": null,
    "image": "7180.png",
    "arasaacId": 7180,
-   "via": "en"
+   "via": "en",
+   "term": "δεν ξέρω|I don't know"
   },
   {
    "text": "Δεν καταλαβαίνω",
@@ -299,7 +328,8 @@
    "gender": null,
    "image": "27363.png",
    "arasaacId": 27363,
-   "via": "en"
+   "via": "en",
+   "term": "δεν καταλαβαίνω|I don't understand"
   },
   {
    "text": "Ξανά",
@@ -309,7 +339,8 @@
    "gender": null,
    "image": "37163.png",
    "arasaacId": 37163,
-   "via": "en"
+   "via": "en",
+   "term": "ξανά|again"
   },
   {
    "text": "Τέλος",
@@ -319,7 +350,8 @@
    "gender": null,
    "image": "28429.png",
    "arasaacId": 28429,
-   "via": "en"
+   "via": "en",
+   "term": "τέλος|finished"
   },
   {
    "text": "καφές",
@@ -329,7 +361,8 @@
    "gender": "M",
    "image": "2296.png",
    "arasaacId": 2296,
-   "via": "el"
+   "via": "el",
+   "term": "καφές|coffee"
   },
   {
    "text": "νερό",
@@ -339,7 +372,8 @@
    "gender": "N",
    "image": "2248.png",
    "arasaacId": 2248,
-   "via": "el"
+   "via": "el",
+   "term": "νερό|water"
   },
   {
    "text": "ψωμί",
@@ -349,7 +383,8 @@
    "gender": "N",
    "image": "2494.png",
    "arasaacId": 2494,
-   "via": "en"
+   "via": "en",
+   "term": "ψωμί|bread"
   },
   {
    "text": "τυρί",
@@ -359,7 +394,8 @@
    "gender": "N",
    "image": "2541.png",
    "arasaacId": 2541,
-   "via": "en"
+   "via": "en",
+   "term": "τυρί|cheese"
   },
   {
    "text": "γάλα",
@@ -369,7 +405,8 @@
    "gender": "N",
    "image": "2445.png",
    "arasaacId": 2445,
-   "via": "el"
+   "via": "el",
+   "term": "γάλα|milk"
   },
   {
    "text": "τσάι",
@@ -379,7 +416,8 @@
    "gender": "N",
    "image": "29802.png",
    "arasaacId": 29802,
-   "via": "en"
+   "via": "en",
+   "term": "τσάι|tea"
   },
   {
    "text": "μπύρα",
@@ -389,7 +427,8 @@
    "gender": "F",
    "image": "2330.png",
    "arasaacId": 2330,
-   "via": "el"
+   "via": "el",
+   "term": "μπύρα|beer"
   },
   {
    "text": "κρασί",
@@ -399,7 +438,8 @@
    "gender": "N",
    "image": "2614.png",
    "arasaacId": 2614,
-   "via": "en"
+   "via": "en",
+   "term": "κρασί|wine"
   },
   {
    "text": "χυμός",
@@ -409,7 +449,8 @@
    "gender": "M",
    "image": "11461.png",
    "arasaacId": 11461,
-   "via": "en"
+   "via": "en",
+   "term": "χυμός|juice"
   },
   {
    "text": "σουβλάκι",
@@ -419,7 +460,8 @@
    "gender": "N",
    "image": "36171.png",
    "arasaacId": 36171,
-   "via": "en"
+   "via": "en",
+   "term": "σουβλάκι|kebab"
   },
   {
    "text": "πίτσα",
@@ -429,7 +471,8 @@
    "gender": "F",
    "image": "2527.png",
    "arasaacId": 2527,
-   "via": "en"
+   "via": "en",
+   "term": "πίτσα|pizza"
   },
   {
    "text": "σαλάτα",
@@ -439,7 +482,8 @@
    "gender": "F",
    "image": "2377.png",
    "arasaacId": 2377,
-   "via": "el"
+   "via": "el",
+   "term": "σαλάτα|salad"
   },
   {
    "text": "μακαρόνια",
@@ -449,7 +493,8 @@
    "gender": "N",
    "image": "2383.png",
    "arasaacId": 2383,
-   "via": "el"
+   "via": "el",
+   "term": "μακαρόνια|pasta"
   },
   {
    "text": "ρύζι",
@@ -459,7 +504,8 @@
    "gender": "N",
    "image": "6911.png",
    "arasaacId": 6911,
-   "via": "en"
+   "via": "en",
+   "term": "ρύζι|rice"
   },
   {
    "text": "κρέας",
@@ -469,7 +515,8 @@
    "gender": "N",
    "image": "2316.png",
    "arasaacId": 2316,
-   "via": "el"
+   "via": "el",
+   "term": "κρέας|meat"
   },
   {
    "text": "κοτόπουλο",
@@ -479,7 +526,8 @@
    "gender": "N",
    "image": "2404.png",
    "arasaacId": 2404,
-   "via": "en"
+   "via": "en",
+   "term": "κοτόπουλο|chicken"
   },
   {
    "text": "ψάρι",
@@ -489,7 +537,8 @@
    "gender": "N",
    "image": "2519.png",
    "arasaacId": 2519,
-   "via": "en"
+   "via": "en",
+   "term": "ψάρι|fish"
   },
   {
    "text": "αυγό",
@@ -499,7 +548,8 @@
    "gender": "N",
    "image": "2427.png",
    "arasaacId": 2427,
-   "via": "en"
+   "via": "en",
+   "term": "αυγό|egg"
   },
   {
    "text": "μήλο",
@@ -509,7 +559,8 @@
    "gender": "N",
    "image": "2462.png",
    "arasaacId": 2462,
-   "via": "en"
+   "via": "en",
+   "term": "μήλο|apple"
   },
   {
    "text": "μπανάνα",
@@ -519,7 +570,8 @@
    "gender": "F",
    "image": "2530.png",
    "arasaacId": 2530,
-   "via": "en"
+   "via": "en",
+   "term": "μπανάνα|banana"
   },
   {
    "text": "πορτοκάλι",
@@ -529,7 +581,8 @@
    "gender": "N",
    "image": "2483.png",
    "arasaacId": 2483,
-   "via": "en"
+   "via": "en",
+   "term": "πορτοκάλι|orange"
   },
   {
    "text": "σοκολάτα",
@@ -539,7 +592,8 @@
    "gender": "F",
    "image": "2334.png",
    "arasaacId": 2334,
-   "via": "el"
+   "via": "el",
+   "term": "σοκολάτα|chocolate"
   },
   {
    "text": "παγωτό",
@@ -549,7 +603,8 @@
    "gender": "N",
    "image": "3348.png",
    "arasaacId": 3348,
-   "via": "en"
+   "via": "en",
+   "term": "παγωτό|ice cream"
   },
   {
    "text": "γλυκό",
@@ -559,7 +614,8 @@
    "gender": "N",
    "image": "2686.png",
    "arasaacId": 2686,
-   "via": "en"
+   "via": "en",
+   "term": "γλυκό|sweet"
   },
   {
    "text": "σούπα",
@@ -569,7 +625,8 @@
    "gender": "F",
    "image": "2573.png",
    "arasaacId": 2573,
-   "via": "en"
+   "via": "en",
+   "term": "σούπα|soup"
   },
   {
    "text": "πατάτες",
@@ -579,7 +636,8 @@
    "gender": "F",
    "image": "2503.png",
    "arasaacId": 2503,
-   "via": "en"
+   "via": "en",
+   "term": "πατάτες|potatoes"
   },
   {
    "text": "ζάχαρη",
@@ -589,7 +647,8 @@
    "gender": "F",
    "image": "25560.png",
    "arasaacId": 25560,
-   "via": "en"
+   "via": "en",
+   "term": "ζάχαρη|sugar"
   },
   {
    "text": "αλάτι",
@@ -599,7 +658,8 @@
    "gender": "N",
    "image": "5579.png",
    "arasaacId": 5579,
-   "via": "en"
+   "via": "en",
+   "term": "αλάτι|salt"
   },
   {
    "text": "πρωινό",
@@ -609,7 +669,8 @@
    "gender": "N",
    "image": "4625.png",
    "arasaacId": 4625,
-   "via": "en"
+   "via": "en",
+   "term": "πρωινό|breakfast"
   },
   {
    "text": "μεσημεριανό",
@@ -619,7 +680,8 @@
    "gender": "N",
    "image": "4609.png",
    "arasaacId": 4609,
-   "via": "en"
+   "via": "en",
+   "term": "μεσημεριανό|lunch"
   },
   {
    "text": "βραδινό",
@@ -629,7 +691,8 @@
    "gender": "N",
    "image": "4592.png",
    "arasaacId": 4592,
-   "via": "en"
+   "via": "en",
+   "term": "βραδινό|dinner"
   },
   {
    "text": "φρούτα",
@@ -639,7 +702,8 @@
    "gender": "N",
    "image": "28339.png",
    "arasaacId": 28339,
-   "via": "en"
+   "via": "en",
+   "term": "φρούτα|fruit"
   },
   {
    "text": "σπίτι",
@@ -649,7 +713,8 @@
    "gender": "N",
    "image": "2317.png",
    "arasaacId": 2317,
-   "via": "el"
+   "via": "el",
+   "term": "σπίτι|house"
   },
   {
    "text": "καφετέρια",
@@ -659,7 +724,8 @@
    "gender": "F",
    "image": "28889.png",
    "arasaacId": 28889,
-   "via": "en"
+   "via": "en",
+   "term": "καφετέρια|cafe"
   },
   {
    "text": "νοσοκομείο",
@@ -669,7 +735,8 @@
    "gender": "N",
    "image": "3116.png",
    "arasaacId": 3116,
-   "via": "en"
+   "via": "en",
+   "term": "νοσοκομείο|hospital"
   },
   {
    "text": "φαρμακείο",
@@ -679,7 +746,8 @@
    "gender": "N",
    "image": "3313.png",
    "arasaacId": 3313,
-   "via": "en"
+   "via": "en",
+   "term": "φαρμακείο|pharmacy"
   },
   {
    "text": "σούπερ μάρκετ",
@@ -689,7 +757,8 @@
    "gender": "N",
    "image": "3389.png",
    "arasaacId": 3389,
-   "via": "en"
+   "via": "en",
+   "term": "σούπερ μάρκετ|supermarket"
   },
   {
    "text": "θάλασσα",
@@ -699,7 +768,8 @@
    "gender": "F",
    "image": "2925.png",
    "arasaacId": 2925,
-   "via": "en"
+   "via": "en",
+   "term": "θάλασσα|sea"
   },
   {
    "text": "πάρκο",
@@ -709,7 +779,8 @@
    "gender": "N",
    "image": "5379.png",
    "arasaacId": 5379,
-   "via": "en"
+   "via": "en",
+   "term": "πάρκο|park"
   },
   {
    "text": "γυμναστήριο",
@@ -719,7 +790,8 @@
    "gender": "N",
    "image": "24785.png",
    "arasaacId": 24785,
-   "via": "en"
+   "via": "en",
+   "term": "γυμναστήριο|gym"
   },
   {
    "text": "σχολείο",
@@ -729,7 +801,8 @@
    "gender": "N",
    "image": "3082.png",
    "arasaacId": 3082,
-   "via": "en"
+   "via": "en",
+   "term": "σχολείο|school"
   },
   {
    "text": "εκκλησία",
@@ -739,7 +812,8 @@
    "gender": "F",
    "image": "3118.png",
    "arasaacId": 3118,
-   "via": "en"
+   "via": "en",
+   "term": "εκκλησία|church"
   },
   {
    "text": "τράπεζα",
@@ -749,7 +823,8 @@
    "gender": "F",
    "image": "3062.png",
    "arasaacId": 3062,
-   "via": "en"
+   "via": "en",
+   "term": "τράπεζα|bank"
   },
   {
    "text": "ταξί",
@@ -759,7 +834,8 @@
    "gender": "N",
    "image": "2580.png",
    "arasaacId": 2580,
-   "via": "en"
+   "via": "en",
+   "term": "ταξί|taxi"
   },
   {
    "text": "λεωφορείο",
@@ -769,7 +845,8 @@
    "gender": "N",
    "image": "2262.png",
    "arasaacId": 2262,
-   "via": "el"
+   "via": "el",
+   "term": "λεωφορείο|bus"
   },
   {
    "text": "αυτοκίνητο",
@@ -779,7 +856,8 @@
    "gender": "N",
    "image": "2339.png",
    "arasaacId": 2339,
-   "via": "el"
+   "via": "el",
+   "term": "αυτοκίνητο|car"
   },
   {
    "text": "δρόμος",
@@ -789,7 +867,8 @@
    "gender": "M",
    "image": "2299.png",
    "arasaacId": 2299,
-   "via": "el"
+   "via": "el",
+   "term": "δρόμος|street"
   },
   {
    "text": "ταβέρνα",
@@ -799,7 +878,8 @@
    "gender": "F",
    "image": "10283.png",
    "arasaacId": 10283,
-   "via": "en"
+   "via": "en",
+   "term": "ταβέρνα|restaurant"
   },
   {
    "text": "μπάνιο",
@@ -809,7 +889,8 @@
    "gender": "N",
    "image": "5921.png",
    "arasaacId": 5921,
-   "via": "en"
+   "via": "en",
+   "term": "μπάνιο|bathroom"
   },
   {
    "text": "κουζίνα",
@@ -819,7 +900,8 @@
    "gender": "F",
    "image": "5965.png",
    "arasaacId": 5965,
-   "via": "en"
+   "via": "en",
+   "term": "κουζίνα|kitchen"
   },
   {
    "text": "κρεβάτι",
@@ -829,7 +911,8 @@
    "gender": "N",
    "image": "2304.png",
    "arasaacId": 2304,
-   "via": "el"
+   "via": "el",
+   "term": "κρεβάτι|bed"
   },
   {
    "text": "δουλειά",
@@ -839,7 +922,8 @@
    "gender": "F",
    "image": "2599.png",
    "arasaacId": 2599,
-   "via": "en"
+   "via": "en",
+   "term": "δουλειά|work"
   },
   {
    "text": "γήπεδο",
@@ -849,7 +933,8 @@
    "gender": "N",
    "image": "5993.png",
    "arasaacId": 5993,
-   "via": "en"
+   "via": "en",
+   "term": "γήπεδο|stadium"
   },
   {
    "text": "μπαλκόνι",
@@ -859,7 +944,8 @@
    "gender": "N",
    "image": "8254.png",
    "arasaacId": 8254,
-   "via": "en"
+   "via": "en",
+   "term": "μπαλκόνι|balcony"
   },
   {
    "text": "μαμά",
@@ -869,7 +955,8 @@
    "gender": "F",
    "image": "2458.png",
    "arasaacId": 2458,
-   "via": "en"
+   "via": "en",
+   "term": "μαμά|mom"
   },
   {
    "text": "μπαμπάς",
@@ -879,7 +966,8 @@
    "gender": "M",
    "image": "31146.png",
    "arasaacId": 31146,
-   "via": "en"
+   "via": "en",
+   "term": "μπαμπάς|dad"
   },
   {
    "text": "αδελφός",
@@ -889,7 +977,8 @@
    "gender": "M",
    "image": "2423.png",
    "arasaacId": 2423,
-   "via": "en"
+   "via": "en",
+   "term": "αδελφός|brother"
   },
   {
    "text": "αδελφή",
@@ -899,7 +988,8 @@
    "gender": "F",
    "image": "2422.png",
    "arasaacId": 2422,
-   "via": "en"
+   "via": "en",
+   "term": "αδελφή|sister"
   },
   {
    "text": "φίλος",
@@ -909,7 +999,8 @@
    "gender": "M",
    "image": "8486.png",
    "arasaacId": 8486,
-   "via": "en"
+   "via": "en",
+   "term": "φίλος|friend"
   },
   {
    "text": "φίλη",
@@ -919,7 +1010,8 @@
    "gender": "F",
    "image": "8486.png",
    "arasaacId": 8486,
-   "via": "en"
+   "via": "en",
+   "term": "φίλη|friend"
   },
   {
    "text": "γιατρός",
@@ -929,7 +1021,8 @@
    "gender": "M",
    "image": "2467.png",
    "arasaacId": 2467,
-   "via": "en"
+   "via": "en",
+   "term": "γιατρός|doctor"
   },
   {
    "text": "νοσοκόμα",
@@ -939,7 +1032,8 @@
    "gender": "F",
    "image": "2375.png",
    "arasaacId": 2375,
-   "via": "en"
+   "via": "en",
+   "term": "νοσοκόμα|nurse"
   },
   {
    "text": "λογοθεραπεύτρια",
@@ -949,7 +1043,8 @@
    "gender": "F",
    "image": "2454.png",
    "arasaacId": 2454,
-   "via": "el"
+   "via": "el",
+   "term": "λογοθεραπευτής|speech therapist"
   },
   {
    "text": "φυσιοθεραπευτής",
@@ -959,7 +1054,8 @@
    "gender": "M",
    "image": "2395.png",
    "arasaacId": 2395,
-   "via": "en"
+   "via": "en",
+   "term": "φυσιοθεραπευτής|physiotherapist"
   },
   {
    "text": "γείτονας",
@@ -969,7 +1065,8 @@
    "gender": "M",
    "image": "37228.png",
    "arasaacId": 37228,
-   "via": "en"
+   "via": "en",
+   "term": "γείτονας|neighbor"
   },
   {
    "text": "παιδί",
@@ -979,7 +1076,8 @@
    "gender": "N",
    "image": "2485.png",
    "arasaacId": 2485,
-   "via": "en"
+   "via": "en",
+   "term": "παιδί|child"
   },
   {
    "text": "άντρας",
@@ -989,7 +1087,8 @@
    "gender": "M",
    "image": "4665.png",
    "arasaacId": 4665,
-   "via": "en"
+   "via": "en",
+   "term": "άντρας|man"
   },
   {
    "text": "γυναίκα",
@@ -999,7 +1098,8 @@
    "gender": "F",
    "image": "4703.png",
    "arasaacId": 4703,
-   "via": "en"
+   "via": "en",
+   "term": "γυναίκα|woman"
   },
   {
    "text": "εγώ",
@@ -1009,7 +1109,8 @@
    "gender": null,
    "image": "2617.png",
    "arasaacId": 2617,
-   "via": "en"
+   "via": "en",
+   "term": "εγώ|me"
   },
   {
    "text": "εσύ",
@@ -1019,7 +1120,8 @@
    "gender": null,
    "image": "2608.png",
    "arasaacId": 2608,
-   "via": "en"
+   "via": "en",
+   "term": "εσύ|you"
   },
   {
    "text": "θέλω",
@@ -1029,7 +1131,8 @@
    "gender": null,
    "image": "5441.png",
    "arasaacId": 5441,
-   "via": "en"
+   "via": "en",
+   "term": "θέλω|want"
   },
   {
    "text": "πάμε",
@@ -1039,7 +1142,8 @@
    "gender": null,
    "image": "2432.png",
    "arasaacId": 2432,
-   "via": "el"
+   "via": "el",
+   "term": "πηγαίνω|go"
   },
   {
    "text": "τρώω",
@@ -1049,7 +1153,8 @@
    "gender": null,
    "image": "2349.png",
    "arasaacId": 2349,
-   "via": "el"
+   "via": "el",
+   "term": "τρώω|eat"
   },
   {
    "text": "πίνω",
@@ -1059,7 +1164,8 @@
    "gender": null,
    "image": "2276.png",
    "arasaacId": 2276,
-   "via": "el"
+   "via": "el",
+   "term": "πίνω|drink"
   },
   {
    "text": "κοιμάμαι",
@@ -1069,7 +1175,8 @@
    "gender": null,
    "image": "2369.png",
    "arasaacId": 2369,
-   "via": "el"
+   "via": "el",
+   "term": "κοιμάμαι|sleep"
   },
   {
    "text": "περπατάω",
@@ -1079,7 +1186,8 @@
    "gender": null,
    "image": "3251.png",
    "arasaacId": 3251,
-   "via": "en"
+   "via": "en",
+   "term": "περπατάω|walk"
   },
   {
    "text": "κάθομαι",
@@ -1089,7 +1197,8 @@
    "gender": null,
    "image": "6611.png",
    "arasaacId": 6611,
-   "via": "en"
+   "via": "en",
+   "term": "κάθομαι|sit"
   },
   {
    "text": "βλέπω",
@@ -1099,7 +1208,8 @@
    "gender": null,
    "image": "2474.png",
    "arasaacId": 2474,
-   "via": "en"
+   "via": "en",
+   "term": "βλέπω|see"
   },
   {
    "text": "ακούω",
@@ -1109,7 +1219,8 @@
    "gender": null,
    "image": "2381.png",
    "arasaacId": 2381,
-   "via": "el"
+   "via": "el",
+   "term": "ακούω|listen"
   },
   {
    "text": "μιλάω",
@@ -1119,7 +1230,8 @@
    "gender": null,
    "image": "3345.png",
    "arasaacId": 3345,
-   "via": "en"
+   "via": "en",
+   "term": "μιλάω|talk"
   },
   {
    "text": "διαβάζω",
@@ -1129,7 +1241,8 @@
    "gender": null,
    "image": "2387.png",
    "arasaacId": 2387,
-   "via": "el"
+   "via": "el",
+   "term": "διαβάζω|read"
   },
   {
    "text": "γράφω",
@@ -1139,7 +1252,8 @@
    "gender": null,
    "image": "2380.png",
    "arasaacId": 2380,
-   "via": "el"
+   "via": "el",
+   "term": "γράφω|write"
   },
   {
    "text": "παίζω",
@@ -1149,7 +1263,8 @@
    "gender": null,
    "image": "2439.png",
    "arasaacId": 2439,
-   "via": "en"
+   "via": "en",
+   "term": "παίζω|play"
   },
   {
    "text": "τηλεφωνώ",
@@ -1159,7 +1274,8 @@
    "gender": null,
    "image": "4686.png",
    "arasaacId": 4686,
-   "via": "en"
+   "via": "en",
+   "term": "τηλεφωνώ|call"
   },
   {
    "text": "αγοράζω",
@@ -1169,7 +1285,8 @@
    "gender": null,
    "image": "6457.png",
    "arasaacId": 6457,
-   "via": "en"
+   "via": "en",
+   "term": "αγοράζω|buy"
   },
   {
    "text": "πληρώνω",
@@ -1179,7 +1296,8 @@
    "gender": null,
    "image": "6457.png",
    "arasaacId": 6457,
-   "via": "en"
+   "via": "en",
+   "term": "πληρώνω|pay"
   },
   {
    "text": "ανοίγω",
@@ -1189,7 +1307,8 @@
    "gender": null,
    "image": "4549.png",
    "arasaacId": 4549,
-   "via": "en"
+   "via": "en",
+   "term": "ανοίγω|open"
   },
   {
    "text": "κλείνω",
@@ -1199,7 +1318,8 @@
    "gender": null,
    "image": "2697.png",
    "arasaacId": 2697,
-   "via": "en"
+   "via": "en",
+   "term": "κλείνω|close"
   },
   {
    "text": "έρχομαι",
@@ -1209,7 +1329,8 @@
    "gender": null,
    "image": "11708.png",
    "arasaacId": 11708,
-   "via": "en"
+   "via": "en",
+   "term": "έρχομαι|come"
   },
   {
    "text": "φεύγω",
@@ -1219,7 +1340,8 @@
    "gender": null,
    "image": "2806.png",
    "arasaacId": 2806,
-   "via": "en"
+   "via": "en",
+   "term": "φεύγω|leave"
   },
   {
    "text": "βοηθάω",
@@ -1229,7 +1351,8 @@
    "gender": null,
    "image": "4570.png",
    "arasaacId": 4570,
-   "via": "en"
+   "via": "en",
+   "term": "βοηθάω|help"
   },
   {
    "text": "ξεκουράζομαι",
@@ -1239,7 +1362,8 @@
    "gender": null,
    "image": "3299.png",
    "arasaacId": 3299,
-   "via": "en"
+   "via": "en",
+   "term": "ξεκουράζομαι|rest"
   },
   {
    "text": "τραγουδάω",
@@ -1249,7 +1373,8 @@
    "gender": null,
    "image": "2315.png",
    "arasaacId": 2315,
-   "via": "en"
+   "via": "en",
+   "term": "τραγουδάω|sing"
   },
   {
    "text": "χαρούμενος",
@@ -1259,7 +1384,8 @@
    "gender": null,
    "image": "3245.png",
    "arasaacId": 3245,
-   "via": "en"
+   "via": "en",
+   "term": "χαρούμενος|happy"
   },
   {
    "text": "λυπημένος",
@@ -1269,7 +1395,8 @@
    "gender": null,
    "image": "2606.png",
    "arasaacId": 2606,
-   "via": "en"
+   "via": "en",
+   "term": "λυπημένος|sad"
   },
   {
    "text": "θυμωμένος",
@@ -1279,7 +1406,8 @@
    "gender": null,
    "image": "2374.png",
    "arasaacId": 2374,
-   "via": "el"
+   "via": "el",
+   "term": "θυμωμένος|angry"
   },
   {
    "text": "κουρασμένος",
@@ -1289,7 +1417,8 @@
    "gender": null,
    "image": "2314.png",
    "arasaacId": 2314,
-   "via": "el"
+   "via": "el",
+   "term": "κουρασμένος|tired"
   },
   {
    "text": "φοβισμένος",
@@ -1299,7 +1428,8 @@
    "gender": null,
    "image": "2261.png",
    "arasaacId": 2261,
-   "via": "en"
+   "via": "en",
+   "term": "φοβισμένος|scared"
   },
   {
    "text": "πεινάω",
@@ -1309,7 +1439,8 @@
    "gender": null,
    "image": "4962.png",
    "arasaacId": 4962,
-   "via": "en"
+   "via": "en",
+   "term": "πεινάω|hungry"
   },
   {
    "text": "διψάω",
@@ -1319,7 +1450,8 @@
    "gender": null,
    "image": "4963.png",
    "arasaacId": 4963,
-   "via": "en"
+   "via": "en",
+   "term": "διψάω|thirsty"
   },
   {
    "text": "κρυώνω",
@@ -1329,7 +1461,8 @@
    "gender": null,
    "image": "4652.png",
    "arasaacId": 4652,
-   "via": "en"
+   "via": "en",
+   "term": "κρυώνω|cold"
   },
   {
    "text": "ζεσταίνομαι",
@@ -1339,7 +1472,8 @@
    "gender": null,
    "image": "2300.png",
    "arasaacId": 2300,
-   "via": "en"
+   "via": "en",
+   "term": "ζεσταίνομαι|hot"
   },
   {
    "text": "βαριέμαι",
@@ -1349,7 +1483,8 @@
    "gender": null,
    "image": "35531.png",
    "arasaacId": 35531,
-   "via": "en"
+   "via": "en",
+   "term": "βαριέμαι|bored"
   },
   {
    "text": "νευρικός",
@@ -1359,7 +1494,8 @@
    "gender": null,
    "image": "11312.png",
    "arasaacId": 11312,
-   "via": "en"
+   "via": "en",
+   "term": "νευρικός|nervous"
   },
   {
    "text": "ήρεμος",
@@ -1369,7 +1505,8 @@
    "gender": null,
    "image": "31310.png",
    "arasaacId": 31310,
-   "via": "en"
+   "via": "en",
+   "term": "ήρεμος|calm"
   },
   {
    "text": "καλά",
@@ -1379,7 +1516,8 @@
    "gender": null,
    "image": "5397.png",
    "arasaacId": 5397,
-   "via": "en"
+   "via": "en",
+   "term": "καλά|fine"
   },
   {
    "text": "άσχημα",
@@ -1389,7 +1527,8 @@
    "gender": null,
    "image": "4690.png",
    "arasaacId": 4690,
-   "via": "en"
+   "via": "en",
+   "term": "άσχημα|bad"
   },
   {
    "text": "κεφάλι",
@@ -1399,7 +1538,8 @@
    "gender": "N",
    "image": "2673.png",
    "arasaacId": 2673,
-   "via": "en"
+   "via": "en",
+   "term": "κεφάλι|head"
   },
   {
    "text": "χέρι",
@@ -1409,7 +1549,8 @@
    "gender": "N",
    "image": "2928.png",
    "arasaacId": 2928,
-   "via": "en"
+   "via": "en",
+   "term": "χέρι|hand"
   },
   {
    "text": "πόδι",
@@ -1419,7 +1560,8 @@
    "gender": "N",
    "image": "2841.png",
    "arasaacId": 2841,
-   "via": "en"
+   "via": "en",
+   "term": "πόδι|foot"
   },
   {
    "text": "μάτι",
@@ -1429,7 +1571,8 @@
    "gender": "N",
    "image": "6573.png",
    "arasaacId": 6573,
-   "via": "en"
+   "via": "en",
+   "term": "μάτι|eye"
   },
   {
    "text": "αυτί",
@@ -1439,7 +1582,8 @@
    "gender": "N",
    "image": "2871.png",
    "arasaacId": 2871,
-   "via": "en"
+   "via": "en",
+   "term": "αυτί|ear"
   },
   {
    "text": "στόμα",
@@ -1449,7 +1593,8 @@
    "gender": "N",
    "image": "2663.png",
    "arasaacId": 2663,
-   "via": "en"
+   "via": "en",
+   "term": "στόμα|mouth"
   },
   {
    "text": "μύτη",
@@ -1459,7 +1604,8 @@
    "gender": "F",
    "image": "2887.png",
    "arasaacId": 2887,
-   "via": "en"
+   "via": "en",
+   "term": "μύτη|nose"
   },
   {
    "text": "δόντια",
@@ -1469,7 +1615,8 @@
    "gender": "N",
    "image": "2737.png",
    "arasaacId": 2737,
-   "via": "en"
+   "via": "en",
+   "term": "δόντια|teeth"
   },
   {
    "text": "στομάχι",
@@ -1479,7 +1626,8 @@
    "gender": "N",
    "image": "2786.png",
    "arasaacId": 2786,
-   "via": "en"
+   "via": "en",
+   "term": "στομάχι|stomach"
   },
   {
    "text": "πλάτη",
@@ -1489,7 +1637,8 @@
    "gender": "F",
    "image": "2748.png",
    "arasaacId": 2748,
-   "via": "en"
+   "via": "en",
+   "term": "πλάτη|back"
   },
   {
    "text": "καρδιά",
@@ -1499,7 +1648,8 @@
    "gender": "F",
    "image": "2715.png",
    "arasaacId": 2715,
-   "via": "en"
+   "via": "en",
+   "term": "καρδιά|heart"
   },
   {
    "text": "γόνατο",
@@ -1509,7 +1659,8 @@
    "gender": "N",
    "image": "2810.png",
    "arasaacId": 2810,
-   "via": "en"
+   "via": "en",
+   "term": "γόνατο|knee"
   },
   {
    "text": "δάχτυλο",
@@ -1519,7 +1670,8 @@
    "gender": "N",
    "image": "3298.png",
    "arasaacId": 3298,
-   "via": "en"
+   "via": "en",
+   "term": "δάχτυλο|finger"
   },
   {
    "text": "λαιμός",
@@ -1529,7 +1681,8 @@
    "gender": "M",
    "image": "2727.png",
    "arasaacId": 2727,
-   "via": "en"
+   "via": "en",
+   "term": "λαιμός|neck"
   },
   {
    "text": "ένα",
@@ -1539,7 +1692,8 @@
    "gender": null,
    "image": "2627.png",
    "arasaacId": 2627,
-   "via": "en"
+   "via": "en",
+   "term": "1|one"
   },
   {
    "text": "δύο",
@@ -1549,7 +1703,8 @@
    "gender": null,
    "image": "2628.png",
    "arasaacId": 2628,
-   "via": "en"
+   "via": "en",
+   "term": "2|two"
   },
   {
    "text": "τρία",
@@ -1559,7 +1714,8 @@
    "gender": null,
    "image": "2629.png",
    "arasaacId": 2629,
-   "via": "en"
+   "via": "en",
+   "term": "3|three"
   },
   {
    "text": "τέσσερα",
@@ -1569,7 +1725,8 @@
    "gender": null,
    "image": "2630.png",
    "arasaacId": 2630,
-   "via": "en"
+   "via": "en",
+   "term": "4|four"
   },
   {
    "text": "πέντε",
@@ -1579,7 +1736,8 @@
    "gender": null,
    "image": "39311.png",
    "arasaacId": 39311,
-   "via": "en"
+   "via": "en",
+   "term": "5|five"
   },
   {
    "text": "έξι",
@@ -1589,7 +1747,8 @@
    "gender": null,
    "image": "2632.png",
    "arasaacId": 2632,
-   "via": "en"
+   "via": "en",
+   "term": "6|six"
   },
   {
    "text": "επτά",
@@ -1599,7 +1758,8 @@
    "gender": null,
    "image": "2633.png",
    "arasaacId": 2633,
-   "via": "en"
+   "via": "en",
+   "term": "7|seven"
   },
   {
    "text": "οκτώ",
@@ -1609,7 +1769,8 @@
    "gender": null,
    "image": "2634.png",
    "arasaacId": 2634,
-   "via": "en"
+   "via": "en",
+   "term": "8|eight"
   },
   {
    "text": "εννέα",
@@ -1619,7 +1780,8 @@
    "gender": null,
    "image": "2635.png",
    "arasaacId": 2635,
-   "via": "en"
+   "via": "en",
+   "term": "9|nine"
   },
   {
    "text": "δέκα",
@@ -1629,7 +1791,8 @@
    "gender": null,
    "image": "7025.png",
    "arasaacId": 7025,
-   "via": "en"
+   "via": "en",
+   "term": "10|ten"
   },
   {
    "text": "τηλέφωνο",
@@ -1639,7 +1802,8 @@
    "gender": "N",
    "image": "2791.png",
    "arasaacId": 2791,
-   "via": "en"
+   "via": "en",
+   "term": "τηλέφωνο|phone"
   },
   {
    "text": "τηλεόραση",
@@ -1649,7 +1813,8 @@
    "gender": "F",
    "image": "25498.png",
    "arasaacId": 25498,
-   "via": "en"
+   "via": "en",
+   "term": "τηλεόραση|television"
   },
   {
    "text": "κλειδιά",
@@ -1659,7 +1824,8 @@
    "gender": "N",
    "image": "2451.png",
    "arasaacId": 2451,
-   "via": "el"
+   "via": "el",
+   "term": "κλειδιά|keys"
   },
   {
    "text": "πορτοφόλι",
@@ -1669,7 +1835,8 @@
    "gender": "N",
    "image": "2689.png",
    "arasaacId": 2689,
-   "via": "en"
+   "via": "en",
+   "term": "πορτοφόλι|wallet"
   },
   {
    "text": "γυαλιά",
@@ -1679,7 +1846,8 @@
    "gender": "N",
    "image": "3329.png",
    "arasaacId": 3329,
-   "via": "en"
+   "via": "en",
+   "term": "γυαλιά|glasses"
   },
   {
    "text": "ρούχα",
@@ -1689,7 +1857,8 @@
    "gender": "N",
    "image": "7233.png",
    "arasaacId": 7233,
-   "via": "en"
+   "via": "en",
+   "term": "ρούχα|clothes"
   },
   {
    "text": "παπούτσια",
@@ -1699,7 +1868,8 @@
    "gender": "N",
    "image": "2622.png",
    "arasaacId": 2622,
-   "via": "en"
+   "via": "en",
+   "term": "παπούτσια|shoes"
   },
   {
    "text": "φάρμακα",
@@ -1709,7 +1879,8 @@
    "gender": "N",
    "image": "8359.png",
    "arasaacId": 8359,
-   "via": "en"
+   "via": "en",
+   "term": "φάρμακα|medicine"
   },
   {
    "text": "χρήματα",
@@ -1719,7 +1890,8 @@
    "gender": "N",
    "image": "4630.png",
    "arasaacId": 4630,
-   "via": "en"
+   "via": "en",
+   "term": "χρήματα|money"
   },
   {
    "text": "ρολόι",
@@ -1729,7 +1901,8 @@
    "gender": "N",
    "image": "5561.png",
    "arasaacId": 5561,
-   "via": "en"
+   "via": "en",
+   "term": "ρολόι|clock"
   },
   {
    "text": "τσάντα",
@@ -1739,7 +1912,8 @@
    "gender": "F",
    "image": "2284.png",
    "arasaacId": 2284,
-   "via": "el"
+   "via": "el",
+   "term": "τσάντα|bag"
   },
   {
    "text": "ομπρέλα",
@@ -1749,7 +1923,8 @@
    "gender": "F",
    "image": "2500.png",
    "arasaacId": 2500,
-   "via": "en"
+   "via": "en",
+   "term": "ομπρέλα|umbrella"
   },
   {
    "text": "καρέκλα",
@@ -1759,7 +1934,8 @@
    "gender": "F",
    "image": "3155.png",
    "arasaacId": 3155,
-   "via": "en"
+   "via": "en",
+   "term": "καρέκλα|chair"
   },
   {
    "text": "τραπέζι",
@@ -1769,7 +1945,8 @@
    "gender": "N",
    "image": "3129.png",
    "arasaacId": 3129,
-   "via": "en"
+   "via": "en",
+   "term": "τραπέζι|table"
   },
   {
    "text": "πόρτα",
@@ -1779,7 +1956,8 @@
    "gender": "F",
    "image": "3244.png",
    "arasaacId": 3244,
-   "via": "en"
+   "via": "en",
+   "term": "πόρτα|door"
   },
   {
    "text": "παράθυρο",
@@ -1789,7 +1967,8 @@
    "gender": "N",
    "image": "2611.png",
    "arasaacId": 2611,
-   "via": "en"
+   "via": "en",
+   "term": "παράθυρο|window"
   },
   {
    "text": "βιβλίο",
@@ -1799,7 +1978,8 @@
    "gender": "N",
    "image": "2450.png",
    "arasaacId": 2450,
-   "via": "el"
+   "via": "el",
+   "term": "βιβλίο|book"
   },
   {
    "text": "μουσική",
@@ -1809,7 +1989,8 @@
    "gender": "F",
    "image": "24795.png",
    "arasaacId": 24795,
-   "via": "en"
+   "via": "en",
+   "term": "μουσική|music"
   },
   {
    "text": "μπάλα",
@@ -1819,7 +2000,8 @@
    "gender": "F",
    "image": "2269.png",
    "arasaacId": 2269,
-   "via": "el"
+   "via": "el",
+   "term": "μπάλα|ball"
   },
   {
    "text": "ήλιος",
@@ -1829,7 +2011,8 @@
    "gender": "M",
    "image": "2798.png",
    "arasaacId": 2798,
-   "via": "en"
+   "via": "en",
+   "term": "ήλιος|sun"
   },
   {
    "text": "βροχή",
@@ -1839,7 +2022,8 @@
    "gender": "F",
    "image": "3123.png",
    "arasaacId": 3123,
-   "via": "en"
+   "via": "en",
+   "term": "βροχή|rain"
   },
   {
    "text": "σήμερα",
@@ -1849,7 +2033,8 @@
    "gender": null,
    "image": "7131.png",
    "arasaacId": 7131,
-   "via": "en"
+   "via": "en",
+   "term": "σήμερα|today"
   },
   {
    "text": "αύριο",
@@ -1859,7 +2044,8 @@
    "gender": null,
    "image": "7152.png",
    "arasaacId": 7152,
-   "via": "en"
+   "via": "en",
+   "term": "αύριο|tomorrow"
   },
   {
    "text": "χθες",
@@ -1869,7 +2055,8 @@
    "gender": null,
    "image": "6926.png",
    "arasaacId": 6926,
-   "via": "en"
+   "via": "en",
+   "term": "χθες|yesterday"
   },
   {
    "text": "τώρα",
@@ -1879,7 +2066,8 @@
    "gender": null,
    "image": "13026.png",
    "arasaacId": 13026,
-   "via": "en"
+   "via": "en",
+   "term": "τώρα|now"
   },
   {
    "text": "μετά",
@@ -1889,7 +2077,8 @@
    "gender": null,
    "image": "13080.png",
    "arasaacId": 13080,
-   "via": "en"
+   "via": "en",
+   "term": "μετά|later"
   },
   {
    "text": "πρωί",
@@ -1899,7 +2088,8 @@
    "gender": "N",
    "image": "25704.png",
    "arasaacId": 25704,
-   "via": "en"
+   "via": "en",
+   "term": "πρωί|morning"
   },
   {
    "text": "μεσημέρι",
@@ -1909,7 +2099,8 @@
    "gender": "N",
    "image": null,
    "arasaacId": 4695,
-   "via": null
+   "via": null,
+   "term": "μεσημέρι|noon"
   },
   {
    "text": "βράδυ",
@@ -1919,7 +2110,8 @@
    "gender": "N",
    "image": "38567.png",
    "arasaacId": 38567,
-   "via": "en"
+   "via": "en",
+   "term": "βράδυ|evening"
   },
   {
    "text": "Δευτέρα",
@@ -1929,7 +2121,8 @@
    "gender": "F",
    "image": "6554.png",
    "arasaacId": 6554,
-   "via": "en"
+   "via": "en",
+   "term": "Δευτέρα|Monday"
   },
   {
    "text": "Σάββατο",
@@ -1939,7 +2132,8 @@
    "gender": "N",
    "image": "6605.png",
    "arasaacId": 6605,
-   "via": "en"
+   "via": "en",
+   "term": "Σάββατο|Saturday"
   },
   {
    "text": "Κυριακή",
@@ -1949,7 +2143,8 @@
    "gender": "F",
    "image": "6478.png",
    "arasaacId": 6478,
-   "via": "en"
+   "via": "en",
+   "term": "Κυριακή|Sunday"
   },
   {
    "text": "ραντεβού",
@@ -1959,7 +2154,8 @@
    "gender": "N",
    "image": "16165.png",
    "arasaacId": 16165,
-   "via": "en"
+   "via": "en",
+   "term": "ραντεβού|appointment"
   },
   {
    "text": "παραγγελία",
@@ -1967,9 +2163,10 @@
    "category": "THINGS",
    "tier": 3,
    "gender": "F",
-   "image": "11251.png",
-   "arasaacId": 11251,
-   "via": "en"
+   "image": null,
+   "arasaacId": null,
+   "via": null,
+   "term": "παραγγελία|"
   },
   {
    "text": "λογαριασμός",
@@ -1979,17 +2176,19 @@
    "gender": "M",
    "image": "5995.png",
    "arasaacId": 5995,
-   "via": "en"
+   "via": "en",
+   "term": "λογαριασμός|invoice"
   },
   {
-   "text": "φυσικοθεραπεία",
+   "text": "φυσιοθεραπεία",
    "kind": "WORD",
    "category": "BODY",
    "tier": 3,
    "gender": "F",
    "image": "29562.png",
    "arasaacId": 29562,
-   "via": "en"
+   "via": "en",
+   "term": "φυσιοθεραπεία|physiotherapy"
   },
   {
    "text": "εφημερίδα",
@@ -1999,7 +2198,8 @@
    "gender": "F",
    "image": "2845.png",
    "arasaacId": 2845,
-   "via": "en"
+   "via": "en",
+   "term": "εφημερίδα|newspaper"
   },
   {
    "text": "συνταγή",
@@ -2009,7 +2209,8 @@
    "gender": "F",
    "image": "38606.png",
    "arasaacId": 38606,
-   "via": "en"
+   "via": "en",
+   "term": "συνταγή|prescription"
   },
   {
    "text": "ταυτότητα",
@@ -2019,7 +2220,8 @@
    "gender": "F",
    "image": "10274.png",
    "arasaacId": 10274,
-   "via": "en"
+   "via": "en",
+   "term": "ταυτότητα|identity card"
   },
   {
    "text": "απόδειξη",
@@ -2029,7 +2231,8 @@
    "gender": "F",
    "image": "9184.png",
    "arasaacId": 9184,
-   "via": "en"
+   "via": "en",
+   "term": "απόδειξη|receipt"
   },
   {
    "text": "κάρτα",
@@ -2037,9 +2240,10 @@
    "category": "THINGS",
    "tier": 3,
    "gender": "F",
-   "image": "17208.png",
-   "arasaacId": 17208,
-   "via": "en"
+   "image": "4751.png",
+   "arasaacId": 4751,
+   "via": "en",
+   "term": "κάρτα|credit card"
   },
   {
    "text": "φορτιστής",
@@ -2049,7 +2253,8 @@
    "gender": "M",
    "image": "16597.png",
    "arasaacId": 16597,
-   "via": "en"
+   "via": "en",
+   "term": "φορτιστής|charger"
   },
   {
    "text": "υπολογιστής",
@@ -2059,7 +2264,8 @@
    "gender": "M",
    "image": "2487.png",
    "arasaacId": 2487,
-   "via": "en"
+   "via": "en",
+   "term": "υπολογιστής|computer"
   },
   {
    "text": "μήνυμα",
@@ -2069,7 +2275,8 @@
    "gender": "N",
    "image": "37867.png",
    "arasaacId": 37867,
-   "via": "en"
+   "via": "en",
+   "term": "μήνυμα|message"
   },
   {
    "text": "φωτογραφία",
@@ -2079,7 +2286,8 @@
    "gender": "F",
    "image": "7108.png",
    "arasaacId": 7108,
-   "via": "en"
+   "via": "en",
+   "term": "φωτογραφία|photograph"
   },
   {
    "text": "μπαστούνι",
@@ -2089,7 +2297,8 @@
    "gender": "N",
    "image": "5922.png",
    "arasaacId": 5922,
-   "via": "en"
+   "via": "en",
+   "term": "μπαστούνι|walking stick"
   },
   {
    "text": "κουβέρτα",
@@ -2099,7 +2308,8 @@
    "gender": "F",
    "image": "2459.png",
    "arasaacId": 2459,
-   "via": "en"
+   "via": "en",
+   "term": "κουβέρτα|blanket"
   },
   {
    "text": "μαξιλάρι",
@@ -2109,7 +2319,8 @@
    "gender": "N",
    "image": "2250.png",
    "arasaacId": 2250,
-   "via": "el"
+   "via": "el",
+   "term": "μαξιλάρι|pillow"
   },
   {
    "text": "πετσέτα",
@@ -2119,7 +2330,8 @@
    "gender": "F",
    "image": "2593.png",
    "arasaacId": 2593,
-   "via": "en"
+   "via": "en",
+   "term": "πετσέτα|towel"
   },
   {
    "text": "σαπούνι",
@@ -2129,7 +2341,8 @@
    "gender": "N",
    "image": "2964.png",
    "arasaacId": 2964,
-   "via": "en"
+   "via": "en",
+   "term": "σαπούνι|soap"
   },
   {
    "text": "οδοντόβουρτσα",
@@ -2139,7 +2352,8 @@
    "gender": "F",
    "image": "2694.png",
    "arasaacId": 2694,
-   "via": "en"
+   "via": "en",
+   "term": "οδοντόβουρτσα|toothbrush"
   },
   {
    "text": "ψυγείο",
@@ -2149,7 +2363,8 @@
    "gender": "N",
    "image": "3272.png",
    "arasaacId": 3272,
-   "via": "en"
+   "via": "en",
+   "term": "ψυγείο|refrigerator"
   },
   {
    "text": "πλυντήριο",
@@ -2159,7 +2374,8 @@
    "gender": "N",
    "image": "2442.png",
    "arasaacId": 2442,
-   "via": "el"
+   "via": "el",
+   "term": "πλυντήριο|washing machine"
   },
   {
    "text": "καθρέφτης",
@@ -2169,7 +2385,8 @@
    "gender": "M",
    "image": "2385.png",
    "arasaacId": 2385,
-   "via": "el"
+   "via": "el",
+   "term": "καθρέφτης|mirror"
   },
   {
    "text": "ασανσέρ",
@@ -2179,7 +2396,8 @@
    "gender": "N",
    "image": "2260.png",
    "arasaacId": 2260,
-   "via": "el"
+   "via": "el",
+   "term": "ασανσέρ|elevator"
   },
   {
    "text": "ταχυδρομείο",
@@ -2189,7 +2407,8 @@
    "gender": "N",
    "image": "3086.png",
    "arasaacId": 3086,
-   "via": "en"
+   "via": "en",
+   "term": "ταχυδρομείο|post office"
   },
   {
    "text": "βιβλιοθήκη",
@@ -2199,7 +2418,8 @@
    "gender": "F",
    "image": "3065.png",
    "arasaacId": 3065,
-   "via": "en"
+   "via": "en",
+   "term": "βιβλιοθήκη|library"
   },
   {
    "text": "κομμωτήριο",
@@ -2209,7 +2429,8 @@
    "gender": "N",
    "image": "2849.png",
    "arasaacId": 2849,
-   "via": "en"
+   "via": "en",
+   "term": "κομμωτήριο|hairdresser"
   },
   {
    "text": "περίπτερο",
@@ -2219,7 +2440,8 @@
    "gender": "N",
    "image": "2956.png",
    "arasaacId": 2956,
-   "via": "en"
+   "via": "en",
+   "term": "περίπτερο|kiosk"
   },
   {
    "text": "αεροδρόμιο",
@@ -2229,7 +2451,8 @@
    "gender": "N",
    "image": "3053.png",
    "arasaacId": 3053,
-   "via": "en"
+   "via": "en",
+   "term": "αεροδρόμιο|airport"
   },
   {
    "text": "πλατεία",
@@ -2239,7 +2462,8 @@
    "gender": "F",
    "image": "4616.png",
    "arasaacId": 4616,
-   "via": "en"
+   "via": "en",
+   "term": "πλατεία|square"
   },
   {
    "text": "παραλία",
@@ -2249,7 +2473,8 @@
    "gender": "F",
    "image": "2826.png",
    "arasaacId": 2826,
-   "via": "en"
+   "via": "en",
+   "term": "παραλία|beach"
   },
   {
    "text": "χωριό",
@@ -2259,7 +2484,8 @@
    "gender": "N",
    "image": "2823.png",
    "arasaacId": 2823,
-   "via": "en"
+   "via": "en",
+   "term": "χωριό|village"
   },
   {
    "text": "πόλη",
@@ -2269,7 +2495,8 @@
    "gender": "F",
    "image": "2704.png",
    "arasaacId": 2704,
-   "via": "en"
+   "via": "en",
+   "term": "πόλη|city"
   },
   {
    "text": "γειτονιά",
@@ -2279,7 +2506,8 @@
    "gender": "F",
    "image": "6241.png",
    "arasaacId": 6241,
-   "via": "en"
+   "via": "en",
+   "term": "γειτονιά|neighbourhood"
   },
   {
    "text": "ιατρείο",
@@ -2289,7 +2517,8 @@
    "gender": "N",
    "image": "25544.png",
    "arasaacId": 25544,
-   "via": "en"
+   "via": "en",
+   "term": "ιατρείο|doctor's office"
   },
   {
    "text": "φούρνος",
@@ -2299,7 +2528,8 @@
    "gender": "M",
    "image": "2426.png",
    "arasaacId": 2426,
-   "via": "el"
+   "via": "el",
+   "term": "φούρνος|bakery"
   },
   {
    "text": "μανάβικο",
@@ -2309,7 +2539,8 @@
    "gender": "N",
    "image": "3328.png",
    "arasaacId": 3328,
-   "via": "en"
+   "via": "en",
+   "term": "μανάβικο|greengrocer"
   },
   {
    "text": "κουρείο",
@@ -2319,7 +2550,8 @@
    "gender": "N",
    "image": "35897.png",
    "arasaacId": 35897,
-   "via": "en"
+   "via": "en",
+   "term": "κουρείο|barber"
   },
   {
    "text": "γιαούρτι",
@@ -2329,7 +2561,8 @@
    "gender": "N",
    "image": "2618.png",
    "arasaacId": 2618,
-   "via": "en"
+   "via": "en",
+   "term": "γιαούρτι|yogurt"
   },
   {
    "text": "μπριζόλα",
@@ -2339,7 +2572,8 @@
    "gender": "F",
    "image": "35147.png",
    "arasaacId": 35147,
-   "via": "en"
+   "via": "en",
+   "term": "μπριζόλα|steak"
   },
   {
    "text": "σπανακόπιτα",
@@ -2349,7 +2583,8 @@
    "gender": "F",
    "image": "8311.png",
    "arasaacId": 8311,
-   "via": "en"
+   "via": "en",
+   "term": "σπανακόπιτα|spinach pie"
   },
   {
    "text": "λεμονάδα",
@@ -2359,7 +2594,8 @@
    "gender": "F",
    "image": "6551.png",
    "arasaacId": 6551,
-   "via": "en"
+   "via": "en",
+   "term": "λεμονάδα|lemonade"
   },
   {
    "text": "πορτοκαλάδα",
@@ -2369,7 +2605,8 @@
    "gender": "F",
    "image": "2624.png",
    "arasaacId": 2624,
-   "via": "en"
+   "via": "en",
+   "term": "πορτοκαλάδα|orange juice"
   },
   {
    "text": "κουλούρι",
@@ -2377,9 +2614,10 @@
    "category": "FOOD",
    "tier": 3,
    "gender": "N",
-   "image": "37881.png",
-   "arasaacId": 37881,
-   "via": "en"
+   "image": "38531.png",
+   "arasaacId": 38531,
+   "via": "en",
+   "term": "κουλούρι|bagel"
   },
   {
    "text": "μπισκότο",
@@ -2389,7 +2627,8 @@
    "gender": "N",
    "image": "8312.png",
    "arasaacId": 8312,
-   "via": "en"
+   "via": "en",
+   "term": "μπισκότο|biscuit"
   },
   {
    "text": "καρπούζι",
@@ -2399,7 +2638,8 @@
    "gender": "N",
    "image": "2557.png",
    "arasaacId": 2557,
-   "via": "en"
+   "via": "en",
+   "term": "καρπούζι|watermelon"
   },
   {
    "text": "σταφύλι",
@@ -2409,7 +2649,8 @@
    "gender": "N",
    "image": "9142.png",
    "arasaacId": 9142,
-   "via": "en"
+   "via": "en",
+   "term": "σταφύλι|grape"
   },
   {
    "text": "αγγούρι",
@@ -2419,7 +2660,8 @@
    "gender": "N",
    "image": "2847.png",
    "arasaacId": 2847,
-   "via": "en"
+   "via": "en",
+   "term": "αγγούρι|cucumber"
   },
   {
    "text": "ντομάτα",
@@ -2429,7 +2671,8 @@
    "gender": "F",
    "image": "2594.png",
    "arasaacId": 2594,
-   "via": "en"
+   "via": "en",
+   "term": "ντομάτα|tomato"
   },
   {
    "text": "λεμόνι",
@@ -2439,7 +2682,8 @@
    "gender": "N",
    "image": "3022.png",
    "arasaacId": 3022,
-   "via": "en"
+   "via": "en",
+   "term": "λεμόνι|lemon"
   },
   {
    "text": "ελαιόλαδο",
@@ -2449,7 +2693,8 @@
    "gender": "N",
    "image": "2246.png",
    "arasaacId": 2246,
-   "via": "el"
+   "via": "el",
+   "term": "ελαιόλαδο|olive oil"
   },
   {
    "text": "εγγονός",
@@ -2459,7 +2704,8 @@
    "gender": "M",
    "image": "10343.png",
    "arasaacId": 10343,
-   "via": "en"
+   "via": "en",
+   "term": "εγγονός|grandson"
   },
   {
    "text": "εγγονή",
@@ -2469,7 +2715,8 @@
    "gender": "F",
    "image": "10342.png",
    "arasaacId": 10342,
-   "via": "en"
+   "via": "en",
+   "term": "εγγονή|granddaughter"
   },
   {
    "text": "οδηγός",
@@ -2479,7 +2726,8 @@
    "gender": "M",
    "image": "3019.png",
    "arasaacId": 3019,
-   "via": "en"
+   "via": "en",
+   "term": "οδηγός|driver"
   },
   {
    "text": "σερβιτόρος",
@@ -2489,7 +2737,8 @@
    "gender": "M",
    "image": "6072.png",
    "arasaacId": 6072,
-   "via": "en"
+   "via": "en",
+   "term": "σερβιτόρος|waiter"
   },
   {
    "text": "υπάλληλος",
@@ -2499,7 +2748,8 @@
    "gender": "M",
    "image": "37554.png",
    "arasaacId": 37554,
-   "via": "en"
+   "via": "en",
+   "term": "υπάλληλος|employee"
   },
   {
    "text": "δάσκαλος",
@@ -2509,17 +2759,8 @@
    "gender": "M",
    "image": "2457.png",
    "arasaacId": 2457,
-   "via": "en"
-  },
-  {
-   "text": "περιμένω",
-   "kind": "WORD",
-   "category": "VERBS",
-   "tier": 3,
-   "gender": null,
-   "image": "8109.png",
-   "arasaacId": 8109,
-   "via": "en"
+   "via": "en",
+   "term": "δάσκαλος|teacher"
   },
   {
    "text": "ρωτάω",
@@ -2529,7 +2770,8 @@
    "gender": null,
    "image": "9840.png",
    "arasaacId": 9840,
-   "via": "en"
+   "via": "en",
+   "term": "ρωτάω|ask"
   },
   {
    "text": "απαντάω",
@@ -2539,7 +2781,8 @@
    "gender": null,
    "image": "9030.png",
    "arasaacId": 9030,
-   "via": "en"
+   "via": "en",
+   "term": "απαντάω|answer"
   },
   {
    "text": "ψωνίζω",
@@ -2549,7 +2792,8 @@
    "gender": null,
    "image": "8986.png",
    "arasaacId": 8986,
-   "via": "en"
+   "via": "en",
+   "term": "ψωνίζω|shop"
   },
   {
    "text": "μαγειρεύω",
@@ -2559,7 +2803,8 @@
    "gender": null,
    "image": "2342.png",
    "arasaacId": 2342,
-   "via": "el"
+   "via": "el",
+   "term": "μαγειρεύω|cook"
   },
   {
    "text": "καθαρίζω",
@@ -2569,7 +2814,8 @@
    "gender": null,
    "image": "3351.png",
    "arasaacId": 3351,
-   "via": "en"
+   "via": "en",
+   "term": "καθαρίζω|clean"
   },
   {
    "text": "οδηγώ",
@@ -2579,7 +2825,8 @@
    "gender": null,
    "image": "2712.png",
    "arasaacId": 2712,
-   "via": "en"
+   "via": "en",
+   "term": "οδηγώ|drive"
   },
   {
    "text": "ταξιδεύω",
@@ -2589,7 +2836,8 @@
    "gender": null,
    "image": "4671.png",
    "arasaacId": 4671,
-   "via": "en"
+   "via": "en",
+   "term": "ταξιδεύω|travel"
   },
   {
    "text": "δουλεύω",
@@ -2597,9 +2845,10 @@
    "category": "VERBS",
    "tier": 3,
    "gender": null,
-   "image": "2599.png",
-   "arasaacId": 2599,
-   "via": "en"
+   "image": null,
+   "arasaacId": null,
+   "via": null,
+   "term": "δουλεύω|"
   },
   {
    "text": "ξυπνάω",
@@ -2609,7 +2858,8 @@
    "gender": null,
    "image": "8988.png",
    "arasaacId": 8988,
-   "via": "en"
+   "via": "en",
+   "term": "ξυπνάω|wake up"
   },
   {
    "text": "ντύνομαι",
@@ -2619,7 +2869,8 @@
    "gender": null,
    "image": "2781.png",
    "arasaacId": 2781,
-   "via": "en"
+   "via": "en",
+   "term": "ντύνομαι|get dressed"
   },
   {
    "text": "πλένομαι",
@@ -2629,7 +2880,8 @@
    "gender": null,
    "image": "2271.png",
    "arasaacId": 2271,
-   "via": "el"
+   "via": "el",
+   "term": "πλένομαι|wash"
   },
   {
    "text": "ψάχνω",
@@ -2639,7 +2891,8 @@
    "gender": null,
    "image": "6947.png",
    "arasaacId": 6947,
-   "via": "en"
+   "via": "en",
+   "term": "ψάχνω|search"
   },
   {
    "text": "βρίσκω",
@@ -2649,7 +2902,8 @@
    "gender": null,
    "image": "5990.png",
    "arasaacId": 5990,
-   "via": "en"
+   "via": "en",
+   "term": "βρίσκω|find"
   },
   {
    "text": "στέλνω",
@@ -2659,7 +2913,8 @@
    "gender": null,
    "image": "21828.png",
    "arasaacId": 21828,
-   "via": "en"
+   "via": "en",
+   "term": "στέλνω|send"
   },
   {
    "text": "φέρνω",
@@ -2669,7 +2924,8 @@
    "gender": null,
    "image": "7280.png",
    "arasaacId": 7280,
-   "via": "en"
+   "via": "en",
+   "term": "φέρνω|bring"
   },
   {
    "text": "δείχνω",
@@ -2679,7 +2935,8 @@
    "gender": null,
    "image": "11308.png",
    "arasaacId": 11308,
-   "via": "en"
+   "via": "en",
+   "term": "δείχνω|show"
   },
   {
    "text": "ξεκινάω",
@@ -2689,7 +2946,8 @@
    "gender": null,
    "image": "5431.png",
    "arasaacId": 5431,
-   "via": "en"
+   "via": "en",
+   "term": "ξεκινάω|start"
   },
   {
    "text": "τελειώνω",
@@ -2699,7 +2957,8 @@
    "gender": null,
    "image": "5358.png",
    "arasaacId": 5358,
-   "via": "en"
+   "via": "en",
+   "term": "τελειώνω|finish"
   },
   {
    "text": "εβδομάδα",
@@ -2709,7 +2968,8 @@
    "gender": "F",
    "image": "7244.png",
    "arasaacId": 7244,
-   "via": "en"
+   "via": "en",
+   "term": "εβδομάδα|week"
   },
   {
    "text": "μήνας",
@@ -2719,7 +2979,8 @@
    "gender": "M",
    "image": "7161.png",
    "arasaacId": 7161,
-   "via": "en"
+   "via": "en",
+   "term": "μήνας|month"
   },
   {
    "text": "απόγευμα",
@@ -2729,7 +2990,8 @@
    "gender": "N",
    "image": "7268.png",
    "arasaacId": 7268,
-   "via": "en"
+   "via": "en",
+   "term": "απόγευμα|afternoon"
   },
   {
    "text": "Τρίτη",
@@ -2739,7 +3001,8 @@
    "gender": "F",
    "image": "6557.png",
    "arasaacId": 6557,
-   "via": "en"
+   "via": "en",
+   "term": "Τρίτη|Tuesday"
   },
   {
    "text": "Τετάρτη",
@@ -2749,7 +3012,8 @@
    "gender": "F",
    "image": "6563.png",
    "arasaacId": 6563,
-   "via": "en"
+   "via": "en",
+   "term": "Τετάρτη|Wednesday"
   },
   {
    "text": "Πέμπτη",
@@ -2759,7 +3023,8 @@
    "gender": "F",
    "image": "6536.png",
    "arasaacId": 6536,
-   "via": "en"
+   "via": "en",
+   "term": "Πέμπτη|Thursday"
   },
   {
    "text": "Παρασκευή",
@@ -2769,7 +3034,8 @@
    "gender": "F",
    "image": "6629.png",
    "arasaacId": 6629,
-   "via": "en"
+   "via": "en",
+   "term": "Παρασκευή|Friday"
   },
   {
    "text": "σκέφτομαι",
@@ -2779,7 +3045,8 @@
    "gender": null,
    "image": "8662.png",
    "arasaacId": 8662,
-   "via": "en"
+   "via": "en",
+   "term": "σκέφτομαι|think"
   },
   {
    "text": "αποφασίζω",
@@ -2789,7 +3056,8 @@
    "gender": null,
    "image": "11694.png",
    "arasaacId": 11694,
-   "via": "en"
+   "via": "en",
+   "term": "αποφασίζω|decide"
   },
   {
    "text": "εξηγώ",
@@ -2799,7 +3067,8 @@
    "gender": null,
    "image": "8579.png",
    "arasaacId": 8579,
-   "via": "en"
+   "via": "en",
+   "term": "εξηγώ|explain"
   },
   {
    "text": "θυμάμαι",
@@ -2809,7 +3078,8 @@
    "gender": null,
    "image": "11357.png",
    "arasaacId": 11357,
-   "via": "en"
+   "via": "en",
+   "term": "θυμάμαι|remember"
   },
   {
    "text": "ξεχνάω",
@@ -2819,7 +3089,8 @@
    "gender": null,
    "image": "26258.png",
    "arasaacId": 26258,
-   "via": "en"
+   "via": "en",
+   "term": "ξεχνάω|forget"
   },
   {
    "text": "καταλαβαίνω",
@@ -2829,7 +3100,8 @@
    "gender": null,
    "image": "11697.png",
    "arasaacId": 11697,
-   "via": "en"
+   "via": "en",
+   "term": "καταλαβαίνω|understand"
   },
   {
    "text": "προσπαθώ",
@@ -2839,7 +3111,8 @@
    "gender": null,
    "image": "8148.png",
    "arasaacId": 8148,
-   "via": "en"
+   "via": "en",
+   "term": "προσπαθώ|try"
   },
   {
    "text": "συνεχίζω",
@@ -2849,7 +3122,8 @@
    "gender": null,
    "image": "24998.png",
    "arasaacId": 24998,
-   "via": "en"
+   "via": "en",
+   "term": "συνεχίζω|continue"
   },
   {
    "text": "σταματάω",
@@ -2859,7 +3133,8 @@
    "gender": null,
    "image": "2499.png",
    "arasaacId": 2499,
-   "via": "en"
+   "via": "en",
+   "term": "σταματάω|stop"
   },
   {
    "text": "διαλέγω",
@@ -2869,7 +3144,8 @@
    "gender": null,
    "image": "6483.png",
    "arasaacId": 6483,
-   "via": "en"
+   "via": "en",
+   "term": "διαλέγω|choose"
   },
   {
    "text": "συμφωνώ",
@@ -2879,7 +3155,8 @@
    "gender": null,
    "image": "37861.png",
    "arasaacId": 37861,
-   "via": "en"
+   "via": "en",
+   "term": "συμφωνώ|agree"
   },
   {
    "text": "διαφωνώ",
@@ -2889,7 +3166,8 @@
    "gender": null,
    "image": "16000.png",
    "arasaacId": 16000,
-   "via": "en"
+   "via": "en",
+   "term": "διαφωνώ|disagree"
   },
   {
    "text": "υπόσχομαι",
@@ -2899,7 +3177,8 @@
    "gender": null,
    "image": "37046.png",
    "arasaacId": 37046,
-   "via": "en"
+   "via": "en",
+   "term": "υπόσχομαι|promise"
   },
   {
    "text": "φαντάζομαι",
@@ -2909,7 +3188,8 @@
    "gender": null,
    "image": null,
    "arasaacId": null,
-   "via": null
+   "via": null,
+   "term": "φαντάζομαι|imagine"
   },
   {
    "text": "ελπίζω",
@@ -2917,9 +3197,10 @@
    "category": "VERBS",
    "tier": 4,
    "gender": null,
-   "image": "32564.png",
-   "arasaacId": 32564,
-   "via": "en"
+   "image": null,
+   "arasaacId": null,
+   "via": null,
+   "term": "ελπίζω|"
   },
   {
    "text": "ανησυχώ",
@@ -2929,7 +3210,8 @@
    "gender": null,
    "image": "26985.png",
    "arasaacId": 26985,
-   "via": "en"
+   "via": "en",
+   "term": "ανησυχώ|worry"
   },
   {
    "text": "πιστεύω",
@@ -2939,7 +3221,8 @@
    "gender": null,
    "image": null,
    "arasaacId": null,
-   "via": null
+   "via": null,
+   "term": "πιστεύω|believe"
   },
   {
    "text": "νιώθω",
@@ -2949,7 +3232,8 @@
    "gender": null,
    "image": "3293.png",
    "arasaacId": 3293,
-   "via": "en"
+   "via": "en",
+   "term": "νιώθω|feel"
   },
   {
    "text": "προτιμώ",
@@ -2957,9 +3241,10 @@
    "category": "VERBS",
    "tier": 4,
    "gender": null,
-   "image": "11694.png",
-   "arasaacId": 11694,
-   "via": "en"
+   "image": null,
+   "arasaacId": null,
+   "via": null,
+   "term": "προτιμώ|"
   },
   {
    "text": "αλλάζω",
@@ -2969,7 +3254,8 @@
    "gender": null,
    "image": "8053.png",
    "arasaacId": 8053,
-   "via": "en"
+   "via": "en",
+   "term": "αλλάζω|change"
   },
   {
    "text": "επιστρέφω",
@@ -2979,7 +3265,8 @@
    "gender": null,
    "image": "6248.png",
    "arasaacId": 6248,
-   "via": "en"
+   "via": "en",
+   "term": "επιστρέφω|return"
   },
   {
    "text": "ετοιμάζω",
@@ -2989,7 +3276,8 @@
    "gender": null,
    "image": "6190.png",
    "arasaacId": 6190,
-   "via": "en"
+   "via": "en",
+   "term": "ετοιμάζω|prepare"
   },
   {
    "text": "κανονίζω",
@@ -2999,7 +3287,8 @@
    "gender": null,
    "image": "2872.png",
    "arasaacId": 2872,
-   "via": "en"
+   "via": "en",
+   "term": "κανονίζω|arrange"
   },
   {
    "text": "φροντίζω",
@@ -3009,7 +3298,8 @@
    "gender": null,
    "image": "30468.png",
    "arasaacId": 30468,
-   "via": "en"
+   "via": "en",
+   "term": "φροντίζω|take care"
   },
   {
    "text": "προσέχω",
@@ -3019,7 +3309,8 @@
    "gender": null,
    "image": "25618.png",
    "arasaacId": 25618,
-   "via": "en"
+   "via": "en",
+   "term": "προσέχω|be careful"
   },
   {
    "text": "συζητάω",
@@ -3029,7 +3320,8 @@
    "gender": null,
    "image": "6477.png",
    "arasaacId": 6477,
-   "via": "en"
+   "via": "en",
+   "term": "συζητάω|discuss"
   },
   {
    "text": "χρειάζομαι",
@@ -3037,9 +3329,10 @@
    "category": "VERBS",
    "tier": 4,
    "gender": null,
-   "image": "37160.png",
-   "arasaacId": 37160,
-   "via": "en"
+   "image": null,
+   "arasaacId": null,
+   "via": null,
+   "term": "χρειάζομαι|"
   },
   {
    "text": "καταφέρνω",
@@ -3049,7 +3342,8 @@
    "gender": null,
    "image": null,
    "arasaacId": null,
-   "via": null
+   "via": null,
+   "term": "καταφέρνω|manage"
   },
   {
    "text": "δύσκολος",
@@ -3059,7 +3353,8 @@
    "gender": null,
    "image": "4629.png",
    "arasaacId": 4629,
-   "via": "en"
+   "via": "en",
+   "term": "δύσκολος|difficult"
   },
   {
    "text": "εύκολος",
@@ -3069,7 +3364,8 @@
    "gender": null,
    "image": "4645.png",
    "arasaacId": 4645,
-   "via": "en"
+   "via": "en",
+   "term": "εύκολος|easy"
   },
   {
    "text": "σημαντικός",
@@ -3079,7 +3375,8 @@
    "gender": null,
    "image": "11470.png",
    "arasaacId": 11470,
-   "via": "en"
+   "via": "en",
+   "term": "σημαντικός|important"
   },
   {
    "text": "σίγουρος",
@@ -3089,7 +3386,8 @@
    "gender": null,
    "image": "2913.png",
    "arasaacId": 2913,
-   "via": "en"
+   "via": "en",
+   "term": "σίγουρος|sure"
   },
   {
    "text": "έτοιμος",
@@ -3099,7 +3397,8 @@
    "gender": null,
    "image": "17000.png",
    "arasaacId": 17000,
-   "via": "en"
+   "via": "en",
+   "term": "έτοιμος|ready"
   },
   {
    "text": "περήφανος",
@@ -3109,7 +3408,8 @@
    "gender": null,
    "image": "31408.png",
    "arasaacId": 31408,
-   "via": "en"
+   "via": "en",
+   "term": "περήφανος|proud"
   },
   {
    "text": "ελεύθερος",
@@ -3119,7 +3419,8 @@
    "gender": null,
    "image": "11474.png",
    "arasaacId": 11474,
-   "via": "en"
+   "via": "en",
+   "term": "ελεύθερος|free"
   },
   {
    "text": "απαραίτητος",
@@ -3129,7 +3430,8 @@
    "gender": null,
    "image": null,
    "arasaacId": null,
-   "via": null
+   "via": null,
+   "term": "απαραίτητος|necessary"
   },
   {
    "text": "επικίνδυνος",
@@ -3139,7 +3441,8 @@
    "gender": null,
    "image": null,
    "arasaacId": null,
-   "via": null
+   "via": null,
+   "term": "επικίνδυνος|dangerous"
   },
   {
    "text": "υπεύθυνος",
@@ -3149,7 +3452,8 @@
    "gender": null,
    "image": "15531.png",
    "arasaacId": 15531,
-   "via": "en"
+   "via": "en",
+   "term": "υπεύθυνος|responsible"
   },
   {
    "text": "ανυπόμονος",
@@ -3159,7 +3463,8 @@
    "gender": null,
    "image": null,
    "arasaacId": null,
-   "via": null
+   "via": null,
+   "term": "ανυπόμονος|impatient"
   },
   {
    "text": "μπερδεμένος",
@@ -3169,7 +3474,8 @@
    "gender": null,
    "image": "2352.png",
    "arasaacId": 2352,
-   "via": "el"
+   "via": "el",
+   "term": "μπερδεμένος|confused"
   },
   {
    "text": "απογοητευμένος",
@@ -3179,7 +3485,8 @@
    "gender": null,
    "image": null,
    "arasaacId": null,
-   "via": null
+   "via": null,
+   "term": "απογοητευμένος|disappointed"
   },
   {
    "text": "ενθουσιασμένος",
@@ -3189,7 +3496,8 @@
    "gender": null,
    "image": "39090.png",
    "arasaacId": 39090,
-   "via": "en"
+   "via": "en",
+   "term": "ενθουσιασμένος|excited"
   },
   {
    "text": "τυχερός",
@@ -3197,9 +3505,10 @@
    "category": "FEELINGS",
    "tier": 4,
    "gender": null,
-   "image": "11164.png",
-   "arasaacId": 11164,
-   "via": "en"
+   "image": null,
+   "arasaacId": null,
+   "via": null,
+   "term": "τυχερός|"
   },
   {
    "text": "δυνατός",
@@ -3209,7 +3518,8 @@
    "gender": null,
    "image": "4655.png",
    "arasaacId": 4655,
-   "via": "en"
+   "via": "en",
+   "term": "δυνατός|strong"
   },
   {
    "text": "αδύναμος",
@@ -3219,7 +3529,8 @@
    "gender": null,
    "image": "4620.png",
    "arasaacId": 4620,
-   "via": "en"
+   "via": "en",
+   "term": "αδύναμος|weak"
   },
   {
    "text": "ήσυχος",
@@ -3229,7 +3540,8 @@
    "gender": null,
    "image": "38050.png",
    "arasaacId": 38050,
-   "via": "en"
+   "via": "en",
+   "term": "ήσυχος|quiet"
   },
   {
    "text": "ικανός",
@@ -3239,7 +3551,8 @@
    "gender": null,
    "image": null,
    "arasaacId": null,
-   "via": null
+   "via": null,
+   "term": "ικανός|capable"
   },
   {
    "text": "ελπίδα",
@@ -3249,7 +3562,8 @@
    "gender": "F",
    "image": "32564.png",
    "arasaacId": 32564,
-   "via": "en"
+   "via": "en",
+   "term": "ελπίδα|hope"
   },
   {
    "text": "ιδέα",
@@ -3259,7 +3573,8 @@
    "gender": "F",
    "image": "6019.png",
    "arasaacId": 6019,
-   "via": "en"
+   "via": "en",
+   "term": "ιδέα|idea"
   },
   {
    "text": "πρόβλημα",
@@ -3269,7 +3584,8 @@
    "gender": "N",
    "image": "5556.png",
    "arasaacId": 5556,
-   "via": "en"
+   "via": "en",
+   "term": "πρόβλημα|problem"
   },
   {
    "text": "υπομονή",
@@ -3279,7 +3595,8 @@
    "gender": "F",
    "image": "27333.png",
    "arasaacId": 27333,
-   "via": "en"
+   "via": "en",
+   "term": "υπομονή|patience"
   },
   {
    "text": "ελευθερία",
@@ -3289,7 +3606,8 @@
    "gender": "F",
    "image": "11484.png",
    "arasaacId": 11484,
-   "via": "en"
+   "via": "en",
+   "term": "ελευθερία|freedom"
   },
   {
    "text": "ευθύνη",
@@ -3299,7 +3617,8 @@
    "gender": "F",
    "image": "37234.png",
    "arasaacId": 37234,
-   "via": "en"
+   "via": "en",
+   "term": "ευθύνη|responsibility"
   },
   {
    "text": "αλήθεια",
@@ -3309,7 +3628,8 @@
    "gender": "F",
    "image": "8715.png",
    "arasaacId": 8715,
-   "via": "en"
+   "via": "en",
+   "term": "αλήθεια|truth"
   },
   {
    "text": "λύση",
@@ -3317,9 +3637,10 @@
    "category": "FEELINGS",
    "tier": 5,
    "gender": "F",
-   "image": "32802.png",
-   "arasaacId": 32802,
-   "via": "en"
+   "image": "37711.png",
+   "arasaacId": 37711,
+   "via": "en",
+   "term": "λύση|solve"
   },
   {
    "text": "απόφαση",
@@ -3329,7 +3650,8 @@
    "gender": "F",
    "image": "14670.png",
    "arasaacId": 14670,
-   "via": "en"
+   "via": "en",
+   "term": "απόφαση|decision"
   },
   {
    "text": "γνώμη",
@@ -3339,7 +3661,8 @@
    "gender": "F",
    "image": null,
    "arasaacId": null,
-   "via": null
+   "via": null,
+   "term": "γνώμη|opinion"
   },
   {
    "text": "ανάγκη",
@@ -3349,7 +3672,8 @@
    "gender": "F",
    "image": "37160.png",
    "arasaacId": 37160,
-   "via": "en"
+   "via": "en",
+   "term": "ανάγκη|need"
   },
   {
    "text": "ευκαιρία",
@@ -3359,7 +3683,8 @@
    "gender": "F",
    "image": "11455.png",
    "arasaacId": 11455,
-   "via": "en"
+   "via": "en",
+   "term": "ευκαιρία|opportunity"
   },
   {
    "text": "εμπειρία",
@@ -3369,7 +3694,8 @@
    "gender": "F",
    "image": null,
    "arasaacId": null,
-   "via": null
+   "via": null,
+   "term": "εμπειρία|experience"
   },
   {
    "text": "κίνδυνος",
@@ -3379,7 +3705,8 @@
    "gender": "M",
    "image": "25315.png",
    "arasaacId": 25315,
-   "via": "en"
+   "via": "en",
+   "term": "κίνδυνος|danger"
   },
   {
    "text": "ασφάλεια",
@@ -3389,7 +3716,8 @@
    "gender": "F",
    "image": "2247.png",
    "arasaacId": 2247,
-   "via": "en"
+   "via": "en",
+   "term": "ασφάλεια|safety"
   },
   {
    "text": "ησυχία",
@@ -3399,7 +3727,8 @@
    "gender": "F",
    "image": "5936.png",
    "arasaacId": 5936,
-   "via": "en"
+   "via": "en",
+   "term": "ησυχία|silence"
   },
   {
    "text": "δύναμη",
@@ -3409,7 +3738,8 @@
    "gender": "F",
    "image": "25638.png",
    "arasaacId": 25638,
-   "via": "en"
+   "via": "en",
+   "term": "δύναμη|strength"
   },
   {
    "text": "θάρρος",
@@ -3419,7 +3749,8 @@
    "gender": "N",
    "image": null,
    "arasaacId": null,
-   "via": null
+   "via": null,
+   "term": "θάρρος|courage"
   },
   {
    "text": "φόβος",
@@ -3429,7 +3760,8 @@
    "gender": "M",
    "image": "10261.png",
    "arasaacId": 10261,
-   "via": "en"
+   "via": "en",
+   "term": "φόβος|fear"
   },
   {
    "text": "θυμός",
@@ -3439,7 +3771,8 @@
    "gender": "M",
    "image": "35567.png",
    "arasaacId": 35567,
-   "via": "en"
+   "via": "en",
+   "term": "θυμός|anger"
   },
   {
    "text": "χαρά",
@@ -3449,7 +3782,8 @@
    "gender": "F",
    "image": "8582.png",
    "arasaacId": 8582,
-   "via": "en"
+   "via": "en",
+   "term": "χαρά|joy"
   },
   {
    "text": "λύπη",
@@ -3459,7 +3793,8 @@
    "gender": "F",
    "image": "16371.png",
    "arasaacId": 16371,
-   "via": "en"
+   "via": "en",
+   "term": "λύπη|sadness"
   },
   {
    "text": "αγάπη",
@@ -3469,7 +3804,8 @@
    "gender": "F",
    "image": "6600.png",
    "arasaacId": 6600,
-   "via": "en"
+   "via": "en",
+   "term": "αγάπη|love"
   },
   {
    "text": "φιλία",
@@ -3479,7 +3815,8 @@
    "gender": "F",
    "image": "8488.png",
    "arasaacId": 8488,
-   "via": "en"
+   "via": "en",
+   "term": "φιλία|friendship"
   },
   {
    "text": "εμπιστοσύνη",
@@ -3489,7 +3826,8 @@
    "gender": "F",
    "image": "36694.png",
    "arasaacId": 36694,
-   "via": "en"
+   "via": "en",
+   "term": "εμπιστοσύνη|trust"
   },
   {
    "text": "σεβασμός",
@@ -3499,7 +3837,8 @@
    "gender": "M",
    "image": "11621.png",
    "arasaacId": 11621,
-   "via": "en"
+   "via": "en",
+   "term": "σεβασμός|respect"
   },
   {
    "text": "υγεία",
@@ -3509,7 +3848,8 @@
    "gender": "F",
    "image": "14264.png",
    "arasaacId": 14264,
-   "via": "en"
+   "via": "en",
+   "term": "υγεία|health"
   },
   {
    "text": "ζωή",
@@ -3519,7 +3859,8 @@
    "gender": "F",
    "image": "8717.png",
    "arasaacId": 8717,
-   "via": "en"
+   "via": "en",
+   "term": "ζωή|life"
   },
   {
    "text": "μνήμη",
@@ -3527,9 +3868,10 @@
    "category": "FEELINGS",
    "tier": 5,
    "gender": "F",
-   "image": "24679.png",
-   "arasaacId": 24679,
-   "via": "en"
+   "image": null,
+   "arasaacId": null,
+   "via": null,
+   "term": "μνήμη|"
   },
   {
    "text": "σκέψη",
@@ -3539,7 +3881,8 @@
    "gender": "F",
    "image": null,
    "arasaacId": null,
-   "via": null
+   "via": null,
+   "term": "σκέψη|thought"
   },
   {
    "text": "πρόοδος",
@@ -3547,9 +3890,10 @@
    "category": "FEELINGS",
    "tier": 5,
    "gender": "F",
-   "image": "11705.png",
-   "arasaacId": 11705,
-   "via": "en"
+   "image": null,
+   "arasaacId": null,
+   "via": null,
+   "term": "πρόοδος|progress"
   },
   {
    "text": "συνήθεια",
@@ -3559,7 +3903,8 @@
    "gender": "F",
    "image": "4595.png",
    "arasaacId": 4595,
-   "via": "en"
+   "via": "en",
+   "term": "συνήθεια|habit"
   },
   {
    "text": "τύχη",
@@ -3569,7 +3914,8 @@
    "gender": "F",
    "image": "11164.png",
    "arasaacId": 11164,
-   "via": "en"
+   "via": "en",
+   "term": "τύχη|luck"
   },
   {
    "text": "σκοπός",
@@ -3579,7 +3925,8 @@
    "gender": "M",
    "image": null,
    "arasaacId": null,
-   "via": null
+   "via": null,
+   "term": "σκοπός|purpose"
   },
   {
    "text": "όνειρο",
@@ -3589,7 +3936,8 @@
    "gender": "N",
    "image": "5590.png",
    "arasaacId": 5590,
-   "via": "en"
+   "via": "en",
+   "term": "όνειρο|dream"
   },
   {
    "text": "μέλλον",
@@ -3599,7 +3947,8 @@
    "gender": "N",
    "image": "9829.png",
    "arasaacId": 9829,
-   "via": "en"
+   "via": "en",
+   "term": "μέλλον|future"
   },
   {
    "text": "παρελθόν",
@@ -3609,7 +3958,8 @@
    "gender": "N",
    "image": "9839.png",
    "arasaacId": 9839,
-   "via": "en"
+   "via": "en",
+   "term": "παρελθόν|past"
   },
   {
    "text": "κατάσταση",
@@ -3619,7 +3969,8 @@
    "gender": "F",
    "image": null,
    "arasaacId": null,
-   "via": null
+   "via": null,
+   "term": "κατάσταση|situation"
   },
   {
    "text": "σχέση",
@@ -3629,7 +3980,8 @@
    "gender": "F",
    "image": null,
    "arasaacId": null,
-   "via": null
+   "via": null,
+   "term": "σχέση|relationship"
   },
   {
    "text": "ιστορία",
@@ -3639,7 +3991,8 @@
    "gender": "F",
    "image": "6469.png",
    "arasaacId": 6469,
-   "via": "en"
+   "via": "en",
+   "term": "ιστορία|story"
   },
   {
    "text": "φύση",
@@ -3649,7 +4002,8 @@
    "gender": "F",
    "image": "20389.png",
    "arasaacId": 20389,
-   "via": "en"
+   "via": "en",
+   "term": "φύση|nature"
   }
  ]
 }

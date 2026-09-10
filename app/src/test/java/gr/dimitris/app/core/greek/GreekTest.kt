@@ -175,12 +175,70 @@ class GreekTest {
     /**
      * The **number** is still read off the word, because a gender is one question and the editor asks
      * it once: «πατάτες» stated feminine is a feminine plural and takes «οι», not «η».
+     *
+     * One of each gender, because the article for a plural differs in all three.
      */
     @Test fun `a stated gender keeps the number the word is written in`() {
         assertEquals(NounForm(Gender.FEMININE, plural = true), Greek.nounForm("πατάτες", "F"))
         assertEquals("οι", Greek.article("πατάτες", Case.NOMINATIVE, gender = "F"))
-        // The list is what knows «δόντια» is a plural — nothing in the ending says so.
+        assertEquals("τις", Greek.article("πατάτες", Case.ACCUSATIVE, gender = "F"))
+        // -οι is an ending no Greek singular has: «οι φίλοι», never «ο φίλοι».
+        assertEquals(NounForm(Gender.MASCULINE, plural = true), Greek.nounForm("φίλοι", "M"))
+        assertEquals("οι", Greek.article("φίλοι", Case.NOMINATIVE, gender = "M"))
+        assertEquals("τους", Greek.article("φίλοι", Case.ACCUSATIVE, gender = "M"))
+        // The list is what knows «ρούχα» and «δόντια» are plurals — nothing in the ending says so.
+        assertEquals(NounForm(Gender.NEUTER, plural = true), Greek.nounForm("ρούχα", "N"))
         assertEquals("τα", Greek.article("δόντια", Case.NOMINATIVE, gender = "N"))
+    }
+
+    /**
+     * A gender says what a word is, never how many of it there are — and an article with the wrong
+     * *number* on it is the same mistake as one with the wrong gender.
+     *
+     * «παιδιά», «λουλούδια», «εγγόνια» are ordinary words in his week and a caregiver may well add
+     * them. The editor asks her for a gender and gives her nowhere to say "plural", so a word whose
+     * ending cannot be counted — -ια is «η καρδιά» and «τα παιδιά» both — stays out of the article
+     * levels exactly as it did before the column existed. Silence, not «το παιδιά».
+     */
+    @Test fun `a stated gender cannot make a plural the app cannot count into a singular`() {
+        for (word in listOf("παιδιά", "λουλούδια", "εγγόνια", "τραγούδια")) {
+            assertNull(word, Greek.nounForm(word, "N"))
+            assertNull(word, Greek.article(word, Case.NOMINATIVE, gender = "N"))
+            assertNull(word, Greek.contracted(word, gender = "N"))
+        }
+        // Which is the number talking and not the gender: the same words are silent with any of the
+        // three, and a word of the same shape the list *can* count is answered.
+        assertNull(Greek.nounForm("παιδιά", "F"))
+        assertNull(Greek.nounForm("παιδιά", "M"))
+        assertEquals("τα", Greek.article("κλειδιά", Case.NOMINATIVE, gender = "N"))
+    }
+
+    /**
+     * The seed's own singulars in -ια are named in the list, like «πόρτα» and «σούπα» before them,
+     * so the words the column was added for are still admitted.
+     */
+    @Test fun `the vocabulary's own -ια singulars are still read`() {
+        assertEquals("η", Greek.article("γειτονιά", Case.NOMINATIVE, gender = "F"))
+        assertEquals("η", Greek.article("παραγγελία", Case.NOMINATIVE, gender = "F"))
+        assertEquals("τη", Greek.article("φωτογραφία", Case.ACCUSATIVE, before = "φωτογραφία", gender = "F"))
+    }
+
+    /** True, false and "cannot say" — and [Greek.plural] reads the last of the three as a singular. */
+    @Test fun `the number is read off the list, the ending, or not at all`() {
+        assertEquals(true, Greek.number("πατάτες"))
+        assertEquals(true, Greek.number("φίλοι"))
+        assertEquals(true, Greek.number("ρούχα"))
+        assertEquals(false, Greek.number("καφές"))
+        assertEquals(false, Greek.number("γάλα"))
+        assertEquals(false, Greek.number("ραντεβού"))
+        // The accent is the whole difference between «οι φίλοι» and «το ρολόι», where the iota is a
+        // syllable of its own. Read wrong, the seed's own clock became «τα ρολόι».
+        assertEquals(false, Greek.number("ρολόι"))
+        assertEquals(false, Greek.number("κομπολόι"))
+        assertEquals("το", Greek.article("ρολόι", Case.NOMINATIVE, gender = "N"))
+        assertNull(Greek.number("παιδιά"))
+        assertNull(Greek.number("καρδιά"))
+        assertEquals(false, Greek.plural("παιδιά"))
     }
 
     /**
@@ -192,6 +250,8 @@ class GreekTest {
         assertEquals(Greek.nounForm("νερό"), Greek.nounForm("νερό", "  "))
         assertEquals(Greek.nounForm("νερό"), Greek.nounForm("νερό", "Θ"))
         assertNull(Greek.nounForm("τυρόπιτα", "X"))
+        // A gender on nothing is still nothing.
+        assertNull(Greek.nounForm("  ", "F"))
         // Written down the way the editor writes it, whatever the case and the spaces around it.
         assertEquals(Gender.FEMININE, Gender.of(" f ")!!)
         assertEquals(setOf("M", "F", "N"), Gender.entries.mapTo(mutableSetOf()) { it.code })

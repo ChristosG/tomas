@@ -22,24 +22,33 @@ package gr.dimitris.app.core.greek
  * γυναί-κες). The exception the accent cannot catch is a plural of a noun stressed on the ending —
  * «οι φορές», «οι γραμμές» — and no card in this vocabulary is one.
  */
-fun Greek.accusative(noun: String): String {
+/**
+ * [gender] is what the row itself says the word is, when it says anything
+ * ([gr.dimitris.app.core.data.Item.gender]). It matters in one place and one only: a **neuter** in
+ * -ος or -ας keeps its sigma, and [NEUTER_IN_SIGMA] is a list, so a neuter a caregiver typed that is
+ * not on it would come out as «θέλω το άνθο». The article half of this file has taken a stated
+ * gender since phase 13; this half taking it too is what keeps a card's article and its ending from
+ * ever disagreeing about the same word.
+ */
+fun Greek.accusative(noun: String, gender: String? = null): String {
     val trimmed = noun.trim()
     if (trimmed.isEmpty()) return trimmed
     // Only the noun bends. «σούπερ μάρκετ» is one card, and its first word is not what carries the case.
     val head = trimmed.substringBeforeLast(' ', missingDelimiterValue = "")
     val last = trimmed.substringAfterLast(' ')
-    val bent = dropFinalSigma(last)
+    val bent = dropFinalSigma(last, Gender.of(gender) == Gender.NEUTER)
     return if (head.isEmpty()) bent else "$head $bent"
 }
 
 /** The word with its final sigma gone, or the word itself when it keeps it. */
-private fun dropFinalSigma(word: String): String {
+private fun dropFinalSigma(word: String, statedNeuter: Boolean = false): String {
     val ends = word.last().lowercaseChar() in SIGMA
     if (!ends || word.length < 2) return word
     // Typed in a hurry: «ΚΑΦΕΣ» and «κρεας» have to be recognised as the words they are.
     val bare = Greek.stripAccents(Greek.normalize(word))
-    // A neuter that ends in sigma keeps it: «τρώω κρέας».
-    if (bare in NEUTER_IN_SIGMA) return word
+    // A neuter that ends in sigma keeps it: «τρώω κρέας». The list knows the ones the seed holds;
+    // the row knows the one the caregiver has just typed.
+    if (statedNeuter || bare in NEUTER_IN_SIGMA) return word
     // A plural is already the accusative: «πατάτες», «γυναίκες», «πόλεις». [Greek.plural] is the one
     // place that decides it — the curated list first, then the accent, which is what separates
     // «πατάτες» from «καφές».

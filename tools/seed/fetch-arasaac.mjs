@@ -16,6 +16,19 @@ const VERSION = 3;
 // picture costs nothing and downloads nothing.
 const graded = (w) => ({ tier: w.tier ?? 1, gender: w.gender ?? null });
 
+// A word that ships text-led on purpose. ARASAAC has one pictogram for a family of related words —
+// "hope" is the same drawing for «ελπίδα» and «ελπίζω», "work" for «δουλειά» and «δουλεύω» — and a
+// picture that means two words is worse than no picture at all: the word coach's first rung shows
+// the picture alone, and he would be scored on two different targets from one drawing. Setting this
+// keeps the word and drops the search, and the ladder skips that rung (see CueLadder).
+const textLed = (w) => w.noPicture === true;
+
+// The terms a word's picture was chosen with, recorded in the manifest beside the picture. It is
+// what makes "keep what the last run downloaded" and "let me correct a bad term" both true: a row
+// whose terms have not changed keeps its picture for ever, and a row whose `en` has been rewritten
+// because the first English result was the wrong sense is looked up again — only that row.
+const termKey = (w) => `${(w.search ?? w.text).trim()}|${(w.en ?? '').trim()}`;
+
 const words = JSON.parse(await fs.readFile(new URL('./words.json', import.meta.url), 'utf8'));
 const outDir = new URL('../../app/src/main/assets/seed/', import.meta.url);
 await fs.mkdir(outDir, { recursive: true });
@@ -34,6 +47,10 @@ try {
 async function alreadyHave(word) {
   const prev = previous.get(word.text);
   if (!prev?.image) return null;
+  // A term that has been corrected since the picture was chosen. An older manifest recorded no
+  // term at all, and then the picture stands: not re-picking what is already downloaded is the
+  // whole point of this cache.
+  if (prev.term && prev.term !== termKey(word)) return null;
   try {
     await fs.access(new URL(prev.image, outDir));
     return prev;
@@ -66,9 +83,16 @@ let viaEn = 0;
 let reused = 0;
 
 for (const w of words) {
+  if (textLed(w)) {
+    items.push({ text: w.text, kind: w.kind ?? 'WORD', category: w.category, ...graded(w), image: null, arasaacId: null, via: null, term: termKey(w) });
+    missing.push(w.text);
+    process.stdout.write('-');
+    continue;
+  }
+
   const kept = await alreadyHave(w);
   if (kept) {
-    items.push({ text: w.text, kind: w.kind ?? 'WORD', category: w.category, ...graded(w), image: kept.image, arasaacId: kept.arasaacId ?? null, via: kept.via ?? null });
+    items.push({ text: w.text, kind: w.kind ?? 'WORD', category: w.category, ...graded(w), image: kept.image, arasaacId: kept.arasaacId ?? null, via: kept.via ?? null, term: termKey(w) });
     if (kept.via === 'en') viaEn++; else viaEl++;
     reused++;
     process.stdout.write('=');
@@ -120,10 +144,22 @@ for (const w of words) {
   } else if (via === 'en') {
     viaEn++;
   }
-  items.push({ text: w.text, kind: w.kind ?? 'WORD', category: w.category, ...graded(w), image, arasaacId: pick?._id ?? null, via });
+  items.push({ text: w.text, kind: w.kind ?? 'WORD', category: w.category, ...graded(w), image, arasaacId: pick?._id ?? null, via, term: termKey(w) });
   process.stdout.write(image ? (via === 'en' ? 'e' : '.') : 'x');
   await sleep(150);
 }
 
 await fs.writeFile(new URL('seed.json', outDir), JSON.stringify({ version: VERSION, items }, null, 1));
-console.log(`\nv${VERSION}: ${items.length} items, ${items.length - missing.length} with pictograms (${viaEl} via el, ${viaEn} via en, ${reused} kept from the last run). Missing: ${missing.join(', ') || 'none'}`);
+
+// Whatever no word points at any more. A word that was renamed, dropped or turned text-led leaves
+// its PNG behind, and a stray half-megabyte in the APK is the least of it: the next reader of this
+// directory cannot tell which files are live. Only .png files are considered — seed.json and
+// scripts.json live here too.
+const live = new Set(items.map((it) => it.image).filter(Boolean));
+let pruned = 0;
+for (const name of await fs.readdir(outDir)) {
+  if (!name.endsWith('.png') || live.has(name)) continue;
+  await fs.rm(new URL(name, outDir));
+  pruned++;
+}
+console.log(`\nv${VERSION}: ${items.length} items, ${items.length - missing.length} with pictograms (${viaEl} via el, ${viaEn} via en, ${reused} kept from the last run, ${pruned} orphan file(s) removed). Without a pictogram: ${missing.join(', ') || 'none'}`);

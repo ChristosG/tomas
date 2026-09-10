@@ -508,15 +508,22 @@ private class Roles(pool: List<Item>, private val random: Random) {
      */
     private fun articleOf(item: Item, case: Case): String? = Greek.article(
         item.text, case,
-        before = if (case == Case.ACCUSATIVE) Greek.accusative(item.text) else item.text,
+        before = if (case == Case.ACCUSATIVE) accusativeOf(item) else item.text,
         gender = item.gender,
     )
 
     private fun contractedOf(item: Item): String? =
-        Greek.contracted(item.text, before = Greek.accusative(item.text), gender = item.gender)
+        Greek.contracted(item.text, before = accusativeOf(item), gender = item.gender)
 
     /** A noun after a verb is its object, and an object is written in the accusative: «θέλω καφέ». */
-    private fun objectTile(item: Item) = Tile(item, Greek.accusative(item.text))
+    private fun objectTile(item: Item) = Tile(item, accusativeOf(item))
+
+    /**
+     * The card as it is written after a verb or a preposition. The row's gender goes with the word:
+     * a stated neuter keeps its final sigma («θέλω το άνθος»), and a card whose article says neuter
+     * while its ending says masculine would be teaching the mistake this module exists to unteach.
+     */
+    private fun accusativeOf(item: Item): String = Greek.accusative(item.text, item.gender)
 
     /** One of the small words, on a card the module made up: it is nobody's vocabulary row. */
     private fun small(label: String) =
@@ -601,8 +608,13 @@ private val VEHICLES = setOf("ταξι", "λεωφορειο", "αυτοκινη
 /**
  * The THINGS cards that are not anywhere: the weather and the sky, and a thing you hear rather than
  * find. «πού είναι ο ήλιος;» parses and nobody says it. See [Roles.locatable].
+ *
+ * And the two PLACES that name where one already **is** rather than a place to find: «πού είναι η
+ * γειτονιά;» is the same sentence as «πού είναι ο ήλιος;». They are in [NOT_DESTINATIONS] for the
+ * neighbouring reason — one list is about going there, this one about looking for it, and these two
+ * words fail both.
  */
-private val NOT_SOMEWHERE = setOf("ηλιος", "βροχη", "μουσικη")
+private val NOT_SOMEWHERE = setOf("ηλιος", "βροχη", "μουσικη", "γειτονια", "πολη")
 
 /** One article, and what it agrees with. See [Roles.oddArticle] and [Roles.blank]. */
 private class ArticleShape(val form: NounForm, val case: Case, val contracted: Boolean, val label: String)
