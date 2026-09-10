@@ -583,7 +583,7 @@ class Settings(private val store: DataStore<Preferences>) {
      * is written by something that also runs on a first launch.
      *
      * One key is excepted: `device_role`. It is written from the very first screen a brand-new
-     * phone ever shows ([gr.dimitris.app.core.settings.RoleScreen]) on the UI thread, which is not
+     * phone ever shows ([gr.dimitris.app.today.RoleScreen]) on the UI thread, which is not
      * ordered against this pass — so on a first launch where that tap lands first and the process
      * then dies before the pass finishes, the next launch would read a non-empty store and
      * grandfather a phone that never had the module. Ignoring it removes the only write that can
