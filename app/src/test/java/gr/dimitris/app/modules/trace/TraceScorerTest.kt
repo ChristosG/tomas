@@ -60,6 +60,30 @@ class TraceScorerTest {
     /** The «ί» as he writes it from hearing: the stem, and no mark over it. */
     private val handIota = listOf(wobbled(line(Pt(400f, 250f), Pt(400f, 900f))))
 
+    /**
+     * An accented **capital**: two stems and a crossbar 700 px tall, with the tonos beside the top of
+     * it, where Greek puts the mark on a capital.
+     *
+     * A capital is the tallest letter there is, so its pieces are the longest — which is the case
+     * where a mark is most likely to be mistaken for a stroke, since the line between them is a
+     * fraction of the letter's own height. The seed has no accented capital among its WORD cards
+     * today («Όχι» is a phrase), but a caregiver adding «Άννα» is an ordinary afternoon.
+     */
+    private val capitalWithTonos = glyph(
+        "Ά",
+        Bar(Pt(180f, 200f), Pt(180f, 900f), STROKE),
+        Bar(Pt(620f, 200f), Pt(620f, 900f), STROKE),
+        Bar(Pt(180f, 600f), Pt(620f, 600f), STROKE),
+        Bar(Pt(90f, 120f), Pt(140f, 180f), STROKE * 0.6f),
+    )
+
+    /** The capital as a hand writes it: three strokes, and no mark beside them. */
+    private val handCapital = listOf(
+        wobbled(line(Pt(180f, 200f), Pt(180f, 900f))),
+        wobbled(line(Pt(620f, 200f), Pt(620f, 900f))),
+        wobbled(line(Pt(180f, 600f), Pt(620f, 600f))),
+    )
+
     // ---- how a hand writes them --------------------------------------------------------------
 
     /** The «Η» as a person writes it: down the middle of each stroke, with a hand's wobble. */
@@ -499,6 +523,25 @@ class TraceScorerTest {
         // The same letter, marked to the same two lines either way: the accent buys him nothing.
         val without = score(handIota, iotaWithTonos, TraceStrictness.NORMAL)
         assertEquals("the accent moved the coverage", without.coverage, s.coverage, 0.001f)
+    }
+
+    /**
+     * The same on a capital, which is the tallest letter there is and so the one whose pieces are
+     * longest: the tonos beside an «Ά» is a mark, its two stems and its crossbar are pieces, and
+     * writing the letter without the mark is writing the letter.
+     */
+    @Test fun `the tonos on a capital is a mark, and the capital is still pieces`() {
+        val cut = TraceScorer.segments(capitalWithTonos.contours, capitalWithTonos.height)
+        val marked = cut.filter { it.accent }.map { it.segment }.distinct()
+        assertEquals("the tonos of «Ά» is not one mark: $marked", 1, marked.size)
+        val letter = cut.filterNot { it.accent }.map { it.segment }.distinct()
+        assertTrue("a stroke of a capital was read as a mark: $letter", letter.size >= 3 * TraceScorer.MIN_SEGMENTS)
+
+        for (level in TraceStrictness.entries) {
+            val s = score(handCapital, capitalWithTonos, level)
+            assertTrue("«Ά» written without its tonos was refused at $level: $s", s.passed)
+            assertEquals("a mark he did not write was recorded as one he did", false, s.letters.single().accent)
+        }
     }
 
     /** A letter with no mark on it says nothing about one, rather than saying he missed it. */

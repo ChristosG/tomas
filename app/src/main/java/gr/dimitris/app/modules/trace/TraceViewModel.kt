@@ -357,9 +357,15 @@ class TraceViewModel(
     private var judging = false
 
     /**
-     * The marking in flight. Cancelled by [leave]: a judgement that comes back after «Πίσω» would
-     * say «Μπράβο» to an empty screen, speak over the silence the back arrow asked for, and write a
-     * row behind the session that has already counted them.
+     * The marking in flight — the scorer's on a letter, or the judge's on a sentence he typed.
+     *
+     * Cancelled by [leave] and by [reload]: a judgement that comes back after «Πίσω» would say
+     * «Μπράβο» to an empty screen, speak over the silence the back arrow asked for, and write a row
+     * behind the session that has already counted them.
+     *
+     * One job and not two, because a board is either a paper or a keyboard and never both. Holding
+     * the typed judge here is what makes it *cancellable* at all: an answer that is eight seconds
+     * away and belongs to a board he has left must not be able to settle onto the one he is on.
      */
     private var judgeJob: Job? = null
 
@@ -824,7 +830,11 @@ class TraceViewModel(
         val said = s.typed.trim()
         if (said.isEmpty()) return
         _state.update { it.copy(checking = true) }
-        viewModelScope.launch {
+        // Whatever was in flight before this press is not an answer to it. Nothing can normally
+        // outlive its own board — [skip] refuses while the judge reads and [next] needs a finished
+        // one — but the invariant is worth holding here, where there can only ever be one.
+        judgeJob?.cancel()
+        judgeJob = viewModelScope.launch {
             val written = try {
                 // The word under the picture is the prompt, and [WRITE_A_SENTENCE] is the intent: what
                 // a good answer has to *do*. Without the intent the model is told to accept only a
@@ -948,7 +958,13 @@ class TraceViewModel(
         val s = _state.value
         // One skip per letter: the button is still there for a frame, and a second tap would pass on
         // the letter that has not been shown yet.
-        if (finishing || ending || s.text.isEmpty()) return
+        //
+        // And never while the judge is reading a sentence of his, which is «SQL»'s rule for a query
+        // inside SQLite and the same one for the same reason: the verdict he is waiting for belongs
+        // to *this* board, and a board he has already left cannot be told what the judge made of it.
+        // The button says so — it is off for as long as «Διαβάζω...» is on the screen — and the wait
+        // is bounded by the judge's own eight seconds.
+        if (finishing || ending || s.checking || s.text.isEmpty()) return
         finishing = true
         graph.feedback.nudge()
         // No numbers on a skipped row: the last failed try's mean and coverage belong to a trace he

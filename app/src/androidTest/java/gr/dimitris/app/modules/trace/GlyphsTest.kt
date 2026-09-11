@@ -312,7 +312,12 @@ class GlyphsTest {
      * they are the shortest contours in the alphabet that are still strokes.
      */
     @Test fun everyStrokeOfARealLetterIsStillAStrokeOfIt() {
-        for (text in listOf("Ο", "ι", "Ξ", "α", "Δημητρα")) {
+        // «ζ», «ξ» and «ς» are here because they are the shapes the rule is most likely to get wrong:
+        // a descending tail and a hook are the shortest-*looking* strokes in the alphabet, and a font
+        // that drew one of them as a contour of its own under eight pieces would have it read as an
+        // accent — a piece of the letter he would no longer have to write. «ξ» carries both, and its
+        // three bars are each shorter than the tail.
+        for (text in listOf("Ο", "ι", "Ξ", "α", "ζ", "ξ", "ς", "Δημητρα")) {
             val glyph = Glyphs.template(text, boxWidth, boxHeight)
             val marks = glyph.points.count { it.accent }
             Log.i(TAG, "«$text»: ${glyph.points.size} points, $marks of them marks on the letter")

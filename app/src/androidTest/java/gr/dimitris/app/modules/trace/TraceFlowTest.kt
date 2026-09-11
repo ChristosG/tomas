@@ -271,11 +271,18 @@ class TraceFlowTest {
         val name = openPractice(level = 3)
         val (width, height) = canvasSize()
         val glyph = Glyphs.template(name, width, height)
-        // Any letter but a «κ» itself: a «Κ» drawn over a «κ» is the letter, written.
-        val eta = glyph.letters.indexOfLast { !it.text.equals(WRONG_LETTER, ignoreCase = true) }
-        assertTrue("no letter of «$name» to spoil", eta > 0)
+        // The **widest** letter of the word that is not a «κ» itself — a «Κ» drawn over a «κ» is the
+        // letter, written. Widest, because this «Κ» is synthesised from the letter's own box: over a
+        // bare stem like «ι» the three strokes come out on top of each other and over the stem, which
+        // is not another letter but a scribble on this one. The word is whichever of his own came up,
+        // so the choice has to be made from the letters rather than named.
+        val ink = glyph.points.filterNot { it.accent }.groupBy { it.letter }
+        val eta = ink.keys
+            .filterNot { glyph.letters[it].text.equals(WRONG_LETTER, ignoreCase = true) }
+            .maxByOrNull { ink.getValue(it).let { p -> p.maxOf { t -> t.pt.x } - p.minOf { t -> t.pt.x } } } ?: -1
+        assertTrue("no letter of «$name» to spoil", eta >= 0)
         val wrongAt = glyph.letters[eta].text
-        val its = glyph.points.filter { it.letter == eta }
+        val its = ink.getValue(eta)
         val left = its.minOf { it.pt.x }
         val right = its.maxOf { it.pt.x }
         val top = its.minOf { it.pt.y }
@@ -498,38 +505,102 @@ class TraceFlowTest {
     }
 
     /**
-     * He presses «Έτοιμο» and then, while the judge is still reading, «Παράλειψη».
+     * A board the judge is still reading cannot be passed on, and the button says so.
      *
-     * The judge takes seconds and «Παράλειψη» stays live through «Διαβάζω...», so the answer to board
-     * 1 can land after board 2 has opened. Before the guard it did: board 2 was marked finished,
-     * board 1's sentence was read out over it, and a row was written against a sentence he had never
-     * written on a board he had never answered. Passing on a board is a legal thing to do, so the fix
-     * is not to stop him — it is that a verdict is only ever applied to the board that asked for it.
+     * «Παράλειψη» used to stay live through «Διαβάζω...», which is how the answer to board 1 could
+     * arrive on board 2 — marking it finished, reading his old sentence out over it and writing a row
+     * against a sentence he had never written there. The verdict he is waiting for belongs to *this*
+     * board, so the door is shut at both ends: nothing moves while it reads (this test), and a
+     * judgement that has been left behind is cancelled rather than applied
+     * ([aJudgeLeftBehindNeverLandsOnTheBoardAfterIt]).
+     *
+     * This is «SQL»'s rule for a query inside SQLite, and the wait is the judge's eight seconds at
+     * the very most.
      */
-    @Test fun aVerdictThatArrivesAfterHeMovesOnIsNotAppliedToTheNextBoard() {
+    @Test fun aBoardTheJudgeIsStillReadingCannotBePassedOn() {
         waitForVocabulary()
         val held = CompletableDeferred<String>()
         withHeldJudge(held)
         openTyped()
 
-        compose.onNodeWithTag(TRACE_TYPED_TAG).performTextInput("ο μπαμπάς πίνει τον καφέ")
+        // Not the sentence the judge is about to hand back: an `expanded` that is his own words again
+        // is the model finding nothing to add, and `JudgeContract` drops it — the board would then
+        // show its own target, which is whatever «Προτάσεις» built about the picture that came up.
+        compose.onNodeWithTag(TRACE_TYPED_TAG).performTextInput("καφέ μπαμπάς")
         compose.onNodeWithText("Έτοιμο").performClick()
-        // Reading, and «Παράλειψη» is still his to press.
         compose.waitUntil(TIMEOUT_MS) { compose.onAllNodes(hasText(READING)).fetchSemanticsNodes().isNotEmpty() }
-        compose.onNodeWithText("Παράλειψη").performClick()
-        compose.waitUntil(TIMEOUT_MS) { attempts().any { it.outcome == Outcome.SKIPPED } }
-        assertEquals("passing on a board wrote more than one row", 1, attempts().size)
 
-        // And now the answer to the board he left arrives.
-        held.complete("""{"accept":true,"expanded":null,"feedback":"Ωραία πρόταση.","score":1}""")
-        compose.waitForIdle()
-        compose.onNodeWithText("Γράψε 2/6").assertIsDisplayed()
-
-        // The board he is on now is untouched: an empty field, no verdict, no row, and no «Επόμενο».
-        assertEquals("the verdict landed on a board he never answered", 1, attempts().size)
-        compose.onNodeWithText("Επόμενο").assertDoesNotExist()
-        compose.onNodeWithText("Ωραία πρόταση.").assertDoesNotExist()
+        // Reading: the two ways off this board are both off, and neither is a button that does nothing.
+        compose.onNodeWithText("Παράλειψη").assertIsNotEnabled()
         compose.onNodeWithText("Έτοιμο").assertIsNotEnabled()
+        compose.onNodeWithText("Παράλειψη").performClick()
+        compose.waitForIdle()
+        compose.onNodeWithText("Γράψε 1/6").assertIsDisplayed()
+        assertTrue("passing on a board mid-judgement wrote a row", attempts().isEmpty())
+
+        // The answer lands on the board that asked for it, and the way on comes back with it.
+        held.complete("""{"accept":false,"expanded":"Ο μπαμπάς πίνει τον καφέ.","feedback":"Κοντά είσαι.","score":0.4}""")
+        compose.waitUntil(TIMEOUT_MS) {
+            compose.onAllNodes(hasText("Ο μπαμπάς πίνει τον καφέ.", substring = true)).fetchSemanticsNodes().isNotEmpty()
+        }
+        compose.onNodeWithText("Παράλειψη").assertIsEnabled()
+        assertTrue("a refused sentence was written down as an attempt", attempts().isEmpty())
+    }
+
+    /**
+     * And the other end of the same door: a judgement he has walked away from is **cancelled**, not
+     * applied to whatever is on the screen when it comes back.
+     *
+     * The one way off a board that is still being read is the dots row — his own difficulty, which is
+     * on the same screen as the field at this level and rebuilds the sitting under it. Before the fix
+     * the typed judge was a bare `launch` that nothing held: it survived the rebuild, and when it
+     * answered, `checking` was true again (because of the *new* board's own «Έτοιμο») so the guard
+     * did not fire and board 1's verdict — its feedback, its sentence, its row — landed on a board he
+     * had never answered.
+     *
+     * Driven through the ViewModel because the race needs the two presses inside one judge call, which
+     * a click-and-wait test cannot hold open; everything it drives is what the screen calls.
+     */
+    @Test fun aJudgeLeftBehindNeverLandsOnTheBoardAfterIt() {
+        waitForVocabulary()
+        val first = CompletableDeferred<String>()
+        val second = CompletableDeferred<String>()
+        withHeldJudge(first, second)
+        runBlocking { graph.settings.setTraceLevel(5) }
+        lateinit var vm: TraceViewModel
+        compose.runOnUiThread { vm = TraceViewModel(graph, sessionId = null) }
+        try {
+            compose.waitUntil(TIMEOUT_MS) { vm.state.value.sentence != null }
+            compose.runOnUiThread { vm.onTypedChange("ο μπαμπάς πίνει τον καφέ"); vm.submitTyped() }
+            compose.waitUntil(TIMEOUT_MS) { vm.state.value.checking }
+
+            // «Παράλειψη» is refused while it reads, so nothing can inherit this verdict that way.
+            compose.runOnUiThread { vm.skip() }
+            assertEquals("a board being read was passed on", 0, vm.state.value.index)
+            assertTrue("passing on a board mid-judgement wrote a row", attempts().isEmpty())
+
+            // He moves the dots instead, which throws the whole sitting away and builds a new one.
+            compose.runOnUiThread { vm.reload() }
+            compose.waitUntil(TIMEOUT_MS) { vm.state.value.sentence != null && !vm.state.value.checking }
+
+            // And now the answer to the sitting he left arrives.
+            first.complete("""{"accept":true,"expanded":null,"feedback":"Ωραία πρόταση.","score":1}""")
+            compose.waitForIdle()
+            assertFalse("a verdict he walked away from finished a board", vm.state.value.finished)
+            assertEquals("it spoke on the new board", null, vm.state.value.feedback)
+            assertTrue("a verdict he walked away from wrote a row", attempts().isEmpty())
+
+            // The new board is his to answer, with its own judge and its own row.
+            compose.runOnUiThread { vm.onTypedChange("πίνω τον καφέ το πρωί"); vm.submitTyped() }
+            compose.waitUntil(TIMEOUT_MS) { vm.state.value.checking }
+            second.complete("""{"accept":true,"expanded":null,"feedback":"Μπράβο.","score":1}""")
+            compose.waitUntil(TIMEOUT_MS) { attempts().isNotEmpty() }
+            assertEquals("one board, one row", 1, attempts().size)
+            assertEquals(Outcome.CORRECT, attempts().single().outcome)
+            assertEquals("Μπράβο.", vm.state.value.feedback)
+        } finally {
+            compose.runOnUiThread { vm.leave {} }
+        }
     }
 
     /**
@@ -627,15 +698,17 @@ class TraceFlowTest {
     }
 
     /**
-     * The same, with the one reply held until the test lets it go: a judge that is still thinking is
-     * the only way to be on the next board when the answer to the last one lands.
+     * The same, with each reply held until the test lets it go: a judge that is still thinking is the
+     * only way to be somewhere else when the answer to a board arrives. One deferred per press, in
+     * the order they are pressed.
      */
-    private fun withHeldJudge(held: CompletableDeferred<String>) {
+    private fun withHeldJudge(vararg held: CompletableDeferred<String>) {
         realJudge = graph.judge
+        val queue = ArrayDeque(held.toList())
         graph.judge = TurnJudge(
             secrets = { KEY },
             enabled = { true },
-            client = JudgeClient { _, _, _ -> held.await() },
+            client = JudgeClient { _, _, _ -> queue.removeFirstOrNull()?.await() },
         )
     }
 
