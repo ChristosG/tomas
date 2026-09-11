@@ -127,10 +127,9 @@ data class SqlState(
 /**
  * One sitting of SQL.
  *
- * Chris asked for a beginner's SQL tile: Dimitris was a programmer, his father runs a software
- * company, and he still does very basic SQL exercises. So this is a module and not a toy — it
- * rotates into the daily sitting, it writes one attempt row per puzzle, and its difficulty is the
- * same row of five dots every other module has.
+ * Chris asked for a beginner's SQL tile: Dimitris was a programmer and he still does very basic SQL
+ * exercises. So this is a module and not a toy — it rotates into the daily sitting, it writes one
+ * attempt row per puzzle, and its difficulty is the same row of five dots every other module has.
  *
  * What it is *not* is a place where anything can go wrong. Every query runs against a fresh in-memory
  * database of four tables ([SqlRunner]), a statement that is not a single `SELECT` is refused in

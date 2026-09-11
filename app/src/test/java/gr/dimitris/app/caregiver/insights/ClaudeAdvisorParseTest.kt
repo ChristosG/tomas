@@ -191,7 +191,26 @@ class ClaudeAdvisorParseTest {
             "Διάλογοι = SCRIPTS", "Προτάσεις = SENTENCES", "Γράψε = TRACE", "Δεξί χέρι = ARCADE",
             "Μίλα = TALKBOARD",
         ).forEach { assertTrue(it, p.contains(it)) }
-        assertTrue("and which level keys exist", p.contains("μόνο numbers, sentences και"))
+        assertTrue("and which level keys exist", p.contains("μόνο numbers, sentences, trace, sql και steps"))
+    }
+
+    /**
+     * **What a «Λέξεις» dot really selects.** The line used to say «1 μόνο λέξεις· 2 έως 5 λέξεις και
+     * φράσεις», which was true before phase 13 and is now the opposite of the thing the phase was for:
+     * it told the advisor that dots 2 to 5 all select the same two hundred words, so the advisor had no
+     * content reason ever to move that dot — and «the app is too easy» was half that dot's fault.
+     *
+     * Five tiers, and the prompt names each of them ([Difficulty.wordCoachTier]).
+     */
+    @Test fun `the prompt says what each vocabulary tier is`() {
+        val p = flowing(ClaudeAdvisor.SYSTEM_PROMPT)
+        assertTrue("the tier ceiling", p.contains("η κουκκίδα n παίρνει τις λέξεις μέχρι και τη δυσκολία n"))
+        assertTrue("the long everyday words", p.contains("φαρμακείο, τράπεζα"))
+        assertTrue("the verbs and the opinion adjectives", p.contains("τα ρήματα και τα επίθετα της γνώμης"))
+        assertTrue("the abstract nouns", p.contains("οι αφηρημένες λέξεις"))
+        assertFalse("the pre-phase-13 line is still there", p.contains("1 μόνο λέξεις"))
+        // And the two new tiles' own keys, which are dots rather than levels.
+        assertTrue("the dot is the number for both", p.contains("Στο sql και στο steps ο αριθμός είναι η ίδια η κουκκίδα"))
     }
 
     /**

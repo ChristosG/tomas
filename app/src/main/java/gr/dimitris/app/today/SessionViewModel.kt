@@ -50,7 +50,7 @@ internal fun planToday(
     // that runs as one unit, which keeps its whole list so the session's planned count is the number
     // of exercises it will really run.
     val allowance = SessionBudget.allowance(today.size)
-    return today.map { (m, items) -> m to SessionBudget.share(items, allowance, m.atomic) }
+    return today.map { (m, items) -> m to SessionBudget.share(items, allowance, m.atomic, m.granularity) }
 }
 
 /**

@@ -37,6 +37,18 @@ interface Module {
      */
     val atomic: Boolean get() = false
 
+    /**
+     * How many of this module's planned items one exercise is worth, so the session's budget is shared
+     * out in whole exercises.
+     *
+     * One for everything except «Βήματα», where a task is **two** items — he orders the steps and then
+     * he tells them, and it writes a row for each ([gr.dimitris.app.modules.steps.StepsModule.ITEMS_PER_TASK]).
+     * A budget of three then bought one task and two rows against a promise of three, so every mixed
+     * sitting with that tile in it left a session row disagreeing with itself by one. Rounded **down**
+     * to a whole exercise, and never below one of them.
+     */
+    val granularity: Int get() = 1
+
     /** Items this module wants in today's mixed session. Empty means "nothing today". */
     suspend fun planFor(graph: AppGraph): List<Item>
 

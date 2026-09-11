@@ -172,6 +172,11 @@ class ClaudeAdvisor(private val secrets: Secrets, private val model: suspend () 
          * last time, be specific enough to be acted on, and end with a focus the app can carry out
          * on its own ([Focus]).
          *
+         * Version 4, phase 13. Two tiles joined the list with their own dot ladders, and «Λέξεις» got
+         * five vocabulary tiers — which is the half of "the app is too easy" that phase 13 set out to
+         * fix, so the prompt now says what each of those tiers *is*. Until it did, the advisor was
+         * told that dots 2 to 5 all select the same words and had no content reason to move that dot.
+         *
          * Version 3, phase 12. Dimitris tried the app himself and said it was too easy, and spec §13
          * rewrote who the advice is for: a man who says most everyday words, reads Greek slowly,
          * reasons well, and whose speech is telegraphic — so full sentences and multi-step tasks are
@@ -235,7 +240,9 @@ class ClaudeAdvisor(private val secrets: Secrets, private val model: suspend () 
             Η δυσκολία: κάθε άσκηση έχει στην πρώτη της οθόνη μια σειρά από πέντε κουκκίδες, 1 έως 5.
             Τις πατάει ο ίδιος ο Δημήτρης· ο φροντιστής βάζει μόνο κάτω και πάνω όριο. Το 1 είναι το
             πιο εύκολο, το 5 το πιο δύσκολο, και σε κάθε άσκηση σημαίνει κάτι δικό της:
-            - Λέξεις: 1 μόνο λέξεις· 2 έως 5 λέξεις και φράσεις
+            - Λέξεις: η κουκκίδα n παίρνει τις λέξεις μέχρι και τη δυσκολία n — 1 καθημερινές λέξεις
+              (και μόνο λέξεις, όχι φράσεις), 2 και φράσεις, 3 οι μεγάλες καθημερινές λέξεις
+              (φαρμακείο, τράπεζα), 4 τα ρήματα και τα επίθετα της γνώμης, 5 οι αφηρημένες λέξεις
             - Αριθμοί: ζώνη επιπέδων 1–2, 3–4, 5–7, 8–11, 12–15 (στο 5 φτάνει σε ρέστα, ώρα, τη
               μέρα της εβδομάδας, τετραψήφιους αριθμούς με λέξεις και προβλήματα δύο βημάτων)
             - Προτάσεις: ζώνη επιπέδων 1–2, 3–4, 5–6, 7, 8 (στο 3 μπαίνουν τα άρθρα, στο 4 μια
@@ -310,10 +317,11 @@ class ClaudeAdvisor(private val secrets: Secrets, private val model: suspend () 
             Οι λέξεις στο items πρέπει να είναι λέξεις που υπάρχουν στην αναφορά, γραμμένες ακριβώς
             όπως εκεί. Τα sounds είναι πρώτοι ήχοι. Τα modules γράφονται με τον κωδικό τους και όχι
             με το ελληνικό όνομα — οι κωδικοί είναι στη λίστα των ασκήσεων πιο πάνω. Το levels είναι
-            προαιρετικό και δέχεται μόνο numbers, sentences και trace· βάλε μόνο όσα θέλεις να
-            αλλάξουν, και θυμήσου ότι ένα επίπεδο μετακινεί μαζί του και την κουκκίδα της άσκησης. Η
-            εφαρμογή κρατάει θέσεις για αυτές τις λέξεις στην επόμενη άσκησή του και δίνει σειρά σε
-            αυτά τα modules, οπότε κράτα τες λίγες: 3 έως 8 λέξεις και το πολύ δύο modules.
+            προαιρετικό και δέχεται μόνο numbers, sentences, trace, sql και steps· βάλε μόνο όσα
+            θέλεις να αλλάξουν, και θυμήσου ότι ένα επίπεδο μετακινεί μαζί του και την κουκκίδα της
+            άσκησης. Στο sql και στο steps ο αριθμός είναι η ίδια η κουκκίδα, 1 έως 5. Η εφαρμογή
+            κρατάει θέσεις για αυτές τις λέξεις στην επόμενη άσκησή του και δίνει σειρά σε αυτά τα
+            modules, οπότε κράτα τες λίγες: 3 έως 8 λέξεις και το πολύ δύο modules.
 
             Οι τρεις τίτλοι είναι οι μόνες γραμμές που ξεκινούν με ##. Μην γράψεις τους τίτλους μέσα
             στο κείμενο. Καθόλου άλλο markdown: χωρίς αστερίσκους για έντονα γράμματα, με παύλες για

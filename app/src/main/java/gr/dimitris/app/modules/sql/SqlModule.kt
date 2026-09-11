@@ -14,9 +14,9 @@ import gr.dimitris.app.modules.Module
 /**
  * «SQL» — the tile Chris asked for in phase 13.
  *
- * Dimitris was a programmer, his father runs a software company, and he still does very basic SQL
- * exercises. Everything else in this app is speech therapy that a programmer happens to be doing;
- * this is the one tile that is *his own work*, in the one language his aphasia does not touch. The
+ * Dimitris was a programmer and he still does very basic SQL exercises. Everything else in this app
+ * is speech therapy that a programmer happens to be doing; this is the one tile that is *his own
+ * work*, in the one language his aphasia does not touch. The
  * Greek is the instruction and the tables about his own life; the SQL is SQL.
  *
  * On for everyone by default: it is not in [gr.dimitris.app.core.settings.Settings.DEFAULT_OFF], so

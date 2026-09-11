@@ -53,9 +53,9 @@ enum class RecordingStyle { SPOKEN, SUNG }
  * preference keys in [gr.dimitris.app.core.settings.Settings] — so a new one may be appended without
  * moving anything that already exists.
  *
- * `SQL` is phase 13's: Dimitris was a programmer, his father runs a software company, and he still
- * does very basic SQL exercises. It is a module on exactly the same footing as the rest — it rotates
- * into the daily sitting, it has its own row of five dots, and it writes one attempt per puzzle.
+ * `SQL` is phase 13's: Dimitris was a programmer and he still does very basic SQL exercises. It is a
+ * module on exactly the same footing as the rest — it rotates into the daily sitting, it has its own
+ * row of five dots, and it writes one attempt per puzzle.
  *
  * `STEPS` is phase 13's other one, and the only module that writes **two** rows per exercise he is
  * given: «Βήματα» asks him to put the steps of an everyday task in order (`steps:order:<task>`) and

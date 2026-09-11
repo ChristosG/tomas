@@ -51,6 +51,13 @@ object StepsModule : Module {
     const val ITEMS_PER_TASK = 2
 
     /**
+     * And the session's budget is shared out in whole tasks because of it: a share of three would buy
+     * one task and write two rows, which is a session row that disagrees with itself by one on every
+     * mixed sitting this tile is in. See [gr.dimitris.app.today.SessionBudget.share].
+     */
+    override val granularity = ITEMS_PER_TASK
+
+    /**
      * The tasks are content, not items ([StepTasks]), so the returned list only *sizes* the session:
      * two transient placeholders per task, and the screen runs one task per pair it is handed.
      *

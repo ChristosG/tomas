@@ -25,7 +25,17 @@ object SessionBudget {
      * whole list: cutting it changed nothing about what ran and only made the session row's
      * `plannedItemCount` a number the module was going to overshoot. The dialogue is held to a
      * sitting's length by the editor's own cap on how many turns a dialogue may have, not here.
+     *
+     * [granularity] is how many items one of the module's exercises is worth
+     * ([gr.dimitris.app.modules.Module.granularity]). The share is cut to a whole number of exercises,
+     * because the alternative is a promise the module cannot keep: «Βήματα» is two items per task, so a
+     * budget of three bought one task and wrote two rows, and the session row said 3 planned / 2 done on
+     * every sitting that tile was in. Never below one exercise — a module the session opens at all is
+     * owed one, and then the planned count is the truth about it rather than one less.
      */
-    fun <T> share(items: List<T>, allowance: Int, atomic: Boolean): List<T> =
-        if (atomic) items else items.take(allowance)
+    fun <T> share(items: List<T>, allowance: Int, atomic: Boolean, granularity: Int = 1): List<T> {
+        if (atomic) return items
+        val unit = granularity.coerceAtLeast(1)
+        return items.take((allowance - allowance % unit).coerceAtLeast(unit))
+    }
 }

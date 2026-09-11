@@ -9,6 +9,7 @@ import gr.dimitris.app.core.data.Item
 import gr.dimitris.app.core.data.ModuleId
 import gr.dimitris.app.core.scheduler.ModuleRotation
 import gr.dimitris.app.modules.Module
+import gr.dimitris.app.modules.steps.StepsModule
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -23,6 +24,7 @@ class SessionPlanTest {
     private class FakeModule(
         override val id: ModuleId,
         override val atomic: Boolean = false,
+        override val granularity: Int = 1,
     ) : Module {
         override val titleGreek = id.name
         override val icon: ImageVector = Icons.Rounded.Star
@@ -88,6 +90,26 @@ class SessionPlanTest {
         val plan = planToday(wanted(ModuleId.WORDCOACH, ModuleId.TRACE), emptyMap())
         assertEquals(2, plan.size)
         assertEquals(SessionBudget.allowance(2), plan.first().second.size)
+    }
+
+    /**
+     * **A four-module day promises «Βήματα» what it can really run.**
+     *
+     * The budget is three items each, and a «Βήματα» task is two of them — the ordering and the
+     * telling. It ran one task and wrote two rows against a promise of three, so `plannedItemCount`
+     * and `completedItemCount` disagreed by one on every mixed sitting that tile was in. Now the share
+     * is two, and the sitting is one exercise shorter and honest about it.
+     */
+    @Test fun `a module whose exercise is two items is planned in whole exercises`() {
+        val steps = FakeModule(ModuleId.STEPS, granularity = StepsModule.ITEMS_PER_TASK) as Module to
+            List(StepsModule.TASKS_PER_SESSION * StepsModule.ITEMS_PER_TASK) { Item(text = "$it") }
+        val plan = planToday(wanted(ModuleId.WORDCOACH, ModuleId.NUMBERS, ModuleId.TRACE) + steps, emptyMap())
+
+        assertEquals("the share of a four-module day", 3, SessionBudget.allowance(plan.size))
+        val items = plan.single { it.first.id == ModuleId.STEPS }.second.size
+        assertEquals("an odd share of a two-item exercise", 2, items)
+        assertEquals("and that is one task, two rows", 1, StepsModule.tasksFor(items))
+        assertEquals("planned and completed agree", items, StepsModule.tasksFor(items) * StepsModule.ITEMS_PER_TASK)
     }
 
     /** A dialogue cannot be cut in half, and the cap does not cut it. */

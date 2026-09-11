@@ -5,9 +5,11 @@ import com.google.gson.JsonObject
 import com.google.gson.JsonParser
 import gr.dimitris.app.core.data.Item
 import gr.dimitris.app.core.data.ModuleId
+import gr.dimitris.app.core.difficulty.Difficulty
 import gr.dimitris.app.core.greek.Greek
 import gr.dimitris.app.modules.numbers.NumberProgression
 import gr.dimitris.app.modules.sentences.SentenceTemplates
+import gr.dimitris.app.modules.sql.SqlPuzzles
 import gr.dimitris.app.modules.trace.TraceViewModel
 import gr.dimitris.app.core.data.Advice as AdviceRow
 
@@ -39,7 +41,7 @@ data class Focus(
     val items: List<String> = emptyList(),
     val sounds: List<String> = emptyList(),
     val modules: List<ModuleId> = emptyList(),
-    /** Keyed by [NUMBERS], [SENTENCES], [TRACE]; already clamped to each module's own range. */
+    /** Keyed by [NUMBERS], [SENTENCES], [TRACE], [SQL], [STEPS]; clamped to each module's own range. */
     val levels: Map<String, Int> = emptyMap(),
     val why: String = "",
     val at: Long = 0L,
@@ -66,10 +68,22 @@ data class Focus(
     companion object {
         val EMPTY = Focus()
 
-        /** The three level keys, the same names the JSON uses and the settings setters take. */
+        /** The level keys, the same names the JSON uses and the settings setters take. */
         const val NUMBERS = "numbers"
         const val SENTENCES = "sentences"
         const val TRACE = "trace"
+
+        /**
+         * Phase 13's two, because the prompt tells the model that «levels» moves a dot and those two
+         * tiles have dots like everything else.
+         *
+         * In both of them the number **is** the dot: «SQL»'s level and its dot are one number
+         * ([Difficulty.sqlDot]), and «Βήματα» has no stored level at all — the dot is the whole of its
+         * difficulty ([Difficulty.stepsTier]). So 1..5 for each, which is also what
+         * `Settings.setSqlLevel` and `Settings.setDifficulty` clamp to.
+         */
+        const val SQL = "sql"
+        const val STEPS = "steps"
 
         /** A week: the horizon the prompt asks the model to advise over. */
         const val WINDOW_MS = 7L * 24 * 60 * 60 * 1000
@@ -84,6 +98,8 @@ data class Focus(
             NUMBERS to NumberProgression.MIN_LEVEL..NumberProgression.MAX_LEVEL,
             SENTENCES to SentenceTemplates.MIN_LEVEL..SentenceTemplates.MAX_LEVEL,
             TRACE to TraceViewModel.MIN_LEVEL..TraceViewModel.MAX_LEVEL,
+            SQL to SqlPuzzles.MIN_LEVEL..SqlPuzzles.MAX_LEVEL,
+            STEPS to Difficulty.MIN..Difficulty.MAX,
         )
 
         /**
@@ -163,7 +179,7 @@ data class Focus(
         private fun primitive(element: JsonElement): String? =
             if (element.isJsonPrimitive) element.asString else null
 
-        /** Only the three the app owns, only as whole numbers, only inside their own ranges. */
+        /** Only the five the app owns, only as whole numbers, only inside their own ranges. */
         private fun levels(obj: JsonObject): Map<String, Int> {
             val levels = obj.get("levels")?.takeIf { it.isJsonObject }?.asJsonObject ?: return emptyMap()
             val out = linkedMapOf<String, Int>()

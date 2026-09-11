@@ -44,8 +44,10 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import gr.dimitris.app.AppGraph
 import gr.dimitris.app.LocalAppGraph
+import gr.dimitris.app.core.data.ModuleId
 import gr.dimitris.app.core.data.Note
 import gr.dimitris.app.core.data.now
+import gr.dimitris.app.modules.steps.StepsModule
 import gr.dimitris.app.ui.components.BigButton
 import gr.dimitris.app.ui.components.DimitrisScreen
 import gr.dimitris.app.ui.components.QuietButton
@@ -161,6 +163,11 @@ class AdviceViewModel(private val graph: AppGraph) : ViewModel() {
                 levels[Focus.NUMBERS]?.let { graph.settings.setNumbersLevel(it) }
                 levels[Focus.SENTENCES]?.let { graph.settings.setSentencesLevel(it) }
                 levels[Focus.TRACE]?.let { graph.settings.setTraceLevel(it) }
+                // The two tiles phase 13 added. «SQL» has a level and its dot follows it; «Βήματα» has
+                // no level at all — the dot *is* its difficulty — so that one goes in through the dot,
+                // where the caregiver's own bounds clamp it exactly as they clamp his own tap.
+                levels[Focus.SQL]?.let { graph.settings.setSqlLevel(it) }
+                levels[Focus.STEPS]?.let { graph.settings.setDifficulty(ModuleId.STEPS, it) }
                 _state.update { it.copy(levelsAppliedFor = adviceId) }
             } catch (ce: CancellationException) {
                 throw ce
@@ -540,11 +547,13 @@ private fun FocusChip(label: String) {
     )
 }
 
-/** «Αριθμοί 3, Προτάσεις 2, Γράψε 2» — the same three names the dashboard's steppers carry. */
+/** «Αριθμοί 3, Προτάσεις 2, Γράψε 2» — the same names the dashboard's steppers carry. */
 internal fun levelsLine(levels: Map<String, Int>): String = listOfNotNull(
     levels[Focus.NUMBERS]?.let { "Αριθμοί $it" },
     levels[Focus.SENTENCES]?.let { "Προτάσεις $it" },
     levels[Focus.TRACE]?.let { "Γράψε $it" },
+    levels[Focus.SQL]?.let { "SQL $it" },
+    levels[Focus.STEPS]?.let { "${StepsModule.titleGreek} $it" },
 ).joinToString(", ")
 
 /** Enough of an old advice to recognise it by, on one line. */

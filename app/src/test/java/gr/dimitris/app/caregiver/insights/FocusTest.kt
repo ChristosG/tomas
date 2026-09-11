@@ -2,8 +2,10 @@ package gr.dimitris.app.caregiver.insights
 
 import gr.dimitris.app.core.data.Item
 import gr.dimitris.app.core.data.ModuleId
+import gr.dimitris.app.core.difficulty.Difficulty
 import gr.dimitris.app.modules.numbers.NumberProgression
 import gr.dimitris.app.modules.sentences.SentenceTemplates
+import gr.dimitris.app.modules.sql.SqlPuzzles
 import gr.dimitris.app.modules.trace.TraceViewModel
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -81,7 +83,28 @@ class FocusTest {
         assertEquals(NumberProgression.MAX_LEVEL, focus.levels[Focus.NUMBERS])
         assertEquals(SentenceTemplates.MIN_LEVEL, focus.levels[Focus.SENTENCES])
         assertEquals(TraceViewModel.MIN_LEVEL, focus.levels[Focus.TRACE])
-        assertEquals("only the three the app owns", 3, focus.levels.size)
+        assertEquals("only the keys the app owns", 3, focus.levels.size)
+    }
+
+    /**
+     * Phase 13's two tiles have dots like everything else, and the prompt tells the model that «levels»
+     * moves a dot — so it has to be able to name them. Without these keys the advisor could say «SQL:
+     * πήγαινε στο 4» in its prose and the app would act on nothing, which is the gap the whole-phase
+     * review found.
+     *
+     * In both of them the number *is* the dot, so the range is 1..5 and anything outside it is clamped
+     * rather than refused: «steps: 9» is a model saying "move him up", and the app knows its own top.
+     */
+    @Test fun `the two tiles of phase 13 have level keys of their own`() {
+        val focus = Focus.parse("""{"levels":{"sql":4,"steps":9}}""", known)
+
+        assertEquals(4, focus.levels[Focus.SQL])
+        assertEquals(Difficulty.MAX, focus.levels[Focus.STEPS])
+        assertEquals(2, focus.levels.size)
+
+        val low = Focus.parse("""{"levels":{"sql":0,"steps":0}}""", known)
+        assertEquals(SqlPuzzles.MIN_LEVEL, low.levels[Focus.SQL])
+        assertEquals(Difficulty.MIN, low.levels[Focus.STEPS])
     }
 
     @Test fun `a level that is not a number is ignored rather than fatal`() {
