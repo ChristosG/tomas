@@ -216,8 +216,23 @@ class StepsViewModel(
     private var speakJob: Job? = null
     private var speakToken = 0
 
-    /** The open recognition window, so leaving or moving on can close it. */
+    /**
+     * The open recognition window **and the judge behind it**, so leaving, moving on or passing on the
+     * exercise can close both: [weigh] runs inside this job, so cancelling it is how a verdict that is
+     * eight seconds away stops being something he has to wait for. See [stopRecogniser].
+     */
     private var listenJob: Job? = null
+
+    /**
+     * When he last passed on the *ordering* of a task, so the second of a double tap cannot pass on the
+     * telling as well.
+     *
+     * [toTelling] opens the guard again the instant the ordering's row is written — it has to, because
+     * the telling is the next exercise — and «Παράλειψη» is still under his thumb for a frame after
+     * that. Two taps half a second apart would otherwise skip a whole task, rows and all, without
+     * showing him the second half of it.
+     */
+    private var orderSkippedAt = 0L
 
     /**
      * The attempt write of the exercise just finished. It runs on the app scope, so the end of the
@@ -421,8 +436,12 @@ class StepsViewModel(
      */
     fun listen() {
         val s = _state.value
-        if (!s.sttOn || s.listening || s.thinking || finishing || ending) return
+        if (!s.sttOn || s.listening || finishing || ending) return
         if (s.stage != StepStage.TELL) return
+        // «Μίλα» pressed again while the judge is still reading the last take is him saying that take
+        // was not what he meant. The verdict he has walked away from is cancelled and the window opens
+        // again — a green button that does nothing for eight seconds is the thing this avoids.
+        if (s.thinking) stopRecogniser()
         // The microphone is about to open: whatever was being said stops here, or the recogniser hears
         // the phone's own telling and agrees with it.
         silence()
@@ -431,8 +450,9 @@ class StepsViewModel(
             val heard = graph.stt.listen()
             // The take is his own voice from that same window. There is nothing in this module to
             // attach it to — a step is not an `Item` — so it is deleted rather than left on disk with
-            // nothing pointing at it.
-            heard.take?.file?.delete()
+            // nothing pointing at it. Off the main thread, because it is a file: this coroutine runs
+            // on the main dispatcher and a delete on a slow filesystem is a frame nobody owes him.
+            heard.take?.file?.let { file -> withContext(Dispatchers.IO) { file.delete() } }
             heard.fold(
                 onSuccess = { t -> weigh(t.text.takeIf { it.isNotBlank() }) },
                 onFailure = { e -> recogniserFailed(e) },
@@ -556,16 +576,28 @@ class StepsViewModel(
      * «Παράλειψη». In stage 1 it passes on the ordering and goes straight to the telling with the
      * steps in the right order on the screen — he has said he cannot order them, and the answer is
      * then the least this app can do with the question. In stage 2 it passes on the task.
+     *
+     * **A skip while the judge is reading cancels the judge and skips.** It used to refuse, and the
+     * button was greyed for as long as «Διαβάζω...» was on the screen — up to the judge's own eight
+     * seconds, which is exactly the moment a man who has just said thirty words wants out. The verdict
+     * is then thrown away, which is the right trade: he did not wait for it. [stopRecogniser] is the
+     * cancel — it kills the coroutine that is waiting on the judge and clears «Διαβάζω...» with it.
      */
     fun skip() {
         val s = _state.value
         val task = s.task ?: return
         // One skip per exercise: the button is still there for a frame, and a second tap would pass on
         // the exercise that has not been shown yet.
-        if (finishing || ending || s.listening || s.thinking) return
+        if (finishing || ending) return
+        // And a second tap after the *ordering*'s skip must not pass on the telling it has just opened.
+        if (s.stage == StepStage.TELL && now() - orderSkippedAt < DOUBLE_TAP_MS) return
+        // Whatever was open is his to close by passing on the exercise: the window, and the judge
+        // reading what came out of it.
+        if (s.listening || s.thinking) stopRecogniser()
         graph.feedback.nudge()
         when (s.stage) {
             StepStage.ORDER -> {
+                orderSkippedAt = now()
                 record(task, stage = StepStage.ORDER, steps = s.chosen.map { it.text }, firstTry = false, skipped = true)
                 // The strip is set to the answer, because the telling stage is about an order he can
                 // read — and that is help, which the telling row has to carry.
@@ -754,5 +786,12 @@ class StepsViewModel(
 
         /** The telling row's id, per task: `steps:tell:coffee`. */
         const val TELL_ITEM = "steps:tell:"
+
+        /**
+         * How long after passing on the ordering a «Παράλειψη» is read as the second half of one tap
+         * rather than as a second decision. Half a second: longer than any double tap and far shorter
+         * than reading a strip of six steps and deciding you cannot tell them.
+         */
+        const val DOUBLE_TAP_MS = 500L
     }
 }

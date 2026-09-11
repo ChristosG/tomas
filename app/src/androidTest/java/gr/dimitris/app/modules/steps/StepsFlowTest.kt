@@ -4,6 +4,7 @@ import android.Manifest
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
@@ -27,6 +28,7 @@ import gr.dimitris.app.core.speech.GentleCheck
 import gr.dimitris.app.core.speech.SpeechToText
 import gr.dimitris.app.today.MODULE_GRID_TAG
 import gr.dimitris.app.ui.components.LISTEN_TAG
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.After
@@ -101,6 +103,20 @@ class StepsFlowTest {
             secrets = { KEY },
             enabled = { true },
             client = JudgeClient { _, _, _ -> replies.removeFirstOrNull() },
+        )
+    }
+
+    /**
+     * The same judge, held open: it answers when the test says so and not before, which is the only way
+     * to stand inside the seconds «Διαβάζω...» is on the screen. One deferred per window, in call order.
+     */
+    private fun withHeldJudge(vararg held: CompletableDeferred<String>) {
+        realJudge = graph.judge
+        val queue = ArrayDeque(held.toList())
+        graph.judge = TurnJudge(
+            secrets = { KEY },
+            enabled = { true },
+            client = JudgeClient { _, _, _ -> queue.removeFirstOrNull()?.await() },
         )
     }
 
@@ -214,6 +230,80 @@ class StepsFlowTest {
         assertEquals("a telling he was read first is assisted work", Outcome.ASSISTED, telling.outcome)
         assertTrue("the row does not say he was read the telling: ${telling.cueLevel}", (telling.cueLevel ?: 0) >= 3)
         assertTrue("nor how many goes the phone disagreed: ${telling.detail}", telling.detail.contains("\"tries\":2"))
+    }
+
+    /**
+     * **A telling the judge is still reading is passed on at once, and the reading is cancelled.**
+     *
+     * «Παράλειψη» and «Μίλα» used to be greyed for as long as the judge was reading — up to its own
+     * eight seconds, which is exactly the moment a man who has just said thirty words wants out, and
+     * the moment a dead button teaches him the button is broken. Both stay live now: the skip cancels
+     * the coroutine that is waiting on the verdict, writes the SKIPPED row the skip always writes, and
+     * the sitting moves on. The verdict is thrown away, which is what he asked for by pressing it.
+     */
+    @Test fun aTellingTheJudgeIsStillReadingIsPassedOnAtOnce() {
+        withRecognition().willHear("πρώτα βάζω νερό στο μπρίκι")
+        val held = CompletableDeferred<String>()
+        withHeldJudge(held)
+        val task = openTask()
+
+        tapInOrder(task.order)
+        compose.onNodeWithText(READY).performClick()
+        compose.waitUntil(TIMEOUT_MS) { onScreen(StepsViewModel.TELL_THEM) }
+        compose.onNodeWithText(GentleCheck.SPEAK).performClick()
+        // The screen says it is reading — the two greyed buttons used to be the only sign of it.
+        compose.waitUntil(TIMEOUT_MS) { onScreen(READING) }
+
+        // Both ways off the telling are live under it.
+        compose.onNodeWithText(SKIP).assertIsEnabled()
+        compose.onNodeWithText(GentleCheck.SPEAK).assertIsEnabled()
+
+        compose.onNodeWithText(SKIP).performClick()
+        compose.waitUntil(TIMEOUT_MS) { rows().any { it.itemId == "${StepsViewModel.TELL_ITEM}${task.id}" } }
+        val telling = rows().single { it.itemId == "${StepsViewModel.TELL_ITEM}${task.id}" }
+        assertEquals("a telling he passed on is a skip", Outcome.SKIPPED, telling.outcome)
+        assertEquals("one task, two rows, whichever way the telling went", 2, rows().size)
+        compose.waitUntil(TIMEOUT_MS) { onScreen("${StepsModule.titleGreek} 2/") }
+
+        // And the answer he walked away from lands nowhere: no third row, nothing on the new board.
+        held.complete(ACCEPTED)
+        compose.waitForIdle()
+        assertEquals("a verdict he walked away from wrote a row", 2, rows().size)
+        assertTrue("it spoke on the board after it", !onScreen(READING))
+    }
+
+    /**
+     * Two taps on «Παράλειψη» pass on the **ordering** and stop there.
+     *
+     * The ordering's skip opens the guard again the instant its row is written — it has to, because the
+     * telling is the next exercise — and the button is still under his thumb for a frame after that. So
+     * a double tap used to pass on the whole task, two rows and all, without ever showing him the
+     * telling. Driven through the ViewModel, because two taps inside half a second is the race and a
+     * click-and-wait test cannot promise them.
+     */
+    @Test fun twoTapsOnTheSkipPassOnTheOrderingAndNotTheTask() {
+        lateinit var vm: StepsViewModel
+        compose.runOnUiThread { vm = StepsViewModel(graph, sessionId = null) }
+        try {
+            compose.waitUntil(TIMEOUT_MS) { vm.state.value.task != null }
+            val task = vm.state.value.task!!
+            compose.runOnUiThread { vm.skip(); vm.skip() }
+
+            assertEquals("the second tap passed on the telling as well", StepStage.TELL, vm.state.value.stage)
+            assertEquals("and moved off the task", 0, vm.state.value.index)
+            compose.waitUntil(TIMEOUT_MS) { rows().isNotEmpty() }
+            compose.waitForIdle()
+            assertEquals("a double tap wrote the telling's row too", 1, rows().size)
+            assertEquals("${StepsViewModel.ORDER_ITEM}${task.id}", rows().single().itemId)
+
+            // Half a second later it is a second decision, and it is his to make.
+            Thread.sleep(StepsViewModel.DOUBLE_TAP_MS + 100)
+            compose.runOnUiThread { vm.skip() }
+            compose.waitUntil(TIMEOUT_MS) { rows().size == 2 }
+            assertEquals(Outcome.SKIPPED, rows().single { it.itemId == "${StepsViewModel.TELL_ITEM}${task.id}" }.outcome)
+        } finally {
+            compose.runOnUiThread { vm.leave {} }
+        }
     }
 
     // ------------------------------------------------------------------------- helpers

@@ -136,11 +136,14 @@ fun StepsScreen(count: Int, sessionId: String?, onDone: () -> Unit, onLeave: () 
                         // into the wrong mode before the settings have been read.
                         GentleCheck.Primary.WAITING ->
                             BigButton(SAID_IT, onClick = {}, tone = ButtonTone.Success, enabled = false)
-                        // Greyed while the judge is reading what he said: the buttons stay where they
-                        // are, and a second window cannot open over a telling that is about to count.
+                        // Live while the judge reads, too. It was greyed for as long as «Διαβάζω...»
+                        // was on the screen — up to eight seconds — and a pressed button that does
+                        // nothing teaches him the button is broken. A second «Μίλα» now cancels the
+                        // verdict he did not wait for and opens the window again
+                        // ([StepsViewModel.listen]).
                         GentleCheck.Primary.SPEAK -> BigButton(
                             GentleCheck.SPEAK, onClick = { askListen.launch(Manifest.permission.RECORD_AUDIO) },
-                            icon = Icons.Rounded.Mic, tone = ButtonTone.Success, enabled = !s.thinking,
+                            icon = Icons.Rounded.Mic, tone = ButtonTone.Success,
                         )
                         GentleCheck.Primary.CONFIRM ->
                             BigButton(SAID_IT, onClick = vm::confirm, tone = ButtonTone.Success)
@@ -148,10 +151,15 @@ fun StepsScreen(count: Int, sessionId: String?, onDone: () -> Unit, onLeave: () 
                 }
                 Spacer(Modifier.height(Sizes.gapSmall))
                 // «Άκου» reads the task and the strip as it stands while he is ordering, and the whole
-                // telling once he is telling. It is never withheld (spec §12); what it costs is the row.
-                ListenButton(onClick = vm::listenModel, enabled = task != null && !s.modelPlaying && !s.thinking)
+                // telling once he is telling. It is never withheld (spec §12) — not even for the
+                // seconds the judge is reading, which is what it used to be — and what it costs is
+                // the row.
+                ListenButton(onClick = vm::listenModel, enabled = task != null && !s.modelPlaying)
                 Spacer(Modifier.height(Sizes.gapSmall))
-                QuietButton("Παράλειψη", onClick = vm::skip, enabled = !s.thinking)
+                // Live while the judge reads: a skip cancels the reading and passes on the exercise
+                // ([StepsViewModel.skip]). The verdict he walked away from is thrown away, which is
+                // the trade he asked for by pressing this.
+                QuietButton("Παράλειψη", onClick = vm::skip)
             }
         },
     ) {
@@ -388,6 +396,13 @@ private fun Tile(step: Step, enabled: Boolean, onClick: () -> Unit) {
 /** What the telling stage puts under the steps: what he was heard to say, and the whole telling. */
 @Composable
 private fun Telling(s: StepsState) {
+    // The window has closed and the judge is reading. It used to be said by the two greyed buttons and
+    // nothing else; now that a skip cancels the reading they stay live, so the screen has to say it in
+    // words — the same word «Προτάσεις» and «Γράψε» use on their typed boards.
+    if (s.thinking) {
+        Text(READING, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Spacer(Modifier.height(Sizes.gapSmall))
+    }
     if (s.nudge) {
         Text(
             GentleCheck.TRY_AGAIN, style = MaterialTheme.typography.headlineMedium,
@@ -447,6 +462,13 @@ private const val SLOT_WAITING = "Βάλε εδώ το σωστό βήμα."
 
 /** «Το είπα!»: the same word as in the three speech modules, because it does the same thing. */
 private const val SAID_IT = "Το είπα!"
+
+/**
+ * What the screen says while the judge reads his telling — the same word the two typed boards use
+ * («Προτάσεις», «Γράψε»), because it is the same wait. Both ways off the exercise stay live under it:
+ * «Παράλειψη» cancels the reading and «Μίλα» opens the window again.
+ */
+internal const val READING = "Διαβάζω..."
 
 /** Seven tiles at difficulty 5, and three columns is what keeps them all above the fold. */
 private const val TILES_PER_ROW = 3

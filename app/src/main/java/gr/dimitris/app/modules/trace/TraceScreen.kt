@@ -155,10 +155,11 @@ fun TraceScreen(count: Int, sessionId: String?, onDone: () -> Unit, onLeave: () 
                     enabled = s.typed.isNotBlank() && !s.checking,
                 )
                 Spacer(Modifier.height(Sizes.gapSmall))
-                // Off while the judge reads, so it is not a button that does nothing: the verdict he
-                // is waiting for belongs to this board, and passing on it now would throw his own
-                // sentence away. The wait is the judge's eight seconds at the very most.
-                QuietButton("Παράλειψη", onClick = vm::skip, enabled = !s.checking)
+                // Live while the judge reads: a skip cancels the reading and passes on the board
+                // ([TraceViewModel.skip]). It was off for as long as «Διαβάζω...» was on the screen —
+                // up to eight seconds, which is exactly when he wants out. What it costs is a verdict
+                // he did not wait for.
+                QuietButton("Παράλειψη", onClick = vm::skip)
             }
             // The dictation level, where the word is only ever a sound. «Άκου» and «Καθάρισε» share
             // one slot the way «Το είδα» and «Έτοιμο» do below, and for the same reason: three

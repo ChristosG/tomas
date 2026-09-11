@@ -29,6 +29,7 @@ import gr.dimitris.app.core.judge.JudgeClient
 import gr.dimitris.app.core.judge.TurnJudge
 import gr.dimitris.app.today.MODULE_GRID_TAG
 import gr.dimitris.app.ui.components.LISTEN_TAG
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.After
@@ -83,6 +84,20 @@ class SentencesFlowTest {
             secrets = { KEY },
             enabled = { true },
             client = JudgeClient { _, _, _ -> replies.removeFirstOrNull() },
+        )
+    }
+
+    /**
+     * The same judge, **held open**: it answers when the test says so, which is the only way to stand
+     * inside the seconds «Διαβάζω...» is on the screen. One deferred per «Έτοιμο», in call order.
+     */
+    private fun withHeldJudge(vararg held: CompletableDeferred<String>) {
+        realJudge = graph.judge
+        val queue = ArrayDeque(held.toList())
+        graph.judge = TurnJudge(
+            secrets = { KEY },
+            enabled = { true },
+            client = JudgeClient { _, _, _ -> queue.removeFirstOrNull()?.await() },
         )
     }
 
@@ -304,6 +319,48 @@ class SentencesFlowTest {
     }
 
     /**
+     * **«Έτοιμο» and then «Παράλειψη» inside one judge call: one row, and nothing on the board after
+     * it.**
+     *
+     * This was a live two-tap defect, not a parity item. The typed judge was a bare `launch` that
+     * nothing held and the skip guarded nothing, so board 1's verdict arrived on board 2: `finishing`
+     * set, a green tick painted on a sentence he had never answered, board 1's sentence read out over
+     * it, and a **second** row written for board 1. Now the skip cancels the judge, writes the SKIPPED
+     * row a skip always writes, and the verdict that comes back afterwards is thrown away — it was
+     * never an answer to anything he is looking at.
+     */
+    @Test fun aBoardTheJudgeIsStillReadingIsPassedOnAtOnce() {
+        val held = CompletableDeferred<String>()
+        withHeldJudge(held)
+        runBlocking { graph.settings.setSentencesLevel(7) }
+        openBoard()
+        repeat(2) { skipBoard() }
+        compose.waitUntil(TIMEOUT_MS) { compose.onAllNodesWithTag(SENTENCE_TYPED_TAG).fetchSemanticsNodes().isNotEmpty() }
+
+        compose.onNodeWithTag(SENTENCE_TYPED_TAG).performTextInput("θέλω ψωμί")
+        compose.onNodeWithText("Έτοιμο").performClick()
+        compose.waitUntil(TIMEOUT_MS) { onScreen(READING) }
+
+        // The way out is live while it reads, and it really is the way out.
+        compose.onNodeWithText("Παράλειψη").assertIsEnabled()
+        compose.onNodeWithText("Παράλειψη").performClick()
+
+        compose.waitUntil(TIMEOUT_MS) { attempts().any { it.detail.contains(TYPED_ROW) } }
+        compose.waitForIdle()
+        val typed = attempts().filter { it.detail.contains(TYPED_ROW) }
+        assertEquals("a skipped typed board wrote more than its own row: $typed", 1, typed.size)
+        assertEquals("a board he passed on is a skip", Outcome.SKIPPED, typed.single().outcome)
+        assertEquals(LEVEL_7, typed.single().itemId)
+
+        // And now the answer to the board he left arrives. Nothing of it may reach the board he is on.
+        held.complete("""{"accept":true,"expanded":null,"feedback":"Ωραία πρόταση.","score":1}""")
+        compose.waitForIdle()
+        assertEquals("a verdict he walked away from wrote a second row", 1, attempts().count { it.detail.contains(TYPED_ROW) })
+        assertTrue("a verdict he walked away from marked the next board", !answered())
+        assertTrue("and spoke its warm line on it", !onScreen("Ωραία πρόταση."))
+    }
+
+    /**
      * A device whose words have all been deleted has no sentence to offer. It has to say so and let
      * him straight out — the one thing it must never do is hold him on a screen with nothing on it.
      */
@@ -418,6 +475,10 @@ class SentencesFlowTest {
         compose.waitForIdle()
     }
 
+    /** Whether any node on the screen carries [text]. */
+    private fun onScreen(text: String): Boolean =
+        compose.onAllNodes(hasText(text, substring = true)).fetchSemanticsNodes().isNotEmpty()
+
     /** True once the sentence is finished, right or wrong. */
     private fun answered(): Boolean = compose.onAllNodes(hasText("Επόμενο")).fetchSemanticsNodes().isNotEmpty() ||
         correctionText() != null
@@ -470,6 +531,9 @@ class SentencesFlowTest {
         val SEED_WORDS = listOf("θέλω", "νερό")
 
         const val CORRECTION = "Σωστά: "
+
+        /** What a typed board says while the judge reads it. The skip stays live under it. */
+        const val READING = "Διαβάζω..."
         const val LEVEL_4 = "sentences:level:4"
         const val LEVEL_5 = "sentences:level:5"
         const val LEVEL_7 = "sentences:level:7"

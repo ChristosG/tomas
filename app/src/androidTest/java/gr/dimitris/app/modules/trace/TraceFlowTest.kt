@@ -505,19 +505,19 @@ class TraceFlowTest {
     }
 
     /**
-     * A board the judge is still reading cannot be passed on, and the button says so.
+     * **A board the judge is still reading is passed on at once, and the reading is cancelled.**
      *
-     * «Παράλειψη» used to stay live through «Διαβάζω...», which is how the answer to board 1 could
-     * arrive on board 2 — marking it finished, reading his old sentence out over it and writing a row
-     * against a sentence he had never written there. The verdict he is waiting for belongs to *this*
-     * board, so the door is shut at both ends: nothing moves while it reads (this test), and a
-     * judgement that has been left behind is cancelled rather than applied
-     * ([aJudgeLeftBehindNeverLandsOnTheBoardAfterIt]).
+     * «Παράλειψη» was dead for as long as «Διαβάζω...» was on the screen — up to the judge's eight
+     * seconds, which is exactly when a man who has typed a sentence with one hand wants out, and a
+     * button that does nothing when pressed teaches him the button is broken. So the skip cancels the
+     * verdict instead of waiting for it: the board moves on, the row says SKIPPED as every skip does,
+     * and the answer that arrives afterwards lands nowhere
+     * ([aJudgeLeftBehindNeverLandsOnTheBoardAfterIt] is the same door from the other side).
      *
-     * This is «SQL»'s rule for a query inside SQLite, and the wait is the judge's eight seconds at
-     * the very most.
+     * «Έτοιμο» stays off while it reads, which is a different thing: a second press would be a second
+     * question about the same board, not a way off it.
      */
-    @Test fun aBoardTheJudgeIsStillReadingCannotBePassedOn() {
+    @Test fun aBoardTheJudgeIsStillReadingIsPassedOnAtOnce() {
         waitForVocabulary()
         val held = CompletableDeferred<String>()
         withHeldJudge(held)
@@ -530,30 +530,39 @@ class TraceFlowTest {
         compose.onNodeWithText("Έτοιμο").performClick()
         compose.waitUntil(TIMEOUT_MS) { compose.onAllNodes(hasText(READING)).fetchSemanticsNodes().isNotEmpty() }
 
-        // Reading: the two ways off this board are both off, and neither is a button that does nothing.
-        compose.onNodeWithText("Παράλειψη").assertIsNotEnabled()
+        // Reading: the way out is live, and asking again is not.
+        compose.onNodeWithText("Παράλειψη").assertIsEnabled()
         compose.onNodeWithText("Έτοιμο").assertIsNotEnabled()
         compose.onNodeWithText("Παράλειψη").performClick()
-        compose.waitForIdle()
-        compose.onNodeWithText("Γράψε 1/6").assertIsDisplayed()
-        assertTrue("passing on a board mid-judgement wrote a row", attempts().isEmpty())
 
-        // The answer lands on the board that asked for it, and the way on comes back with it.
+        // The board he passed on is behind him, with one row for it and nothing waiting on the judge.
+        compose.waitUntil(TIMEOUT_MS) { attempts().isNotEmpty() }
+        compose.waitForIdle()
+        val row = attempts().single()
+        assertEquals("a board he passed on is a skip", Outcome.SKIPPED, row.outcome)
+        assertEquals("${ITEM_ID_PREFIX}5", row.itemId)
+        compose.onNodeWithText("Γράψε 2/6").assertIsDisplayed()
+        assertTrue("the new board is still reading", compose.onAllNodes(hasText(READING)).fetchSemanticsNodes().isEmpty())
+
+        // And now the answer to the board he left arrives. Nothing of it may reach the board he is on.
         held.complete("""{"accept":false,"expanded":"Ο μπαμπάς πίνει τον καφέ.","feedback":"Κοντά είσαι.","score":0.4}""")
-        compose.waitUntil(TIMEOUT_MS) {
-            compose.onAllNodes(hasText("Ο μπαμπάς πίνει τον καφέ.", substring = true)).fetchSemanticsNodes().isNotEmpty()
-        }
+        compose.waitForIdle()
+        assertEquals("a verdict he walked away from wrote a row", 1, attempts().size)
+        assertTrue(
+            "a verdict he walked away from painted the board after it",
+            compose.onAllNodes(hasText("Ο μπαμπάς πίνει τον καφέ.", substring = true)).fetchSemanticsNodes().isEmpty(),
+        )
         compose.onNodeWithText("Παράλειψη").assertIsEnabled()
-        assertTrue("a refused sentence was written down as an attempt", attempts().isEmpty())
     }
 
     /**
      * And the other end of the same door: a judgement he has walked away from is **cancelled**, not
      * applied to whatever is on the screen when it comes back.
      *
-     * The one way off a board that is still being read is the dots row — his own difficulty, which is
-     * on the same screen as the field at this level and rebuilds the sitting under it. Before the fix
-     * the typed judge was a bare `launch` that nothing held: it survived the rebuild, and when it
+     * Two ways off a board that is still being read, and this drives both: «Παράλειψη», which cancels
+     * the reading and writes its SKIPPED row, and the dots row — his own difficulty, on the same screen
+     * as the field at this level — which throws the whole sitting away and builds a new one. Before the
+     * fix the typed judge was a bare `launch` that nothing held: it survived the rebuild, and when it
      * answered, `checking` was true again (because of the *new* board's own «Έτοιμο») so the guard
      * did not fire and board 1's verdict — its feedback, its sentence, its row — landed on a board he
      * had never answered.
@@ -574,29 +583,32 @@ class TraceFlowTest {
             compose.runOnUiThread { vm.onTypedChange("ο μπαμπάς πίνει τον καφέ"); vm.submitTyped() }
             compose.waitUntil(TIMEOUT_MS) { vm.state.value.checking }
 
-            // «Παράλειψη» is refused while it reads, so nothing can inherit this verdict that way.
+            // «Παράλειψη» cancels the reading and passes on the board: board 2, one SKIPPED row, and
+            // nothing left waiting for the verdict.
             compose.runOnUiThread { vm.skip() }
-            assertEquals("a board being read was passed on", 0, vm.state.value.index)
-            assertTrue("passing on a board mid-judgement wrote a row", attempts().isEmpty())
+            assertEquals("a board he passed on is still the board he is on", 1, vm.state.value.index)
+            assertFalse("the new board inherited «Διαβάζω...»", vm.state.value.checking)
+            compose.waitUntil(TIMEOUT_MS) { attempts().isNotEmpty() }
+            assertEquals("a skip wrote more than its own row", 1, attempts().size)
+            assertEquals(Outcome.SKIPPED, attempts().single().outcome)
 
-            // He moves the dots instead, which throws the whole sitting away and builds a new one.
+            // He moves the dots as well, which throws the whole sitting away and builds a new one.
             compose.runOnUiThread { vm.reload() }
             compose.waitUntil(TIMEOUT_MS) { vm.state.value.sentence != null && !vm.state.value.checking }
 
-            // And now the answer to the sitting he left arrives.
+            // And now the answer to the board he left arrives.
             first.complete("""{"accept":true,"expanded":null,"feedback":"Ωραία πρόταση.","score":1}""")
             compose.waitForIdle()
             assertFalse("a verdict he walked away from finished a board", vm.state.value.finished)
             assertEquals("it spoke on the new board", null, vm.state.value.feedback)
-            assertTrue("a verdict he walked away from wrote a row", attempts().isEmpty())
+            assertEquals("a verdict he walked away from wrote a row", 1, attempts().size)
 
             // The new board is his to answer, with its own judge and its own row.
             compose.runOnUiThread { vm.onTypedChange("πίνω τον καφέ το πρωί"); vm.submitTyped() }
             compose.waitUntil(TIMEOUT_MS) { vm.state.value.checking }
             second.complete("""{"accept":true,"expanded":null,"feedback":"Μπράβο.","score":1}""")
-            compose.waitUntil(TIMEOUT_MS) { attempts().isNotEmpty() }
-            assertEquals("one board, one row", 1, attempts().size)
-            assertEquals(Outcome.CORRECT, attempts().single().outcome)
+            compose.waitUntil(TIMEOUT_MS) { attempts().size == 2 }
+            assertEquals("one board, one row", 1, attempts().count { it.outcome == Outcome.CORRECT })
             assertEquals("Μπράβο.", vm.state.value.feedback)
         } finally {
             compose.runOnUiThread { vm.leave {} }

@@ -361,7 +361,8 @@ class TraceViewModel(
      *
      * Cancelled by [leave] and by [reload]: a judgement that comes back after «Πίσω» would say
      * «Μπράβο» to an empty screen, speak over the silence the back arrow asked for, and write a row
-     * behind the session that has already counted them.
+     * behind the session that has already counted them. And by [skip] on a typed board, which is how
+     * «Παράλειψη» stays live through «Διαβάζω...» instead of being dead for eight seconds.
      *
      * One job and not two, because a board is either a paper or a keyboard and never both. Holding
      * the typed judge here is what makes it *cancellable* at all: an answer that is eight seconds
@@ -958,13 +959,19 @@ class TraceViewModel(
         val s = _state.value
         // One skip per letter: the button is still there for a frame, and a second tap would pass on
         // the letter that has not been shown yet.
+        if (finishing || ending || s.text.isEmpty()) return
+        // **A skip while the judge reads cancels the judge and skips.** It used to refuse, with the
+        // button greyed for as long as «Διαβάζω...» was on the screen — up to eight seconds, which is
+        // exactly when a man who has just typed a sentence with one hand wants out, and a button that
+        // does nothing when pressed teaches him the button is broken. The verdict is thrown away: he
+        // did not wait for it, and a board he has left cannot be told what the judge made of it.
         //
-        // And never while the judge is reading a sentence of his, which is «SQL»'s rule for a query
-        // inside SQLite and the same one for the same reason: the verdict he is waiting for belongs
-        // to *this* board, and a board he has already left cannot be told what the judge made of it.
-        // The button says so — it is off for as long as «Διαβάζω...» is on the screen — and the wait
-        // is bounded by the judge's own eight seconds.
-        if (finishing || ending || s.checking || s.text.isEmpty()) return
+        // Only the typed judge is cancelled here. The letter scorer is the same [judgeJob] but it is
+        // milliseconds rather than seconds, nothing on the screen waits for it, and it holds [judging]
+        // — a flag its own `finally`-less body clears when it finishes, so cancelling it would leave
+        // «Έτοιμο» dead for the rest of the sitting. Its own guard already drops a score for a letter
+        // that has been skipped (`finishing` is true by then).
+        if (s.checking) judgeJob?.cancel()
         finishing = true
         graph.feedback.nudge()
         // No numbers on a skipped row: the last failed try's mean and coverage belong to a trace he

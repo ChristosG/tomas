@@ -168,6 +168,19 @@ class SentencesViewModel(
     /** The typed board he is on, or null on a board that is not one. One per board, like the sentence. */
     private var typing: TypedCheck? = null
 
+    /**
+     * The judge reading a sentence he typed.
+     *
+     * Held in a field so that it can be **cancelled**: an answer that is eight seconds away and belongs
+     * to a board he has left must not be able to settle onto the one he is on. [skip] cancels it and
+     * passes on the board, [reload] and [leave] cancel it on their way out, and the next «Έτοιμο»
+     * replaces it. Before this it was a bare `launch` that nothing held, and «Έτοιμο» then «Παράλειψη»
+     * inside one judge call painted board 1's verdict on board 2 — green tick, his old sentence read
+     * out over it, and a second row written against board 1. «Γράψε»'s `judgeJob` is the same field for
+     * the same reason.
+     */
+    private var judgeJob: Job? = null
+
     /** What the judge said about the board just finished, for the attempt row. */
     private var lastVerdict: Map<String, Any?> = emptyMap()
 
@@ -188,6 +201,9 @@ class SentencesViewModel(
     fun reload() {
         if (ending || finishing) return
         loadJob?.cancel()
+        // The sitting he typed into is about to be thrown away; a verdict about it must not survive
+        // the rebuild and land on the board that replaces it.
+        judgeJob?.cancel()
         graph.voice.quiet()
         load()
     }
@@ -379,7 +395,10 @@ class SentencesViewModel(
         val said = s.typed.trim()
         if (said.isEmpty()) return
         _state.update { it.copy(checking = true) }
-        viewModelScope.launch {
+        // Whatever was in flight before this press is not an answer to it. There can normally only be
+        // one — `checking` is set by this press — but the invariant is held here, where it is cheap.
+        judgeJob?.cancel()
+        judgeJob = viewModelScope.launch {
             val written = try {
                 // The judge is given the line he is reading, word and all — «Γράψε μια ερώτηση για:
                 // φαρμακείο» — and not just the word. A model told only «φαρμακείο» has the same
@@ -395,6 +414,13 @@ class SentencesViewModel(
                 _state.update { it.copy(checking = false) }
                 return@launch
             }
+            // The board he asked about is still the board he is on. The judge takes seconds and
+            // «Παράλειψη» stays live through them, so the answer to board 1 could otherwise land on
+            // board 2: a green tick on a sentence he never answered, his old sentence spoken over it,
+            // and a second row written against board 1. The sentence's identity **and** `checking`,
+            // because `checking` is what this press set and what everything that moves the board
+            // clears ([advance], [load]).
+            if (ending || _state.value.sentence !== sentence || !_state.value.checking) return@launch
             lastVerdict = written.judge
             if (written.accepted) {
                 graph.feedback.success()
@@ -479,12 +505,20 @@ class SentencesViewModel(
         _state.update { it.copy(modelPlaying = false) }
     }
 
+    /**
+     * «Παράλειψη». **A skip while the judge is reading cancels the judge and skips**: the verdict he
+     * did not wait for is thrown away, the row says SKIPPED as every skip does, and the next board
+     * arrives clean. The button is live through «Διαβάζω...» for that reason — a button that does
+     * nothing for eight seconds is a button he learns is broken.
+     */
     fun skip() {
         val s = _state.value
         val sentence = s.sentence ?: return
         // One skip per sentence: the button is still there for a frame, and a second tap would pass
         // on the sentence that has not been shown yet.
         if (finishing || ending) return
+        // Nothing is coming back for a board he has passed on, so nothing may arrive on the next one.
+        judgeJob?.cancel()
         finishing = true
         graph.feedback.nudge()
         // Whatever he had put down when he passed on it: the cards on a built board, the half a
@@ -562,6 +596,9 @@ class SentencesViewModel(
      */
     fun leave(then: () -> Unit) {
         loadJob?.cancel()
+        // A judgement that came back after «Πίσω» would speak over the silence the back arrow asked
+        // for and write a row behind a session that has already counted them.
+        judgeJob?.cancel()
         silence()
         val write = lastWrite
         viewModelScope.launch { write?.join(); then() }

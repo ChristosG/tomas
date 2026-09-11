@@ -143,6 +143,9 @@ fun SentencesScreen(count: Int, sessionId: String?, onDone: () -> Unit, onLeave:
                 variant == Variant.TYPED -> {
                     BigButton("Έτοιμο", onClick = vm::submitTyped, enabled = s.typed.isNotBlank() && !s.checking)
                     Spacer(Modifier.height(Sizes.gapSmall))
+                    // Live through «Διαβάζω...»: a skip cancels the reading and passes on the board
+                    // ([SentencesViewModel.skip]), rather than being a button that does nothing for
+                    // the judge's eight seconds.
                     QuietButton("Παράλειψη", onClick = vm::skip)
                 }
                 // A gap board has nothing to take back: one tap is the whole answer.
