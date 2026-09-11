@@ -1,6 +1,7 @@
 package gr.dimitris.app.modules.sql
 
 import gr.dimitris.app.core.data.AttemptDao
+import gr.dimitris.app.core.data.Category
 import gr.dimitris.app.core.data.ItemDao
 import gr.dimitris.app.core.data.ItemKind
 import gr.dimitris.app.core.data.ModuleId
@@ -152,6 +153,11 @@ class SqlTables(val tables: List<SqlTable>) {
             val counts = attempts.mostUsed(ModuleId.WORDCOACH, WORD_ROWS * 8, SessionViewModel.SESSION_SUMMARY).first()
                 .associate { it.itemId to it.n }
             val rows = items.activeOfKinds(listOf(ItemKind.WORD, ItemKind.PHRASE))
+                // The sung sentences are not words he practises: they belong to «Τραγούδα και πες το»
+                // alone, and the word coach and the talk board already keep them out. A «λέξεις» table
+                // with «Πόσο κάνει το ψωμί;» under «Τραγούδι» in it would be the third place that
+                // forgot — and a `φορές` of 0 on every one of them, because «Λέξεις» never asks them.
+                .filterNot { it.category == Category.SINGING }
                 .mapNotNull { item ->
                     val text = cell(item.text) ?: return@mapNotNull null
                     Triple(text, item.category.greek, counts[item.id] ?: 0)

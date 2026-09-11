@@ -96,8 +96,20 @@ data class ItemEditState(
      * Leaving the screen with the recorder running would have the practice screen cancel the take
      * on its way out while this form still believed it was recording: «Στοπ» would then be showing
      * for a take that no longer exists, and pressing it would fail.
+     *
+     * **A sung sentence stops it too.** «Δοκίμασέ το» runs the item through the word coach
+     * (`Routes.practiceItem` names that module for any id, and `PracticeViewModel.named` filters
+     * nothing), and a `SINGING` phrase is the one kind of item the word coach is written to keep out:
+     * it is a twenty-syllable read-aloud for «Τραγούδα και πες το», not a word to name under a
+     * picture. The hint under the category chips says so, because a dead button explains nothing.
      */
-    val canTry: Boolean get() = !saving && !isRecording && !isRecordingSung
+    val canTry: Boolean get() = !saving && !isRecording && !isRecordingSung && !isSungSentence
+
+    /**
+     * A phrase filed under «Τραγούδι»: the sing-say tile's own content, excluded from the word coach
+     * pool, the talk board and the first-sound work. See [Category.SINGING].
+     */
+    val isSungSentence: Boolean get() = kind == ItemKind.PHRASE && category == Category.SINGING
 }
 
 class ItemEditViewModel(private val graph: AppGraph, private val itemId: String?) : ViewModel() {

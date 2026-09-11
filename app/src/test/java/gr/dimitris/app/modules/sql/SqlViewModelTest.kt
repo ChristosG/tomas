@@ -180,6 +180,29 @@ class SqlViewModelTest {
         )
     }
 
+    /**
+     * The sung sentences are «Τραγούδα και πες το»'s alone, and `λέξεις` is the third place that has to
+     * know it — after the word coach pool and the talk board.
+     *
+     * Nothing would have crashed: the row is text like any other. But «Πόσο κάνει το ψωμί;» under
+     * «Τραγούδι» with `φορές` 0 is a row about an exercise «Λέξεις» never asks, in a table whose whole
+     * claim is that it is the words he practises — and a man writing `SELECT λέξη FROM λέξεις WHERE
+     * φορές = 0` would get a page of sentences he has never been asked once.
+     */
+    @Test fun `a sung sentence is not one of the words he practises`() = runTest {
+        val items = FakeItemDao()
+        val coffee = Item(text = "καφές", kind = ItemKind.WORD, category = Category.FOOD)
+        val sung = Item(text = "Πόσο κάνει το ψωμί;", kind = ItemKind.PHRASE, category = Category.SINGING)
+        val asked = Item(text = "θέλω καφέ", kind = ItemKind.PHRASE, category = Category.QUICK)
+        items.upsertAll(listOf(coffee, sung, asked))
+
+        val words = SqlTables.words(items, FakeAttemptDao())
+
+        // Nobody has practised either, so the name breaks the tie — the table is the same twice running.
+        assertEquals(listOf("θέλω καφέ", "καφές"), words.rows.map { it[0] })
+        assertTrue("«Τραγούδι» reached a table he reads", words.rows.none { it[1] == Category.SINGING.greek })
+    }
+
     @Test fun `an apostrophe in a word of his never reaches a table`() = runTest {
         val items = FakeItemDao()
         items.upsert(Item(text = "'; DROP TABLE λέξεις; --", kind = ItemKind.WORD, category = Category.CUSTOM))

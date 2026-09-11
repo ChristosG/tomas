@@ -2,6 +2,7 @@ package gr.dimitris.app.caregiver.content
 
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isEnabled
@@ -11,6 +12,7 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTouchInput
 import androidx.test.core.app.ApplicationProvider
@@ -24,6 +26,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -114,6 +117,32 @@ class ItemEditFlowTest {
         assertEquals(1, runBlocking { drafts() }.size)
     }
 
+    /**
+     * **A sung sentence says what «Τραγούδι» means and cannot be run through the word coach.**
+     *
+     * «Δοκίμασέ το» opens the word coach for any id, and a `SINGING` phrase is the one item the word
+     * coach is written to keep out — a twenty-syllable read-aloud is not a word to name under a
+     * picture. The caregiver opens exactly these rows, because the sung take is recorded on this form.
+     * So the button goes off, and the line under the chips says why: a dead button with no explanation
+     * would be a worse bug than the one it fixes.
+     */
+    @Test fun aSungSentenceSaysWhatTheCategoryCostsAndCannotBeRun() {
+        openTheSeededWord()
+        compose.onNodeWithText(TRY_IT).assertIsEnabled()
+        assertFalse("the hint is on a form nobody has filed under «Τραγούδι»", shown(SINGING_HINT))
+
+        compose.onNodeWithText(PHRASE).performScrollTo().performClick()
+        compose.onNodeWithText(SINGING).performScrollTo().performClick()
+
+        compose.waitUntil(TIMEOUT_MS) { shown(SINGING_HINT) }
+        compose.onNodeWithText(SINGING_HINT).assertIsDisplayed()
+        compose.onNodeWithText(TRY_IT).assertIsNotEnabled()
+
+        // A word filed under «Τραγούδι» is still a word: it is the pair that excludes it.
+        compose.onNodeWithText(WORD_KIND).performScrollTo().performClick()
+        compose.onNodeWithText(TRY_IT).assertIsEnabled()
+    }
+
     /** Hold the name, say yes, open the words — the way a caregiver gets here. */
     private fun openTheWordList() {
         compose.onNodeWithTag("title").performTouchInput {
@@ -153,6 +182,11 @@ class ItemEditFlowTest {
 
         const val TRY_IT = "Δοκίμασέ το"
         const val NEW_WORD = "Νέα λέξη"
+
+        /** The two chips the sung-sentence case taps, and the category it files it under. */
+        const val WORD_KIND = "Λέξη"
+        const val PHRASE = "Φράση"
+        val SINGING = Category.SINGING.greek
         const val WORDS_ENTRY = "Λέξεις και εικόνες"
         const val EDITOR_TITLE = "Επεξεργασία"
         const val HELP = "Βοήθεια"

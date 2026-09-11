@@ -1,5 +1,6 @@
 package gr.dimitris.app.caregiver.content
 
+import gr.dimitris.app.core.data.Category
 import gr.dimitris.app.core.data.Item
 import gr.dimitris.app.core.data.ItemKind
 import org.junit.Assert.assertEquals
@@ -45,6 +46,28 @@ class ItemEditStateTest {
     /** A refusal she has read does not take the button away — she may fix it and try again. */
     @Test fun `an error on the form does not stop it`() =
         assertTrue(saved.copy(error = "Η τιμή θέλει μορφή 3,50").canTry)
+
+    /**
+     * **And never a sung sentence.**
+     *
+     * «Δοκίμασέ το» runs the item through the word coach — `Routes.practiceItem` names that module for
+     * any id and `PracticeViewModel.named` filters nothing — which is the one place a `SINGING` phrase
+     * is written to stay out of: a twenty-syllable read-aloud is not a word to name under a picture.
+     * The caregiver opens exactly these rows, because the sung take is recorded on this form. The hint
+     * under the chips is what stops it being a button with no explanation.
+     */
+    @Test fun `a sung sentence cannot be run through the word coach`() {
+        val sung = saved.copy(
+            text = "Μπορείτε να μου πείτε πού είναι το φαρμακείο;",
+            kind = ItemKind.PHRASE, category = Category.SINGING,
+        )
+        assertFalse(sung.canTry)
+        assertTrue("and the form knows to say why", sung.isSungSentence)
+        // It is the pair that excludes it. A word somebody filed under «Τραγούδι» is still a word, and
+        // a phrase in any other category is still the talk board's and the word coach's.
+        assertTrue(sung.copy(kind = ItemKind.WORD).canTry)
+        assertTrue(sung.copy(category = Category.CUSTOM).canTry)
+    }
 
     // ------------------------------------------- the two gradings the form writes onto the row
 

@@ -156,6 +156,13 @@ fun ItemEditScreen(itemId: String?, onClose: () -> Unit, onTry: (String) -> Unit
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Category.entries.forEach { c -> KindChip(c.greek, s.category == c) { vm.setCategory(c) } }
             }
+            // «Τραγούδι» is the one category that takes the item *out* of two places he uses every
+            // day, and nothing on this form said so: a caregiver who filed «θέλω καφέ» under it would
+            // have watched it vanish from the talk board with no explanation. It is also why
+            // «Δοκίμασέ το» is dead on a sung sentence ([ItemEditState.canTry]).
+            if (s.category == Category.SINGING) {
+                Text(SINGING_HINT, style = MaterialTheme.typography.bodyMedium)
+            }
             Spacer(Modifier.height(Sizes.gap))
 
             // Only a word is ever a noun: a phrase takes no article, and a row of chips under
@@ -291,6 +298,17 @@ fun ItemEditScreen(itemId: String?, onClose: () -> Unit, onTry: (String) -> Unit
  */
 private val GENDERS: List<Pair<String, String>> =
     listOf(Gender.MASCULINE.code to "Α", Gender.FEMININE.code to "Θ", Gender.NEUTER.code to "Ο")
+
+/**
+ * What «Τραγούδι» costs, said once, under the chips.
+ *
+ * One line, because it is the answer to one question — "why did the card disappear?" — and the
+ * caregiver reading it is not looking for a paragraph. «Λέξεις» and «ο πίνακας» are the two places it
+ * is kept out of (`WordCoachModule.asks`, `TalkBoardViewModel`); the sung sentences of phase 13 are
+ * the whole of what the category is for.
+ */
+internal const val SINGING_HINT =
+    "Μόνο για το «Τραγούδα και πες το» — δεν μπαίνει στις Λέξεις ούτε στον πίνακα."
 
 @Composable
 private fun KindChip(label: String, selected: Boolean, onClick: () -> Unit) {
