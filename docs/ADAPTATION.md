@@ -366,10 +366,11 @@ the phone twice — it syncs to the father's server, and it goes to Claude insid
 - **Whether the judge is worth its latency.** `ms` with `source: "JUDGE"` is the whole cost of the
   feature. A median above about three seconds is a green button greyed for three seconds on every
   turn, and at that point the local fallback is the better experience even with a working key. Phase 13
-  added two callers and one of them raises the stake: on «Γράψε»'s typed board **«Παράλειψη» is off for
-  as long as the judge reads** (the verdict belongs to the board that asked for it), so a slow judge is
-  not only a wait there but a way out he cannot take. A median over five seconds on `TRACE` rows is
-  reason enough to turn «Έλεγχος με Claude» off for that tile rather than to wait it out.
+  added two callers, so five modules now pay it. The way out is never closed — a «Παράλειψη» taken while
+  the judge reads **cancels** it and writes the SKIPPED row — but a verdict he walks away from is a verdict
+  nobody is judged on, so a slow judge shows up as SKIPPED rows rather than as long `ms`. A median over
+  five seconds on `TRACE` rows is reason enough to turn «Έλεγχος με Claude» off for that tile rather than
+  to wait it out.
 - **Whether it is actually running.** A month of `source: "LOCAL"` on a phone whose caregiver
   believes «Έλεγχος με Claude» is on is an expired key nobody was told about. The journey report now
   says so per module («χωρίς Claude N»); an insight rule could say it on the dashboard too.
@@ -385,16 +386,19 @@ plus `difficulty_floor_*` / `difficulty_ceiling_*` for the caregiver's bounds �
 *setting in force*, not a fact about one exercise, and it does not change between two rows of the
 same sitting.
 
-What is on the row is `level`, which the three levelled modules already wrote (phase 11) and which
-moves *with* the dot: a dot picks a band of levels and the level is held inside it, so
-`Difficulty.numbersDot(level)` and its two siblings read a row's dot back exactly. «Διάλογοι» and
+What is on the row is `level`, which the levelled modules already wrote (phase 11) and which moves *with*
+the dot: a dot picks a band of levels and the level is held inside it, so `Difficulty.numbersDot(level)`
+and its siblings read a row's dot back exactly. «SQL» is the simple case of that — its level *is* its dot,
+written by his own tap and held by the caregiver's bounds, so `sql:level:N` names the dot in the item id. «Διάλογοι» and
 «Δεξί χέρι» carry the thing the dot selects on instead — `tier` and `sizeDp` — which is the same
 information one step closer to the exercise. «Λέξεις» and «Τραγούδα» carry neither: what the dot
 selects there is a property of the *item* (its `kind`, its syllable count), so a row's dot is
 recoverable only by looking the item up, and for a word a caregiver has since deleted, not at all.
 
 The current dot per module is in the journey report's «Ανά άσκηση» section as `δυσκολία n/5`, so the
-advisor can be asked which one to move next. If a later phase wants the dot *on the row* — to ask
+advisor can be asked which one to move next — and the `levels` object of its «Εστίαση» answer can move
+five of them on a caregiver's tap: `numbers`, `sentences`, `trace`, and since phase 13 `sql` and `steps`,
+where the number *is* the dot (1–5) rather than a level inside a band. If a later phase wants the dot *on the row* — to ask
 "was this sitting run at 3 or at 4?" without joining against a preference that has since moved — one
 `put("difficulty", …)` in each module's detail builder is the whole change, and this file is where to
 say so.

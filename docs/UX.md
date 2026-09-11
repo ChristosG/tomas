@@ -61,19 +61,21 @@ primary. `QuietButton` is the app's genuinely secondary control — outlined, an
 | | finished | «Εντάξει» | «Εντάξει» |
 | Προτάσεις (`SentencesScreen`) | correct | «Άκου», «Επόμενο» | «Επόμενο» |
 | | typed board | «Άκου», «Έτοιμο», «Παράλειψη» | «Έτοιμο» |
+| | typed board, while «Διαβάζω...» | «Άκου», «Έτοιμο» (dead), «Παράλειψη» | — (a skip cancels the reading) |
 | | gap board | «Άκου», «Παράλειψη» | — |
 | | card board | «Άκου», σβήσε, «Παράλειψη» | — |
 | | finished | «Εντάξει» | «Εντάξει» |
 | Βήματα (`StepsScreen`) | listening | «Στοπ» | «Στοπ» |
 | | ordering the steps | «Έτοιμο», «Άκου», «Παράλειψη» | «Έτοιμο» |
 | | telling them | «Μίλα» / «Το είπα!», «Άκου», «Παράλειψη» | «Μίλα» / «Το είπα!» |
+| | telling them, while «Διαβάζω...» | «Μίλα», «Άκου», «Παράλειψη» (all live) | «Μίλα» (a skip or a second «Μίλα» cancels the reading) |
 | | finished | «Εντάξει» | «Εντάξει» |
 | Γράψε (`TraceScreen`) | passed | «Επόμενο» | «Επόμενο» |
 | | recall word, still shown | «Καθάρισε», «Το είδα», «Παράλειψη» | «Το είδα» |
 | | level 4 (dictation), clean paper | «Άκου», «Έτοιμο» (dead), «Παράλειψη» | — («Έτοιμο» wakes on the first stroke) |
 | | level 4, ink on the paper | «Καθάρισε», «Έτοιμο», «Παράλειψη» | «Έτοιμο» |
 | | level 5 (typed) | «Άκου», «Έτοιμο», «Παράλειψη» | «Έτοιμο» |
-| | level 5, while «Διαβάζω...» | «Άκου», «Έτοιμο» (dead), «Παράλειψη» (dead) | — |
+| | level 5, while «Διαβάζω...» | «Άκου», «Έτοιμο» (dead), «Παράλειψη» | — (a skip cancels the reading) |
 | | otherwise | «Καθάρισε», «Έτοιμο», «Παράλειψη» | «Έτοιμο» |
 | | finished | «Εντάξει» | «Εντάξει» |
 | Δεξί χέρι (`ArcadeScreen`) | playing | «Παράλειψη» | — |
@@ -270,13 +272,17 @@ paper he cannot ask for the word again without clearing first.** Hearing it matt
 sheet, which is why that is the way round it went; if he turns out to want the word again with ink
 already on the paper, this is the trade to revisit.
 
-**Level 5, the typed sentence: «Παράλειψη» is off while «Διαβάζω...» is on the screen.** It is the only
-button in the app that is deliberately dead for as long as eight seconds, and the reason is that the
-verdict he is waiting for belongs to *this* board: a skip taken mid-judgement used to let board 1's
-answer land on board 2, marking a sentence he never wrote. «SQL» does the same for the two seconds a
-query of his is inside SQLite. The back arrow still works throughout and still writes nothing, and the
-wait is the judge's own timeout at the very most — but it is the first thing to look at if a phone with
-no signal ever leaves him stuck on a board.
+**«Παράλειψη» stays live while «Διαβάζω...» is on the screen, and a skip cancels the reading.** This was
+the other way round at first — the button was dead for as long as the judge took, up to eight seconds —
+because the verdict he was waiting for belongs to *this* board and a skip taken mid-judgement used to let
+board 1's answer land on board 2, marking a sentence he never wrote. Both halves of that are true, and
+the app now keeps the second one by cancelling rather than by waiting: the skip throws the verdict away,
+writes the SKIPPED row every skip writes, and the next board opens clean. He did not wait for the answer,
+so he does not get it. The three screens with a judge behind them do this — «Γράψε» level 5, «Προτάσεις»'
+typed board and «Βήματα»'s telling, where a second «Μίλα» cancels it too — and a man who has just typed a
+sentence with one hand or said thirty words is exactly the man who wants out. «SQL» is the one place a
+button is still deliberately dead, and it is the two seconds a query of his is inside SQLite: the runner's
+own limit, and it cannot be cancelled without throwing away work he can see on the screen.
 
 **The breath is spacing and silence, not a control.** A sentence longer than six syllables is now sung
 in breath groups, and both halves of that are things he hears and sees rather than things he presses:

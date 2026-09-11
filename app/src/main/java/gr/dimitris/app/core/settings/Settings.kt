@@ -541,9 +541,11 @@ class Settings(private val store: DataStore<Preferences>) {
      * off — or with no key saved — [gr.dimitris.app.core.judge.TurnJudge] never touches the network
      * and every turn is matched locally, exactly as it was before phase 12.
      *
-     * What goes up when it is on is one small JSON object of five fields — the kind of exercise, the
-     * question, the target, what the recogniser heard, and the 1–5 difficulty — and the fixed system
-     * prompt, which names him and states the three sentences of §1 that judging a sentence needs
+     * What goes up when it is on is one small JSON object of six fields — the kind of exercise, the
+     * question, the target, what the recogniser heard, the 1–5 difficulty, and (since phase 13) the
+     * *intent*, one Greek line saying what a good answer has to do, so that a board with more than one
+     * right answer is not marked against the one the app happened to have in mind — and the fixed
+     * system prompt, which names him and states the three sentences of §1 that judging a sentence needs
      * ([gr.dimitris.app.core.judge.JudgeContract.SYSTEM_PROMPT]). Never the audio, never a photo,
      * never an item id, never a history, and nothing about his health beyond those three sentences.
      * The caregiver-facing line under the toggle says the short version of this, because a caregiver

@@ -135,7 +135,9 @@ class ItemEditFlowTest {
         compose.onNodeWithText(SINGING).performScrollTo().performClick()
 
         compose.waitUntil(TIMEOUT_MS) { shown(SINGING_HINT) }
-        compose.onNodeWithText(SINGING_HINT).assertIsDisplayed()
+        // Scrolled to, because the form is longer than the screen: the line is under the chips she has
+        // just tapped, which on a medium phone is the bottom edge of the window.
+        compose.onNodeWithText(SINGING_HINT).performScrollTo().assertIsDisplayed()
         compose.onNodeWithText(TRY_IT).assertIsNotEnabled()
 
         // A word filed under «Τραγούδι» is still a word: it is the pair that excludes it.

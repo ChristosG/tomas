@@ -224,15 +224,17 @@ class StepsViewModel(
     private var listenJob: Job? = null
 
     /**
-     * When he last passed on the *ordering* of a task, so the second of a double tap cannot pass on the
-     * telling as well.
+     * When he last passed on an exercise, so that the second half of a double tap cannot pass on the
+     * next one.
      *
-     * [toTelling] opens the guard again the instant the ordering's row is written — it has to, because
-     * the telling is the next exercise — and «Παράλειψη» is still under his thumb for a frame after
-     * that. Two taps half a second apart would otherwise skip a whole task, rows and all, without
-     * showing him the second half of it.
+     * This module is the only one where one tap opens the *next* exercise straight away: the ordering's
+     * skip writes its row and goes to the telling of the same task ([toTelling] reopens `finishing` the
+     * instant it does, because the telling is a new exercise), and the telling's skip draws the next
+     * task. «Παράλειψη» is still under his thumb for a frame after either, so two taps half a second
+     * apart used to pass a whole task — rows and all — without his ever seeing the second half of it.
+     * Verified by hand on the emulator, which is where the second of the two cases turned up.
      */
-    private var orderSkippedAt = 0L
+    private var skippedAt = 0L
 
     /**
      * The attempt write of the exercise just finished. It runs on the app scope, so the end of the
@@ -582,6 +584,9 @@ class StepsViewModel(
      * seconds, which is exactly the moment a man who has just said thirty words wants out. The verdict
      * is then thrown away, which is the right trade: he did not wait for it. [stopRecogniser] is the
      * cancel — it kills the coroutine that is waiting on the judge and clears «Διαβάζω...» with it.
+     *
+     * One exercise per tap, always: see [skippedAt] for why this module needs a stamp where no other
+     * does.
      */
     fun skip() {
         val s = _state.value
@@ -589,15 +594,15 @@ class StepsViewModel(
         // One skip per exercise: the button is still there for a frame, and a second tap would pass on
         // the exercise that has not been shown yet.
         if (finishing || ending) return
-        // And a second tap after the *ordering*'s skip must not pass on the telling it has just opened.
-        if (s.stage == StepStage.TELL && now() - orderSkippedAt < DOUBLE_TAP_MS) return
+        // And a second tap must not pass on the exercise the first one has just opened. See [skippedAt].
+        if (now() - skippedAt < DOUBLE_TAP_MS) return
+        skippedAt = now()
         // Whatever was open is his to close by passing on the exercise: the window, and the judge
         // reading what came out of it.
         if (s.listening || s.thinking) stopRecogniser()
         graph.feedback.nudge()
         when (s.stage) {
             StepStage.ORDER -> {
-                orderSkippedAt = now()
                 record(task, stage = StepStage.ORDER, steps = s.chosen.map { it.text }, firstTry = false, skipped = true)
                 // The strip is set to the answer, because the telling stage is about an order he can
                 // read — and that is help, which the telling row has to carry.
@@ -788,9 +793,9 @@ class StepsViewModel(
         const val TELL_ITEM = "steps:tell:"
 
         /**
-         * How long after passing on the ordering a «Παράλειψη» is read as the second half of one tap
-         * rather than as a second decision. Half a second: longer than any double tap and far shorter
-         * than reading a strip of six steps and deciding you cannot tell them.
+         * How long after one skip a second «Παράλειψη» is read as the other half of one tap rather than
+         * as a second decision. Half a second: longer than any double tap and far shorter than reading a
+         * strip of six steps and deciding you cannot tell them.
          */
         const val DOUBLE_TAP_MS = 500L
     }

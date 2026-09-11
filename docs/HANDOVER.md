@@ -212,7 +212,9 @@ ladder he already had, or words that were not there before.
   the most even word boundary — with a rest three times as long before each group and 16 dp of space in
   front of its first syllable. No new control. The module is **still off unless a caregiver switches it
   on** (phase 12). The twenty sentences live on a shelf of their own, «Τραγούδι», which keeps them out
-  of «Λέξεις» and off the talk board: a naming exercise is not a twenty-syllable read-aloud.
+  of «Λέξεις» and off the talk board: a naming exercise is not a twenty-syllable read-aloud. The
+  caregiver's editor says so in one line under the category chips, and «Δοκίμασέ το» is off for a phrase
+  filed there — that button runs the word coach, which is the one place those sentences must not go.
 - **The database moved to v9** — `items.tier` and `items.gender`, additive migration, both optional on
   the wire. His phone and every caregiver phone must move to the phase 13 build together, as with v7
   and v8.
@@ -232,6 +234,14 @@ worth saying on the day he asks for «ελευθερία» and a sitting wants a
 «Γράψε» is one level per dot, because its five are five different exercises and being moved off the one
 he chose by a good morning is not something he asked for. The caregiver's floor and ceiling in
 Ρυθμίσεις → «Όρια δυσκολίας» work exactly as they did.
+
+**A ceiling is not all a dot does, on the two new tiles.** A «SQL» sitting is built at **one** level, so
+his tap writes that level too: dot 5 means a sitting of two-table questions, and the ceiling is what
+bounds how far a finished sitting may promote him afterwards. Without that the dots were decoration — a
+mixed sitting is three puzzles and the progression wants five results, so a man who only opens «Σήμερα»
+would never have met a `WHERE`. «Βήματα» has no stored level at all, so its sitting is **drawn at the
+dot**: half of it (rounded up) from tasks of that difficulty and the rest from under it, which makes the
+one task of a mixed sitting the work he asked for rather than a 4-in-20 chance of it.
 
 ### What happens once, on upgrade (phase 13)
 
@@ -267,8 +277,8 @@ he chose by a good morning is not something he asked for. The caregiver's floor 
   have become word-coach targets (a twenty-syllable read-aloud in a naming exercise) and twenty
   text-only cards on the talk board (clutter, for a slow reader). The «Τραγούδι» shelf is how they are
   kept out. The cost: a few genuinely useful request cards are missing from the talk board, and a
-  caregiver who files one of her own phrases there will find it excluded from both — which is correct
-  and is not explained anywhere on her screen.
+  caregiver who files one of her own phrases there will find it excluded from both — which is correct,
+  and the line under the chips in her editor is where it is now said.
 - **Nothing new appears at the default dot.** The vocabulary's default is still dot 2, so the new
   words are waiting behind a tap of his own. Moving the default would have changed every module's
   difficulty on upgrade, which is not a thing this phase should do quietly.
@@ -351,14 +361,14 @@ Every controller ruling is recorded in the "Execution record" section at the end
 - A future NOT NULL column must ship to all phones together (the sync validator rejects incomplete rows).
 - Screen readers are not supported (the number line names the answer in its content description).
 - The tremor tolerance in Γράψε was tuned with synthetic hand-like traces, not a real hand.
-- **Two buttons are deliberately dead for a moment.** «Παράλειψη» is off while a Γράψε sentence is with
-  the judge (up to eight seconds, the longest anywhere in the app) and while a SQL query of his is inside
-  SQLite (two seconds). Both exist so that a verdict cannot land on the next board; the back arrow works
-  throughout and writes nothing.
-- **A «Βήματα» sitting can report one exercise fewer than it planned.** A task is two attempt rows and
-  the module plans two items per task, so an *odd* budget (the session minimum is three) buys one task
-  and leaves one item unspent. Nothing he sees is wrong; a caregiver screen that ever printed "N of M"
-  would read oddly.
+- **One button is deliberately dead for a moment.** «Παράλειψη» is off for the two seconds a SQL query of
+  his is inside SQLite, because the only way to cancel it is to throw away work he can see on the screen.
+  The three judged boards — Γράψε level 5, «Προτάσεις» typed, «Βήματα»'s telling — keep theirs live and
+  **cancel the judge** instead: the verdict he did not wait for is thrown away and the row says SKIPPED.
+  The back arrow works throughout and writes nothing.
+- **A «Βήματα» sitting plans in whole tasks, so a mixed sitting is one exercise shorter.** A task is two
+  attempt rows, and the session's minimum share is three items — which now buys one task and promises two,
+  rather than promising three and writing two. The sitting loses an item it could not have run.
 - **The seed assets are 5.2 MB** — 326 vocabulary pictograms plus 92 for the step tasks, all in git. If
   the seed keeps growing at this rate they want to move out of the repository.
 - **A caregiver who files one of her own phrases under «Τραγούδι»** will find it excluded from «Λέξεις»

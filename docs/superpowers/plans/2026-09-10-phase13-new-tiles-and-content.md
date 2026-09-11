@@ -92,12 +92,25 @@
 
 ## Verification notes (2026-09-11)
 
-Code tree `87f5ce8` (the docs commits after it change no behaviour): **1275 JVM tests**, 0 failures,
-2 skipped — the two live-key Claude calls, and there is no key on this machine; **221 instrumented**
-tests on `emulator-5554`, 0 failures, from a fresh install (`adb -s emulator-5554 uninstall
-gr.dimitris.app` first) with the sync server **from this worktree** on 18787; **29 server tests**,
-0 failures (`cd server && npm test`). Then `installDebug`, so what is on the emulator is what was
-committed.
+Re-run after the fix wave (the counts from `87f5ce8` were 1275 / 221 / 29): **1285 JVM tests**, 0
+failures, 2 skipped — the two live-key Claude calls, and there is no key on this machine; **227
+instrumented** tests on `emulator-5554`, 0 failures, from a fresh install (`adb -s emulator-5554
+uninstall gr.dimitris.app` first) with the sync server **from this worktree** on 18787; **29 server
+tests**, 0 failures (`cd server && npm test`). Then `installDebug`, so what is on the emulator is what
+was committed.
+
+The ten JVM tests the wave added: the SQL dot writing the level and a tap outside the caregiver's
+bounds landing on the bound (`SettingsTest`), a one-task sitting at every dot being a task of that
+dot's own difficulty and a four-task sitting being half at the dot (`StepTasksTest`), the exact text of
+each dot-5 distractor (`StepTasksTest`), a sung sentence refusing «Δοκίμασέ το» (`ItemEditStateTest`),
+a sung sentence staying out of the SQL `λέξεις` table (`SqlViewModelTest`), the `sql`/`steps` keys of a
+focus (`FocusTest`), the vocabulary tiers in the advisor prompt (`ClaudeAdvisorParseTest`), and a
+two-item exercise being planned in whole exercises (`SessionBudgetTest`, `SessionPlanTest`). The six
+instrumented ones: a telling the judge is still reading being passed on at once and one exercise per
+tap (`StepsFlowTest`), a typed «Προτάσεις» board passed on mid-judgement (`SentencesFlowTest`), a
+runaway query stopped by its caller's cancellation and a double tap on one wrong option
+(`SqlRunnerTest`, `SqlFlowTest`), and the editor's «Τραγούδι» hint (`ItemEditFlowTest`). The two
+`TraceFlowTest` cases that asserted refuse-while-checking now assert cancel-and-skip.
 
 By hand on the emulator afterwards, with the app's data cleared so the first launch imported the seed
 from nothing: the role screen, then the Today grid with **seven tiles** — «SQL» and «Βήματα» among
@@ -149,5 +162,7 @@ Chris:
    «Στοπ» — has never been observed on a device. If the tile hangs or keeps singing after you leave,
    that is where to look.
 8. **The «Τραγούδι» shelf from a caregiver's side.** The chip is offered in the word editor like any
-   other, and a phrase filed there is silently excluded from «Λέξεις» and «Μίλα». Nothing on her
-   screen says so; if that confuses anyone, a one-line hint under the chips is the fix.
+   other, and a phrase filed there is excluded from «Λέξεις» and «Μίλα». The fix wave added the line
+   that says so under the chips («Μόνο για το «Τραγούδα και πες το» — δεν μπαίνει στις Λέξεις ούτε στον
+   πίνακα.») and took «Δοκίμασέ το» away from a sung sentence, because that button runs the word coach.
+   What is left to judge is whether the sentence is the right one for whoever reads it.

@@ -273,12 +273,13 @@ class StepsFlowTest {
     }
 
     /**
-     * Two taps on «Παράλειψη» pass on the **ordering** and stop there.
+     * **One exercise per tap.** Two taps on «Παράλειψη» pass on the ordering and stop there.
      *
-     * The ordering's skip opens the guard again the instant its row is written — it has to, because the
-     * telling is the next exercise — and the button is still under his thumb for a frame after that. So
-     * a double tap used to pass on the whole task, two rows and all, without ever showing him the
-     * telling. Driven through the ViewModel, because two taps inside half a second is the race and a
+     * This is the only module where one tap opens the *next* exercise straight away — the ordering's
+     * skip writes its row and goes to the telling of the same task — and the button is still under his
+     * thumb for a frame after that. So a double tap used to pass on the whole task, two rows and all,
+     * without ever showing him the telling; the same tap in the telling stage passed the next task's
+     * ordering. Driven through the ViewModel, because two taps inside half a second is the race and a
      * click-and-wait test cannot promise them.
      */
     @Test fun twoTapsOnTheSkipPassOnTheOrderingAndNotTheTask() {
@@ -298,9 +299,15 @@ class StepsFlowTest {
 
             // Half a second later it is a second decision, and it is his to make.
             Thread.sleep(StepsViewModel.DOUBLE_TAP_MS + 100)
-            compose.runOnUiThread { vm.skip() }
+            compose.runOnUiThread { vm.skip(); vm.skip() }
             compose.waitUntil(TIMEOUT_MS) { rows().size == 2 }
+            compose.waitForIdle()
             assertEquals(Outcome.SKIPPED, rows().single { it.itemId == "${StepsViewModel.TELL_ITEM}${task.id}" }.outcome)
+            // And that pair passed on the telling alone: the next task's ordering is still in front of
+            // him, which is the second half of the same double tap seen from the other stage.
+            assertEquals(1, vm.state.value.index)
+            assertEquals(StepStage.ORDER, vm.state.value.stage)
+            assertEquals("a double tap in the telling passed the next task's ordering too", 2, rows().size)
         } finally {
             compose.runOnUiThread { vm.leave {} }
         }
