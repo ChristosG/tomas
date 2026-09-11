@@ -87,3 +87,67 @@
 - [ ] `docs/HANDOVER.md` phase 13 section; `docs/UX.md` (+ two tiles); `docs/ADAPTATION.md` (+ `sql`, `steps` keys); README row; the advisor prompt names the two tiles.
 - [ ] Full suites green (JVM, connected from a fresh install with the sync server, server); tag `v0.4.0`; verification notes; commit `docs(phase13): verification notes`.
 - [ ] Chris: SQL levels 1–5 with Dimitris (which tables he prefers), «Βήματα» with a task from his real day, dictation by ear, a long sung sentence, difficulty 5 in Λέξεις with the new tier-5 words.
+
+---
+
+## Verification notes (2026-09-11)
+
+Code tree `87f5ce8` (the docs commits after it change no behaviour): **1275 JVM tests**, 0 failures,
+2 skipped — the two live-key Claude calls, and there is no key on this machine; **221 instrumented**
+tests on `emulator-5554`, 0 failures, from a fresh install (`adb -s emulator-5554 uninstall
+gr.dimitris.app` first) with the sync server **from this worktree** on 18787; **29 server tests**,
+0 failures (`cd server && npm test`). Then `installDebug`, so what is on the emulator is what was
+committed.
+
+By hand on the emulator afterwards, with the app's data cleared so the first launch imported the seed
+from nothing: the role screen, then the Today grid with **seven tiles** — «SQL» and «Βήματα» among
+them on a phone nobody has ever configured, which is the whole of the "on for everybody" claim, and
+all seven fit the screen. «SQL» opened on level 1 («Βάλε τις λέξεις στη σειρά. Από τον πίνακα λέξεις,
+δείξε τη στήλη λέξη.»), with the «Δυσκολία» row above and «Άκου» / «Έτοιμο» / «Παράλειψη» below —
+asking about his own `λέξεις` table on a phone with no practice on it at all. «Βήματα» opened on a
+three-step task at dot 1 («Ανοίγω την τηλεόραση») with the empty strip reading «Εδώ μπαίνουν τα
+βήματα.»; three taps filled it, «Έτοιμο» accepted the order, and the screen became the telling stage
+(«Πες τα βήματα», the strip still in place, «Το είπα!» as the primary because recognition is off by
+default). «Γράψε» at dot 4 showed the dictation board — one empty slot `_`, no word anywhere on the
+screen, «Έτοιμο» really disabled until there is ink — and at dot 5, with «Έλεγχος με Claude» off
+(the default), fell back to the word level with «Χρειάζεται τον έλεγχο με Claude.» on the screen,
+which is the designed behaviour and not a failure. The talk board's category row ends at «Χρόνος»:
+no «Τραγούδι» tab, so the sung sentences really are the singing tile's alone. The device database is
+at `user_version = 9` with tiers 1–5 = 275/32/85/57/47, 213 rows carrying a gender and 20 filed under
+`SINGING`; the bundled manifest is v5, 384 entries, 340 with a pictogram.
+
+What no machine in this phase could check: **nothing was heard.** The emulator has no speech engine,
+so the dictated word, every new Greek prompt and every sung sentence are verified by tests and
+decision tables, never by ear. And **no live judge call was made** — «Γράψε» level 5 and «Βήματα»'s
+telling have been judged only by the instrumented fake judge and by the local fallback.
+
+Chris:
+
+1. **«SQL», levels 1–5, with Dimitris — and which tables he prefers.** Watch level 4 hardest: typing
+   SQL on a phone with one hand is the most demanding thing in the app. The row's `tables` column is
+   what will answer "his own words or the textbook?" later; your eye is what answers it now.
+2. **«Βήματα» with a task from his real day.** The twenty tasks are plausible, not observed, and
+   thirteen of them carry my judgement about which steps may swap. Tell me where the groups are wrong.
+   Also watch whether the telling («πρώτα… μετά… τέλος») is an exercise or a wall — the first telling
+   of his life in this module is very likely to be an assisted one, by design.
+3. **Dictation by ear** (dot 4 of «Γράψε»), on a phone with a voice. The word must be *only* a sound,
+   «Άκου» must repeat it as often as he wants, and a letter he gets wrong must appear for him to trace
+   over rather than stop him. Check too whether he writes the accents — nothing marks him on them, and
+   `letters[].accent` is the only place the answer is kept.
+4. **A long sung sentence, heard.** «Θα ήθελα να κλείσω ένα ραντεβού για αύριο το πρωί» is twenty
+   syllables in five breath groups. Whether the breaths fall where a person would take them is a thing
+   only an ear can say; listen at «Ρυθμός: Αργός» as well.
+5. **Difficulty 5 in «Λέξεις», with the new tier-5 words.** «ελπίδα», «ευθύνη», «εμπιστοσύνη» —
+   abstract nouns, some with a loosely related ARASAAC drawing and sixteen with none. If a picture is
+   getting in the way rather than helping, text-led is one flag per word.
+6. **A six-step «Βήματα» board on your own screen.** With four lines in the strip the tiles go below
+   the fold. Both cheap fixes are worse (a shorter strip line stops being a 72 dp target; hiding the
+   board while he reads the strip is the reshuffle this app avoids everywhere else), so it was left
+   alone — but it wants a real look before it reaches him.
+7. **Leaving a long sung sentence halfway.** Anything over about six seconds of melody now streams to
+   the audio track instead of going out in one buffer. A stop *during* a streamed sentence — back, or
+   «Στοπ» — has never been observed on a device. If the tile hangs or keeps singing after you leave,
+   that is where to look.
+8. **The «Τραγούδι» shelf from a caregiver's side.** The chip is offered in the word editor like any
+   other, and a phrase filed there is silently excluded from «Λέξεις» and «Μίλα». Nothing on her
+   screen says so; if that confuses anyone, a one-line hint under the chips is the fix.
