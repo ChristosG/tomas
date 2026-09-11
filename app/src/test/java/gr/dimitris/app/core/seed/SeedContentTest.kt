@@ -1,7 +1,10 @@
 package gr.dimitris.app.core.seed
 
 import gr.dimitris.app.core.data.ItemKind
+import gr.dimitris.app.core.difficulty.Difficulty
 import gr.dimitris.app.core.greek.Gender
+import gr.dimitris.app.modules.singsay.Melody
+import gr.dimitris.app.modules.singsay.Note
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -73,6 +76,62 @@ class SeedContentTest {
             if (entries.size == 1) continue
             val texts = entries.map { it.text }.toSet()
             assertTrue("$image is shared by $texts", texts in SHARED)
+        }
+    }
+
+    /**
+     * The content phase 13 moved «Τραγούδα και πες το» to. Dimitris judged the tile pointless at word
+     * length — he says «νερό» — and melodic intonation therapy is for the sentences a man with
+     * Broca's aphasia cannot start, so twenty long everyday requests were seeded: appointments, the
+     * pharmacy, directions, shopping, the phone, the bank, a taxi, physiotherapy.
+     *
+     * Long means longer than one breath ([Melody.BREATH_SYLLABLES]). Eighteen of the twenty sit
+     * inside the 7..12 syllables the dots grade in two-syllable steps; the two the brief named
+     * («Θα ήθελα να κλείσω ένα ραντεβού για αύριο το πρωί», «Μπορείτε να μου πείτε πού είναι το
+     * φαρμακείο;») are fifteen and twenty syllables as [Difficulty.syllablesOf] counts them, which is
+     * dot 5's own content and exactly what the breath groups exist for. The counter is deliberately
+     * generous — it reads «για» as two syllables where a speaker sings one — so these numbers are the
+     * app's own measure, not a phonetician's.
+     */
+    @Test fun `the singing module has twenty long sentences to sing`() {
+        val lengths = manifest.items
+            .filter { it.kind == ItemKind.PHRASE.name }
+            .map { Difficulty.syllablesOf(it.text) }
+        assertTrue(
+            "only ${lengths.count { it > Melody.BREATH_SYLLABLES }} phrases need more than one breath",
+            lengths.count { it > Melody.BREATH_SYLLABLES } >= 20,
+        )
+        assertTrue(
+            "${lengths.count { it in 7..12 }} phrases sit in the 7..12 the dots grade",
+            lengths.count { it in 7..12 } >= 18,
+        )
+        // Every dot from the default up has content of its own, or tapping it changes nothing.
+        for (dot in Difficulty.DEFAULT..Difficulty.MAX) {
+            assertTrue("dot $dot has no phrase of its own", lengths.any { Difficulty.syllableDot(it) == dot })
+        }
+    }
+
+    /**
+     * And every one of them is singable in breaths: no group of more than
+     * [Melody.BREATH_SYLLABLES] syllables unless it is a single word, because a breath taken inside a
+     * word is a stutter rather than a breath group. «φυσιοθεραπεία» is seven syllables of one word
+     * and is sung whole; that is the only shape allowed through.
+     */
+    @Test fun `every bundled phrase is sung in breath groups of one breath each`() {
+        for (entry in manifest.items) {
+            if (entry.kind != ItemKind.PHRASE.name) continue
+            val groups = mutableListOf(mutableListOf<Note>())
+            Melody.forPhrase(entry.text).forEachIndexed { i, n ->
+                if (n.breathBefore && i > 0) groups.add(mutableListOf())
+                groups.last().add(n)
+            }
+            for (group in groups) {
+                val words = group.map { it.wordIndex }.distinct().size
+                assertTrue(
+                    "«${entry.text}» asks for ${group.size} syllables in one breath across $words words",
+                    group.size <= Melody.BREATH_SYLLABLES || words == 1,
+                )
+            }
         }
     }
 

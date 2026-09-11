@@ -208,19 +208,31 @@ object Difficulty {
     // ------------------------------------------------- «Τραγούδα και πες το»
 
     /**
-     * How long a phrase he sings, in syllables: 1 → up to 2, 2 → up to 4, 3 → up to 6, 4 → up to 8,
+     * How long a phrase he sings, in syllables: 1 → up to 5, 2 → up to 7, 3 → up to 9, 4 → up to 11,
      * 5 → any length. A **ceiling**, not a window — see [syllableCeiling].
      *
      * Syllables and not words, because a syllable is what melodic intonation therapy is made of —
      * one tapped beat each — so two syllables more is two more beats to hold, whether they arrive as
      * one word or two.
+     *
+     * The whole row moved up in phase 13. It used to be 2 / 4 / 6 / 8 / any, which graded a module
+     * whose content was «θέλω καφέ» and «πάμε σπίτι» — and Dimitris, who says those words, told us
+     * the tile was pointless. Melodic intonation therapy is *for* the sentences a man with Broca's
+     * aphasia cannot start: «Θα ήθελα να κλείσω ένα ραντεβού για αύριο το πρωί» is what the module
+     * is now made of ([gr.dimitris.app.modules.singsay.Melody] sings it in breath groups), and it is
+     * twelve syllables long. The dots had to be able to name it.
+     *
+     * Nobody's phone loses anything to the move, because a ceiling only ever rises here: the longest
+     * phrase the app shipped before phase 13 was seven syllables, so at the default dot 2 the whole
+     * of the old vocabulary is still in the pool — and every new sentence is above it, which is what
+     * makes dots 3 to 5 worth tapping.
      */
     fun syllables(d: Int): IntRange = when (clamp(d)) {
-        1 -> 1..2
-        2 -> 3..4
-        3 -> 5..6
-        4 -> 7..8
-        else -> 9..Int.MAX_VALUE
+        1 -> 1..5
+        2 -> 6..7
+        3 -> 8..9
+        4 -> 10..11
+        else -> 12..Int.MAX_VALUE
     }
 
     /**

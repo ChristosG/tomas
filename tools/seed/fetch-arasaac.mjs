@@ -7,7 +7,7 @@ import fs from 'node:fs/promises';
 // Bump when words.json changes: SeedImporter only looks at the manifest again when this is higher
 // than the version the device has, and then adds only the texts it does not already have — and,
 // since phase 13, re-grades the tier and the gender of the bundled words it has not been edited.
-const VERSION = 3;
+const VERSION = 4;
 
 // The two gradings every entry carries out of words.json and into the manifest. `tier` is how hard
 // the word is, 1 to 5 (the word coach's dots read it); `gender` is 'M', 'F' or 'N' on a noun and

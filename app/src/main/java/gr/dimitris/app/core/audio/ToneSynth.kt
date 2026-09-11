@@ -42,12 +42,19 @@ class ToneSynth {
 
     @Volatile private var current: Any? = null
 
+    /**
+     * [breathBefore] are the indices of the notes that start a breath group
+     * ([Melody.breaths]): the silence before each of them is [Melody.BREATH_GAPS] gaps long instead
+     * of one, so a long sentence is sung in breaths rather than in one unbroken run. Empty is the
+     * old behaviour exactly — an even [gapMs] after every note.
+     */
     suspend fun play(
         notes: List<Pitch>,
         noteMs: Int = Melody.NOTE_MS,
         gapMs: Int = Melody.GAP_MS,
         gain: Float = 1f,
         key: Key = Key.NORMAL,
+        breathBefore: Set<Int> = emptySet(),
         onNote: (Int) -> Unit = {},
     ): Result<Unit> {
         if (notes.isEmpty()) return Result.success(Unit)
@@ -56,7 +63,7 @@ class ToneSynth {
         // melody plays has to invalidate it *now*, or the newest melody would politely wait for the
         // one it was meant to replace.
         claim(self)
-        return gate.withLock { playHoldingGate(self, notes, noteMs, gapMs, gain, key, onNote) }
+        return gate.withLock { playHoldingGate(self, notes, noteMs, gapMs, gain, key, breathBefore, onNote) }
     }
 
     private suspend fun playHoldingGate(
@@ -66,6 +73,7 @@ class ToneSynth {
         gapMs: Int,
         gain: Float,
         key: Key,
+        breathBefore: Set<Int>,
         onNote: (Int) -> Unit,
     ): Result<Unit> {
         // Superseded while we waited for the gate: the caller behind us already owns the output.
@@ -91,7 +99,9 @@ class ToneSynth {
                 // Bluetooth) is still unplayed when the track is released, and it would take the
                 // last note's decay with it.
                 val pcm = Pcm.concat(
-                    notes.flatMap { listOf(Pcm.tone(key.hz(it), noteMs, gain), Pcm.silence(gapMs)) } + listOf(Pcm.silence(TAIL_MS)),
+                    notes.flatMapIndexed { i, p ->
+                        listOf(Pcm.tone(key.hz(p), noteMs, gain), Pcm.silence(Melody.gapAfter(i, gapMs, breathBefore)))
+                    } + listOf(Pcm.silence(TAIL_MS)),
                 )
                 pcmSize = pcm.size
                 // build() throws (it does not return an uninitialised track) when the platform
@@ -129,7 +139,9 @@ class ToneSynth {
             for (i in notes.indices) {
                 if (current !== self) return Result.success(Unit)
                 onNote(i)
-                delay((noteMs + gapMs).toLong())
+                // The same gap the PCM above was written with, note for note — the breath he hears
+                // and the breath the lit syllables wait out are one number, read once.
+                delay((noteMs + Melody.gapAfter(i, gapMs, breathBefore)).toLong())
             }
             // The silent tail written above, waited out here: without it the release below throws
             // away whatever the device had not yet pushed out, clipping the last note's decay.

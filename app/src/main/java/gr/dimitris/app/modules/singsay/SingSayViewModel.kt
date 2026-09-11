@@ -432,12 +432,24 @@ class SingSayViewModel(private val graph: AppGraph, private val items: List<Item
         else report(graph.speaker.speak(_state.value.item), SPEECH_FAILED, "singsay speak")
     }
 
-    private suspend fun playMelody(gain: Float) = report(
-        graph.voice.playMelody(
-            _state.value.notes.map { it.pitch }, noteMs = tempo.noteMs, gapMs = tempo.gapMs, gain = gain, key = key,
-        ) { i -> _state.update { it.copy(lit = i) } },
-        SYNTH_FAILED, "singsay melody",
-    )
+    /**
+     * The whole phrase, sung in its breath groups: the rest at each group boundary is the phrase's
+     * own ([Melody.breaths]), not a setting, and it widens with the caregiver's [tempo] because it is
+     * counted in that tempo's gaps.
+     *
+     * One snapshot of the notes, read once: the list the pitches are taken from has to be the list
+     * the breaths were read off, or a phrase changed under the job would rest in the wrong place.
+     */
+    private suspend fun playMelody(gain: Float) {
+        val notes = _state.value.notes
+        report(
+            graph.voice.playMelody(
+                notes.map { it.pitch }, noteMs = tempo.noteMs, gapMs = tempo.gapMs, gain = gain, key = key,
+                breathBefore = Melody.breaths(notes),
+            ) { i -> _state.update { it.copy(lit = i) } },
+            SYNTH_FAILED, "singsay melody",
+        )
+    }
 
     /**
      * Records what one sound did. Silence is the one failure Dimitris cannot diagnose himself, so it

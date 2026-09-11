@@ -219,10 +219,16 @@ class DifficultyTest {
         assertTrue(Difficulty.syllablesOf("ok") >= 1)
     }
 
-    /** The seed's phrases run one to seven syllables, so the middle dots are the ones with content. */
-    @Test fun `the seed's own phrase lengths land in the lower bands`() {
-        assertTrue(Difficulty.syllablesOf("θέλω καφέ") in Difficulty.syllables(2))
-        assertTrue(Difficulty.syllablesOf("καλημέρα σας") in Difficulty.syllables(3))
+    /**
+     * Where phase 13's own sentences land: the bands moved up to 5 / 7 / 9 / 11 / any because the
+     * module moved from «θέλω καφέ» to the long everyday requests Dimitris cannot start.
+     */
+    @Test fun `the seed's phrase lengths spread across the bands`() {
+        assertTrue(Difficulty.syllablesOf("θέλω καφέ") in Difficulty.syllables(1))
+        assertTrue(Difficulty.syllablesOf("πού είναι το κινητό") in Difficulty.syllables(2))
+        assertTrue(Difficulty.syllablesOf("Πού μπορώ να βγάλω χρήματα;") in Difficulty.syllables(3))
+        assertTrue(Difficulty.syllablesOf("Πού είναι η τράπεζα, παρακαλώ;") in Difficulty.syllables(4))
+        assertTrue(Difficulty.syllablesOf("Πού είναι η στάση του λεωφορείου;") in Difficulty.syllables(5))
         assertFalse(Difficulty.syllablesOf("θέλω καφέ") in Difficulty.syllables(5))
     }
 
@@ -232,15 +238,27 @@ class DifficultyTest {
      * offered, their Leitner rows went overdue for ever, and no dot brought them back.
      */
     @Test fun `a phrase shorter than the dot asks for is still his to sing`() {
-        val short = Difficulty.syllablesOf("ναι")            // 1
-        val middle = Difficulty.syllablesOf("θέλω καφέ")      // 4
-        val long = Difficulty.syllablesOf("καλημέρα σας")     // 5
+        val short = Difficulty.syllablesOf("ναι")                                  // 1
+        val middle = Difficulty.syllablesOf("θέλω καφέ")                            // 4
+        val long = Difficulty.syllablesOf("Πού είναι η στάση του λεωφορείου;")      // 12
         assertTrue("the easiest phrases vanish at the default dot", short <= Difficulty.syllableCeiling(Difficulty.DEFAULT))
         assertTrue(middle <= Difficulty.syllableCeiling(Difficulty.DEFAULT))
-        assertFalse("dot 2 must not reach a five-syllable phrase", long <= Difficulty.syllableCeiling(Difficulty.DEFAULT))
+        assertFalse("dot 2 must not reach a twelve-syllable sentence", long <= Difficulty.syllableCeiling(Difficulty.DEFAULT))
         // And every dot above it keeps everything the dots below it had.
         (1..5).forEach { d -> assertTrue(short <= Difficulty.syllableCeiling(d)) }
-        assertTrue(long <= Difficulty.syllableCeiling(3))
+        assertTrue(long <= Difficulty.syllableCeiling(5))
+    }
+
+    /**
+     * The upgrade, in one line: the longest phrase the app shipped before phase 13 was seven
+     * syllables («πού είναι το κινητό»), and the bands moved **up**, so every phrase already on a
+     * phone is still in reach at the default dot. Moving a ceiling up can only add; this is the test
+     * that keeps the next move from being a window again.
+     */
+    @Test fun `the phrases a phone already had still fit the default dot`() {
+        for (text in listOf("ναι", "θέλω καφέ", "καλημέρα σας", "Δεν καταλαβαίνω", "πού είναι το κινητό")) {
+            assertTrue("«$text» fell out of the default dot", Difficulty.syllablesOf(text) <= Difficulty.syllableCeiling(Difficulty.DEFAULT))
+        }
     }
 
     @Test fun `the syllable ceilings rise with the dots and the top one takes anything`() {
@@ -252,9 +270,12 @@ class DifficultyTest {
     /** Which dot a phrase belongs to: the easiest that still admits it. Used once, on the upgrade. */
     @Test fun `a phrase names the easiest dot that admits it`() {
         assertEquals(1, Difficulty.syllableDot(1))
-        assertEquals(1, Difficulty.syllableDot(2))
-        assertEquals(2, Difficulty.syllableDot(3))
-        assertEquals(3, Difficulty.syllableDot(6))
+        assertEquals(1, Difficulty.syllableDot(5))
+        assertEquals(2, Difficulty.syllableDot(6))
+        assertEquals(2, Difficulty.syllableDot(7))
+        assertEquals(3, Difficulty.syllableDot(9))
+        assertEquals(4, Difficulty.syllableDot(11))
+        assertEquals(5, Difficulty.syllableDot(12))
         assertEquals(5, Difficulty.syllableDot(99))
     }
 

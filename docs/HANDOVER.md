@@ -18,7 +18,7 @@ anybody read it: `git log --oneline master..worktree-phase0` is the branch's rea
 | Talk board (AAC) | Μίλα | quick phrases, categories, sentence strip, favourites, caregiver photos and voices |
 | Word coach | Λέξεις | Leitner boxes 1–5, cue ladder 0–4, record and compare, speech recognition when enabled |
 | Number sense | Αριθμοί | fifteen levels: dots, number line, counting, number words, coins, prices, paying, sums and carries, the tables, division, change, the clock and days, word problems |
-| Sing-then-say | Τραγούδα | two-note melody from Greek stress, five MIT stages, caregiver sung model, 20 seed phrases; **off by default since phase 12** |
+| Sing-then-say | Τραγούδα | two-note melody from Greek stress sung in breath groups of six syllables, five MIT stages, caregiver sung model, 52 seed phrases — 20 of them whole everyday sentences since phase 13; **off by default since phase 12** |
 | Dialogues | Διάλογοι | 14 seed scripts with tiers and intents, open answers judged for sense, caregiver editor with the other side's voice, cue ladder on his lines |
 | Sentence builder | Προτάσεις | eight levels, accusative objects, distractor from level 4, articles and prepositions and clauses, gap-fill and typed boards |
 | Trace and write | Γράψε | five levels incl. recall, finger-sized tolerances, filled-glyph scoring |

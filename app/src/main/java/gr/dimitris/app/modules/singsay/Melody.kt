@@ -3,6 +3,7 @@ package gr.dimitris.app.modules.singsay
 import gr.dimitris.app.core.greek.Greek
 import gr.dimitris.app.core.greek.Syllabifier
 import java.text.Normalizer
+import kotlin.math.abs
 
 enum class Pitch(val hz: Double) { LOW(196.0), HIGH(246.94) }
 
@@ -46,7 +47,15 @@ enum class Key(val lowHz: Double, val highHz: Double) {
     }
 }
 
-data class Note(val syllable: String, val pitch: Pitch, val wordIndex: Int)
+/**
+ * One sung syllable.
+ *
+ * [breathBefore] is set on the first note of every breath group after the first (see
+ * [Melody.forPhrase]): a place to take a breath before singing on. It is false on every note of a
+ * phrase short enough to be sung in one breath, which is every phrase the module had before phase
+ * 13 — nothing about the short cards changed.
+ */
+data class Note(val syllable: String, val pitch: Pitch, val wordIndex: Int, val breathBefore: Boolean = false)
 
 /**
  * Two-note melody for Melodic Intonation Therapy: the stressed syllable of each word is HIGH,
@@ -55,26 +64,181 @@ data class Note(val syllable: String, val pitch: Pitch, val wordIndex: Int)
  * syllable so it still has a peak. If none of that gives the phrase any HIGH note at all — a run
  * of unaccented monosyllables, say — the very last note is raised to HIGH so the melody he hears
  * always has a shape, never a flat line.
+ *
+ * Since phase 13 a phrase is also cut into **breath groups**. Dimitris judged the tile pointless at
+ * word length — he can say «νερό» — and melodic intonation therapy is for what he cannot say: whole
+ * everyday sentences. A twelve-syllable sentence cannot be sung in one breath at
+ * [NOTE_MS] a note, so [forPhrase] marks where to breathe and the rest of the module follows that
+ * mark: the synth rests three gaps there ([gapAfter]) and the syllable row shows the group boundary
+ * as a little extra space. Nothing new is on the screen and no prompt changed — the breath is a
+ * property of the phrase, not a control.
  */
 object Melody {
     /** [Tempo.NORMAL]'s own timing, kept as this object's default (an enum constant is not a compile-time constant). */
     const val NOTE_MS = 550
     const val GAP_MS = 80
 
+    /**
+     * The longest a breath group may be. Six syllables at [NOTE_MS] plus [GAP_MS] is under four
+     * seconds of singing — a phrase of that length is what the module was already asking of him, and
+     * it is what a man who is short of breath after a stroke can hold in one go. Longer phrases are
+     * cut into groups of at most this many syllables; a single word longer than this is left whole,
+     * because a breath taken inside a word is not a breath group, it is a stutter.
+     */
+    const val BREATH_SYLLABLES = 6
+
+    /**
+     * How many ordinary gaps long the rest between two breath groups is. Three, so that the silence
+     * is unmistakably a place to breathe rather than the gap between two syllables — and derived
+     * from the gap rather than fixed in milliseconds, so it grows with the caregiver's [Tempo].
+     */
+    const val BREATH_GAPS = 3
+
+    /**
+     * The punctuation a sentence already breathes at. Written Greek marks exactly where the voice
+     * stops, so these come first: a comma in «Θα πάω στο φαρμακείο, και μετά στην τράπεζα» is the
+     * author of the phrase telling us where the breath belongs.
+     *
+     * Both question marks are here — the Greek one is usually typed as the ASCII semicolon, but a
+     * Greek keyboard can produce U+037E too, and a caregiver's copy-paste can carry either.
+     */
+    private val BREATH_MARKS = setOf(',', ';', '\u037E', '.', '!', '?', '·')
+
+    /**
+     * The words a Greek sentence is most naturally broken **before** when it has no punctuation to
+     * break at: the conjunction and the particle that start a new clause. «Θα ήθελα να κλείσω ένα
+     * ραντεβού» breathes before «να», not in the middle of «ραντεβού».
+     */
+    private val BREATH_WORDS = setOf("και", "να")
+
+    /**
+     * The melody of [text], one note per syllable, with [Note.breathBefore] marking where the
+     * breath groups start.
+     *
+     * A phrase of at most [BREATH_SYLLABLES] syllables is one group and carries no mark at all, so
+     * every short card behaves exactly as it did before phase 13. A longer one is cut in two at the
+     * best boundary available and each half is cut again until no group is too long:
+     *
+     *  1. after a word that carries [BREATH_MARKS], because the sentence says so itself;
+     *  2. else before «και» or «να» ([BREATH_WORDS]), the start of the next clause;
+     *  3. else at the word boundary that leaves the two halves most even in syllables.
+     *
+     * Where several boundaries of the same kind exist the most even one is taken, and an exact tie
+     * goes to the earlier boundary — so the same phrase is always cut the same way.
+     */
     fun forPhrase(text: String): List<Note> {
-        val words = text.trim().split(Regex("\\s+"))
-            .map { Greek.normalize(it.trim { c -> !c.isLetter() }) }
-            .filter { it.isNotEmpty() }
-        val notes = words.flatMapIndexed { wi, word ->
-            val syl = Syllabifier.syllables(word) ?: return@flatMapIndexed emptyList()
-            if (syl.size == 1) return@flatMapIndexed listOf(Note(syl[0], Pitch.LOW, wi))
-            val stressed = syl.indexOfFirst { hasTonos(it) }.let { if (it == -1) syl.lastIndex else it }
-            syl.mapIndexed { i, s -> Note(s, if (i == stressed) Pitch.HIGH else Pitch.LOW, wi) }
-        }
-        if (notes.isEmpty() || notes.any { it.pitch == Pitch.HIGH }) return notes
-        return notes.toMutableList().also { it[it.lastIndex] = it.last().copy(pitch = Pitch.HIGH) }
+        val words = wordsOf(text)
+        val notes = words.flatMap(::notesFor)
+        if (notes.isEmpty()) return notes
+        val shaped = if (notes.any { it.pitch == Pitch.HIGH }) notes
+        else notes.toMutableList().also { it[it.lastIndex] = it.last().copy(pitch = Pitch.HIGH) }
+        return breathed(shaped, words.filter { it.syllables.isNotEmpty() })
     }
+
+    /** Where the breath groups of [notes] start, as note indices — what the synth is handed. */
+    fun breaths(notes: List<Note>): Set<Int> =
+        notes.indices.filterTo(mutableSetOf()) { notes[it].breathBefore }
+
+    /**
+     * The silence after the note at [index], in milliseconds: [BREATH_GAPS] gaps where the next note
+     * starts a breath group, one gap everywhere else.
+     *
+     * One function for both halves of playing a melody — the PCM that is synthesised and the wait
+     * between the lit syllables — so the rest he hears and the rest the screen counts can never
+     * disagree. [breathBefore] is [breaths]' output: the indices of the notes that start a group.
+     */
+    fun gapAfter(index: Int, gapMs: Int, breathBefore: Set<Int>): Int =
+        if (index + 1 in breathBefore) gapMs * BREATH_GAPS else gapMs
+
+    /** One word of the phrase, with what decides where a breath goes beside it. */
+    private data class Word(
+        /** Its syllables, or empty when [Syllabifier] could not split it — such a word has no notes. */
+        val syllables: List<String>,
+        /** Its position among the words of the phrase, which is what [Note.wordIndex] carries. */
+        val index: Int,
+        /** Punctuation follows it: the strongest place to end a breath group. */
+        val closesGroup: Boolean,
+        /** It is «και» or «να»: the word a group is most naturally started with. */
+        val opensGroup: Boolean,
+    )
+
+    /**
+     * The words of [text], punctuation read before it is thrown away.
+     *
+     * The letters are what is sung — a trailing comma is not a syllable — but *that* there was a
+     * comma is exactly what tells us where he breathes, so it is recorded here rather than lost in
+     * the trim. Only marks that follow the word count: an opening quotation mark says nothing about
+     * the voice.
+     */
+    private fun wordsOf(text: String): List<Word> {
+        val words = mutableListOf<Word>()
+        for (token in text.trim().split(WHITESPACE)) {
+            val letters = Greek.normalize(token.trim { !it.isLetter() })
+            if (letters.isEmpty()) continue
+            words += Word(
+                syllables = Syllabifier.syllables(letters).orEmpty(),
+                index = words.size,
+                closesGroup = token.takeLastWhile { !it.isLetter() }.any { it in BREATH_MARKS },
+                opensGroup = Greek.stripAccents(letters) in BREATH_WORDS,
+            )
+        }
+        return words
+    }
+
+    /** The notes of one word: its stressed syllable HIGH, the rest LOW; a monosyllable LOW. */
+    private fun notesFor(word: Word): List<Note> {
+        val syl = word.syllables
+        if (syl.isEmpty()) return emptyList()
+        if (syl.size == 1) return listOf(Note(syl[0], Pitch.LOW, word.index))
+        val stressed = syl.indexOfFirst { hasTonos(it) }.let { if (it == -1) syl.lastIndex else it }
+        return syl.mapIndexed { i, s -> Note(s, if (i == stressed) Pitch.HIGH else Pitch.LOW, word.index) }
+    }
+
+    /** [notes] with the first note of every group after the first marked. [sung] is the words that have notes. */
+    private fun breathed(notes: List<Note>, sung: List<Word>): List<Note> {
+        if (notes.size <= BREATH_SYLLABLES) return notes
+        val starts = mutableSetOf<Int>()
+        var at = 0
+        for (group in groupsOf(sung)) {
+            if (at > 0) starts += at
+            at += group.sumOf { it.syllables.size }
+        }
+        if (starts.isEmpty()) return notes
+        return notes.mapIndexed { i, n -> if (i in starts) n.copy(breathBefore = true) else n }
+    }
+
+    /**
+     * [words] cut into breath groups, each at most [BREATH_SYLLABLES] syllables long where the words
+     * allow it. One word on its own is always one group however long it is: «ευχαριστώ» is four
+     * syllables of one breath, and a six-syllable word would be sung whole rather than broken.
+     */
+    private fun groupsOf(words: List<Word>): List<List<Word>> {
+        if (words.size < 2 || syllables(words) <= BREATH_SYLLABLES) return listOf(words)
+        val cut = cutPoint(words)
+        return groupsOf(words.subList(0, cut)) + groupsOf(words.subList(cut, words.size))
+    }
+
+    /**
+     * Where to cut [words] in two: the index of the word the second half starts with. Punctuation
+     * first, then «και»/«να», then any boundary — and within one kind, the most even cut, ties to
+     * the earlier one (see [forPhrase]).
+     */
+    private fun cutPoint(words: List<Word>): Int {
+        val boundaries = (1 until words.size).toList()
+        val marked = boundaries.filter { words[it - 1].closesGroup }
+        val joined = boundaries.filter { words[it].opensGroup }
+        val candidates = marked.ifEmpty { joined }.ifEmpty { boundaries }
+        return candidates.minByOrNull { imbalance(words, it) } ?: boundaries.first()
+    }
+
+    /** How uneven a cut is: the syllables one side of it has more than the other. */
+    private fun imbalance(words: List<Word>, cut: Int): Int =
+        abs(syllables(words) - 2 * syllables(words.subList(0, cut)))
+
+    private fun syllables(words: List<Word>): Int = words.sumOf { it.syllables.size }
 
     /** True when the syllable carries a written accent (tonos, U+0301 in NFD). */
     private fun hasTonos(s: String): Boolean = Normalizer.normalize(s, Normalizer.Form.NFD).contains('́')
+
+    private val WHITESPACE = Regex("\\s+")
 }

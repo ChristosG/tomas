@@ -162,11 +162,21 @@ fun SingSayScreen(items: List<Item>, sessionId: String?, onDone: () -> Unit, onL
             }
             Spacer(Modifier.height(Sizes.gap))
             // High syllables sit higher than low ones, so the melody is visible as well as audible.
+            //
+            // A breath group starts with a wider space before it — the same rest the melody plays
+            // there ([Melody.BREATH_GAPS]), seen rather than heard, so a long sentence reads as the
+            // two or three phrases he is meant to sing it in. Spacing and not a new control: the
+            // breath is a property of the phrase, and this screen already has its one primary action.
+            //
+            // Carried by the syllable's own padding rather than by a Spacer between the chips,
+            // because the row wraps: a spacer that wrapped to the start of a line would be a breath
+            // he cannot see, while padding stays attached to the syllable it belongs to.
             FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 s.notes.forEachIndexed { i, n ->
                     val lit = i == s.lit
                     Box(
-                        Modifier.background(if (lit) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.surface, RoundedCornerShape(12.dp))
+                        Modifier.padding(start = if (n.breathBefore) Sizes.gap else 0.dp)
+                            .background(if (lit) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.surface, RoundedCornerShape(12.dp))
                             .padding(horizontal = 14.dp, vertical = if (n.pitch == Pitch.HIGH) 4.dp else 18.dp),
                         contentAlignment = Alignment.Center,
                     ) {

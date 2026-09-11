@@ -144,7 +144,7 @@ class DifficultyInitTest {
      * backup restored, or by the first sync pull. Asked again over the same DAOs, it now answers.
      *
      * Without the second ask the dots stayed at the default, and at the default the sing-then-say
-     * ceiling is four syllables: every longer phrase that came with his data would have sat out of
+     * ceiling is seven syllables: every longer phrase that came with his data would have sat out of
      * the pool with its schedule row overdue for ever.
      */
     @Test fun `a derivation over an empty database answers once his rows arrive`() = runTest {

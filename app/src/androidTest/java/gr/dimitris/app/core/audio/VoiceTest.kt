@@ -100,6 +100,32 @@ class VoiceTest {
         assertTrue("quiet() left the melody playing for $took ms", took < 2_000)
     }
 
+    /**
+     * The breath between two groups of a long sentence, measured where it is meant to be heard: the
+     * wait before the note that *starts* a group is [gr.dimitris.app.modules.singsay.Melody.BREATH_GAPS]
+     * gaps long, every other wait is one gap.
+     *
+     * Timed off the `onNote` callbacks rather than the whole melody's length, because that is what
+     * the screen lights the syllables from — so this is the same clock he sees and hears. The margin
+     * is generous (the gap is tripled from 200 ms to 600 ms and only 200 ms of that is claimed)
+     * because an emulator under load jitters, but a *missing* rest fails it by 400 ms.
+     */
+    @Test fun aBreathGroupRestsLongerBeforeTheNoteThatStartsIt() = runBlocking {
+        val at = LongArray(6)
+        val result = withTimeout(20_000) {
+            voice.playMelody(
+                List(6) { Pitch.LOW }, noteMs = 100, gapMs = 200, breathBefore = setOf(3),
+                onNote = { i -> at[i] = System.currentTimeMillis() },
+            )
+        }
+        assumeTrue("no usable audio output on this device: ${result.exceptionOrNull()?.message}", result.isSuccess)
+
+        val waits = (0 until 5).map { at[it + 1] - at[it] }
+        val breath = waits[2]
+        val ordinary = waits.filterIndexed { i, _ -> i != 2 }
+        assertTrue("the breath waited $breath ms, the ordinary gaps $ordinary", breath >= ordinary.max() + 200)
+    }
+
     /** The microphone is open: a melody now would be inside the take. */
     @Test fun theMelodyIsRefusedWhileRecording() = runBlocking {
         voice.startRecording()

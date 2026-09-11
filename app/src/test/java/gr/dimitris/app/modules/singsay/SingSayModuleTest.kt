@@ -51,13 +51,60 @@ class SingSayModuleTest {
      * **longest** he is willing to be asked for.
      */
     @Test fun `the difficulty he set caps how long a phrase he sings`() = runTest {
-        phrase("ναι", createdAt = 1)                           // 1 syllable
-        phrase("θέλω καφέ", createdAt = 2)                     // 4
-        phrase("θέλω να πάω στο σπίτι μου", createdAt = 3)     // 9
+        phrase("ναι", createdAt = 1)                                  // 1 syllable
+        phrase("θέλω καφέ", createdAt = 2)                            // 4
+        phrase("Πού είναι η στάση του λεωφορείου;", createdAt = 3)    // 12
         val easy = SingSayModule.plan(items, schedules, SingSayModule.MAX_PER_PRACTICE, difficulty = 1)
-        assertEquals(listOf("ναι"), easy.map { it.text })
+        assertEquals(setOf("ναι", "θέλω καφέ"), easy.map { it.text }.toSet())
         val hard = SingSayModule.plan(items, schedules, SingSayModule.MAX_PER_PRACTICE, difficulty = 5)
         assertEquals(3, hard.size)
+    }
+
+    /**
+     * The pool at each dot, after phase 13 moved the ceilings up to 5 / 7 / 9 / 11 / any. One phrase
+     * inside each ceiling and one outside it, so every dot is pinned from both sides.
+     *
+     * Nobody's phone lost anything in the move: «πού είναι το κινητό» was the longest phrase the app
+     * shipped before phase 13 at seven syllables, and it is still in reach at the default dot 2.
+     * What changed is the other end — dots 3 to 5 now name the long sentences the module was moved
+     * here for, where before dot 5 meant "nine syllables or more" and nothing in the app was that
+     * long.
+     *
+     * A fresh DAO per dot, and never more than three phrases in it, because
+     * [SingSayModule.NEW_PER_DAY] caps how many phrases he has never seen a sitting may introduce —
+     * this test is about the ceiling, not about that cap.
+     */
+    @Test fun `each dot admits every phrase up to its own ceiling and nothing above it`() = runTest {
+        val five = "καλημέρα σας"                        // 5 syllables
+        val seven = "πού είναι το κινητό"                // 7
+        val nine = "Πού μπορώ να βγάλω χρήματα;"         // 9
+        val eleven = "Πού είναι η τράπεζα, παρακαλώ;"    // 11
+        val twelve = "Πού είναι η στάση του λεωφορείου;" // 12
+
+        assertEquals(setOf(five), pool(1, five, seven))
+        assertEquals(setOf(five, seven), pool(2, five, seven, nine))
+        assertEquals(setOf(five, nine), pool(3, five, nine, eleven))
+        assertEquals(setOf(nine, eleven), pool(4, nine, eleven, twelve))
+        assertEquals(setOf(eleven, twelve), pool(5, eleven, twelve))
+    }
+
+    /** The brief's own sentence — twenty syllables of everyday Greek — is dot 5's and nobody else's. */
+    @Test fun `the longest sentence in the seed belongs to the hardest dot`() = runTest {
+        val short = "θέλω καφέ"
+        val long = "Θα ήθελα να κλείσω ένα ραντεβού για αύριο το πρωί"
+        assertEquals(setOf(short), pool(4, short, long))
+        assertEquals(setOf(short, long), pool(5, short, long))
+    }
+
+    /** What [difficulty] plans out of [texts], over DAOs of its own. */
+    private suspend fun pool(difficulty: Int, vararg texts: String): Set<String> {
+        val dao = FakeItemDao()
+        texts.forEachIndexed { i, text ->
+            dao.upsert(Item(text = text, kind = ItemKind.PHRASE, source = Source.SEED, createdAt = i.toLong()))
+        }
+        return SingSayModule.plan(dao, FakeScheduleDao(), SingSayModule.MAX_PER_PRACTICE, difficulty = difficulty)
+            .map { it.text }
+            .toSet()
     }
 
     /**
@@ -70,11 +117,11 @@ class SingSayModuleTest {
      * sitting with.
      */
     @Test fun `dot two keeps the easiest phrases as well as its own`() = runTest {
-        phrase("ναι", createdAt = 1)                           // 1 syllable — below the band
-        phrase("θέλω καφέ", createdAt = 2)                     // 4 — in the band
-        phrase("καλημέρα σας", createdAt = 3)                  // 5 — above it
+        phrase("ναι", createdAt = 1)                              // 1 syllable — below the band
+        phrase("πού είναι το κινητό", createdAt = 2)              // 7 — the band's own ceiling
+        phrase("Πού μπορώ να βγάλω χρήματα;", createdAt = 3)      // 9 — above it
         val plan = SingSayModule.plan(items, schedules, SingSayModule.MAX_PER_PRACTICE, difficulty = 2)
-        assertEquals(setOf("ναι", "θέλω καφέ"), plan.map { it.text }.toSet())
+        assertEquals(setOf("ναι", "πού είναι το κινητό"), plan.map { it.text }.toSet())
     }
 
     /**

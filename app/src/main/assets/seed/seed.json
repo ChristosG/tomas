@@ -1,5 +1,5 @@
 {
- "version": 3,
+ "version": 4,
  "items": [
   {
    "text": "θέλω καφέ",
@@ -4004,6 +4004,226 @@
    "arasaacId": 20389,
    "via": "en",
    "term": "φύση|nature"
+  },
+  {
+   "text": "Θα ήθελα να κλείσω ένα ραντεβού για αύριο το πρωί",
+   "kind": "PHRASE",
+   "category": "TIME",
+   "tier": 5,
+   "gender": null,
+   "image": null,
+   "arasaacId": null,
+   "via": null,
+   "term": "Θα ήθελα να κλείσω ένα ραντεβού για αύριο το πρωί|"
+  },
+  {
+   "text": "Έχω ραντεβού στις πέντε",
+   "kind": "PHRASE",
+   "category": "TIME",
+   "tier": 3,
+   "gender": null,
+   "image": null,
+   "arasaacId": null,
+   "via": null,
+   "term": "Έχω ραντεβού στις πέντε|"
+  },
+  {
+   "text": "Θέλω να αλλάξω το ραντεβού",
+   "kind": "PHRASE",
+   "category": "TIME",
+   "tier": 4,
+   "gender": null,
+   "image": null,
+   "arasaacId": null,
+   "via": null,
+   "term": "Θέλω να αλλάξω το ραντεβού|"
+  },
+  {
+   "text": "Μπορείτε να μου πείτε πού είναι το φαρμακείο;",
+   "kind": "PHRASE",
+   "category": "PLACES",
+   "tier": 5,
+   "gender": null,
+   "image": null,
+   "arasaacId": null,
+   "via": null,
+   "term": "Μπορείτε να μου πείτε πού είναι το φαρμακείο;|"
+  },
+  {
+   "text": "Έχω τη συνταγή στην τσέπη μου",
+   "kind": "PHRASE",
+   "category": "THINGS",
+   "tier": 4,
+   "gender": null,
+   "image": null,
+   "arasaacId": null,
+   "via": null,
+   "term": "Έχω τη συνταγή στην τσέπη μου|"
+  },
+  {
+   "text": "Πού είναι η στάση του λεωφορείου;",
+   "kind": "PHRASE",
+   "category": "PLACES",
+   "tier": 5,
+   "gender": null,
+   "image": null,
+   "arasaacId": null,
+   "via": null,
+   "term": "Πού είναι η στάση του λεωφορείου;|"
+  },
+  {
+   "text": "Πώς πάω στην πλατεία;",
+   "kind": "PHRASE",
+   "category": "PLACES",
+   "tier": 3,
+   "gender": null,
+   "image": null,
+   "arasaacId": null,
+   "via": null,
+   "term": "Πώς πάω στην πλατεία;|"
+  },
+  {
+   "text": "Μπορείτε να μου δείξετε τον δρόμο;",
+   "kind": "PHRASE",
+   "category": "PLACES",
+   "tier": 4,
+   "gender": null,
+   "image": null,
+   "arasaacId": null,
+   "via": null,
+   "term": "Μπορείτε να μου δείξετε τον δρόμο;|"
+  },
+  {
+   "text": "Πόσο κάνει το ψωμί;",
+   "kind": "PHRASE",
+   "category": "FOOD",
+   "tier": 3,
+   "gender": null,
+   "image": null,
+   "arasaacId": null,
+   "via": null,
+   "term": "Πόσο κάνει το ψωμί;|"
+  },
+  {
+   "text": "Θα ήθελα ένα κιλό ντομάτες",
+   "kind": "PHRASE",
+   "category": "FOOD",
+   "tier": 4,
+   "gender": null,
+   "image": null,
+   "arasaacId": null,
+   "via": null,
+   "term": "Θα ήθελα ένα κιλό ντομάτες|"
+  },
+  {
+   "text": "Θέλω γάλα και ψωμί, παρακαλώ",
+   "kind": "PHRASE",
+   "category": "FOOD",
+   "tier": 4,
+   "gender": null,
+   "image": null,
+   "arasaacId": null,
+   "via": null,
+   "term": "Θέλω γάλα και ψωμί, παρακαλώ|"
+  },
+  {
+   "text": "Δεν βρίσκω το κινητό μου πουθενά",
+   "kind": "PHRASE",
+   "category": "THINGS",
+   "tier": 4,
+   "gender": null,
+   "image": null,
+   "arasaacId": null,
+   "via": null,
+   "term": "Δεν βρίσκω το κινητό μου πουθενά|"
+  },
+  {
+   "text": "Πάρε με τηλέφωνο το βράδυ",
+   "kind": "PHRASE",
+   "category": "THINGS",
+   "tier": 4,
+   "gender": null,
+   "image": null,
+   "arasaacId": null,
+   "via": null,
+   "term": "Πάρε με τηλέφωνο το βράδυ|"
+  },
+  {
+   "text": "Πού μπορώ να βγάλω χρήματα;",
+   "kind": "PHRASE",
+   "category": "THINGS",
+   "tier": 3,
+   "gender": null,
+   "image": null,
+   "arasaacId": null,
+   "via": null,
+   "term": "Πού μπορώ να βγάλω χρήματα;|"
+  },
+  {
+   "text": "Πού είναι η τράπεζα, παρακαλώ;",
+   "kind": "PHRASE",
+   "category": "PLACES",
+   "tier": 4,
+   "gender": null,
+   "image": null,
+   "arasaacId": null,
+   "via": null,
+   "term": "Πού είναι η τράπεζα, παρακαλώ;|"
+  },
+  {
+   "text": "Θέλω να πληρώσω τον λογαριασμό",
+   "kind": "PHRASE",
+   "category": "THINGS",
+   "tier": 5,
+   "gender": null,
+   "image": null,
+   "arasaacId": null,
+   "via": null,
+   "term": "Θέλω να πληρώσω τον λογαριασμό|"
+  },
+  {
+   "text": "Θέλω ένα ταξί, παρακαλώ",
+   "kind": "PHRASE",
+   "category": "PLACES",
+   "tier": 4,
+   "gender": null,
+   "image": null,
+   "arasaacId": null,
+   "via": null,
+   "term": "Θέλω ένα ταξί, παρακαλώ|"
+  },
+  {
+   "text": "Μπορείτε να καλέσετε ένα ταξί;",
+   "kind": "PHRASE",
+   "category": "PLACES",
+   "tier": 5,
+   "gender": null,
+   "image": null,
+   "arasaacId": null,
+   "via": null,
+   "term": "Μπορείτε να καλέσετε ένα ταξί;|"
+  },
+  {
+   "text": "Έχω φυσιοθεραπεία την Τρίτη",
+   "kind": "PHRASE",
+   "category": "BODY",
+   "tier": 5,
+   "gender": null,
+   "image": null,
+   "arasaacId": null,
+   "via": null,
+   "term": "Έχω φυσιοθεραπεία την Τρίτη|"
+  },
+  {
+   "text": "Πάμε στη φυσιοθεραπεία",
+   "kind": "PHRASE",
+   "category": "BODY",
+   "tier": 4,
+   "gender": null,
+   "image": null,
+   "arasaacId": null,
+   "via": null,
+   "term": "Πάμε στη φυσιοθεραπεία|"
   }
  ]
 }

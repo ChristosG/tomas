@@ -91,6 +91,10 @@ class Voice(
      * that makes sound: it takes the transient focus so another app's music ducks under it, it is
      * refused while the microphone is open, and [quiet] stops it. [key] is a caregiver setting, not
      * a property of [notes] — the same [Pitch] list sings in whichever register [key] names.
+     *
+     * [breathBefore] is where the phrase breathes, as note indices ([Melody.breaths]): the gap
+     * before each of those notes is [Melody.BREATH_GAPS] gaps wide instead of one. It is a property
+     * of the *phrase*, which is why it travels with the notes; a single tapped note has none.
      */
     suspend fun playMelody(
         notes: List<Pitch>,
@@ -98,13 +102,14 @@ class Voice(
         gapMs: Int = Melody.GAP_MS,
         gain: Float = 1f,
         key: Key = Key.NORMAL,
+        breathBefore: Set<Int> = emptySet(),
         onNote: (Int) -> Unit = {},
     ): Result<Unit> {
         if (isRecording) return Result.failure(IllegalStateException(RECORDING_NOW))
         quiet()
         return try {
             holdOutputFocus()
-            synth.play(notes, noteMs, gapMs, gain, key, onNote)
+            synth.play(notes, noteMs, gapMs, gain, key, breathBefore, onNote)
         } finally {
             releaseOutputFocus()
         }
