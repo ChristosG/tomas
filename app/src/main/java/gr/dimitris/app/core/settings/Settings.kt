@@ -355,11 +355,22 @@ class Settings(private val store: DataStore<Preferences>) {
     }
 
     /**
-     * The module's own level, set to the easiest level of the band the dots now ask for. The three
-     * modules that keep a level keep it here. «Λέξεις», «Τραγούδα και πες το» and «Διάλογοι» have no
-     * level to move: their difficulty is which items the plan admits, and the next plan admits them.
+     * The module's own level, set to the level the dot he has just tapped asks for. The four modules
+     * that keep a level keep it here. «Λέξεις», «Τραγούδα και πες το» and «Διάλογοι» have no level to
+     * move: their difficulty is which items the plan admits, and the next plan admits them.
      *
-     * **«Δεξί χέρι» is not one of the three.** It has no level — it has four target sizes, and a
+     * **«SQL» is the one whose level is the dot itself**, because a sitting is built at one level
+     * ([gr.dimitris.app.modules.sql.SqlViewModel] generates every puzzle of the sitting at the level
+     * it loaded) and the five levels are five *kinds* of question. Clamping into the band was the
+     * first cut and it made the dots decoration: with `sql_level = 1` a tap on dot 5 left the sitting
+     * on ordering tiles, and the only thing that could ever move it was a six-puzzle free practice at
+     * five right out of six — so a man who only ever opens «Σήμερα» never met a `WHERE` at all. His
+     * tap is a decision, exactly as a tap on «Αριθμοί» jumps into the band; a *bound* the caregiver
+     * moves still only clamps, through [reclamp]. [Difficulty.sql] remains the ceiling that bounds
+     * what a sitting may promote him to, and `levelAfterSitting` still steps him back down after a
+     * bad sitting, so the cost of the jump is one sitting of harder work he asked for.
+     *
+     * **«Δεξί χέρι» is not one of the four.** It has no level — it has four target sizes, and a
      * stored target size is a ceiling ([Difficulty.arcadeClamp]), never a starting point, whichever
      * door the change came through. Assigning the band's biggest size here was the one path that had
      * not followed that rule, and it undid the very thing the ceiling was written for: with the pinch
@@ -371,10 +382,11 @@ class Settings(private val store: DataStore<Preferences>) {
             ModuleId.NUMBERS -> p[NUMBERS_LEVEL] = Difficulty.numbers(difficulty).first
             ModuleId.SENTENCES -> p[SENTENCES_LEVEL] = Difficulty.sentences(difficulty).first
             ModuleId.TRACE -> p[TRACE_LEVEL] = Difficulty.trace(difficulty).first
-            // «SQL» and «Δεξί χέρι» are the two whose dot is a **ceiling** and not a band, so there
-            // is no floor to jump to: everything at or below the new dot stays in play, and a level
-            // he has already earned is held rather than given back. See [Difficulty.sql].
-            ModuleId.SQL, ModuleId.ARCADE -> clampLevelIntoBand(p, module, difficulty)
+            // The dot he tapped *is* the kind of puzzle he asked for, held to what the module has.
+            ModuleId.SQL -> p[SQL_LEVEL] = Difficulty.sql(difficulty).last
+            // «Δεξί χέρι» has no level to jump: its dot is a ceiling on four target sizes, and a hand
+            // already doing better than the fence asks is never given the easier target back.
+            ModuleId.ARCADE -> clampLevelIntoBand(p, module, difficulty)
             else -> Unit
         }
     }

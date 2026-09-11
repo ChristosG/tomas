@@ -4,6 +4,7 @@ import gr.dimitris.app.core.difficulty.Difficulty
 import gr.dimitris.app.core.speech.SpeechMatch
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -115,6 +116,12 @@ class StepTasksTest {
             // The pairing is decided by a person, once, and written down here: a later edit that moves
             // a distractor onto a task it could belong to is the defect this test exists for.
             assertEquals("«${task.id}»'s distractor is borrowed from somewhere new", BORROWED[task.id], owner.single().id)
+            // And **which** step of it, to the letter. The owner alone is not enough: «Ρίχνω
+            // απορρυπαντικό» — the rejected washing-up distractor, whose host's own step 4 reads
+            // «Πλένω με σφουγγάρι και υγρό» — is a step of `laundry` exactly as its replacement is,
+            // and shares no content word with `dishes` either, so both of the checks above passed it.
+            // A revert to it has to fail something.
+            assertEquals("«${task.id}» is not the distractor somebody chose", EXPECTED_DISTRACTOR[task.id], text)
         }
     }
 
@@ -364,6 +371,43 @@ class StepTasksTest {
         assertEquals(4, harder.distinctBy { it.id }.size)
     }
 
+    /**
+     * **The one task of a mixed sitting is the difficulty he set**, whenever the dot has one.
+     *
+     * A mixed sitting buys one task ([StepsModule.ITEMS_PER_TASK] against a budget of three), and the
+     * plan used to be a flat shuffle of everything the dot admits — so at dot 5 that one task was a
+     * six-step-plus-distractor board four times in twenty and «Φτιάχνω καφέ» the rest of the time.
+     * Every seed in the drawer, not one lucky one: a dot whose own difficulty has any task at all
+     * must spend the single task on it.
+     */
+    @Test fun `a one-task sitting is a task of the dot's own difficulty`() {
+        for (dots in 1..5) {
+            val own = seed.forDifficulty(dots).filter { it.difficulty == dots }
+            assertTrue("dot $dots has no task of its own in the seed", own.isNotEmpty())
+            for (seedValue in 1..40) {
+                val one = seed.plan(count = 1, dots = dots, random = Random(seedValue.toLong())).single()
+                assertEquals("dot $dots, draw $seedValue: «${one.id}» is difficulty ${one.difficulty}", dots, one.difficulty)
+            }
+        }
+        // And dot 5's single task really is the hardest board there is: six steps and a foreign tile.
+        val five = seed.plan(count = 1, dots = 5, random = Random(11)).single()
+        assertEquals(StepTasks.MAX_STEPS, five.steps.size)
+        assertNotNull("dot 5 is the distractor board", five.distractor)
+    }
+
+    /**
+     * A four-task sitting keeps the easy end the cumulative pool is for: half at the dot (rounded up),
+     * the rest from under it — never four of the hardest thing the app has.
+     */
+    @Test fun `a four-task sitting is half at the dot and half under it`() {
+        for (seedValue in 1..20) {
+            val sitting = seed.plan(StepsModule.TASKS_PER_SESSION, dots = 5, random = Random(seedValue.toLong()))
+            assertEquals(4, sitting.size)
+            assertEquals("draw $seedValue: $sitting", 2, sitting.count { it.difficulty == 5 })
+            assertTrue("draw $seedValue: nothing easier in it", sitting.any { it.difficulty < 5 })
+        }
+    }
+
     /** The board is the steps and the distractor, and nothing else ever reaches the screen. */
     @Test fun `the board carries the distractor and the steps`() {
         val five = tasks.first { it.difficulty == 5 }
@@ -430,6 +474,19 @@ class StepTasksTest {
             "dishes" to "laundry",
             "bed" to "pasta",
             "cafe" to "bus",
+        )
+
+        /**
+         * The exact step each dot-5 board borrows, because [BORROWED] cannot see the one reversion
+         * that matters: `dishes` takes a step of `laundry` either way, and the rejected «Ρίχνω
+         * απορρυπαντικό» shares no content word with «Πλένω τα πιάτα» — so only the text itself says
+         * that the washing-up board asks him about the laundry basket and not about washing-up liquid.
+         */
+        val EXPECTED_DISTRACTOR = mapOf(
+            "atm" to "Βουρτσίζω τα δόντια μου",
+            "dishes" to "Βάζω τα ρούχα μέσα",
+            "bed" to "Ρίχνω τα μακαρόνια",
+            "cafe" to "Βγάζω εισιτήριο",
         )
 
         /** Articles, prepositions and the possessive: shared by everything, so they say nothing. */

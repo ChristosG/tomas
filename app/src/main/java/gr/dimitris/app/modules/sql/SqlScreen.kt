@@ -131,7 +131,8 @@ fun SqlScreen(count: Int, sessionId: String?, onDone: () -> Unit, onLeave: () ->
         },
     ) {
         // The five dots, on the first screen of the module and nowhere else (spec §13). Rebuilt on
-        // the spot: the level is what decides which *kind* of question this is.
+        // the spot, and the rebuild is the point: the dot he taps *is* the level, and the level is
+        // what decides which kind of question this is — so a tap changes the board under his thumb.
         if (sessionId == null && s.index == 0) ModuleDifficultyRow(ModuleId.SQL, onChanged = vm::reload)
         if (puzzle == null) {
             Text("Ετοιμάζω...", style = MaterialTheme.typography.headlineMedium)

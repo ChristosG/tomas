@@ -162,14 +162,18 @@ object Difficulty {
      * The five levels are five different *kinds* of question and not five sizes of one: 1 put the
      * words of a query in order, 2 choose the query that gives a result, 3 fill in the missing
      * keyword, 4 write the query, 5 two tables at once. A ceiling is the honest shape for that.
-     * Putting the words in order is still worth doing on the day he writes a `JOIN` — it is how
-     * every sitting starts, and the progression inside the band is what decides when he meets the
-     * harder kind — whereas a *band* of 4..4 would have retired the first three kinds the moment he
-     * asked for hard work, which is exactly the mistake [syllableCeiling] documents.
+     * Putting the words in order is still worth doing on the day he writes a `JOIN`, so a sitting the
+     * progression steps *down* is still inside the dot — whereas a *band* of 4..4 would have refused
+     * to step him down at all, which is exactly the mistake [syllableCeiling] documents.
      *
-     * So the dot is a real cap: at dot 1 the module is ordering tiles and nothing else, and at dot 5
-     * the whole ladder is in play. [SqlPuzzles.MAX_LEVEL] is 5, so every dot means something
-     * different and nothing below clamps.
+     * What the ceiling is **not** is the whole of what the dot does. A sitting is built at one level
+     * (`SqlViewModel.load`), so the ceiling alone would never have mixed the kinds: his own tap
+     * therefore writes the level too, and the ceiling's job is to bound what a finished sitting may
+     * promote him to. See [gr.dimitris.app.core.settings.Settings.setDifficulty].
+     *
+     * So the dot is a real cap as well as a choice: at dot 1 the module is ordering tiles and nothing
+     * else, and at dot 5 the whole ladder is in play. [SqlPuzzles.MAX_LEVEL] is 5, so every dot means
+     * something different and nothing below clamps.
      */
     fun sql(d: Int): IntRange = SqlPuzzles.MIN_LEVEL..clamp(d).coerceAtMost(SqlPuzzles.MAX_LEVEL)
 

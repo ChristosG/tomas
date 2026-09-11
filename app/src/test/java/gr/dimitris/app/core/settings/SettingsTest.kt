@@ -11,6 +11,7 @@ import gr.dimitris.app.modules.arcade.Adaptive
 import gr.dimitris.app.modules.arcade.ArcadeGame
 import gr.dimitris.app.modules.singsay.Key
 import gr.dimitris.app.modules.singsay.Tempo
+import gr.dimitris.app.modules.sql.SqlPuzzles
 import gr.dimitris.app.modules.trace.TraceStrictness
 import gr.dimitris.app.modules.trace.TraceViewModel
 import kotlinx.coroutines.CoroutineScope
@@ -550,6 +551,41 @@ class SettingsTest {
         s.setNumbersLevel(14)
         s.setDifficulty(ModuleId.NUMBERS, 3)
         assertEquals(Difficulty.numbers(3).first, s.numbersLevel.first())
+    }
+
+    /**
+     * **«SQL»: his tap on a dot is the kind of question he gets.**
+     *
+     * A sitting is built at one level, so while the tap only clamped, a man on level 1 could tap dot 5
+     * and meet the same ordering tiles — and a mixed sitting of three puzzles can never promote him
+     * (the progression wants five results), so «Σήμερα» alone would never have shown him a `WHERE` at
+     * all. The dot he taps is the level now, downwards as well as up: dot 2 after dot 5 is a man
+     * saying the `JOIN` was too much.
+     */
+    @Test fun `a tap on the SQL dots sets the kind of puzzle the sitting asks`() = runBlocking {
+        val s = newSettings()
+        assertEquals(SqlPuzzles.MIN_LEVEL, s.sqlLevel.first())
+
+        s.setDifficulty(ModuleId.SQL, 5)
+        assertEquals("the dot he tapped is the level", 5, s.sqlLevel.first())
+        assertEquals(5, s.difficulty(ModuleId.SQL).first())
+
+        // And back down, because a dot he taps is always a decision and never only a ceiling.
+        s.setDifficulty(ModuleId.SQL, 2)
+        assertEquals(2, s.sqlLevel.first())
+    }
+
+    /** The caregiver's fence still clamps the tap, and the level lands on the fence and not past it. */
+    @Test fun `a SQL tap outside the bounds lands on the bound`() = runBlocking {
+        val s = newSettings()
+        s.setDifficultyCeiling(ModuleId.SQL, 3)
+        s.setDifficulty(ModuleId.SQL, 5)
+        assertEquals(3, s.difficulty(ModuleId.SQL).first())
+        assertEquals("the level went past a fence the dot respected", 3, s.sqlLevel.first())
+
+        // A fence moved *afterwards* still only clamps — the level he earned is held, not reset.
+        s.setDifficultyCeiling(ModuleId.SQL, 2)
+        assertEquals(2, s.sqlLevel.first())
     }
 
     /**

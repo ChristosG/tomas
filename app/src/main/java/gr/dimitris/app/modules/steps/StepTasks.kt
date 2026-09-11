@@ -184,11 +184,21 @@ class StepTasks(val tasks: List<StepTask>) {
         tasks.filter { Difficulty.admitsSteps(it.difficulty, dots) }
 
     /**
-     * [count] tasks for one sitting, hardest-first inside what the dot allows and then shuffled.
+     * [count] tasks for one sitting: **at the dot's own difficulty first**, then filled from below,
+     * and shuffled so the sitting does not always open on the hardest one.
      *
-     * A sitting is four tasks out of the twenty the dot admits, drawn without repeats while there are
-     * enough to draw from: at dot 1 there are exactly four, so every sitting is all of them, and by
-     * dot 3 there are twelve and two sittings in a row are different work. If the dot admits fewer
+     * Half of a sitting (rounded up) is drawn from the tasks whose difficulty *is* the dot, and the
+     * rest from everything below it. A mixed sitting is one task ([StepsModule.ITEMS_PER_TASK] against
+     * a budget of three), so rounding up is what makes that one task the work he asked for — which is
+     * the whole point of the dots.
+     *
+     * It used to be `pool.shuffled(random).take(count)` over the cumulative pool, which made the dot
+     * nothing but odds: at dot 5 a one-task sitting was a six-step-plus-distractor task **four times
+     * in twenty**, so a man who tapped 5 twice running got «Φτιάχνω καφέ» and then «Βουρτσίζω τα
+     * δόντια μου» and had every reason to think the dots were decoration.
+     *
+     * The easy tasks keep their place in a four-task sitting, which is what the cumulative pool is
+     * for ([Difficulty.stepsTier]): two at the dot and two from under it. And if the dot admits fewer
      * than [count] — nothing does today, and a hand-edited seed could — the list is filled by going
      * round again rather than coming up short, because a session that promised four exercises has to
      * run four.
@@ -196,9 +206,16 @@ class StepTasks(val tasks: List<StepTask>) {
     fun plan(count: Int, dots: Int, random: Random = Random.Default): List<StepTask> {
         val pool = forDifficulty(dots).ifEmpty { tasks }
         if (pool.isEmpty() || count <= 0) return emptyList()
-        val picked = mutableListOf<StepTask>()
+        val tier = Difficulty.stepsTier(dots)
+        val own = pool.filter { Difficulty.clamp(it.difficulty) == tier }.shuffled(random)
+        val under = pool.filter { Difficulty.clamp(it.difficulty) != tier }.shuffled(random)
+        // Ceiling division: a one-task sitting is one task at the dot, and a four-task sitting is two.
+        val atTheDot = (count + 1) / 2
+        val picked = (own.take(atTheDot) + under + own.drop(atTheDot)).take(count).toMutableList()
+        // A dot with nothing of its own and too little under it: repeats beat an exercise he is owed
+        // and never shown.
         while (picked.size < count) picked += pool.shuffled(random).take(count - picked.size)
-        return picked
+        return picked.shuffled(random)
     }
 
     companion object {
