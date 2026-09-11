@@ -321,9 +321,9 @@ one task of a mixed sitting the work he asked for rather than a 4-in-20 chance o
    «Στοπ» — has never been observed on a device. If the tile ever hangs or keeps singing after you
    leave, that is where to look.
 8. **The «Τραγούδι» shelf, from a caregiver's side.** The category chip is offered in the word editor
-   like any other, and a phrase filed there is silently excluded from «Λέξεις» and «Μίλα». Nothing on
-   her screen says so. If that is confusing when somebody else uses the editor, a one-line hint under
-   the chips is the fix.
+   like any other; when it is chosen, a one-line hint under the chips says the phrase goes only to
+   «Τραγούδα και πες το» — not to «Λέξεις», not to the talk board — and «Δοκίμασέ το» is off for it.
+   Whether that line is enough for somebody else using the editor is for you to see.
 
 ## What only you can verify
 
@@ -361,18 +361,20 @@ Every controller ruling is recorded in the "Execution record" section at the end
 - A future NOT NULL column must ship to all phones together (the sync validator rejects incomplete rows).
 - Screen readers are not supported (the number line names the answer in its content description).
 - The tremor tolerance in Γράψε was tuned with synthetic hand-like traces, not a real hand.
-- **One button is deliberately dead for a moment.** «Παράλειψη» is off for the two seconds a SQL query of
-  his is inside SQLite, because the only way to cancel it is to throw away work he can see on the screen.
-  The three judged boards — Γράψε level 5, «Προτάσεις» typed, «Βήματα»'s telling — keep theirs live and
-  **cancel the judge** instead: the verdict he did not wait for is thrown away and the row says SKIPPED.
-  The back arrow works throughout and writes nothing.
+- **Two places still hold a button for a moment.** In «SQL», «Παράλειψη» is off for the two seconds a
+  query of his is inside SQLite, because the only way to cancel it is to throw away work he can see on the
+  screen. In «Διάλογοι», «Άκου» and «Μίλα» are off while the judge reads his turn (up to eight seconds;
+  «Παράλειψη» there already cancels the reading) — a phase 14 item, to bring it in line with the rest.
+  The three judged boards of this phase — Γράψε level 5, «Προτάσεις» typed, «Βήματα»'s telling — keep
+  every button live and **cancel the judge** instead: the verdict he did not wait for is thrown away and
+  the row says SKIPPED. The back arrow works throughout and writes nothing.
 - **A «Βήματα» sitting plans in whole tasks, so a mixed sitting is one exercise shorter.** A task is two
   attempt rows, and the session's minimum share is three items — which now buys one task and promises two,
   rather than promising three and writing two. The sitting loses an item it could not have run.
 - **The seed assets are 5.2 MB** — 326 vocabulary pictograms plus 92 for the step tasks, all in git. If
   the seed keeps growing at this rate they want to move out of the repository.
 - **A caregiver who files one of her own phrases under «Τραγούδι»** will find it excluded from «Λέξεις»
-  and from the talk board. That is what the shelf is for, and nothing on her screen says so.
+  and from the talk board. That is what the shelf is for; the hint under the chips says so.
 - **The syllable counter is coarse**, so the sing-then-say dots are slightly stricter than speech:
   «για», «μια» and «πιο» each count two. Changing it would move every module that counts syllables.
 

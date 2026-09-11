@@ -832,7 +832,7 @@ class TraceViewModel(
         if (said.isEmpty()) return
         _state.update { it.copy(checking = true) }
         // Whatever was in flight before this press is not an answer to it. Nothing can normally
-        // outlive its own board — [skip] refuses while the judge reads and [next] needs a finished
+        // outlive its own board — [skip] cancels the judge and [next] needs a finished
         // one — but the invariant is worth holding here, where there can only ever be one.
         judgeJob?.cancel()
         judgeJob = viewModelScope.launch {

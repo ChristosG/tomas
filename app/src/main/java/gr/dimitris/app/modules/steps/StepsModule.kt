@@ -69,11 +69,9 @@ object StepsModule : Module {
 
     /**
      * How many tasks a budget of [items] buys: two items each, and never fewer than one task — a
-     * module the session opens at all owes it an exercise, and [gr.dimitris.app.today.SessionBudget]
-     * can hand out an odd number ([gr.dimitris.app.today.SessionBudget.MIN_PER_MODULE] is three).
-     *
-     * An odd budget costs the session one item of honesty — three planned, two rows written — which is
-     * the smallest disagreement available, and far better than the factor of two it replaces.
+     * module the session opens at all owes it an exercise. Since the phase-13 fix wave the session
+     * runner hands this module a multiple of [ITEMS_PER_TASK], so what it plans and what he completes
+     * agree; the floor of one task is for any caller that does not.
      */
     fun tasksFor(items: Int): Int = (items / ITEMS_PER_TASK).coerceAtLeast(1)
 

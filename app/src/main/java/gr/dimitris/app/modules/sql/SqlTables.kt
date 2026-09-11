@@ -18,7 +18,7 @@ import java.time.format.DateTimeFormatter
  * «Η ζωή του» is built out of his own practice — the words he says and the mornings he sits down —
  * and «Το βιβλίο» is the two tables every SQL book opens with. Both are here on purpose. A query
  * that answers a question about *him* is the reason to write one at all; a query over `users` and
- * `orders` is the shape he will recognise from every tutorial his father's company ever wrote.
+ * `orders` is the shape he will recognise from every SQL tutorial ever written.
  */
 enum class SqlTableSet(val greek: String) {
     HIS_LIFE("Η ζωή του"),

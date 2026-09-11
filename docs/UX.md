@@ -280,9 +280,11 @@ the app now keeps the second one by cancelling rather than by waiting: the skip 
 writes the SKIPPED row every skip writes, and the next board opens clean. He did not wait for the answer,
 so he does not get it. The three screens with a judge behind them do this — «Γράψε» level 5, «Προτάσεις»'
 typed board and «Βήματα»'s telling, where a second «Μίλα» cancels it too — and a man who has just typed a
-sentence with one hand or said thirty words is exactly the man who wants out. «SQL» is the one place a
-button is still deliberately dead, and it is the two seconds a query of his is inside SQLite: the runner's
-own limit, and it cannot be cancelled without throwing away work he can see on the screen.
+sentence with one hand or said thirty words is exactly the man who wants out. Two places still hold a
+button: «SQL», for the two seconds a query of his is inside SQLite (the runner's own limit, and it cannot
+be cancelled without throwing away work he can see on the screen), and «Διάλογοι», where «Άκου» and «Μίλα»
+wait while the judge reads his turn although «Παράλειψη» there already cancels it — the next phase brings
+that screen in line with the three above.
 
 **The breath is spacing and silence, not a control.** A sentence longer than six syllables is now sung
 in breath groups, and both halves of that are things he hears and sees rather than things he presses:
