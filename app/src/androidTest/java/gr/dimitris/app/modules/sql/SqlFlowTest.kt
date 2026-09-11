@@ -248,6 +248,45 @@ class SqlFlowTest {
         )
     }
 
+    /**
+     * **The same wrong option twice is one go, not two.**
+     *
+     * Two misses put the answer on the screen ([SqlViewModel.WRONG_TRIES_BEFORE_REVEAL]), and a tile
+     * under a thumb that is not always steady is tapped twice oftener than anybody would like: a double
+     * tap used to spend both goes and reveal the answer to a question he had answered once. A
+     * *different* wrong option is a real second go and still reveals — the rule is unchanged, only the
+     * repeat is ignored.
+     *
+     * Driven through the ViewModel, because two taps inside one frame is the race and a click-and-wait
+     * test cannot promise them; everything it drives is what the option tiles call.
+     */
+    @Test fun twoTapsOnTheSameWrongOptionAreOneGo() {
+        runBlocking { graph.settings.setSqlLevel(2) }
+        lateinit var vm: SqlViewModel
+        compose.runOnUiThread { vm = SqlViewModel(graph, sessionId = null) }
+        try {
+            compose.waitUntil(TIMEOUT_MS) { vm.state.value.puzzle?.kind == SqlPuzzleKind.PICK }
+            val puzzle = vm.state.value.puzzle!!
+            val wrong = puzzle.options.filter { it != puzzle.answer }
+            assertEquals("a choosing board has two wrong options", 2, wrong.size)
+
+            compose.runOnUiThread { vm.choose(wrong[0]); vm.choose(wrong[0]) }
+            assertEquals("the same option twice was two goes", 1, vm.state.value.wrongTries)
+            assertTrue("a double tap showed him the answer", !vm.state.value.revealed)
+            assertTrue("a double tap ended the puzzle", vm.state.value.correct == false)
+
+            // The other wrong option is a second answer, and the second answer is where the reveal is.
+            compose.runOnUiThread { vm.choose(wrong[1]) }
+            assertEquals(2, vm.state.value.wrongTries)
+            assertTrue("a real second miss did not show him the answer", vm.state.value.revealed)
+            compose.waitUntil(TIMEOUT_MS) { attempts().isNotEmpty() }
+            assertEquals("one puzzle, one row", 1, attempts().size)
+            assertTrue("the row does not say how many goes: ${attempts().single().detail}", attempts().single().detail.contains("\"tries\":2"))
+        } finally {
+            compose.runOnUiThread { vm.leave {} }
+        }
+    }
+
     // ------------------------------------------------------------------------- helpers
 
     /** Opens free practice at [level] and returns the tiles on the board, as they are laid out. */

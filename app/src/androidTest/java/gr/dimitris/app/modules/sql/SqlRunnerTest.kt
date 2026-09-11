@@ -1,5 +1,9 @@
 package gr.dimitris.app.modules.sql
 
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -178,6 +182,46 @@ class SqlRunnerTest {
         assertEquals(listOf(listOf("Κώστας")), rows("SELECT name FROM users WHERE city = 'Βόλος'").rows)
     }
 
+    /**
+     * **A runaway query the caller has walked away from is stopped at once**, not when it finishes.
+     *
+     * The watchdog is a child of `run`'s own scope, so leaving the screen (or moving the dots, which
+     * calls `reload`) cancelled the watchdog *before* its two seconds were up — and `withContext`
+     * cannot interrupt a thread inside `fillWindow`, so the `catch (CancellationException)` that pulls
+     * the signal only ran after SQLite had finished on its own. [BOMB] is about twenty seconds of that,
+     * with `SqlViewModel.onCleared` closing the database under it. The `finally` on the watchdog is
+     * what makes the cancellation reach the statement.
+     *
+     * This is the one bomb that can test it: the classic `WITH RECURSIVE` one is refused by name and
+     * never reaches SQLite at all ([aRecursiveBombNeverReachesTheDatabase]), so there is nothing to
+     * cancel there.
+     *
+     * The wall clock is the assertion, because "it was cancelled" is exactly a question about time:
+     * the join cannot return until the blocking read has, so what is measured is the read.
+     */
+    @Test fun aRunawayQueryStopsWhenTheCallerIsCancelled() {
+        val began = System.currentTimeMillis()
+        var took = 0L
+        runBlocking {
+            val job = launch(Dispatchers.Default) {
+                try {
+                    // Whatever a cancelled query comes out as — the cancellation itself or SQLite's own
+                    // `OperationCanceledException` — is not what this test is about. The clock is.
+                    runCatching { runner.run(BOMB) }
+                } finally {
+                    took = System.currentTimeMillis() - began
+                }
+            }
+            // Long enough for the statement to be well inside SQLite, far short of the two seconds.
+            delay(CANCEL_AFTER_MS)
+            job.cancelAndJoin()
+        }
+
+        assertTrue("the query outlived its caller by ${took - CANCEL_AFTER_MS} ms", took < SqlRunner.TIMEOUT_MS)
+        // And the database is still usable: a cancelled statement must not take the connection with it.
+        assertEquals(12, count(SqlTables.USERS))
+    }
+
     /** The other side of the same limit: something slow but finishable still answers. */
     @Test fun aQueryThatIsMerelySlowStillAnswers() {
         val outcome = run(
@@ -252,6 +296,9 @@ class SqlRunnerTest {
     private companion object {
         /** Enough draws to cover every shape of every level, few enough to keep the run short. */
         const val DRAWS = 60
+
+        /** When the cancellation test pulls the rug: inside SQLite, well short of the two seconds. */
+        const val CANCEL_AFTER_MS = 300L
 
         /**
          * Seven copies of `users` and a condition nothing can index: 35,831,808 rows of string

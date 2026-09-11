@@ -316,6 +316,10 @@ class SqlRunner(
      * SQLite answers a cancelled signal by throwing `OperationCanceledException` out of the cursor,
      * which is why it has a branch of its own below: it is a `RuntimeException`, so without one it
      * would arrive as «Η ερώτηση δεν τρέχει.» — a lie about a query that was fine and merely slow.
+     *
+     * The watchdog pulls the signal from a `finally`, so **the caller's own cancellation stops the
+     * query too**: a screen that goes away mid-query aborts the statement at once instead of leaving a
+     * thread on it until it finishes by itself.
      */
     suspend fun run(sql: String): SqlOutcome {
         SqlGuard.problem(sql)?.let { return SqlOutcome.Refused(it) }
@@ -324,7 +328,15 @@ class SqlRunner(
         val signal = CancellationSignal()
         return try {
             coroutineScope {
-                val watchdog = launch { delay(TIMEOUT_MS); signal.cancel() }
+                // `finally`, so the signal is pulled when the watchdog is **cancelled** as well as
+                // when it fires. The watchdog is a child of this scope: leaving the screen or moving
+                // the dots cancels the scope, which used to cancel the watchdog before its two seconds
+                // were up — and `withContext` cannot interrupt a thread inside `fillWindow`, so the
+                // `catch (ce: CancellationException)` below only ran *after* the query had finished on
+                // its own. A seven-way cross join is ~20 s of that, with `onCleared` closing the
+                // database under it. On a normal return the `finally` below cancels the watchdog and
+                // its own `finally` then pulls a signal nothing is attached to, which is inert.
+                val watchdog = launch { try { delay(TIMEOUT_MS) } finally { signal.cancel() } }
                 try {
                     withContext(io) { read(database, statement, signal) }
                 } finally {

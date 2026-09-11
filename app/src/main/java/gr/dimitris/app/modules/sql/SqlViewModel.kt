@@ -186,18 +186,42 @@ class SqlViewModel(
     /** How many goes he has had at this puzzle, a refused query included. For the row, not the mark. */
     private var tries = 0
 
+    /**
+     * The wrong option he tapped last on a choosing board, so that tapping it **again** is not a second
+     * go at the puzzle.
+     *
+     * Two misses reveal the answer ([WRONG_TRIES_BEFORE_REVEAL]), and a tile under a thumb that is not
+     * always steady is tapped twice more often than anybody designing this would like: a double tap on
+     * one wrong option used to spend both goes and show him the answer to a question he had answered
+     * once. A different wrong option is a real second go and still reveals.
+     */
+    private var lastWrong: String? = null
+
+    /** His query inside SQLite, and the board's own target run. Cancelled before the runner is closed. */
+    private var runJob: Job? = null
+
     init { load() }
 
     /** He moved the dots. The sitting is rebuilt at the hardest level the new dot admits. */
     fun reload() {
         if (ending || finishing) return
         loadJob?.cancel()
+        // Whatever of his is inside SQLite belongs to the sitting being thrown away: the query he
+        // handed in and the board's own target. Cancelled here and **joined** in [load] before the
+        // database is closed — a close under a reading thread is not a crash (every throw comes back
+        // as a Greek refusal) but it is a race nobody should have to think about twice, and since the
+        // watchdog pulls the signal on cancellation the join is as short as an abort.
+        runJob?.cancel()
+        showJob?.cancel()
         graph.voice.quiet()
         load()
     }
 
     private fun load() {
+        // Read before the coroutine starts, because [load] assigns both of them itself.
+        val reading = listOfNotNull(runJob, showJob)
         loadJob = viewModelScope.launch {
+            reading.forEach { it.join() }
             val stored = runCatching { graph.settings.sqlLevel.first() }
                 .getOrElse { graph.errors.record("sql level read", it); SqlPuzzles.MIN_LEVEL }
             val difficulty = runCatching { graph.settings.difficulty(ModuleId.SQL).first() }
@@ -242,6 +266,8 @@ class SqlViewModel(
             runner = open.takeIf { ready }
             results.clear()
             tries = 0
+            lastWrong = null
+            runJob = null
             puzzles = List(wanted) { SqlPuzzles.generate(level, read, random) }
             val first = puzzles.firstOrNull()
             // Not before the settings read and the database build: their wait is not his thinking time.
@@ -341,8 +367,12 @@ class SqlViewModel(
         val puzzle = s.puzzle ?: return
         if (finishing || ending) return
         if (puzzle.kind != SqlPuzzleKind.PICK && puzzle.kind != SqlPuzzleKind.KEYWORD) return
+        // The same wrong option twice is one answer, not two. See [lastWrong].
+        if (option == lastWrong) return
         tries++
-        settle(puzzle, option, accepted = sqlAccepts(puzzle, option, got = null, wanted = null))
+        val accepted = sqlAccepts(puzzle, option, got = null, wanted = null)
+        lastWrong = option.takeUnless { accepted }
+        settle(puzzle, option, accepted)
     }
 
     /**
@@ -384,7 +414,7 @@ class SqlViewModel(
      */
     private fun runTyped(puzzle: SqlPuzzle, typed: String) {
         _state.update { it.copy(running = true, refusal = null, refusalDetail = null) }
-        viewModelScope.launch {
+        runJob = viewModelScope.launch {
             val target = targetResult(puzzle)
             if (_state.value.puzzle !== puzzle) return@launch
             if (puzzle.showResult && target == null) {
@@ -527,6 +557,7 @@ class SqlViewModel(
         val puzzle = puzzles[i]
         startedAt = now()
         tries = 0
+        lastWrong = null
         silence()
         _state.update {
             it.copy(
@@ -567,6 +598,11 @@ class SqlViewModel(
      */
     fun leave(then: () -> Unit) {
         loadJob?.cancel()
+        // The screen is going and [onCleared] closes the database behind it: a query of his still
+        // inside SQLite is aborted here rather than left to finish against a closed connection. The
+        // watchdog's `finally` is what turns this cancellation into an abort.
+        runJob?.cancel()
+        showJob?.cancel()
         silence()
         val write = lastWrite
         viewModelScope.launch { write?.join(); then() }
