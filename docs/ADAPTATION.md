@@ -263,6 +263,49 @@ away and was stopped at two seconds is not even a try.
   If the median doubles over the last two puzzles of a sitting, the sitting is too long
   (`SqlModule.PUZZLES_PER_SESSION`), not the level too hard.
 
+### Βήματα — the steps of a task (`module = 'STEPS'`, two rows per task)
+
+One task leaves **two** rows, because it is two exercises: `steps:order:<task>` for putting the steps in
+order and `steps:tell:<task>` for telling them with «πρώτα… μετά… τέλος». Same keys in both, and the
+`<task>` part is the seed's own id (`coffee`, `atm`, `bed`), so the pair can be read side by side.
+
+| Key | What it is |
+|---|---|
+| `task` | the task's Greek title, as he saw it — «Φτιάχνω καφέ», «Βγάζω χρήματα από το ΑΤΜ» |
+| `steps` | the steps as short Greek phrases. On an **order** row it is *his* sequence, tile by tile, because where the wrong step went is the whole of what went wrong; on a **tell** row it is the task's own order, which is what the telling was judged against |
+| `difficulty` | 1–5, the task's own grading — and in this module the grading *is* the number of steps: 1 three, 2 four, 3 five, 4 six, 5 six with a seventh tile on the board that belongs to another task entirely |
+| `tries` | how many goes. On an order row, wrong orders before the strip was right; on a tell row, tellings that did not land |
+| `judge` | on a **tell** row only: what the judge made of the telling — see [The judge's verdict](#the-judges-verdict-judge) |
+| `ms` | his thinking time, from the board being drawn (ordering) or from the telling stage opening |
+
+The row's own `cueLevel` carries the rest: on a tell row it is `3` (`CueLadder.LISTENED`) when the phone
+read the whole telling to him before he said it, and absent when it did not. An order row never has one
+— «Άκου» there reads *his* strip back to him and gives nothing away, so there is no ladder to be on.
+
+**How to read it, and the first rules to try:**
+
+- **Read the two rows as a pair, never one alone.** The question this module exists to answer is which
+  half he loses: `steps:order:coffee` CORRECT beside `steps:tell:coffee` ASSISTED is a man who can
+  sequence and cannot narrate — the connectors are the work, and more ordering would not touch it. The
+  other way round is the opposite lesson. A month where one half is always the worse one is a finding;
+  a single task is not.
+- **A difference between `steps` and the task's order is not automatically a mistake.** Thirteen of the
+  twenty tasks let some steps come in any order (`Step.group` in `steps.json`) — the four things that go
+  into a suitcase, the water and the coffee into the briki — so an order row can be CORRECT with a
+  `steps` list the seed never wrote. Read the *first* place his sequence leaves the seed's **groups**,
+  which is the one step the screen marked for him; `firstWrongStep` in `StepsViewModel` is the same
+  walk. And a tile that belongs to no group at all is the difficulty-5 distractor: wherever it appears
+  in `steps`, he put a foreign step into the task.
+- **Compare `ms` and `tries` within one `difficulty`, the way `groups` is compared in «Τραγούδα».**
+  Six steps is twice the holding of three and the row says so in one number. The dot is a ceiling
+  (`Difficulty.stepsTier`), so a sitting at dot 5 mixes all five lengths and an average over the sitting
+  says nothing. The rule worth trying first: step the dot down when `tries` on the *order* rows of the
+  dot's own hardest tasks is 2 or more on two consecutive sittings, and up when it is 0 on every task of
+  a sitting at that dot.
+- **Which tasks are worth writing next** (there is no editor yet, so this is a seed edit). A `task`
+  whose order row is CORRECT first try every time it comes up has been learned, and the twenty are a
+  fixed set: `task` plus `difficulty` is what says whether the pool at his dot still has anything in it.
+
 ### Μίλα — talk board (`module = 'TALKBOARD'`, `itemId` = the word)
 
 | Key | What it is |
@@ -298,9 +341,9 @@ One row on this board *is* graded, and it is not a tap: **«Ολόκληρη»**
 
 ### The judge's verdict (`judge`)
 
-Three modules write it — «Διάλογοι», «Προτάσεις» and the talk board's «Ολόκληρη» — and all three
-write **the same shape**, built in one place (`Verdict.detail`) rather than in three view models that
-would drift:
+Five places write it — «Διάλογοι», «Προτάσεις», the talk board's «Ολόκληρη», and since phase 13
+«Βήματα»'s telling and «Γράψε»'s typed sentence — and all five write **the same shape**, built in one
+place (`Verdict.detail`) rather than in five view models that would drift:
 
 ```json
 "judge": {"source": "JUDGE", "accept": true, "ms": 1840, "expanded": "Πρέπει να πάρω τα φάρμακα."}
@@ -322,7 +365,11 @@ the phone twice — it syncs to the father's server, and it goes to Claude insid
 
 - **Whether the judge is worth its latency.** `ms` with `source: "JUDGE"` is the whole cost of the
   feature. A median above about three seconds is a green button greyed for three seconds on every
-  turn, and at that point the local fallback is the better experience even with a working key.
+  turn, and at that point the local fallback is the better experience even with a working key. Phase 13
+  added two callers and one of them raises the stake: on «Γράψε»'s typed board **«Παράλειψη» is off for
+  as long as the judge reads** (the verdict belongs to the board that asked for it), so a slow judge is
+  not only a wait there but a way out he cannot take. A median over five seconds on `TRACE` rows is
+  reason enough to turn «Έλεγχος με Claude» off for that tile rather than to wait it out.
 - **Whether it is actually running.** A month of `source: "LOCAL"` on a phone whose caregiver
   believes «Έλεγχος με Claude» is on is an expired key nobody was told about. The journey report now
   says so per module («χωρίς Claude N»); an insight rule could say it on the dashboard too.

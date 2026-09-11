@@ -70,9 +70,10 @@ primary. `QuietButton` is the app's genuinely secondary control — outlined, an
 | | finished | «Εντάξει» | «Εντάξει» |
 | Γράψε (`TraceScreen`) | passed | «Επόμενο» | «Επόμενο» |
 | | recall word, still shown | «Καθάρισε», «Το είδα», «Παράλειψη» | «Το είδα» |
-| | level 4, clean paper | «Άκου», «Έτοιμο» (dead), «Παράλειψη» | «Άκου» |
+| | level 4 (dictation), clean paper | «Άκου», «Έτοιμο» (dead), «Παράλειψη» | — («Έτοιμο» wakes on the first stroke) |
 | | level 4, ink on the paper | «Καθάρισε», «Έτοιμο», «Παράλειψη» | «Έτοιμο» |
 | | level 5 (typed) | «Άκου», «Έτοιμο», «Παράλειψη» | «Έτοιμο» |
+| | level 5, while «Διαβάζω...» | «Άκου», «Έτοιμο» (dead), «Παράλειψη» (dead) | — |
 | | otherwise | «Καθάρισε», «Έτοιμο», «Παράλειψη» | «Έτοιμο» |
 | | finished | «Εντάξει» | «Εντάξει» |
 | Δεξί χέρι (`ArcadeScreen`) | playing | «Παράλειψη» | — |
@@ -84,7 +85,7 @@ primary. `QuietButton` is the app's genuinely secondary control — outlined, an
 | | finished | «Εντάξει» | «Εντάξει» |
 | Μίλα (`TalkBoardScreen`) | always | «Πες το», σβήσε, καθάρισε | «Πες το» |
 
-Eight of his screens carry a control in the *content* rather than in the bottom area. Every one of
+Nine of his screens carry a control in the *content* rather than in the bottom area. Every one of
 them is listed here, deliberately: the rule below is that a content control is an escape hatch and
 not a loophole, and a list that is only *mostly* complete is how the loophole gets in.
 
@@ -94,6 +95,9 @@ not a loophole, and a list that is only *mostly* complete is how the loophole ge
 - **Τραγούδα και πες το**: «Το έκανα», under the syllables; «Ηχογράφηση» (only on the fallback
   recogniser path, where the window does not keep his own take); and the second «Μίλα».
 - **Προτάσεις**: «Το έγραψα», under the sentence he typed.
+- **Γράψε**: «Το έγραψα», under «Σωστά: …» on the level-5 typed board — the same control in the same
+  place as the sentence builder's, because it is the same exercise and the bottom block is already
+  «Άκου» / «Έτοιμο» / «Παράλειψη».
 - **Αριθμοί**: «Άκου», between the question and the options — the question said again, next to the
   question, where the bottom area holds only «Παράλειψη».
 - **SQL**: the words he has already laid down, in the strip above the board — tapping one takes it
@@ -249,3 +253,34 @@ counts are the same number; the screen runs one task per pair it is handed.
 
 [`Icons.Rounded.FormatListNumbered`]: ../app/src/main/java/gr/dimitris/app/modules/steps/StepsModule.kt
 [`CueLadder.LISTENED`]: ../app/src/main/java/gr/dimitris/app/modules/wordcoach/CueLadder.kt
+
+## What phase 13 changed: two new writing boards, and a breath
+
+No new tile and no new control — «Γράψε» already had five dots and its three bottom actions, and
+«Τραγούδα και πες το» keeps exactly the screen it had. What changed is what two of those dots ask for,
+and both changes had to fit inside the three places the bottom block has.
+
+**Level 4, «Υπαγόρευση»: «Άκου» and «Καθάρισε» share one slot.** The word is only ever a sound here, so
+hearing it again is not a hint and is never withheld — but wiping the paper is also something he needs,
+and a fourth button is not available. They take turns, the way «Το είδα» and «Έτοιμο» do on the recall
+board and for the same reason: the slot holds whichever is the real next step. With a clean sheet there is
+nothing to wipe and nothing to hand in, so it is «Άκου»; the moment there is ink on the paper it is
+«Καθάρισε», and «Έτοιμο» beside it wakes up. The cost is the converse and it is real: **with ink on the
+paper he cannot ask for the word again without clearing first.** Hearing it matters most on an empty
+sheet, which is why that is the way round it went; if he turns out to want the word again with ink
+already on the paper, this is the trade to revisit.
+
+**Level 5, the typed sentence: «Παράλειψη» is off while «Διαβάζω...» is on the screen.** It is the only
+button in the app that is deliberately dead for as long as eight seconds, and the reason is that the
+verdict he is waiting for belongs to *this* board: a skip taken mid-judgement used to let board 1's
+answer land on board 2, marking a sentence he never wrote. «SQL» does the same for the two seconds a
+query of his is inside SQLite. The back arrow still works throughout and still writes nothing, and the
+wait is the judge's own timeout at the very most — but it is the first thing to look at if a phone with
+no signal ever leaves him stuck on a board.
+
+**The breath is spacing and silence, not a control.** A sentence longer than six syllables is now sung
+in breath groups, and both halves of that are things he hears and sees rather than things he presses:
+the first syllable of each group carries 16 dp of extra space before it, and the rest before it lasts
+three times the ordinary gap between syllables. A "breathe here" affordance would have been a fourth
+thing on a screen that already has the tap pad, «Άκου» and «Παράλειψη» — and it would have asked him to
+do on purpose the one thing the melody is there to do for him.

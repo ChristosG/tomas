@@ -1,6 +1,6 @@
 # Dimitris' App («Δημήτρης»)
 
-A personal Android app for Dimitris: daily speech, number and writing practice after a stroke, a talk board for everyday communication, and a caregiver mode for the people around him. Greek-only, one-handed, works fully offline. Not a product.
+A personal Android app for Dimitris: daily speech, number, writing and step-by-step practice after a stroke, a talk board for everyday communication, and a caregiver mode for the people around him. Greek-only, one-handed, works fully offline. Not a product.
 
 ## Read first
 
@@ -27,6 +27,7 @@ A personal Android app for Dimitris: daily speech, number and writing practice a
 | 10 | [Sync between the family's phones](docs/superpowers/plans/2026-09-05-phase10-sync.md) |
 | 11 | [Polish after the first field test](docs/superpowers/plans/2026-09-06-phase11-polish.md) |
 | 12 | [Harder, and about sentences](docs/superpowers/plans/2026-09-10-phase12-sentences-and-difficulty.md) |
+| 13 | [Two new tiles, and harder content](docs/superpowers/plans/2026-09-10-phase13-new-tiles-and-content.md) |
 
 Feedback on the medical reasoning is as welcome as feedback on the code: the therapy assumptions are spelled out in the specification and in each plan's execution record, and they are guesses by a programmer until a clinician says otherwise.
 
