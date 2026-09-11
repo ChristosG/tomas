@@ -87,7 +87,8 @@ class ToneSynth {
         var t: AudioTrack? = null
         var written = -1
         var published = false
-        var pcmSize = 0
+        var pcm: ShortArray? = null
+        var streaming = false
         try {
             withContext(Dispatchers.IO) {
                 // Synthesised here, not on the caller's dispatcher: an eight-syllable phrase is a
@@ -98,35 +99,33 @@ class ToneSynth {
                 // from play(), so the device's own output latency (tens of ms on a speaker, more on
                 // Bluetooth) is still unplayed when the track is released, and it would take the
                 // last note's decay with it.
-                val pcm = Pcm.concat(
+                val audio = Pcm.concat(
                     notes.flatMapIndexed { i, p ->
                         listOf(Pcm.tone(key.hz(p), noteMs, gain), Pcm.silence(Melody.gapAfter(i, gapMs, breathBefore)))
                     } + listOf(Pcm.silence(TAIL_MS)),
                 )
-                pcmSize = pcm.size
+                pcm = audio
+                streaming = streams(audio.size)
                 // build() throws (it does not return an uninitialised track) when the platform
                 // cannot allocate one — an incoming call, another app holding an exclusive route.
-                val built = runCatching {
-                    AudioTrack.Builder()
-                        .setAudioAttributes(AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_MEDIA).setContentType(AudioAttributes.CONTENT_TYPE_MUSIC).build())
-                        .setAudioFormat(AudioFormat.Builder().setEncoding(AudioFormat.ENCODING_PCM_16BIT).setSampleRate(SAMPLE_RATE).setChannelMask(AudioFormat.CHANNEL_OUT_MONO).build())
-                        .setBufferSizeInBytes(pcm.size * 2)
-                        .setTransferMode(AudioTrack.MODE_STATIC)
-                        .build()
-                }.getOrNull()
+                val built = runCatching { build(audio.size, streaming) }.getOrNull()
                 t = built
                 // A MODE_STATIC track reports STATE_NO_STATIC_DATA until its buffer has been
                 // filled: STATE_INITIALIZED is what it *becomes* once the whole melody is written,
                 // never what it starts as. Only STATE_UNINITIALIZED means the platform refused.
+                // A MODE_STREAM track is INITIALIZED from the moment it is built.
                 if (built != null && stateOf(built) != AudioTrack.STATE_UNINITIALIZED) {
-                    written = runCatching { built.write(pcm, 0, pcm.size) }.getOrElse { -1 }
+                    written =
+                        if (streaming) feed(built, audio, 0)
+                        else runCatching { built.write(audio, 0, audio.size) }.getOrElse { -1 }
                 }
             }
 
             val built = t
-            if (built == null || stateOf(built) != AudioTrack.STATE_INITIALIZED || written != pcmSize) {
-                return Result.failure(IllegalStateException(PLAYBACK_FAILED))
-            }
+            val audio = pcm
+            val ready = built != null && audio != null && stateOf(built) == AudioTrack.STATE_INITIALIZED &&
+                if (streaming) written > 0 else written == audio.size
+            if (!ready || built == null || audio == null) return Result.failure(IllegalStateException(PLAYBACK_FAILED))
             if (current !== self) return Result.success(Unit) // stopped while we were building/writing
 
             published = true
@@ -139,10 +138,18 @@ class ToneSynth {
             for (i in notes.indices) {
                 if (current !== self) return Result.success(Unit)
                 onNote(i)
+                // A streamed melody is fed a note at a time, from this loop and from no other
+                // thread: the ring buffer holds a few seconds, the writes never block, and the only
+                // code that can touch the track is the code that is also watching [current].
+                if (streaming) {
+                    written = feed(built, audio, written)
+                    if (written < 0) return stoppedOrFailed(self)
+                }
                 // The same gap the PCM above was written with, note for note — the breath he hears
                 // and the breath the lit syllables wait out are one number, read once.
                 delay((noteMs + Melody.gapAfter(i, gapMs, breathBefore)).toLong())
             }
+            if (streaming) return drain(self, built, audio, written)
             // The silent tail written above, waited out here: without it the release below throws
             // away whatever the device had not yet pushed out, clipping the last note's decay.
             if (current === self) delay(TAIL_MS.toLong())
@@ -163,6 +170,68 @@ class ToneSynth {
             }
         }
     }
+
+    /**
+     * The track this melody is played through: the whole clip in a static buffer, or a ring buffer
+     * fed as it plays when the clip is too big for one ([streams]).
+     *
+     * A static track's buffer is shared memory the platform has to allocate in one piece, and phase
+     * 13 quadrupled what this module asks for: «Θα ήθελα να κλείσω ένα ραντεβού για αύριο το πρωί»
+     * is twenty notes and four breaths — about 18 seconds at [gr.dimitris.app.modules.singsay.Tempo.SLOW],
+     * which is 1.6 MB where the longest phrase before it was 0.4 MB. A refusal there would be
+     * «Δεν παίζει ο ήχος» on exactly the card this module now exists for, so above the threshold the
+     * melody streams instead: a bounded ring buffer, written a note at a time from the playing loop.
+     */
+    private fun build(samples: Int, streaming: Boolean): AudioTrack = AudioTrack.Builder()
+        .setAudioAttributes(AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_MEDIA).setContentType(AudioAttributes.CONTENT_TYPE_MUSIC).build())
+        .setAudioFormat(AudioFormat.Builder().setEncoding(AudioFormat.ENCODING_PCM_16BIT).setSampleRate(SAMPLE_RATE).setChannelMask(AudioFormat.CHANNEL_OUT_MONO).build())
+        .setBufferSizeInBytes(if (streaming) streamBufferBytes() else samples * 2)
+        .setTransferMode(if (streaming) AudioTrack.MODE_STREAM else AudioTrack.MODE_STATIC)
+        .build()
+
+    /**
+     * Hands [track] as much of [audio] from [from] as its buffer has room for, and returns where the
+     * next write starts — or -1 if the track refused, which on this path means it was released under
+     * us by a [stop].
+     *
+     * Non-blocking on purpose. A blocking write would hold an IO thread inside the native track for
+     * as long as it takes the audio to drain, and [quiet] — which Dimitris causes by leaving the
+     * screen — would then be racing a thread it cannot see. Nothing here ever waits; the pacing is
+     * the note loop's own [delay].
+     */
+    private suspend fun feed(track: AudioTrack, audio: ShortArray, from: Int): Int = withContext(Dispatchers.IO) {
+        if (from >= audio.size) return@withContext from
+        val n = runCatching {
+            track.write(audio, from, audio.size - from, AudioTrack.WRITE_NON_BLOCKING)
+        }.getOrElse { -1 }
+        if (n < 0) -1 else from + n
+    }
+
+    /**
+     * The end of a streamed melody: whatever is left of [audio] goes in, and then the track is given
+     * the time to play out what it holds — up to [DRAIN_MS], which is longer than the ring buffer
+     * can possibly be behind. Without this the `finally` below would release the track with the last
+     * breath group still inside it.
+     */
+    private suspend fun drain(self: Any, track: AudioTrack, audio: ShortArray, from: Int): Result<Unit> {
+        var at = from
+        var left = DRAIN_MS
+        while (current === self && left > 0) {
+            if (at < audio.size) {
+                at = feed(track, audio, at)
+                if (at < 0) return stoppedOrFailed(self)
+            }
+            val head = runCatching { track.playbackHeadPosition }.getOrElse { audio.size }
+            if (at >= audio.size && head >= audio.size) return Result.success(Unit)
+            delay(FEED_MS.toLong())
+            left -= FEED_MS
+        }
+        return Result.success(Unit)
+    }
+
+    /** A track that refused mid-melody: being stopped is not a failure to report to him, a refusal is. */
+    private fun stoppedOrFailed(self: Any): Result<Unit> =
+        if (current !== self) Result.success(Unit) else Result.failure(IllegalStateException(PLAYBACK_FAILED))
 
     /** Stops (or cancels the in-flight build of) whatever is playing. Idempotent: safe before the first [play] and safe to call any number of times. Never suspends and never throws. */
     fun stop() = claim(null)
@@ -195,6 +264,42 @@ class ToneSynth {
 
         /** Silence written after the last note and waited out, so output latency cannot eat its decay. */
         const val TAIL_MS = 150
+
+        /**
+         * The most PCM that goes into one static buffer, in bytes — half a megabyte, about six
+         * seconds of [SAMPLE_RATE] mono. Everything the module asked for before phase 13 is under
+         * it (the longest phrase was seven syllables, 0.4 MB) and every long sentence at a slow
+         * tempo is over it. See [build] for why the two paths exist at all.
+         */
+        const val MAX_STATIC_BYTES = 512 * 1024
+
+        /** Whether a melody of [samples] 16-bit samples is played streamed rather than from one static buffer. */
+        internal fun streams(samples: Int): Boolean = samples * 2 > MAX_STATIC_BYTES
+
+        /**
+         * The ring buffer a streamed melody is fed through: a quarter of a megabyte, which is about
+         * three seconds — four or five notes of lead, where the loop tops it up every note. Never
+         * below what the platform says it needs for this format.
+         */
+        private fun streamBufferBytes(): Int {
+            val min = runCatching {
+                AudioTrack.getMinBufferSize(SAMPLE_RATE, AudioFormat.CHANNEL_OUT_MONO, AudioFormat.ENCODING_PCM_16BIT)
+            }.getOrDefault(0)
+            return maxOf(STREAM_BUFFER_BYTES, if (min > 0) min else 0)
+        }
+
+        private const val STREAM_BUFFER_BYTES = 256 * 1024
+
+        /** How often a streamed melody is topped up and asked how far it has got, in milliseconds. */
+        private const val FEED_MS = 50
+
+        /**
+         * The longest a streamed melody may take to play out what it is still holding, once every
+         * note has been handed over. The track can never be more than its own ring buffer behind —
+         * about three seconds — so six is slack, and it is a cap rather than a wait: the loop leaves
+         * the moment the playback head has reached the end.
+         */
+        private const val DRAIN_MS = 6_000
 
         /** Said when a note couldn't be played — no usable audio output, or the platform refused the track. */
         const val PLAYBACK_FAILED = "Δεν παίζει ο ήχος"

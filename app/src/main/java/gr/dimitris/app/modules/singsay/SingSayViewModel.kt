@@ -41,6 +41,9 @@ import kotlinx.coroutines.withContext
  * him and how long he spent in it.
  *
  * [repsPerStage] and [msPerStage] are five entries each, stage 1 to stage 5.
+ *
+ * [groupSyllables] is how many syllables each breath group has, in the order they are sung — one
+ * entry for a phrase sung in a single breath, which writes `groups = 1` and no list at all.
  */
 internal fun singSayDetail(
     stage: Int,
@@ -57,6 +60,7 @@ internal fun singSayDetail(
     msPerStage: List<Long>,
     sung: Boolean,
     takeMs: Long?,
+    groupSyllables: List<Int>,
 ): String = Adapt.detail {
     put("stage", stage)
     put("listened", listened)
@@ -77,6 +81,12 @@ internal fun singSayDetail(
     put("takeMs", takeMs)
     put("sttOn", sttOn)
     if (sttOn) put("sttWaitMs", RecognizerIntents.COMPLETE_SILENCE_MS)
+    // How the phrase was cut up to be sung: how many breaths it took and how long each one was.
+    // Phase 13 moved this module onto whole sentences, so "he stalls at stage 3" is no longer one
+    // fact — it matters whether he was holding one breath group or four. A phrase sung in one
+    // breath writes `groups = 1` and no list, which is every card the module had before.
+    put("groups", groupSyllables.size)
+    counts("groupSyllables", groupSyllables.takeIf { it.size > 1 })
 }
 
 data class SingSayState(
@@ -739,6 +749,7 @@ class SingSayViewModel(private val graph: AppGraph, private val items: List<Item
             msPerStage = stageMs.drop(1),
             sung = s.hasSungModel,
             takeMs = lastTakeMs,
+            groupSyllables = Melody.groups(s.notes).map { it.size },
         )
         // Chained, because the app scope runs on a pool with no ordering: whoever joins the last
         // write must be joining every write, or a row can land after the session has counted.

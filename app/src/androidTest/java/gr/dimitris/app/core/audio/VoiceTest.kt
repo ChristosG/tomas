@@ -5,6 +5,7 @@ import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.rule.GrantPermissionRule
 import gr.dimitris.app.core.speech.AndroidTextToSpeech
+import gr.dimitris.app.modules.singsay.Melody
 import gr.dimitris.app.modules.singsay.Pitch
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.async
@@ -101,29 +102,32 @@ class VoiceTest {
     }
 
     /**
-     * The breath between two groups of a long sentence, measured where it is meant to be heard: the
-     * wait before the note that *starts* a group is [gr.dimitris.app.modules.singsay.Melody.BREATH_GAPS]
-     * gaps long, every other wait is one gap.
+     * The breath between two groups of a long sentence: the silence before the note that *starts* a
+     * group is [Melody.BREATH_GAPS] gaps long, every other silence is one gap.
      *
-     * Timed off the `onNote` callbacks rather than the whole melody's length, because that is what
-     * the screen lights the syllables from — so this is the same clock he sees and hears. The margin
-     * is generous (the gap is tripled from 200 ms to 600 ms and only 200 ms of that is claimed)
-     * because an emulator under load jitters, but a *missing* rest fails it by 400 ms.
+     * Asserted on the schedule the melody is actually built from rather than on a stopwatch. Both
+     * halves of playing — the PCM the synth writes and the wait between the lit syllables — read
+     * [Melody.gapAfter], so this *is* the number the device uses; timing it instead would have made
+     * a correct breath fail whenever a loaded emulator overslept one ordinary gap. That the melody
+     * plays at all is the assertion above it, and every other case in this file.
      */
     @Test fun aBreathGroupRestsLongerBeforeTheNoteThatStartsIt() = runBlocking {
-        val at = LongArray(6)
-        val result = withTimeout(20_000) {
-            voice.playMelody(
-                List(6) { Pitch.LOW }, noteMs = 100, gapMs = 200, breathBefore = setOf(3),
-                onNote = { i -> at[i] = System.currentTimeMillis() },
-            )
-        }
-        assumeTrue("no usable audio output on this device: ${result.exceptionOrNull()?.message}", result.isSuccess)
+        val notes = Melody.forPhrase("Πού είναι η στάση του λεωφορείου;")
+        val breaths = Melody.breaths(notes)
+        assertEquals("the sentence should be sung in two breaths", setOf(6), breaths)
 
-        val waits = (0 until 5).map { at[it + 1] - at[it] }
-        val breath = waits[2]
-        val ordinary = waits.filterIndexed { i, _ -> i != 2 }
-        assertTrue("the breath waited $breath ms, the ordinary gaps $ordinary", breath >= ordinary.max() + 200)
+        val gaps = notes.indices.map { Melody.gapAfter(it, Melody.GAP_MS, breaths) }
+        assertEquals("the rest falls after the last note of the first group", Melody.GAP_MS * 3, gaps[5])
+        gaps.forEachIndexed { i, g ->
+            if (i != 5) assertEquals("note $i should carry an ordinary gap", Melody.GAP_MS, g)
+        }
+
+        // And the whole of it really plays with the rests in it — at a tempo no sitting uses, because
+        // what is being proved here is the path, not the pace. The pace is [ToneSynthTest].
+        val result = withTimeout(60_000) {
+            voice.playMelody(notes.map { it.pitch }, noteMs = 60, gapMs = 20, gain = 0f, breathBefore = breaths)
+        }
+        assertTrue(result.exceptionOrNull()?.toString() ?: "", result.isSuccess)
     }
 
     /** The microphone is open: a melody now would be inside the take. */

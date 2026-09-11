@@ -1,5 +1,6 @@
 package gr.dimitris.app.core.seed
 
+import gr.dimitris.app.core.data.Category
 import gr.dimitris.app.core.data.Item
 import gr.dimitris.app.core.data.ItemKind
 import gr.dimitris.app.core.data.Source
@@ -168,6 +169,39 @@ class SeedImporterTest {
         // The bundled row itself, untouched, is re-graded — so the three refusals above are the
         // conditions talking and not an empty list for some other reason.
         assertEquals(listOf("M"), SeedImporter.regraded(v3, listOf(seed), stamp).map { it.gender })
+    }
+
+    /**
+     * v5's own re-grade: the twenty long sentences moved to [Category.SINGING], and a phone that had
+     * already imported v4 has them filed under «Μέρη» and «Χρόνος».
+     *
+     * The shelf is not decoration — «Λέξεις» and «Μίλα» both exclude that category by name — so
+     * without the category travelling with the tier and the gender, those phones would have gone on
+     * offering «Μπορείτε να μου πείτε πού είναι το φαρμακείο;» as a talk-board card and a word-coach
+     * target for ever, and the fix would have reached nobody who already had the app.
+     */
+    @Test fun `a version bump moves a bundled word to the category the manifest now gives it`() {
+        val sung = SeedEntry(
+            text = "Πάμε στη φυσιοθεραπεία", kind = "PHRASE", category = "SINGING",
+            image = null, arasaacId = null, tier = 4,
+        )
+        val v5 = SeedManifest(version = 5, items = listOf(sung))
+        val onDevice = listOf(seeded(sung.copy(category = "BODY"), version = 4))
+
+        val rows = SeedImporter.regraded(v5, onDevice, SeedIds.stamp(5))
+        assertEquals(listOf(Category.SINGING), rows.map { it.category })
+        assertTrue("the re-grade travels as a newer row", rows.all { it.updatedAt == SeedIds.stamp(5) })
+    }
+
+    /** And a row a caregiver has filed somewhere herself keeps her shelf, as it keeps her tier. */
+    @Test fun `the category re-grade never touches a row the caregiver has had a hand in`() {
+        val sung = SeedEntry(
+            text = "Πάμε στη φυσιοθεραπεία", kind = "PHRASE", category = "SINGING",
+            image = null, arasaacId = null, tier = 4,
+        )
+        val v5 = SeedManifest(version = 5, items = listOf(sung))
+        val hers = seeded(sung.copy(category = "BODY"), version = 4).copy(updatedAt = 1_757_000_000_000)
+        assertTrue(SeedImporter.regraded(v5, listOf(hers), SeedIds.stamp(5)).isEmpty())
     }
 
     /** A word the manifest has twice is re-graded once, like everything else the importer reads. */

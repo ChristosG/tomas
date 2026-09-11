@@ -27,6 +27,7 @@ import gr.dimitris.app.MainActivity
 import gr.dimitris.app.core.data.Attempt
 import gr.dimitris.app.core.data.Category
 import gr.dimitris.app.core.data.Item
+import gr.dimitris.app.core.data.ItemKind
 import gr.dimitris.app.core.data.Outcome
 import gr.dimitris.app.core.judge.JudgeClient
 import gr.dimitris.app.core.judge.TurnJudge
@@ -36,6 +37,7 @@ import gr.dimitris.app.ui.theme.DimitrisTheme
 import gr.dimitris.app.ui.theme.LocalFeedback
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -260,6 +262,29 @@ class TalkBoardScreenTest {
         runBlocking { graph.db.attempts().since(0).filter { it.itemId == EXPAND_ITEM } }
 
     /** The board on its own, with our own words in it. */
+    /**
+     * The sentences «Τραγούδα και πες το» was moved to in phase 13 are an exercise for that tile and
+     * are never board cards: a twelve-syllable request he has to read to the end before he knows
+     * what it is would push «νερό» and «πονάω» off the screen, and the twenty of them would have
+     * arrived as four new pages of «Μέρη» and «Πράγματα».
+     *
+     * Both cards here are pinned, so the favourites tab the board opens on ranks them first: if the
+     * ordinary one is on the board and the sung one is not, it is the category that kept it off and
+     * nothing else.
+     */
+    @Test fun theSingingSentencesAreNotBoardCards() = runBlocking<Unit> {
+        val ordinary = graph.items.save(Item(text = "ζάχαρη", category = Category.FOOD, pinned = true)).also { seeded += it }
+        val sung = graph.items.save(
+            Item(text = "Πάμε στη φυσιοθεραπεία", kind = ItemKind.PHRASE, category = Category.SINGING, pinned = true),
+        ).also { seeded += it }
+
+        val vm = viewModel()
+        val shown = withTimeout(UI_TIMEOUT_MS) { vm.shown.first { l -> l.any { it.id == ordinary.id } } }
+        assertTrue("the sung sentence is on the board", shown.none { it.id == sung.id })
+        val tabs = vm.tabs.first()
+        assertTrue("«Τραγούδι» is a tab on the board: $tabs", tabs.none { it is Tab.Cat && it.category == Category.SINGING })
+    }
+
     private fun show() {
         compose.runOnUiThread {
             compose.activity.setContent {

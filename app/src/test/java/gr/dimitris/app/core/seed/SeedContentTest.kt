@@ -1,11 +1,14 @@
 package gr.dimitris.app.core.seed
 
+import gr.dimitris.app.core.data.Category
+import gr.dimitris.app.core.data.Item
 import gr.dimitris.app.core.data.ItemKind
 import gr.dimitris.app.core.difficulty.Difficulty
 import gr.dimitris.app.core.greek.Gender
 import gr.dimitris.app.modules.singsay.Melody
-import gr.dimitris.app.modules.singsay.Note
+import gr.dimitris.app.modules.wordcoach.WordCoachModule
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
@@ -94,20 +97,41 @@ class SeedContentTest {
      * app's own measure, not a phonetician's.
      */
     @Test fun `the singing module has twenty long sentences to sing`() {
-        val lengths = manifest.items
-            .filter { it.kind == ItemKind.PHRASE.name }
-            .map { Difficulty.syllablesOf(it.text) }
-        assertTrue(
-            "only ${lengths.count { it > Melody.BREATH_SYLLABLES }} phrases need more than one breath",
-            lengths.count { it > Melody.BREATH_SYLLABLES } >= 20,
-        )
-        assertTrue(
-            "${lengths.count { it in 7..12 }} phrases sit in the 7..12 the dots grade",
-            lengths.count { it in 7..12 } >= 18,
-        )
-        // Every dot from the default up has content of its own, or tapping it changes nothing.
+        val sung = manifest.items.filter { it.category == Category.SINGING.name }
+        assertEquals("the twenty sentences of phase 13", 20, sung.size)
+        for (entry in sung) {
+            assertEquals("«${entry.text}» is not a phrase", ItemKind.PHRASE.name, entry.kind)
+            assertTrue("«${entry.text}» is ${entry.tier}", entry.tier in 3..5)
+            assertTrue(
+                "«${entry.text}» is ${Difficulty.syllablesOf(entry.text)} syllables — one breath is enough for it",
+                Difficulty.syllablesOf(entry.text) > Melody.BREATH_SYLLABLES,
+            )
+        }
+        // Eighteen of the twenty sit in the 7..12 the dots grade in two-syllable steps; the two the
+        // brief named are fifteen and twenty, which is dot 5's own content — see the class comment.
+        val lengths = sung.map { Difficulty.syllablesOf(it.text) }
+        assertEquals("sentences inside the window the dots grade", 18, lengths.count { it in 7..12 })
+
+        // Every dot from the default up has a phrase of its own, or tapping it changes nothing. Read
+        // over all the phrases, because dot 2 is served by the short cards the module always had.
+        val all = manifest.items.filter { it.kind == ItemKind.PHRASE.name }.map { Difficulty.syllablesOf(it.text) }
         for (dot in Difficulty.DEFAULT..Difficulty.MAX) {
-            assertTrue("dot $dot has no phrase of its own", lengths.any { Difficulty.syllableDot(it) == dot })
+            assertTrue("dot $dot has no phrase of its own", all.any { Difficulty.syllableDot(it) == dot })
+        }
+    }
+
+    /**
+     * And they are the singing tile's alone: «Λέξεις» never asks for one, whatever dot he sets, and
+     * the talk board never shows one. Both read [Category.SINGING] by name; this is the seed's half
+     * of that contract — that the twenty really carry it.
+     */
+    @Test fun `the long sentences belong to the singing tile and to nothing else`() {
+        val sung = manifest.items.filter { it.category == Category.SINGING.name }
+        for (entry in sung) {
+            val item = Item(text = entry.text, kind = ItemKind.PHRASE, category = Category.SINGING, tier = entry.tier)
+            for (dot in Difficulty.MIN..Difficulty.MAX) {
+                assertFalse("«${entry.text}» is a word-coach target at dot $dot", WordCoachModule.asks(item, dot))
+            }
         }
     }
 
@@ -120,12 +144,7 @@ class SeedContentTest {
     @Test fun `every bundled phrase is sung in breath groups of one breath each`() {
         for (entry in manifest.items) {
             if (entry.kind != ItemKind.PHRASE.name) continue
-            val groups = mutableListOf(mutableListOf<Note>())
-            Melody.forPhrase(entry.text).forEachIndexed { i, n ->
-                if (n.breathBefore && i > 0) groups.add(mutableListOf())
-                groups.last().add(n)
-            }
-            for (group in groups) {
+            for (group in Melody.groups(Melody.forPhrase(entry.text))) {
                 val words = group.map { it.wordIndex }.distinct().size
                 assertTrue(
                     "«${entry.text}» asks for ${group.size} syllables in one breath across $words words",

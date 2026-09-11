@@ -11,6 +11,19 @@ fun newId(): String = UUID.randomUUID().toString()
 
 enum class ItemKind { WORD, PHRASE, NUMBER, SCRIPT_LINE }
 
+/**
+ * What a card is about. The talk board's tabs are these, and the caregiver's editor offers all of
+ * them; [SINGING] is the one that is not a subject at all.
+ *
+ * [SINGING] is phase 13's: the long everyday sentences «Τραγούδα και πες το» was moved to
+ * («Μπορείτε να μου πείτε πού είναι το φαρμακείο;») are exercises for one tile and nothing else.
+ * They are real phrases, so they would otherwise have turned up as talk-board cards nobody can read
+ * at a glance and as word-coach targets that ask him to retrieve twelve syllables from a first
+ * sound. Both of those exclude this category by name — see
+ * [gr.dimitris.app.modules.wordcoach.WordCoachModule] and
+ * [gr.dimitris.app.modules.talkboard.TalkBoardViewModel] — and the sing-then-say module, which
+ * plans by kind, takes them as it takes every other phrase.
+ */
 enum class Category(val greek: String) {
     QUICK("Γρήγορα"),
     FOOD("Φαγητό & ποτό"),
@@ -22,6 +35,7 @@ enum class Category(val greek: String) {
     NUMBERS("Αριθμοί"),
     THINGS("Πράγματα"),
     TIME("Χρόνος"),
+    SINGING("Τραγούδι"),
     CUSTOM("Δικά μας"),
 }
 

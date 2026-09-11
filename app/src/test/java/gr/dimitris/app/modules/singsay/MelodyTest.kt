@@ -45,14 +45,8 @@ class MelodyTest {
     // ------------------------------------------------------------- breath groups
 
     /** The syllables of each breath group, as the row would show them grouped. */
-    private fun groups(text: String): List<List<String>> {
-        val out = mutableListOf(mutableListOf<String>())
-        Melody.forPhrase(text).forEachIndexed { i, n ->
-            if (n.breathBefore && i > 0) out.add(mutableListOf())
-            out.last().add(n.syllable)
-        }
-        return out
-    }
+    private fun groups(text: String): List<List<String>> =
+        Melody.groups(Melody.forPhrase(text)).map { g -> g.map { it.syllable } }
 
     /**
      * A phrase he can sing in one breath is untouched: no mark, one group, exactly the melody the
@@ -117,11 +111,56 @@ class MelodyTest {
         )
     }
 
+    /** «κι» is «και» before a vowel and starts the same clause, so it is the same place to breathe. */
+    @Test fun `the elided κι opens a group like και`() {
+        assertEquals(
+            listOf(listOf("θέ", "λω", "ψω", "μί"), listOf("κι", "έ", "να", "γά", "λα")),
+            groups("Θέλω ψωμί κι ένα γάλα"),
+        )
+    }
+
+    /**
+     * A comma typed with a space in front of it is still the author saying where the voice stops.
+     * The token is not a word and gets no note, so its mark is handed to the word before it.
+     */
+    @Test fun `a comma standing on its own still says where to breathe`() {
+        assertEquals(groups("Θέλω γάλα και ψωμί, παρακαλώ"), groups("Θέλω γάλα και ψωμί , παρακαλώ"))
+    }
+
+    /**
+     * A group never ends on a word that leans onto the next one. «το φαρμακείο» is one thing to say
+     * and a breath between the article and its noun is the one way a breath group can make a
+     * sentence harder to sing than it was whole — so the marginally less even cut wins.
+     */
+    @Test fun `an article is never left at the end of a breath group`() {
+        assertEquals(
+            listOf(
+                listOf("μπο", "ρεί", "τε"), listOf("να", "μου", "πεί", "τε", "πού"),
+                listOf("εί", "ναι"), listOf("το", "φαρ", "μα", "κεί", "ο"),
+            ),
+            groups("Μπορείτε να μου πείτε πού είναι το φαρμακείο;"),
+        )
+        // It is a cost and not a veto: «το κινητό» is kept whole here by the even cut itself, and
+        // the cheapest cut is still the one that balances the two halves.
+        assertEquals(listOf(listOf("πού", "εί", "ναι"), listOf("το", "κι", "νη", "τό")), groups("πού είναι το κινητό"))
+    }
+
     /** Where the groups start, as the synth is handed them — and nothing before the first note. */
     @Test fun `the breaths are the indices of the notes that start a group`() {
         val notes = Melody.forPhrase("Θέλω να αλλάξω το ραντεβού")
         assertEquals(notes.indices.filter { notes[it].breathBefore }.toSet(), Melody.breaths(notes))
         assertFalse("the first note can never carry a breath", notes.first().breathBefore)
+    }
+
+    /** [Melody.groups] is the one walk from notes to groups — nothing lost, nothing repeated. */
+    @Test fun `the groups are the notes, cut where the breaths are`() {
+        val notes = Melody.forPhrase("Θα ήθελα να κλείσω ένα ραντεβού για αύριο το πρωί")
+        val groups = Melody.groups(notes)
+        assertEquals(notes, groups.flatten())
+        assertEquals(Melody.breaths(notes).size + 1, groups.size)
+        // A phrase of one breath is one group, and no phrase at all is no groups.
+        assertEquals(1, Melody.groups(Melody.forPhrase("θέλω καφέ")).size)
+        assertEquals(emptyList<List<Note>>(), Melody.groups(Melody.forPhrase("  ")))
     }
 
     /**

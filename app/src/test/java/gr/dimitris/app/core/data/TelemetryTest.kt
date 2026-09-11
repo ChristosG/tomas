@@ -211,7 +211,7 @@ class TelemetryTest {
             stage = 5, listened = 1, tempo = Tempo.SLOW, key = Key.LOW, sttOn = true, heard = "θέλω καφέ",
             matched = true, sttTries = 0, peak = 12_000, ms = 40_000,
             repsPerStage = listOf(1, 3, 3, 1, 0), msPerStage = listOf(4_000L, 12_000L, 18_000L, 5_000L, 1_000L),
-            sung = true, takeMs = 2_400,
+            sung = true, takeMs = 2_400, groupSyllables = listOf(4),
         )
         assertTrue("the old prefix moved: $json", json.startsWith("""{"stage":5,"listened":1,"tempo":"SLOW","key":"LOW""""))
         val o = parse(json)
@@ -223,6 +223,31 @@ class TelemetryTest {
         assertNumber(o, "ms")
         assertNumber(o, "takeMs")
     }
+
+    /**
+     * The breath groups, which are what make the rest of this row comparable since phase 13: the
+     * same stage on a phrase of one breath and on a sentence of five is not the same work.
+     *
+     * A phrase sung in one breath — every card the module had before — writes `groups = 1` and no
+     * list at all, so an old reader sees exactly what it always saw.
+     */
+    @Test fun `sing-then-say writes how many breaths the phrase took`() {
+        val one = parse(singSayDetail(groupSyllables = listOf(4)))
+        assertEquals(1, one["groups"].asInt)
+        assertFalse("a single breath is not a list: $one", one.has("groupSyllables"))
+
+        val many = parse(singSayDetail(groupSyllables = listOf(4, 3, 5, 5, 3)))
+        assertEquals(5, many["groups"].asInt)
+        assertEquals(listOf(4, 3, 5, 5, 3), many["groupSyllables"].asJsonArray.map { it.asInt })
+    }
+
+    /** The sing-then-say row with everything but the breath groups held at one sensible value. */
+    private fun singSayDetail(groupSyllables: List<Int>) = singSayDetail(
+        stage = 3, listened = 0, tempo = Tempo.NORMAL, key = Key.NORMAL, sttOn = false, heard = null,
+        matched = false, sttTries = 0, peak = null, ms = 30_000,
+        repsPerStage = listOf(1, 1, 1, 0, 0), msPerStage = listOf(4_000L, 8_000L, 8_000L, 0L, 0L),
+        sung = false, takeMs = null, groupSyllables = groupSyllables,
+    )
 
     // ---------------------------------------------------------------- Dialogues
 

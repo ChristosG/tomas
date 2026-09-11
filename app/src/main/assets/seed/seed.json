@@ -1,5 +1,5 @@
 {
- "version": 4,
+ "version": 5,
  "items": [
   {
    "text": "θέλω καφέ",
@@ -4008,7 +4008,7 @@
   {
    "text": "Θα ήθελα να κλείσω ένα ραντεβού για αύριο το πρωί",
    "kind": "PHRASE",
-   "category": "TIME",
+   "category": "SINGING",
    "tier": 5,
    "gender": null,
    "image": null,
@@ -4019,7 +4019,7 @@
   {
    "text": "Έχω ραντεβού στις πέντε",
    "kind": "PHRASE",
-   "category": "TIME",
+   "category": "SINGING",
    "tier": 3,
    "gender": null,
    "image": null,
@@ -4030,7 +4030,7 @@
   {
    "text": "Θέλω να αλλάξω το ραντεβού",
    "kind": "PHRASE",
-   "category": "TIME",
+   "category": "SINGING",
    "tier": 4,
    "gender": null,
    "image": null,
@@ -4041,7 +4041,7 @@
   {
    "text": "Μπορείτε να μου πείτε πού είναι το φαρμακείο;",
    "kind": "PHRASE",
-   "category": "PLACES",
+   "category": "SINGING",
    "tier": 5,
    "gender": null,
    "image": null,
@@ -4052,7 +4052,7 @@
   {
    "text": "Έχω τη συνταγή στην τσέπη μου",
    "kind": "PHRASE",
-   "category": "THINGS",
+   "category": "SINGING",
    "tier": 4,
    "gender": null,
    "image": null,
@@ -4063,7 +4063,7 @@
   {
    "text": "Πού είναι η στάση του λεωφορείου;",
    "kind": "PHRASE",
-   "category": "PLACES",
+   "category": "SINGING",
    "tier": 5,
    "gender": null,
    "image": null,
@@ -4074,7 +4074,7 @@
   {
    "text": "Πώς πάω στην πλατεία;",
    "kind": "PHRASE",
-   "category": "PLACES",
+   "category": "SINGING",
    "tier": 3,
    "gender": null,
    "image": null,
@@ -4085,7 +4085,7 @@
   {
    "text": "Μπορείτε να μου δείξετε τον δρόμο;",
    "kind": "PHRASE",
-   "category": "PLACES",
+   "category": "SINGING",
    "tier": 4,
    "gender": null,
    "image": null,
@@ -4096,7 +4096,7 @@
   {
    "text": "Πόσο κάνει το ψωμί;",
    "kind": "PHRASE",
-   "category": "FOOD",
+   "category": "SINGING",
    "tier": 3,
    "gender": null,
    "image": null,
@@ -4107,7 +4107,7 @@
   {
    "text": "Θα ήθελα ένα κιλό ντομάτες",
    "kind": "PHRASE",
-   "category": "FOOD",
+   "category": "SINGING",
    "tier": 4,
    "gender": null,
    "image": null,
@@ -4118,7 +4118,7 @@
   {
    "text": "Θέλω γάλα και ψωμί, παρακαλώ",
    "kind": "PHRASE",
-   "category": "FOOD",
+   "category": "SINGING",
    "tier": 4,
    "gender": null,
    "image": null,
@@ -4129,7 +4129,7 @@
   {
    "text": "Δεν βρίσκω το κινητό μου πουθενά",
    "kind": "PHRASE",
-   "category": "THINGS",
+   "category": "SINGING",
    "tier": 4,
    "gender": null,
    "image": null,
@@ -4140,7 +4140,7 @@
   {
    "text": "Πάρε με τηλέφωνο το βράδυ",
    "kind": "PHRASE",
-   "category": "THINGS",
+   "category": "SINGING",
    "tier": 4,
    "gender": null,
    "image": null,
@@ -4151,7 +4151,7 @@
   {
    "text": "Πού μπορώ να βγάλω χρήματα;",
    "kind": "PHRASE",
-   "category": "THINGS",
+   "category": "SINGING",
    "tier": 3,
    "gender": null,
    "image": null,
@@ -4162,7 +4162,7 @@
   {
    "text": "Πού είναι η τράπεζα, παρακαλώ;",
    "kind": "PHRASE",
-   "category": "PLACES",
+   "category": "SINGING",
    "tier": 4,
    "gender": null,
    "image": null,
@@ -4173,7 +4173,7 @@
   {
    "text": "Θέλω να πληρώσω τον λογαριασμό",
    "kind": "PHRASE",
-   "category": "THINGS",
+   "category": "SINGING",
    "tier": 5,
    "gender": null,
    "image": null,
@@ -4184,7 +4184,7 @@
   {
    "text": "Θέλω ένα ταξί, παρακαλώ",
    "kind": "PHRASE",
-   "category": "PLACES",
+   "category": "SINGING",
    "tier": 4,
    "gender": null,
    "image": null,
@@ -4195,7 +4195,7 @@
   {
    "text": "Μπορείτε να καλέσετε ένα ταξί;",
    "kind": "PHRASE",
-   "category": "PLACES",
+   "category": "SINGING",
    "tier": 5,
    "gender": null,
    "image": null,
@@ -4206,7 +4206,7 @@
   {
    "text": "Έχω φυσιοθεραπεία την Τρίτη",
    "kind": "PHRASE",
-   "category": "BODY",
+   "category": "SINGING",
    "tier": 5,
    "gender": null,
    "image": null,
@@ -4217,7 +4217,7 @@
   {
    "text": "Πάμε στη φυσιοθεραπεία",
    "kind": "PHRASE",
-   "category": "BODY",
+   "category": "SINGING",
    "tier": 4,
    "gender": null,
    "image": null,

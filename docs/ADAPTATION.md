@@ -81,9 +81,18 @@ and three since phase 12:
 | `msPerStage` | five numbers, stage 1 to stage 5: milliseconds spent in each |
 | `tempo`, `key` | the melody settings in force (`SLOW`/`NORMAL`/`FAST`, `LOW`/`HIGH`) |
 | `sung` | whether a caregiver's *sung* take existed for this phrase |
+| `groups` | how many breath groups the phrase was sung in — 1 for everything the module had before phase 13 |
+| `groupSyllables` | how long each group was, in syllables, in the order they are sung; absent when `groups` is 1 |
 | `listened`, `takeMs`, `peak`, `ms`, `sttOn`, `sttWaitMs`, `sttHeard`, `sttMatched`, `sttTries` | as the word coach |
 
 **Knobs, and the first rules to try:**
+
+- **How long a sentence to ask for.** `groups` and `groupSyllables` are what make the rest of this
+  row comparable since phase 13: "he stalls at stage 3" means one thing on a phrase of one breath
+  and another on «Θα ήθελα να κλείσω ένα ραντεβού για αύριο το πρωί», which is five. Compare
+  `msPerStage` and `repsPerStage` **within** a `groups` value, and move the difficulty dot down a
+  step when a sitting's phrases of three groups or more cost twice what his two-group phrases cost,
+  on two consecutive sittings. Up a step when four groups cost no more than two.
 
 - **Melody tempo.** Slow down when the passes at stage 2, «Τραγούδα μαζί» — `repsPerStage` JSON
   index `[1]` — are more than 3 on two consecutive sittings. Speed back up one step when they are 1

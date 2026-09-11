@@ -536,9 +536,15 @@ class TalkBoardViewModel(private val graph: AppGraph) : ViewModel() {
      * Script lines are items of category CUSTOM, so without this filter the dialogues would take
      * over the «Δικά μας» tab and the favourites. A line is practised inside its script, not tapped
      * out of context here.
+     *
+     * [Category.SINGING] is left out for the same reason: the long sentences phase 13 wrote for
+     * «Τραγούδα και πες το» are an exercise for that tile, not cards to say something with. A board
+     * card is a thing he reaches for in the middle of a conversation — a twelve-syllable request he
+     * has to read to the end before he knows what it is would push «νερό» and «πονάω» off the
+     * screen, and the twenty of them would have arrived as four new pages of «Μέρη» and «Πράγματα».
      */
     private val all: StateFlow<List<Item>> = graph.items.observeAll()
-        .map { l -> l.filter { it.kind != ItemKind.SCRIPT_LINE } }
+        .map { l -> l.filter { it.kind != ItemKind.SCRIPT_LINE && it.category != Category.SINGING } }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     /** Room re-emits this on every attempt insert, so a tap re-ranks favourites with no nudging. */

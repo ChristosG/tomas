@@ -2485,140 +2485,140 @@
  },
  {
   "text": "Θα ήθελα να κλείσω ένα ραντεβού για αύριο το πρωί",
-  "category": "TIME",
+  "category": "SINGING",
   "kind": "PHRASE",
   "tier": 5,
   "noPicture": true
  },
  {
   "text": "Έχω ραντεβού στις πέντε",
-  "category": "TIME",
+  "category": "SINGING",
   "kind": "PHRASE",
   "tier": 3,
   "noPicture": true
  },
  {
   "text": "Θέλω να αλλάξω το ραντεβού",
-  "category": "TIME",
+  "category": "SINGING",
   "kind": "PHRASE",
   "tier": 4,
   "noPicture": true
  },
  {
   "text": "Μπορείτε να μου πείτε πού είναι το φαρμακείο;",
-  "category": "PLACES",
+  "category": "SINGING",
   "kind": "PHRASE",
   "tier": 5,
   "noPicture": true
  },
  {
   "text": "Έχω τη συνταγή στην τσέπη μου",
-  "category": "THINGS",
+  "category": "SINGING",
   "kind": "PHRASE",
   "tier": 4,
   "noPicture": true
  },
  {
   "text": "Πού είναι η στάση του λεωφορείου;",
-  "category": "PLACES",
+  "category": "SINGING",
   "kind": "PHRASE",
   "tier": 5,
   "noPicture": true
  },
  {
   "text": "Πώς πάω στην πλατεία;",
-  "category": "PLACES",
+  "category": "SINGING",
   "kind": "PHRASE",
   "tier": 3,
   "noPicture": true
  },
  {
   "text": "Μπορείτε να μου δείξετε τον δρόμο;",
-  "category": "PLACES",
+  "category": "SINGING",
   "kind": "PHRASE",
   "tier": 4,
   "noPicture": true
  },
  {
   "text": "Πόσο κάνει το ψωμί;",
-  "category": "FOOD",
+  "category": "SINGING",
   "kind": "PHRASE",
   "tier": 3,
   "noPicture": true
  },
  {
   "text": "Θα ήθελα ένα κιλό ντομάτες",
-  "category": "FOOD",
+  "category": "SINGING",
   "kind": "PHRASE",
   "tier": 4,
   "noPicture": true
  },
  {
   "text": "Θέλω γάλα και ψωμί, παρακαλώ",
-  "category": "FOOD",
+  "category": "SINGING",
   "kind": "PHRASE",
   "tier": 4,
   "noPicture": true
  },
  {
   "text": "Δεν βρίσκω το κινητό μου πουθενά",
-  "category": "THINGS",
+  "category": "SINGING",
   "kind": "PHRASE",
   "tier": 4,
   "noPicture": true
  },
  {
   "text": "Πάρε με τηλέφωνο το βράδυ",
-  "category": "THINGS",
+  "category": "SINGING",
   "kind": "PHRASE",
   "tier": 4,
   "noPicture": true
  },
  {
   "text": "Πού μπορώ να βγάλω χρήματα;",
-  "category": "THINGS",
+  "category": "SINGING",
   "kind": "PHRASE",
   "tier": 3,
   "noPicture": true
  },
  {
   "text": "Πού είναι η τράπεζα, παρακαλώ;",
-  "category": "PLACES",
+  "category": "SINGING",
   "kind": "PHRASE",
   "tier": 4,
   "noPicture": true
  },
  {
   "text": "Θέλω να πληρώσω τον λογαριασμό",
-  "category": "THINGS",
+  "category": "SINGING",
   "kind": "PHRASE",
   "tier": 5,
   "noPicture": true
  },
  {
   "text": "Θέλω ένα ταξί, παρακαλώ",
-  "category": "PLACES",
+  "category": "SINGING",
   "kind": "PHRASE",
   "tier": 4,
   "noPicture": true
  },
  {
   "text": "Μπορείτε να καλέσετε ένα ταξί;",
-  "category": "PLACES",
+  "category": "SINGING",
   "kind": "PHRASE",
   "tier": 5,
   "noPicture": true
  },
  {
   "text": "Έχω φυσιοθεραπεία την Τρίτη",
-  "category": "BODY",
+  "category": "SINGING",
   "kind": "PHRASE",
   "tier": 5,
   "noPicture": true
  },
  {
   "text": "Πάμε στη φυσιοθεραπεία",
-  "category": "BODY",
+  "category": "SINGING",
   "kind": "PHRASE",
   "tier": 4,
   "noPicture": true

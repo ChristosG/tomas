@@ -1,5 +1,6 @@
 package gr.dimitris.app.modules.singsay
 
+import gr.dimitris.app.core.data.Category
 import gr.dimitris.app.core.data.FakeItemDao
 import gr.dimitris.app.core.data.FakeScheduleDao
 import gr.dimitris.app.core.data.Item
@@ -86,6 +87,25 @@ class SingSayModuleTest {
         assertEquals(setOf(five, nine), pool(3, five, nine, eleven))
         assertEquals(setOf(nine, eleven), pool(4, nine, eleven, twelve))
         assertEquals(setOf(eleven, twelve), pool(5, eleven, twelve))
+    }
+
+    /**
+     * The other half of «these sentences belong to this tile»: «Λέξεις» and «Μίλα» leave
+     * [Category.SINGING] out, and this module takes it exactly as it takes every other phrase —
+     * because it plans by *kind*, and a sung sentence is a phrase like any other.
+     */
+    @Test fun `the sentences written for this tile are planned by it`() = runTest {
+        items.upsert(
+            Item(
+                text = "Πάμε στη φυσιοθεραπεία", kind = ItemKind.PHRASE, category = Category.SINGING,
+                source = Source.SEED, tier = 4, createdAt = 1,
+            ),
+        )
+        phrase("θέλω καφέ", createdAt = 2)
+        assertEquals(
+            setOf("Πάμε στη φυσιοθεραπεία", "θέλω καφέ"),
+            SingSayModule.plan(items, schedules, SingSayModule.MAX_PER_PRACTICE, difficulty = 5).map { it.text }.toSet(),
+        )
     }
 
     /** The brief's own sentence — twenty syllables of everyday Greek — is dot 5's and nobody else's. */

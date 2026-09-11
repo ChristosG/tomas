@@ -33,7 +33,10 @@ class SeedImporter(private val graph: AppGraph) {
             // word a tier and every bundled noun a gender, and without this the two hundred that
             // shipped before it would have stayed tier 1 with no gender on every phone already in
             // use, for ever: his dots 3 to 5 would have drawn on the new words alone and the article
-            // levels would have gone on guessing from endings. See [regraded].
+            // levels would have gone on guessing from endings. The category travels the same road
+            // since v5, and for a sharper reason: a phone that imported v4 has the twenty long
+            // sentences filed under «Μέρη» and «Χρόνος», where the word coach and the talk board
+            // would go on offering them for ever. See [regraded].
             val regrade = regraded(manifest, all, stamp)
             if (regrade.isNotEmpty()) graph.db.items().upsertAll(regrade)
             graph.settings.setSeedVersion(manifest.version)
@@ -71,7 +74,7 @@ class SeedImporter(private val graph: AppGraph) {
             id = SeedIds.item(entry.text),
             text = entry.text,
             kind = runCatching { ItemKind.valueOf(entry.kind) }.getOrDefault(ItemKind.WORD),
-            category = runCatching { Category.valueOf(entry.category) }.getOrDefault(Category.CUSTOM),
+            category = categoryOf(entry),
             imagePath = imagePath,
             source = Source.SEED,
             tier = Difficulty.clamp(entry.tier),
@@ -91,8 +94,21 @@ class SeedImporter(private val graph: AppGraph) {
         internal fun genderOf(entry: SeedEntry): String? = Gender.of(entry.gender)?.code
 
         /**
+         * Which shelf a bundled word sits on, with anything unreadable as [Category.CUSTOM] — the
+         * same reading [row] has always done, named so that [regraded] can do it too.
+         */
+        internal fun categoryOf(entry: SeedEntry): Category =
+            runCatching { Category.valueOf(entry.category) }.getOrDefault(Category.CUSTOM)
+
+        /**
          * The bundled words already on the device whose grading a version bump may correct, and no
          * others. Everything else the device holds is left exactly as it is.
+         *
+         * Three things are corrected: the **tier** and the **gender** since phase 13's first bump,
+         * and the **category** since v5. The category is here because a shelf is not decoration —
+         * «Λέξεις» and «Μίλα» both exclude [Category.SINGING] by name, so a phone that imported v4,
+         * where the twenty long sentences were still filed under «Μέρη» and «Χρόνος», would have
+         * gone on offering them as talk-board cards and word-coach targets for ever.
          *
          * The same three conditions as the dialogues' [gr.dimitris.app.core.seed.ScriptSeedImporter.regraded],
          * and all three are about not touching a caregiver's work:
@@ -101,7 +117,7 @@ class SeedImporter(private val graph: AppGraph) {
          *   herself is not ours and is never seen, even when it says the same thing;
          * * **the word is still ours** — the row's text is the manifest's, character for character
          *   once trimmed. A word she re-typed («καφες» without its tonos) is hers now, and hers keeps
-         *   whatever tier and gender she gave it;
+         *   whatever tier, gender and category she gave it;
          * * **nobody has touched it since it was seeded** — `updatedAt` is at or below [stamp], which
          *   is [SeedIds.EPOCH] plus a version number. Anything the family does is stamped with a real
          *   clock and is eleven digits larger, so a word she edited in the editor, or one that
@@ -121,8 +137,9 @@ class SeedImporter(private val graph: AppGraph) {
                 if (row.text.trim() != entry.text.trim()) return@mapNotNull null
                 val tier = Difficulty.clamp(entry.tier)
                 val gender = genderOf(entry)
-                if (row.tier == tier && row.gender == gender) null
-                else row.copy(tier = tier, gender = gender, updatedAt = stamp)
+                val category = categoryOf(entry)
+                if (row.tier == tier && row.gender == gender && row.category == category) null
+                else row.copy(tier = tier, gender = gender, category = category, updatedAt = stamp)
             }
         }
 

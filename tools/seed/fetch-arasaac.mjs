@@ -6,14 +6,17 @@ import fs from 'node:fs/promises';
 
 // Bump when words.json changes: SeedImporter only looks at the manifest again when this is higher
 // than the version the device has, and then adds only the texts it does not already have — and,
-// since phase 13, re-grades the tier and the gender of the bundled words it has not been edited.
-const VERSION = 4;
+// since phase 13, re-grades the tier, the gender and the category of the bundled words nobody has
+// edited. v5 is the category: the twenty long sentences moved to SINGING, which is what keeps them
+// out of the word coach and the talk board on a phone that had already imported v4.
+const VERSION = 5;
 
 // The two gradings every entry carries out of words.json and into the manifest. `tier` is how hard
 // the word is, 1 to 5 (the word coach's dots read it); `gender` is 'M', 'F' or 'N' on a noun and
 // absent on everything else (the sentence builder's articles read it). They are copied from
 // words.json on every run, pictogram or no pictogram, so re-grading a word that already has its
-// picture costs nothing and downloads nothing.
+// picture costs nothing and downloads nothing. The category travels the same way — it is already in
+// every manifest row — and since v5 the importer re-grades it too.
 const graded = (w) => ({ tier: w.tier ?? 1, gender: w.gender ?? null });
 
 // A word that ships text-led on purpose. ARASAAC has one pictogram for a family of related words —
